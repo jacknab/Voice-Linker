@@ -1,0 +1,367 @@
+Build a complete **Node.js + Express + Twilio voice application** that recreates an old-school telephone voice profile system.
+
+Callers interact with the system entirely through phone calls.
+
+Users can:
+
+• Record a voice profile
+• Listen to other caller profiles
+• Send voice messages to profiles
+• Receive messages while browsing profiles
+• Reply to messages
+
+IMPORTANT:
+
+Users are automatically identified using their **caller ID phone number**.
+There is **no login system**.
+
+The caller's phone number (req.body.From) is their account.
+
+There are **no live calls between users**.
+All communication happens through recorded voice messages.
+
+---
+
+TECH STACK
+
+Backend:
+Node.js
+Express
+PostgreSQL
+Twilio Voice API
+Twilio TwiML
+dotenv
+
+Optional:
+Redis for caching
+Morgan/Winston logging
+
+---
+
+CALLER IDENTIFICATION
+
+Twilio sends caller phone number in:
+
+req.body.From
+
+Example:
+
++17202436886
+
+Use this as the unique identifier.
+
+When a caller enters the system:
+
+1. Check if phone number exists in users table.
+2. If not, create a user.
+3. Use this user_id for all interactions.
+
+---
+
+DATABASE SCHEMA
+
+users
+
+* id (uuid primary key)
+* phone_number (text unique)
+* created_at (timestamp)
+
+profiles
+
+* id (uuid primary key)
+* user_id (uuid unique)
+* recording_url (text)
+* recording_duration (integer)
+* created_at (timestamp)
+
+messages
+
+* id (uuid primary key)
+* from_user_id (uuid)
+* to_user_id (uuid)
+* recording_url (text)
+* is_read (boolean default false)
+* created_at (timestamp)
+
+---
+
+INCOMING CALL FLOW
+
+Twilio webhook:
+
+POST /voice
+
+Server must:
+
+1. Get caller number from req.body.From
+2. Find or create user
+3. Check if user has a profile
+
+---
+
+NEW USER OR USER WITHOUT PROFILE
+
+If user does not have a profile:
+
+Play message:
+
+"Welcome! Before using the system you must record a short personal profile."
+
+Prompt:
+
+"After the tone, record your profile. You have 30 seconds."
+
+Use Twilio <Record>
+
+maxLength = 30
+playBeep = true
+action = /save-profile
+
+---
+
+SAVE PROFILE
+
+POST /save-profile
+
+Server must:
+
+1. Identify user using req.body.From
+2. Save recording_url
+3. Save recording_duration
+4. Link profile to user_id
+
+Each user can only have **one profile**.
+
+If profile already exists, replace it.
+
+After saving:
+
+"Your profile has been saved."
+
+Redirect to the main menu.
+
+---
+
+MAIN MENU
+
+Play:
+
+"Welcome to the voice line."
+
+Menu:
+
+Press 1 to listen to profiles
+Press 2 to re-record your profile
+
+---
+
+PROFILE BROWSING SYSTEM
+
+When user selects "listen to profiles":
+
+The system must follow this logic **every time before playing the next profile**:
+
+STEP 1
+Check if the user has any unread messages.
+
+STEP 2
+If a message exists, deliver the message FIRST.
+
+STEP 3
+If no messages exist, play the next profile.
+
+---
+
+MESSAGE DELIVERY DURING BROWSING
+
+If an unread message exists:
+
+Play:
+
+"You have a new message."
+
+Then play the recording with <Play>.
+
+After message playback present menu:
+
+Press 1 to reply to this message
+Press 2 to hear the sender's profile
+Press 3 to continue browsing profiles
+Press 9 to return to the main menu
+
+---
+
+REPLY TO MESSAGE
+
+If user presses 1:
+
+Prompt:
+
+"Record your reply after the tone."
+
+Use Twilio <Record>
+
+maxLength = 60
+playBeep = true
+action = /save-message
+
+Server saves message with:
+
+from_user_id
+to_user_id
+recording_url
+
+Mark original message as read.
+
+---
+
+HEAR SENDER PROFILE
+
+If user presses 2:
+
+Fetch sender's profile.
+
+Play recording using <Play>.
+
+After playback:
+
+Press 1 to send a message
+Press 2 to continue browsing profiles
+Press 9 to return to main menu
+
+---
+
+CONTINUE BROWSING
+
+If caller presses 3:
+
+Mark message as read.
+
+Resume profile browsing.
+
+---
+
+PROFILE PLAYBACK
+
+When there are no unread messages:
+
+Fetch a random profile from the database.
+
+IMPORTANT RULES:
+
+• Do not play caller's own profile
+• Randomize results
+• Avoid repeating recently played profiles
+
+Play the profile using <Play>.
+
+After playback present menu:
+
+Press 1 to send this caller a message
+Press 2 to hear the next profile
+Press 9 to return to main menu
+
+---
+
+SEND MESSAGE
+
+If caller presses 1 after hearing a profile:
+
+Prompt:
+
+"Record your message after the tone."
+
+Use Twilio <Record>
+
+maxLength = 60
+playBeep = true
+action = /save-message
+
+Save message with:
+
+from_user_id
+to_user_id
+recording_url
+created_at
+
+---
+
+MESSAGE READ STATUS
+
+Messages should only interrupt browsing once.
+
+When message is delivered:
+
+Set is_read = true.
+
+---
+
+PROJECT STRUCTURE
+
+/voice-line-app
+
+/routes
+voiceRoutes.js
+
+/controllers
+callController.js
+
+/services
+twilioService.js
+userService.js
+profileService.js
+messageService.js
+
+/db
+database.js
+
+server.js
+.env
+package.json
+
+---
+
+ENV VARIABLES
+
+TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN
+TWILIO_PHONE_NUMBER
+DATABASE_URL
+
+---
+
+REQUIREMENTS
+
+• All endpoints return valid TwiML
+• Use Express routing
+• Include SQL schema
+• Include logging
+• Prevent users from hearing their own profile
+• Randomize profile playback
+• Only one profile per user
+• Clean modular code structure
+
+---
+
+TESTING
+
+Include instructions for:
+
+1. Running server locally
+2. Using ngrok to expose webhooks
+3. Connecting Twilio voice webhook
+4. Testing calls
+
+---
+
+GOAL
+
+Create a working Twilio voice system where callers:
+
+• create voice profiles
+• browse other profiles
+• receive voice messages during browsing
+• reply to messages
+• send voice messages to other callers
+
+Accounts are automatically managed using caller ID phone numbers.
