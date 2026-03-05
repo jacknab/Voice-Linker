@@ -312,7 +312,7 @@ export async function registerRoutes(
         toUserId,
         recordingUrl
       });
-      twiml.say("Your message has been sent.");
+      twiml.say("Your message has been sent. Returning to the profiles.");
       twiml.redirect("/voice/browse-profiles");
     } catch (error) {
       console.error(error);
