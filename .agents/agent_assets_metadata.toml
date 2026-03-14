@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "A94LSjLMF5S8MgWI0l6Vb"
+uri = "file://SETUP.md"
+type = "text"
+title = "VOICE_PROTOCOL — VPS Setup & Operations Guide"
