@@ -14,7 +14,8 @@ export interface IStorage {
   markMessageRead(messageId: string): Promise<void>;
   
   getRandomProfile(excludeUserId: string): Promise<Profile | undefined>;
-  
+  getOtherProfileCount(excludeUserId: string): Promise<number>;
+
   getStats(): Promise<{users: number, profiles: number, messages: number}>;
 }
 
@@ -77,6 +78,13 @@ export class DatabaseStorage implements IStorage {
       .orderBy(sql`RANDOM()`)
       .limit(1);
     return profile;
+  }
+
+  async getOtherProfileCount(excludeUserId: string): Promise<number> {
+    const [result] = await db.select({ count: count() })
+      .from(profiles)
+      .where(not(eq(profiles.userId, excludeUserId)));
+    return result.count;
   }
   
   async getStats(): Promise<{users: number, profiles: number, messages: number}> {

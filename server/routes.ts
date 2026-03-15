@@ -209,6 +209,21 @@ export async function registerRoutes(
       if (!fromNumber) throw new Error("Missing From field in browse-profiles");
 
       const user = await getOrCreateUser(fromNumber);
+      const otherCount = await storage.getOtherProfileCount(user.id);
+
+      console.log(`[voice] browse-profiles: userId=${user.id}, otherProfileCount=${otherCount}`);
+
+      // Announce how many other callers are on the system
+      if (otherCount === 0) {
+        twiml.say("There are no new callers on the line right now. Please call back later.");
+        twiml.redirect("/voice/main-menu");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const callerWord = otherCount === 1 ? "caller" : "callers";
+      twiml.say(`There ${otherCount === 1 ? "is" : "are"} ${otherCount} ${callerWord} on the line.`);
+
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
       if (unreadMessage) {
@@ -243,7 +258,7 @@ export async function registerRoutes(
           gather.say("Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         } else {
-          twiml.say("There are no other profiles available at this time.");
+          twiml.say("There are no new callers on the line right now. Please call back later.");
           twiml.redirect("/voice/main-menu");
         }
       }
