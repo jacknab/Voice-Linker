@@ -14,7 +14,8 @@ export const api = {
         200: z.object({
           users: z.number(),
           profiles: z.number(),
-          messages: z.number()
+          messages: z.number(),
+          activeCalls: z.number()
         })
       }
     }

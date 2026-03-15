@@ -7,30 +7,51 @@ import twilio from "twilio";
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
+// Build the base URL of this server from an incoming Twilio request
+function baseUrl(req: Request): string {
+  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "";
+  return `${proto}://${host}`;
+}
+
 // Extract Twilio recording SID from a recording URL
 function getRecordingSid(url: string): string | null {
   const match = url.match(/Recordings\/([^\/\?.]+)/);
   return match ? match[1] : null;
 }
 
-// Build a URL pointing to our local audio proxy from the incoming request
+// Build a URL pointing to our local audio proxy
 function audioProxyUrl(recordingUrl: string, req: Request): string {
   const sid = getRecordingSid(recordingUrl);
   if (!sid) {
     console.warn("[audio] Could not extract SID from:", recordingUrl);
     return recordingUrl;
   }
-  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
-  const host = req.headers["x-forwarded-host"] as string || req.headers.host || "";
-  return `${proto}://${host}/audio/${sid}`;
+  return `${baseUrl(req)}/audio/${sid}`;
 }
 
-function twimlError(res: Response, message = "An error occurred. Please try again later.") {
-  const twiml = new VoiceResponse();
-  twiml.say(message);
-  twiml.redirect("/voice/main-menu");
-  res.type("text/xml");
-  res.send(twiml.toString());
+// Register Twilio status callback so we know when this call ends.
+// Called once when a call first arrives so Twilio will POST to /voice/status on hangup.
+async function registerStatusCallback(callSid: string, req: Request): Promise<void> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!accountSid || !authToken) {
+    console.warn("[status] Twilio credentials missing — cannot register status callback");
+    return;
+  }
+  const client = twilio(accountSid, authToken);
+  const statusCallbackUrl = `${baseUrl(req)}/voice/status`;
+  try {
+    await client.calls(callSid).update({
+      statusCallback: statusCallbackUrl,
+      statusCallbackMethod: "POST",
+      statusCallbackEvent: ["completed", "failed", "busy", "no-answer", "canceled"],
+    });
+    console.log(`[status] Registered status callback for ${callSid} → ${statusCallbackUrl}`);
+  } catch (err) {
+    // Non-fatal — the call still works; we just might miss the hangup event
+    console.error(`[status] Failed to register status callback for ${callSid}:`, err);
+  }
 }
 
 export async function registerRoutes(
@@ -39,24 +60,22 @@ export async function registerRoutes(
 ): Promise<Server> {
   app.use(express.urlencoded({ extended: true }));
 
-  // Log all voice webhook requests for debugging
+  // Log all voice webhook requests
   app.use("/voice", (req: Request, _res: Response, next: NextFunction) => {
-    console.log(`[voice] ${req.method} ${req.path} | From=${req.body?.From} Digits=${req.body?.Digits}`);
+    console.log(`[voice] ${req.method} ${req.path} | From=${req.body?.From} CallSid=${req.body?.CallSid} Digits=${req.body?.Digits} CallStatus=${req.body?.CallStatus}`);
     next();
   });
 
   // --- Audio Proxy ---
-  // Fetches a Twilio recording using stored credentials and streams it back.
-  // This lets <Play> use our server URL instead of the private Twilio API URL.
   app.get("/audio/:sid", async (req, res) => {
     const { sid } = req.params;
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
 
-    console.log(`[audio] Proxy request for SID=${sid}, creds=${accountSid ? "present" : "MISSING"}`);
+    console.log(`[audio] Proxy request for SID=${sid}`);
 
     if (!accountSid || !authToken) {
-      console.error("[audio] TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set");
+      console.error("[audio] Twilio credentials not set");
       return res.status(503).send("Audio credentials not configured");
     }
 
@@ -64,10 +83,7 @@ export async function registerRoutes(
     const authHeader = "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64");
 
     try {
-      const upstream = await fetch(twilioUrl, {
-        headers: { Authorization: authHeader },
-      });
-
+      const upstream = await fetch(twilioUrl, { headers: { Authorization: authHeader } });
       console.log(`[audio] Twilio responded ${upstream.status} for SID=${sid}`);
 
       if (!upstream.ok) {
@@ -78,7 +94,6 @@ export async function registerRoutes(
       const cl = upstream.headers.get("content-length");
       if (cl) res.setHeader("Content-Length", cl);
 
-      // Stream the body through
       const { Readable } = await import("stream");
       const readable = Readable.fromWeb(upstream.body as any);
       readable.pipe(res);
@@ -108,22 +123,55 @@ export async function registerRoutes(
     return user;
   }
 
-  // 1. Initial Webhook: POST /voice
+  // ─── Call Status Callback ──────────────────────────────────────────────────
+  // Twilio POSTs here when a call ends (completed/failed/canceled/etc.)
+  // This is how we remove callers from the active party line in real time.
+  app.post("/voice/status", async (req, res) => {
+    const callSid = req.body?.CallSid;
+    const callStatus = req.body?.CallStatus;
+    console.log(`[status] Call ${callSid} → ${callStatus}`);
+
+    const terminalStatuses = ["completed", "failed", "busy", "no-answer", "canceled"];
+    if (callSid && terminalStatuses.includes(callStatus)) {
+      try {
+        await storage.removeActiveCall(callSid);
+        console.log(`[status] Removed ${callSid} from active calls`);
+      } catch (err) {
+        console.error(`[status] Error removing active call ${callSid}:`, err);
+      }
+    }
+
+    // Twilio expects a 2xx response; no TwiML needed for status callbacks
+    res.status(204).send();
+  });
+
+  // ─── 1. Initial Webhook: POST /voice ──────────────────────────────────────
   app.post("/voice", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From;
+    const callSid = req.body?.CallSid;
 
-    if (!fromNumber) {
-      twiml.say("We could not identify your caller ID. Goodbye.");
+    if (!fromNumber || !callSid) {
+      twiml.say("We could not identify your call. Goodbye.");
       twiml.hangup();
       res.type("text/xml");
       return res.send(twiml.toString());
     }
 
     try {
-      const user = await getOrCreateUser(fromNumber);
-      const profile = await storage.getProfile(user.id);
+      // Clean up any stale calls (safety valve for missed status callbacks)
+      await storage.removeStaleActiveCalls(90);
 
+      const user = await getOrCreateUser(fromNumber);
+
+      // Mark this caller as active on the party line
+      await storage.registerActiveCall(callSid, user.id);
+      console.log(`[voice] Registered active call ${callSid} for userId=${user.id}`);
+
+      // Register the hangup callback so we remove them when they disconnect
+      registerStatusCallback(callSid, req).catch(() => {});
+
+      const profile = await storage.getProfile(user.id);
       if (!profile) {
         twiml.say("Welcome! Before using the system you must record a short personal profile.");
         twiml.say("After the tone, record your profile. You have 30 seconds.");
@@ -141,7 +189,7 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // 2. Save Profile
+  // ─── 2. Save Profile ──────────────────────────────────────────────────────
   app.post("/voice/save-profile", async (req, res) => {
     const twiml = new VoiceResponse();
 
@@ -151,11 +199,10 @@ export async function registerRoutes(
       const recordingDuration = parseInt(req.body?.RecordingDuration) || null;
 
       if (!fromNumber || !recordingUrl) {
-        throw new Error(`Missing required fields: From=${fromNumber}, RecordingUrl=${recordingUrl}`);
+        throw new Error(`Missing fields: From=${fromNumber}, RecordingUrl=${recordingUrl}`);
       }
 
       const user = await getOrCreateUser(fromNumber);
-      // Store the raw Twilio URL — audio proxy handles auth at play time
       await storage.upsertProfile({ userId: user.id, recordingUrl, recordingDuration });
 
       twiml.say("Your profile has been saved.");
@@ -170,7 +217,7 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // 3. Main Menu
+  // ─── 3. Main Menu ─────────────────────────────────────────────────────────
   app.post("/voice/main-menu", async (_req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-main-menu" });
@@ -181,7 +228,7 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // 4. Handle Main Menu Input
+  // ─── 4. Handle Main Menu ──────────────────────────────────────────────────
   app.post("/voice/handle-main-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits;
@@ -200,7 +247,8 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // 5. Browse Profiles
+  // ─── 5. Browse Profiles ───────────────────────────────────────────────────
+  // Only shows profiles of callers currently active on the party line.
   app.post("/voice/browse-profiles", async (req, res) => {
     const twiml = new VoiceResponse();
 
@@ -209,21 +257,22 @@ export async function registerRoutes(
       if (!fromNumber) throw new Error("Missing From field in browse-profiles");
 
       const user = await getOrCreateUser(fromNumber);
-      const otherCount = await storage.getOtherProfileCount(user.id);
 
-      console.log(`[voice] browse-profiles: userId=${user.id}, otherProfileCount=${otherCount}`);
+      // Count of OTHER active callers who have recorded profiles
+      const activeCount = await storage.getActiveCallerCount(user.id);
+      console.log(`[voice] browse-profiles: userId=${user.id}, activeOtherCallers=${activeCount}`);
 
-      // Announce how many other callers are on the system
-      if (otherCount === 0) {
+      if (activeCount === 0) {
         twiml.say("There are no new callers on the line right now. Please call back later.");
         twiml.redirect("/voice/main-menu");
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
-      const callerWord = otherCount === 1 ? "caller" : "callers";
-      twiml.say(`There ${otherCount === 1 ? "is" : "are"} ${otherCount} ${callerWord} on the line.`);
+      const callerWord = activeCount === 1 ? "caller" : "callers";
+      twiml.say(`There ${activeCount === 1 ? "is" : "are"} ${activeCount} ${callerWord} on the line.`);
 
+      // Check for unread messages first
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
       if (unreadMessage) {
@@ -241,11 +290,12 @@ export async function registerRoutes(
         gather.say("Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
-        const randomProfile = await storage.getRandomProfile(user.id);
+        // Only play profiles of currently active callers
+        const randomProfile = await storage.getRandomActiveProfile(user.id);
 
         if (randomProfile) {
           const playUrl = audioProxyUrl(randomProfile.recordingUrl, req);
-          console.log(`[voice] browse-profiles: playing userId=${randomProfile.userId}, proxyUrl=${playUrl}`);
+          console.log(`[voice] Playing active caller profile userId=${randomProfile.userId}`);
           twiml.play(playUrl);
 
           const gather = twiml.gather({
@@ -258,7 +308,8 @@ export async function registerRoutes(
           gather.say("Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         } else {
-          twiml.say("There are no new callers on the line right now. Please call back later.");
+          // Active callers exist but none have recorded a profile yet
+          twiml.say("There are callers on the line but none have recorded a profile yet.");
           twiml.redirect("/voice/main-menu");
         }
       }
@@ -274,7 +325,7 @@ export async function registerRoutes(
     res.send(xml);
   });
 
-  // 6. Handle Message Menu
+  // ─── 6. Handle Message Menu ───────────────────────────────────────────────
   app.post("/voice/handle-message-menu", async (req, res) => {
     const twiml = new VoiceResponse();
 
@@ -321,7 +372,7 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // 7. Handle Sender Profile Menu
+  // ─── 7. Handle Sender Profile Menu ───────────────────────────────────────
   app.post("/voice/handle-sender-profile-menu", async (req, res) => {
     const twiml = new VoiceResponse();
 
@@ -354,7 +405,7 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // 8. Handle Profile Menu
+  // ─── 8. Handle Profile Menu ───────────────────────────────────────────────
   app.post("/voice/handle-profile-menu", async (req, res) => {
     const twiml = new VoiceResponse();
 
@@ -383,7 +434,7 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // 9. Save Message
+  // ─── 9. Save Message ──────────────────────────────────────────────────────
   app.post("/voice/save-message", async (req, res) => {
     const twiml = new VoiceResponse();
 
@@ -397,7 +448,6 @@ export async function registerRoutes(
       }
 
       const user = await getOrCreateUser(fromNumber);
-      // Store the raw Twilio URL — audio proxy handles auth at play time
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
       twiml.say("Your message has been sent. Returning to profiles.");
       twiml.redirect("/voice/browse-profiles");

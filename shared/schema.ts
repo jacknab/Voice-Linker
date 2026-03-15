@@ -13,7 +13,7 @@ export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid("user_id").notNull().unique(),
   recordingUrl: text("recording_url").notNull(),
-  recordingDuration: integer("recording_duration"), // some twilio calls might not have duration
+  recordingDuration: integer("recording_duration"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -26,6 +26,13 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Tracks callers who are currently on the line (cleared when call ends)
+export const activeCalls = pgTable("active_calls", {
+  callSid: text("call_sid").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  joinedAt: timestamp("joined_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   profile: one(profiles, {
@@ -34,6 +41,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   sentMessages: many(messages, { relationName: "sentMessages" }),
   receivedMessages: many(messages, { relationName: "receivedMessages" }),
+  activeCalls: many(activeCalls),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
@@ -56,6 +64,13 @@ export const profilesRelations = relations(profiles, ({ one }) => ({
   }),
 }));
 
+export const activeCallsRelations = relations(activeCalls, ({ one }) => ({
+  user: one(users, {
+    fields: [activeCalls.userId],
+    references: [users.id],
+  }),
+}));
+
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertProfileSchema = createInsertSchema(profiles).omit({ id: true, createdAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, isRead: true });
@@ -68,3 +83,5 @@ export type InsertProfile = z.infer<typeof insertProfileSchema>;
 
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+export type ActiveCall = typeof activeCalls.$inferSelect;

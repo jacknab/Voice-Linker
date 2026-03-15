@@ -66,38 +66,42 @@ export default function Home() {
             System Status_
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {isLoading ? (
-              // Loading Skeleton Stats
-              Array(3).fill(0).map((_, i) => (
+              Array(4).fill(0).map((_, i) => (
                 <div key={i} className="h-40 rounded-md bg-secondary/50 border border-border animate-pulse" />
               ))
             ) : isError ? (
-              // Error State
-              <div className="col-span-3 h-40 rounded-md border border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center text-destructive">
+              <div className="col-span-4 h-40 rounded-md border border-destructive/50 bg-destructive/10 flex flex-col items-center justify-center text-destructive">
                 <ServerCrash className="w-8 h-8 mb-2 opacity-80" />
                 <p className="font-display tracking-widest uppercase">System Offline</p>
               </div>
             ) : (
-              // Actual Stats
               <>
-                <StatPanel 
-                  label="Registered Users" 
-                  value={stats?.users || 0} 
-                  icon={<Users className="w-8 h-8" />} 
+                <StatPanel
+                  label="Live on the Line"
+                  value={stats?.activeCalls || 0}
+                  icon={<PhoneCall className="w-8 h-8" />}
                   delay={0.4}
+                  highlight
                 />
-                <StatPanel 
-                  label="Voice Profiles" 
-                  value={stats?.profiles || 0} 
-                  icon={<Mic className="w-8 h-8" />} 
+                <StatPanel
+                  label="Registered Users"
+                  value={stats?.users || 0}
+                  icon={<Users className="w-8 h-8" />}
                   delay={0.5}
                 />
-                <StatPanel 
-                  label="Messages Relayed" 
-                  value={stats?.messages || 0} 
-                  icon={<Voicemail className="w-8 h-8" />} 
+                <StatPanel
+                  label="Voice Profiles"
+                  value={stats?.profiles || 0}
+                  icon={<Mic className="w-8 h-8" />}
                   delay={0.6}
+                />
+                <StatPanel
+                  label="Messages Relayed"
+                  value={stats?.messages || 0}
+                  icon={<Voicemail className="w-8 h-8" />}
+                  delay={0.7}
                 />
               </>
             )}
