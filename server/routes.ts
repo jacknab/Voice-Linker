@@ -9,8 +9,19 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 
 function normalizeRecordingUrl(url: string): string {
   if (!url) return url;
-  if (url.endsWith(".mp3") || url.endsWith(".wav")) return url;
-  return url + ".mp3";
+  // Strip any existing auth credentials from the URL before re-adding them
+  let cleanUrl = url.replace(/^(https?:\/\/)[^@]+@/, "$1");
+  // Ensure .mp3 extension
+  if (!cleanUrl.endsWith(".mp3") && !cleanUrl.endsWith(".wav")) {
+    cleanUrl = cleanUrl + ".mp3";
+  }
+  // Embed Twilio credentials so the <Play> verb can authenticate
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (sid && token) {
+    cleanUrl = cleanUrl.replace(/^(https?:\/\/)/, `$1${sid}:${token}@`);
+  }
+  return cleanUrl;
 }
 
 function twimlError(res: Response, message = "An error occurred. Please try again later.") {
