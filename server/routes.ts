@@ -7,21 +7,22 @@ import twilio from "twilio";
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
-function normalizeRecordingUrl(url: string): string {
-  if (!url) return url;
-  // Strip any existing auth credentials from the URL before re-adding them
-  let cleanUrl = url.replace(/^(https?:\/\/)[^@]+@/, "$1");
-  // Ensure .mp3 extension
-  if (!cleanUrl.endsWith(".mp3") && !cleanUrl.endsWith(".wav")) {
-    cleanUrl = cleanUrl + ".mp3";
+// Extract Twilio recording SID from a recording URL
+function getRecordingSid(url: string): string | null {
+  const match = url.match(/Recordings\/([^\/\?.]+)/);
+  return match ? match[1] : null;
+}
+
+// Build a URL pointing to our local audio proxy from the incoming request
+function audioProxyUrl(recordingUrl: string, req: Request): string {
+  const sid = getRecordingSid(recordingUrl);
+  if (!sid) {
+    console.warn("[audio] Could not extract SID from:", recordingUrl);
+    return recordingUrl;
   }
-  // Embed Twilio credentials so the <Play> verb can authenticate
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  if (sid && token) {
-    cleanUrl = cleanUrl.replace(/^(https?:\/\/)/, `$1${sid}:${token}@`);
-  }
-  return cleanUrl;
+  const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] as string || req.headers.host || "";
+  return `${proto}://${host}/audio/${sid}`;
 }
 
 function twimlError(res: Response, message = "An error occurred. Please try again later.") {
@@ -44,14 +45,51 @@ export async function registerRoutes(
     next();
   });
 
-  // Catch any unhandled errors from voice routes and return TwiML instead of JSON
-  app.use("/voice", (err: any, _req: Request, res: Response, _next: NextFunction) => {
-    console.error("[voice] unhandled error:", err);
-    twimlError(res);
+  // --- Audio Proxy ---
+  // Fetches a Twilio recording using stored credentials and streams it back.
+  // This lets <Play> use our server URL instead of the private Twilio API URL.
+  app.get("/audio/:sid", async (req, res) => {
+    const { sid } = req.params;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+    console.log(`[audio] Proxy request for SID=${sid}, creds=${accountSid ? "present" : "MISSING"}`);
+
+    if (!accountSid || !authToken) {
+      console.error("[audio] TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set");
+      return res.status(503).send("Audio credentials not configured");
+    }
+
+    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${sid}.mp3`;
+    const authHeader = "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+
+    try {
+      const upstream = await fetch(twilioUrl, {
+        headers: { Authorization: authHeader },
+      });
+
+      console.log(`[audio] Twilio responded ${upstream.status} for SID=${sid}`);
+
+      if (!upstream.ok) {
+        return res.status(upstream.status).send("Failed to fetch recording from Twilio");
+      }
+
+      res.setHeader("Content-Type", "audio/mpeg");
+      const cl = upstream.headers.get("content-length");
+      if (cl) res.setHeader("Content-Length", cl);
+
+      // Stream the body through
+      const { Readable } = await import("stream");
+      const readable = Readable.fromWeb(upstream.body as any);
+      readable.pipe(res);
+    } catch (error) {
+      console.error("[audio] Error proxying recording:", error);
+      res.status(500).send("Error fetching audio");
+    }
   });
 
   // --- API Routes ---
-  app.get(api.stats.get.path, async (req, res) => {
+  app.get(api.stats.get.path, async (_req, res) => {
     try {
       const stats = await storage.getStats();
       res.json(stats);
@@ -89,11 +127,7 @@ export async function registerRoutes(
       if (!profile) {
         twiml.say("Welcome! Before using the system you must record a short personal profile.");
         twiml.say("After the tone, record your profile. You have 30 seconds.");
-        twiml.record({
-          maxLength: 30,
-          playBeep: true,
-          action: "/voice/save-profile",
-        });
+        twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
       } else {
         twiml.redirect("/voice/main-menu");
       }
@@ -121,7 +155,8 @@ export async function registerRoutes(
       }
 
       const user = await getOrCreateUser(fromNumber);
-      await storage.upsertProfile({ userId: user.id, recordingUrl: normalizeRecordingUrl(recordingUrl), recordingDuration });
+      // Store the raw Twilio URL — audio proxy handles auth at play time
+      await storage.upsertProfile({ userId: user.id, recordingUrl, recordingDuration });
 
       twiml.say("Your profile has been saved.");
       twiml.redirect("/voice/main-menu");
@@ -138,17 +173,10 @@ export async function registerRoutes(
   // 3. Main Menu
   app.post("/voice/main-menu", async (_req, res) => {
     const twiml = new VoiceResponse();
-
-    const gather = twiml.gather({
-      numDigits: 1,
-      action: "/voice/handle-main-menu",
-    });
-
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-main-menu" });
     gather.say("Welcome to the voice line.");
     gather.say("Press 1 to listen to profiles. Press 2 to re-record your profile.");
-
     twiml.redirect("/voice/main-menu");
-
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -162,11 +190,7 @@ export async function registerRoutes(
       twiml.redirect("/voice/browse-profiles");
     } else if (digit === "2") {
       twiml.say("After the tone, record your new profile. You have 30 seconds.");
-      twiml.record({
-        maxLength: 30,
-        playBeep: true,
-        action: "/voice/save-profile",
-      });
+      twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
     } else {
       twiml.say("Invalid choice.");
       twiml.redirect("/voice/main-menu");
@@ -182,17 +206,14 @@ export async function registerRoutes(
 
     try {
       const fromNumber = req.body?.From;
-
-      if (!fromNumber) {
-        throw new Error("Missing From field in browse-profiles");
-      }
+      if (!fromNumber) throw new Error("Missing From field in browse-profiles");
 
       const user = await getOrCreateUser(fromNumber);
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
       if (unreadMessage) {
         twiml.say("You have a new message.");
-        twiml.play(normalizeRecordingUrl(unreadMessage.recordingUrl));
+        twiml.play(audioProxyUrl(unreadMessage.recordingUrl, req));
 
         const gather = twiml.gather({
           numDigits: 1,
@@ -203,15 +224,13 @@ export async function registerRoutes(
         gather.say("Press 2 to hear the sender's profile.");
         gather.say("Press 3 to continue browsing profiles.");
         gather.say("Press 9 to return to the main menu.");
-
-        // Fallback if no input received
         twiml.redirect("/voice/main-menu");
       } else {
         const randomProfile = await storage.getRandomProfile(user.id);
 
         if (randomProfile) {
-          const playUrl = normalizeRecordingUrl(randomProfile.recordingUrl);
-          console.log(`[voice] browse-profiles: playing profile for userId=${randomProfile.userId}, url=${playUrl}`);
+          const playUrl = audioProxyUrl(randomProfile.recordingUrl, req);
+          console.log(`[voice] browse-profiles: playing userId=${randomProfile.userId}, proxyUrl=${playUrl}`);
           twiml.play(playUrl);
 
           const gather = twiml.gather({
@@ -222,8 +241,6 @@ export async function registerRoutes(
           gather.say("Press 1 to send this caller a message.");
           gather.say("Press 2 to hear the next profile.");
           gather.say("Press 9 to return to main menu.");
-
-          // Fallback if no input received
           twiml.redirect("/voice/main-menu");
         } else {
           twiml.say("There are no other profiles available at this time.");
@@ -236,10 +253,10 @@ export async function registerRoutes(
       twiml.redirect("/voice/main-menu");
     }
 
-    const twimlOutput = twiml.toString();
-    console.log(`[voice] browse-profiles: TwiML response =\n${twimlOutput}`);
+    const xml = twiml.toString();
+    console.log(`[voice] browse-profiles TwiML:\n${xml}`);
     res.type("text/xml");
-    res.send(twimlOutput);
+    res.send(xml);
   });
 
   // 6. Handle Message Menu
@@ -254,15 +271,11 @@ export async function registerRoutes(
       if (digit === "1") {
         await storage.markMessageRead(msgId);
         twiml.say("Record your reply after the tone.");
-        twiml.record({
-          maxLength: 60,
-          playBeep: true,
-          action: `/voice/save-message?toUserId=${senderId}`,
-        });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}` });
       } else if (digit === "2") {
         const senderProfile = await storage.getProfile(senderId);
         if (senderProfile) {
-          twiml.play(normalizeRecordingUrl(senderProfile.recordingUrl));
+          twiml.play(audioProxyUrl(senderProfile.recordingUrl, req));
         } else {
           twiml.say("This caller no longer has a profile.");
         }
@@ -305,11 +318,7 @@ export async function registerRoutes(
       if (digit === "1") {
         await storage.markMessageRead(msgId);
         twiml.say("Record your message after the tone.");
-        twiml.record({
-          maxLength: 60,
-          playBeep: true,
-          action: `/voice/save-message?toUserId=${senderId}`,
-        });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}` });
       } else if (digit === "2") {
         await storage.markMessageRead(msgId);
         twiml.redirect("/voice/browse-profiles");
@@ -340,11 +349,7 @@ export async function registerRoutes(
 
       if (digit === "1") {
         twiml.say("Record your message after the tone.");
-        twiml.record({
-          maxLength: 60,
-          playBeep: true,
-          action: `/voice/save-message?toUserId=${profileUserId}`,
-        });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${profileUserId}` });
       } else if (digit === "2") {
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "9") {
@@ -377,7 +382,8 @@ export async function registerRoutes(
       }
 
       const user = await getOrCreateUser(fromNumber);
-      await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl: normalizeRecordingUrl(recordingUrl) });
+      // Store the raw Twilio URL — audio proxy handles auth at play time
+      await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
       twiml.say("Your message has been sent. Returning to profiles.");
       twiml.redirect("/voice/browse-profiles");
     } catch (error) {
