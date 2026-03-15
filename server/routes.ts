@@ -7,6 +7,12 @@ import twilio from "twilio";
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
+function normalizeRecordingUrl(url: string): string {
+  if (!url) return url;
+  if (url.endsWith(".mp3") || url.endsWith(".wav")) return url;
+  return url + ".mp3";
+}
+
 function twimlError(res: Response, message = "An error occurred. Please try again later.") {
   const twiml = new VoiceResponse();
   twiml.say(message);
@@ -104,7 +110,7 @@ export async function registerRoutes(
       }
 
       const user = await getOrCreateUser(fromNumber);
-      await storage.upsertProfile({ userId: user.id, recordingUrl, recordingDuration });
+      await storage.upsertProfile({ userId: user.id, recordingUrl: normalizeRecordingUrl(recordingUrl), recordingDuration });
 
       twiml.say("Your profile has been saved.");
       twiml.redirect("/voice/main-menu");
@@ -175,7 +181,7 @@ export async function registerRoutes(
 
       if (unreadMessage) {
         twiml.say("You have a new message.");
-        twiml.play(unreadMessage.recordingUrl);
+        twiml.play(normalizeRecordingUrl(unreadMessage.recordingUrl));
 
         const gather = twiml.gather({
           numDigits: 1,
@@ -193,7 +199,7 @@ export async function registerRoutes(
         const randomProfile = await storage.getRandomProfile(user.id);
 
         if (randomProfile) {
-          twiml.play(randomProfile.recordingUrl);
+          twiml.play(normalizeRecordingUrl(randomProfile.recordingUrl));
 
           const gather = twiml.gather({
             numDigits: 1,
@@ -241,7 +247,7 @@ export async function registerRoutes(
       } else if (digit === "2") {
         const senderProfile = await storage.getProfile(senderId);
         if (senderProfile) {
-          twiml.play(senderProfile.recordingUrl);
+          twiml.play(normalizeRecordingUrl(senderProfile.recordingUrl));
         } else {
           twiml.say("This caller no longer has a profile.");
         }
@@ -356,7 +362,7 @@ export async function registerRoutes(
       }
 
       const user = await getOrCreateUser(fromNumber);
-      await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
+      await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl: normalizeRecordingUrl(recordingUrl) });
       twiml.say("Your message has been sent. Returning to profiles.");
       twiml.redirect("/voice/browse-profiles");
     } catch (error) {
