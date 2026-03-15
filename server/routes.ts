@@ -199,7 +199,9 @@ export async function registerRoutes(
         const randomProfile = await storage.getRandomProfile(user.id);
 
         if (randomProfile) {
-          twiml.play(normalizeRecordingUrl(randomProfile.recordingUrl));
+          const playUrl = normalizeRecordingUrl(randomProfile.recordingUrl);
+          console.log(`[voice] browse-profiles: playing profile for userId=${randomProfile.userId}, url=${playUrl}`);
+          twiml.play(playUrl);
 
           const gather = twiml.gather({
             numDigits: 1,
@@ -223,8 +225,10 @@ export async function registerRoutes(
       twiml.redirect("/voice/main-menu");
     }
 
+    const twimlOutput = twiml.toString();
+    console.log(`[voice] browse-profiles: TwiML response =\n${twimlOutput}`);
     res.type("text/xml");
-    res.send(twiml.toString());
+    res.send(twimlOutput);
   });
 
   // 6. Handle Message Menu
