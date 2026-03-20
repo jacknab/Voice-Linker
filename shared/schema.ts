@@ -14,6 +14,7 @@ export const profiles = pgTable("profiles", {
   userId: uuid("user_id").notNull().unique(),
   recordingUrl: text("recording_url").notNull(),
   recordingDuration: integer("recording_duration"),
+  isAdminUploaded: boolean("is_admin_uploaded").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

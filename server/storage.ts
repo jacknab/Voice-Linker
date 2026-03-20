@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { users, profiles, messages, activeCalls, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage } from "@shared/schema";
-import { eq, and, not, count, sql, inArray } from "drizzle-orm";
+import { eq, and, not, count, sql, inArray, or } from "drizzle-orm";
 
 export interface ProfileWithUser extends Profile {
   phoneNumber: string;
@@ -25,6 +25,7 @@ export interface IStorage {
   removeActiveCall(callSid: string): Promise<void>;
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
   getActiveCallerCount(excludeUserId: string): Promise<number>;
+  getAvailableProfileCount(excludeUserId: string): Promise<number>;
   getRandomActiveProfile(excludeUserId: string): Promise<Profile | undefined>;
 
   getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }>;
@@ -75,6 +76,7 @@ export class DatabaseStorage implements IStorage {
         userId: profiles.userId,
         recordingUrl: profiles.recordingUrl,
         recordingDuration: profiles.recordingDuration,
+        isAdminUploaded: profiles.isAdminUploaded,
         createdAt: profiles.createdAt,
         phoneNumber: users.phoneNumber,
       })
@@ -138,18 +140,41 @@ export class DatabaseStorage implements IStorage {
     return result.count;
   }
 
-  async getRandomActiveProfile(excludeUserId: string): Promise<Profile | undefined> {
-    // Get user IDs of other active callers who have profiles
+  async getAvailableProfileCount(excludeUserId: string): Promise<number> {
+    // Count profiles from active callers OR admin-uploaded profiles, excluding the caller themselves
     const activeUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(not(eq(activeCalls.userId, excludeUserId)));
 
-    if (activeUserIds.length === 0) return undefined;
+    const ids = activeUserIds.map(r => r.userId);
+    const conditions = ids.length > 0
+      ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
+      : eq(profiles.isAdminUploaded, true);
+
+    const [result] = await db.select({ count: count() })
+      .from(profiles)
+      .where(and(conditions, not(eq(profiles.userId, excludeUserId))));
+    return result.count;
+  }
+
+  async getRandomActiveProfile(excludeUserId: string): Promise<Profile | undefined> {
+    // Get user IDs of other active callers
+    const activeUserIds = await db.select({ userId: activeCalls.userId })
+      .from(activeCalls)
+      .where(not(eq(activeCalls.userId, excludeUserId)));
 
     const ids = activeUserIds.map(r => r.userId);
+
+    // Return a random profile from:
+    //  (a) active callers who have a profile, OR
+    //  (b) admin-uploaded profiles (always available in the pool)
+    const conditions = ids.length > 0
+      ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
+      : eq(profiles.isAdminUploaded, true);
+
     const [profile] = await db.select()
       .from(profiles)
-      .where(inArray(profiles.userId, ids))
+      .where(and(conditions, not(eq(profiles.userId, excludeUserId))))
       .orderBy(sql`RANDOM()`)
       .limit(1);
     return profile;

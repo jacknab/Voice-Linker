@@ -7,6 +7,7 @@ import twilio from "twilio";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import * as mm from "music-metadata";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -48,8 +49,13 @@ function getRecordingSid(url: string): string | null {
   return match ? match[1] : null;
 }
 
-// Build a URL pointing to our local audio proxy
+// Build a URL pointing to our local audio proxy (or a full URL for local uploads)
 function audioProxyUrl(recordingUrl: string, req: Request): string {
+  // Local admin-uploaded file — just make it a full absolute URL
+  if (recordingUrl.startsWith("/uploads/")) {
+    return `${baseUrl(req)}${recordingUrl}`;
+  }
+  // Twilio-hosted recording — proxy through our audio endpoint
   const sid = getRecordingSid(recordingUrl);
   if (!sid) {
     console.warn("[audio] Could not extract SID from:", recordingUrl);
@@ -166,9 +172,26 @@ export async function registerRoutes(
         return res.status(400).json({ message: "MP3 file is required" });
       }
 
+      // Auto-detect duration from the uploaded MP3
+      let recordingDuration: number | null = null;
+      try {
+        const metadata = await mm.parseFile(req.file.path);
+        const durationSec = metadata.format.duration;
+        if (durationSec != null) {
+          recordingDuration = Math.round(durationSec);
+        }
+      } catch (metaErr) {
+        console.warn("[admin] Could not read MP3 duration:", metaErr);
+      }
+
       const user = await storage.getOrCreateUser(phoneNumber);
       const recordingUrl = `/uploads/${req.file.filename}`;
-      const profile = await storage.upsertProfile({ userId: user.id, recordingUrl, recordingDuration: null });
+      const profile = await storage.upsertProfile({
+        userId: user.id,
+        recordingUrl,
+        recordingDuration,
+        isAdminUploaded: true,
+      });
       res.json({ profile, phoneNumber: user.phoneNumber });
     } catch (e) {
       console.error("[admin] Failed to upload profile:", e);
@@ -333,19 +356,22 @@ export async function registerRoutes(
 
       const user = await getOrCreateUser(fromNumber);
 
-      // Count of OTHER active callers who have recorded profiles
-      const activeCount = await storage.getActiveCallerCount(user.id);
-      console.log(`[voice] browse-profiles: userId=${user.id}, activeOtherCallers=${activeCount}`);
+      // Count available profiles: active callers + admin-uploaded greetings
+      const availableCount = await storage.getAvailableProfileCount(user.id);
+      const activeCallerCount = await storage.getActiveCallerCount(user.id);
+      console.log(`[voice] browse-profiles: userId=${user.id}, activeOtherCallers=${activeCallerCount}, availableProfiles=${availableCount}`);
 
-      if (activeCount === 0) {
-        twiml.say("There are no new callers on the line right now. Please call back later.");
+      if (availableCount === 0) {
+        twiml.say("There are no profiles available right now. Please call back later.");
         twiml.redirect("/voice/main-menu");
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
-      const callerWord = activeCount === 1 ? "caller" : "callers";
-      twiml.say(`There ${activeCount === 1 ? "is" : "are"} ${activeCount} ${callerWord} on the line.`);
+      if (activeCallerCount > 0) {
+        const callerWord = activeCallerCount === 1 ? "caller" : "callers";
+        twiml.say(`There ${activeCallerCount === 1 ? "is" : "are"} ${activeCallerCount} ${callerWord} on the line.`);
+      }
 
       // Check for unread messages first
       const unreadMessage = await storage.getUnreadMessage(user.id);
@@ -365,12 +391,12 @@ export async function registerRoutes(
         gather.say("Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
-        // Only play profiles of currently active callers
+        // Play a random profile (active caller OR admin-uploaded greeting)
         const randomProfile = await storage.getRandomActiveProfile(user.id);
 
         if (randomProfile) {
           const playUrl = audioProxyUrl(randomProfile.recordingUrl, req);
-          console.log(`[voice] Playing active caller profile userId=${randomProfile.userId}`);
+          console.log(`[voice] Playing profile userId=${randomProfile.userId} url=${playUrl}`);
           twiml.play(playUrl);
 
           const gather = twiml.gather({
@@ -383,8 +409,7 @@ export async function registerRoutes(
           gather.say("Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         } else {
-          // Active callers exist but none have recorded a profile yet
-          twiml.say("There are callers on the line but none have recorded a profile yet.");
+          twiml.say("No profiles are available right now. Please try again later.");
           twiml.redirect("/voice/main-menu");
         }
       }
