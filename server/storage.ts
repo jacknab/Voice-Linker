@@ -2,12 +2,19 @@ import { db } from "./db";
 import { users, profiles, messages, activeCalls, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage } from "@shared/schema";
 import { eq, and, not, count, sql, inArray } from "drizzle-orm";
 
+export interface ProfileWithUser extends Profile {
+  phoneNumber: string;
+}
+
 export interface IStorage {
   getUserByPhone(phoneNumber: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  getOrCreateUser(phoneNumber: string): Promise<User>;
 
   getProfile(userId: string): Promise<Profile | undefined>;
   upsertProfile(profile: InsertProfile): Promise<Profile>;
+  getAllProfilesWithUsers(): Promise<ProfileWithUser[]>;
+  deleteProfile(id: string): Promise<void>;
 
   getUnreadMessage(userId: string): Promise<Message | undefined>;
   createMessage(message: InsertMessage): Promise<Message>;
@@ -34,6 +41,14 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getOrCreateUser(phoneNumber: string): Promise<User> {
+    let user = await this.getUserByPhone(phoneNumber);
+    if (!user) {
+      user = await this.createUser({ phoneNumber });
+    }
+    return user;
+  }
+
   async getProfile(userId: string): Promise<Profile | undefined> {
     const [profile] = await db.select().from(profiles).where(eq(profiles.userId, userId));
     return profile;
@@ -51,6 +66,26 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return profile;
+  }
+
+  async getAllProfilesWithUsers(): Promise<ProfileWithUser[]> {
+    const rows = await db
+      .select({
+        id: profiles.id,
+        userId: profiles.userId,
+        recordingUrl: profiles.recordingUrl,
+        recordingDuration: profiles.recordingDuration,
+        createdAt: profiles.createdAt,
+        phoneNumber: users.phoneNumber,
+      })
+      .from(profiles)
+      .innerJoin(users, eq(profiles.userId, users.id))
+      .orderBy(profiles.createdAt);
+    return rows;
+  }
+
+  async deleteProfile(id: string): Promise<void> {
+    await db.delete(profiles).where(eq(profiles.id, id));
   }
 
   async getUnreadMessage(userId: string): Promise<Message | undefined> {

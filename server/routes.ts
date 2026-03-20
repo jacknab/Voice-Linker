@@ -4,6 +4,34 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import express from "express";
 import twilio from "twilio";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+// Ensure uploads directory exists
+const UPLOADS_DIR = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+    filename: (_req, file, cb) => {
+      const unique = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+      const ext = path.extname(file.originalname) || ".mp3";
+      cb(null, `${unique}${ext}`);
+    },
+  }),
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "audio/mpeg" || file.mimetype === "audio/mp3" || file.originalname.endsWith(".mp3")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only MP3 files are allowed"));
+    }
+  },
+  limits: { fileSize: 20 * 1024 * 1024 },
+});
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
@@ -103,6 +131,9 @@ export async function registerRoutes(
     }
   });
 
+  // --- Serve uploaded MP3 files ---
+  app.use("/uploads", express.static(UPLOADS_DIR));
+
   // --- API Routes ---
   app.get(api.stats.get.path, async (_req, res) => {
     try {
@@ -110,6 +141,50 @@ export async function registerRoutes(
       res.json(stats);
     } catch (e) {
       res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
+  // --- Admin: List all profiles ---
+  app.get("/api/admin/profiles", async (_req, res) => {
+    try {
+      const data = await storage.getAllProfilesWithUsers();
+      res.json(data);
+    } catch (e) {
+      console.error("[admin] Failed to list profiles:", e);
+      res.status(500).json({ message: "Failed to fetch profiles" });
+    }
+  });
+
+  // --- Admin: Upload MP3 to create/replace a caller's profile greeting ---
+  app.post("/api/admin/profiles/upload", upload.single("audio"), async (req, res) => {
+    try {
+      const phoneNumber = (req.body?.phoneNumber as string)?.trim();
+      if (!phoneNumber) {
+        return res.status(400).json({ message: "Phone number is required" });
+      }
+      if (!req.file) {
+        return res.status(400).json({ message: "MP3 file is required" });
+      }
+
+      const user = await storage.getOrCreateUser(phoneNumber);
+      const recordingUrl = `/uploads/${req.file.filename}`;
+      const profile = await storage.upsertProfile({ userId: user.id, recordingUrl, recordingDuration: null });
+      res.json({ profile, phoneNumber: user.phoneNumber });
+    } catch (e) {
+      console.error("[admin] Failed to upload profile:", e);
+      res.status(500).json({ message: "Failed to upload profile" });
+    }
+  });
+
+  // --- Admin: Delete a profile ---
+  app.delete("/api/admin/profiles/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteProfile(id);
+      res.status(204).send();
+    } catch (e) {
+      console.error("[admin] Failed to delete profile:", e);
+      res.status(500).json({ message: "Failed to delete profile" });
     }
   });
 
