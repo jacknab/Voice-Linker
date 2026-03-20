@@ -8,6 +8,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import * as mm from "music-metadata";
+import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -192,6 +193,10 @@ export async function registerRoutes(
         recordingDuration,
         isAdminUploaded: true,
       });
+
+      // Register this profile with the virtual caller simulator
+      addVirtualCaller(user.id);
+
       res.json({ profile, phoneNumber: user.phoneNumber });
     } catch (e) {
       console.error("[admin] Failed to upload profile:", e);
@@ -203,11 +208,25 @@ export async function registerRoutes(
   app.delete("/api/admin/profiles/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      // Look up the profile before deleting so we can stop its simulation
+      const allProfiles = await storage.getAllProfilesWithUsers();
+      const target = allProfiles.find(p => p.id === id);
+      if (target) removeVirtualCaller(target.userId);
       await storage.deleteProfile(id);
       res.status(204).send();
     } catch (e) {
       console.error("[admin] Failed to delete profile:", e);
       res.status(500).json({ message: "Failed to delete profile" });
+    }
+  });
+
+  // --- Admin: Simulator status ---
+  app.get("/api/admin/simulator/live", async (_req, res) => {
+    try {
+      const liveIds = await getLiveVirtualUserIds();
+      res.json({ liveUserIds: Array.from(liveIds) });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to get simulator status" });
     }
   });
 
@@ -378,17 +397,18 @@ export async function registerRoutes(
 
       if (unreadMessage) {
         twiml.say("You have a new message.");
-        twiml.play(audioProxyUrl(unreadMessage.recordingUrl, req));
 
-        const gather = twiml.gather({
+        // Nest <Play> inside <Gather> so pressing a digit during playback skips immediately
+        const msgGather = twiml.gather({
           numDigits: 1,
           action: `/voice/handle-message-menu?msgId=${unreadMessage.id}&senderId=${unreadMessage.fromUserId}`,
           timeout: 10,
         });
-        gather.say("Press 1 to reply to this message.");
-        gather.say("Press 2 to hear the sender's profile.");
-        gather.say("Press 3 to continue browsing profiles.");
-        gather.say("Press 9 to return to the main menu.");
+        msgGather.play(audioProxyUrl(unreadMessage.recordingUrl, req));
+        msgGather.say("Press 1 to reply to this message.");
+        msgGather.say("Press 2 to hear the sender's profile.");
+        msgGather.say("Press 3 to continue browsing profiles.");
+        msgGather.say("Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
         // Play a random profile (active caller OR admin-uploaded greeting)
@@ -397,16 +417,17 @@ export async function registerRoutes(
         if (randomProfile) {
           const playUrl = audioProxyUrl(randomProfile.recordingUrl, req);
           console.log(`[voice] Playing profile userId=${randomProfile.userId} url=${playUrl}`);
-          twiml.play(playUrl);
 
-          const gather = twiml.gather({
+          // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one
+          const profileGather = twiml.gather({
             numDigits: 1,
             action: `/voice/handle-profile-menu?profileUserId=${randomProfile.userId}`,
             timeout: 10,
           });
-          gather.say("Press 1 to send this caller a message.");
-          gather.say("Press 2 to hear the next profile.");
-          gather.say("Press 9 to return to main menu.");
+          profileGather.play(playUrl);
+          profileGather.say("Press 1 to send this caller a message.");
+          profileGather.say("Press 2 to skip to the next profile.");
+          profileGather.say("Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         } else {
           twiml.say("No profiles are available right now. Please try again later.");
@@ -440,17 +461,18 @@ export async function registerRoutes(
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}` });
       } else if (digit === "2") {
         const senderProfile = await storage.getProfile(senderId);
-        if (senderProfile) {
-          twiml.play(audioProxyUrl(senderProfile.recordingUrl, req));
-        } else {
-          twiml.say("This caller no longer has a profile.");
-        }
-        const gather = twiml.gather({
+        const senderGather = twiml.gather({
           numDigits: 1,
           action: `/voice/handle-sender-profile-menu?senderId=${senderId}&msgId=${msgId}`,
           timeout: 10,
         });
-        gather.say("Press 1 to send a message. Press 2 to continue browsing. Press 9 for main menu.");
+        if (senderProfile) {
+          // Nested inside gather so pressing 2 during playback skips immediately
+          senderGather.play(audioProxyUrl(senderProfile.recordingUrl, req));
+        } else {
+          senderGather.say("This caller no longer has a profile.");
+        }
+        senderGather.say("Press 1 to send a message. Press 2 to continue browsing. Press 9 for main menu.");
         twiml.redirect("/voice/main-menu");
       } else if (digit === "3") {
         await storage.markMessageRead(msgId);

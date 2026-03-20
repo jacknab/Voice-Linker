@@ -1,6 +1,8 @@
 import { db } from "./db";
 import { users, profiles, messages, activeCalls, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage } from "@shared/schema";
-import { eq, and, not, count, sql, inArray, or } from "drizzle-orm";
+import { eq, and, not, count, sql, inArray, or, notLike } from "drizzle-orm";
+
+const VIRTUAL_PREFIX = "VIRTUAL-";
 
 export interface ProfileWithUser extends Profile {
   phoneNumber: string;
@@ -127,10 +129,16 @@ export class DatabaseStorage implements IStorage {
     await db.delete(activeCalls).where(eq(activeCalls.callSid, callSid));
   }
 
-  // Safety valve: clean up calls that have been "active" too long (missed status callbacks)
+  // Safety valve: clean up calls that have been "active" too long (missed status callbacks).
+  // Excludes virtual simulator entries so they are managed by the simulator only.
   async removeStaleActiveCalls(olderThanMinutes: number): Promise<void> {
     await db.delete(activeCalls)
-      .where(sql`joined_at < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'`);
+      .where(
+        and(
+          sql`joined_at < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'`,
+          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`)
+        )
+      );
   }
 
   async getActiveCallerCount(excludeUserId: string): Promise<number> {

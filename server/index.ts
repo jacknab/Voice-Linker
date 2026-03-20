@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
+import { startSimulator } from "./simulator";
 import { createServer } from "http";
 
 const app = express();
@@ -61,6 +62,9 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+
+  // Start the virtual caller simulator after a short delay to let the DB settle
+  setTimeout(() => startSimulator().catch(err => console.error("[simulator] startup error:", err)), 3000);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
