@@ -387,10 +387,6 @@ export async function registerRoutes(
         return res.send(twiml.toString());
       }
 
-      if (activeCallerCount > 0) {
-        const callerWord = activeCallerCount === 1 ? "caller" : "callers";
-        twiml.say(`There ${activeCallerCount === 1 ? "is" : "are"} ${activeCallerCount} ${callerWord} on the line.`);
-      }
 
       // Check for unread messages first
       const unreadMessage = await storage.getUnreadMessage(user.id);

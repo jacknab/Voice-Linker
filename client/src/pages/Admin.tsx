@@ -207,6 +207,13 @@ function VoiceProfilesTab() {
     queryKey: ["/api/admin/profiles"],
   });
 
+  const { data: liveData } = useQuery<{ liveUserIds: string[] }>({
+    queryKey: ["/api/admin/simulator/live"],
+    refetchInterval: 5000,
+  });
+
+  const liveSet = new Set(liveData?.liveUserIds ?? []);
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/admin/profiles/${id}`, { method: "DELETE" });
