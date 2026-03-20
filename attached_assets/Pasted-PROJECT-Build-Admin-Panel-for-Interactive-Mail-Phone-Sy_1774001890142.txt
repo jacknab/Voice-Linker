@@ -1,0 +1,138 @@
+PROJECT: Build Admin Panel for Interactive Mail Phone System
+
+STACK:
+
+* Backend: Node.js (existing project)
+* Database: SQLite
+* Frontend: Simple React dashboard (or minimal HTML if faster)
+* File storage: Local or S3-compatible
+* Audio processing: ffmpeg
+
+GOAL:
+Create a web-based admin panel to manage voice profiles and pre-recorded messages used in the IVR phone system.
+
+FEATURE REQUIREMENTS:
+
+1. PROFILES MANAGEMENT
+
+Create a full CRUD system for profiles.
+
+Each profile must include:
+
+* id (auto)
+* name
+* age
+* location
+* bio (optional)
+* audio_url (greeting recording)
+* is_active (boolean)
+* is_boosted (boolean)
+* play_count (default 0)
+* created_at
+* last_played_at
+
+Admin UI must allow:
+
+* Create new profile
+* Upload greeting audio
+* Edit profile fields
+* Toggle active/inactive
+* Toggle boost
+* Delete profile
+
+2. MESSAGES MANAGEMENT
+
+Create a system for pre-recorded messages.
+
+Each message must include:
+
+* id
+* from_profile_id (foreign key)
+* audio_url
+* type (generic, reply, follow-up)
+* is_active
+* created_at
+
+Admin UI must allow:
+
+* Create message
+* Upload audio
+* Select profile sender
+* Delete message
+
+3. AUDIO UPLOAD + PROCESSING
+
+When audio is uploaded:
+
+* Convert to WAV format
+* 8000 Hz sample rate
+* mono channel
+
+Use ffmpeg for conversion.
+
+Store processed file and save its URL.
+
+4. DASHBOARD
+
+Display basic stats:
+
+* total profiles
+* active profiles
+* total messages
+* recent activity (optional)
+
+5. DATABASE TABLES
+
+Implement:
+
+* profiles
+* messages
+* blocked_users
+* favorites
+* profile_views
+
+Use clean SQL schema with indexes where appropriate.
+
+6. API ROUTES
+
+Implement REST endpoints:
+
+Profiles:
+GET /admin/profiles
+POST /admin/profiles
+PUT /admin/profiles/:id
+DELETE /admin/profiles/:id
+
+Messages:
+GET /admin/messages
+POST /admin/messages
+DELETE /admin/messages/:id
+
+Stats:
+GET /admin/stats
+
+7. BASIC UI REQUIREMENTS
+
+* Clean dashboard layout
+* Table view for profiles and messages
+* Simple forms for create/edit
+* Toggle switches for active/boost
+* File upload input for audio
+
+No need for advanced styling — prioritize functionality.
+
+8. FUTURE READY
+
+Structure code so it can later support:
+
+* AI-generated profiles
+* advanced analytics
+* moderation tools
+
+EXPECTED OUTPUT:
+
+* Working admin panel UI
+* Backend API integrated
+* SQLite schema created
+* Audio upload + conversion working
+* Profiles and messages fully manageable
