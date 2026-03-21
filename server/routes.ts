@@ -39,9 +39,9 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 
 // ─── Membership Packages ───────────────────────────────────────────────────
 const MEMBERSHIP_PACKAGES: Record<string, { name: string; label: string; priceCents: number; priceLabel: string }> = {
-  "1": { name: "bronze", label: "Bronze", priceCents: 999,  priceLabel: "9 dollars and 99 cents per month" },
-  "2": { name: "silver", label: "Silver", priceCents: 1999, priceLabel: "19 dollars and 99 cents per month" },
-  "3": { name: "gold",   label: "Gold",   priceCents: 2999, priceLabel: "29 dollars and 99 cents per month" },
+  "1": { name: "24hour", label: "24 Hour",  priceCents: 299,  priceLabel: "2 dollars and 99 cents" },
+  "2": { name: "7day",   label: "7 Day",    priceCents: 1699, priceLabel: "16 dollars and 99 cents" },
+  "3": { name: "30day",  label: "30 Day",   priceCents: 2999, priceLabel: "29 dollars and 99 cents" },
 };
 
 // In-memory payment sessions keyed by Twilio CallSid
@@ -49,6 +49,7 @@ interface PaymentSession {
   packageName: string;
   packageLabel: string;
   packagePriceCents: number;
+  priceLabel: string;
   cardNumber?: string;
   expMonth?: number;
   expYear?: number;
@@ -677,9 +678,8 @@ export async function registerRoutes(
       "Here is how membership works. " +
       "As a member, you get full access to the voice line community. " +
       "Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. " +
-      "Membership is billed monthly and can be cancelled at any time. " +
-      "We offer three tiers: Bronze, Silver, and Gold. " +
-      "Each tier unlocks additional features and benefits."
+      "We offer three membership options: a 24 hour pass, a 7 day membership, and a 30 day membership. " +
+      "Choose the option that works best for you."
     );
     twiml.redirect("/voice/membership-questions");
     res.type("text/xml");
@@ -691,9 +691,9 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     twiml.say(
       "Here are our membership prices. " +
-      "Bronze membership is 9 dollars and 99 cents per month. Bronze members get full access to profiles and messaging. " +
-      "Silver membership is 19 dollars and 99 cents per month. Silver members get everything in Bronze plus enhanced profile visibility. " +
-      "Gold membership is 29 dollars and 99 cents per month. Gold members get everything in Silver plus priority placement and exclusive features. " +
+      "A 24 hour pass is 2 dollars and 99 cents. " +
+      "A 7 day membership is 16 dollars and 99 cents. " +
+      "A 30 day membership is 29 dollars and 99 cents. " +
       "To purchase, press 3 from the membership menu."
     );
     twiml.redirect("/voice/membership-questions");
@@ -706,9 +706,9 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-package-selection" });
     gather.say("Which membership package would you like to purchase?");
-    gather.say("Press 1 for Bronze at 9 dollars and 99 cents per month.");
-    gather.say("Press 2 for Silver at 19 dollars and 99 cents per month.");
-    gather.say("Press 3 for Gold at 29 dollars and 99 cents per month.");
+    gather.say("Press 1 for a 24 hour pass at 2 dollars and 99 cents.");
+    gather.say("Press 2 for a 7 day membership at 16 dollars and 99 cents.");
+    gather.say("Press 3 for a 30 day membership at 29 dollars and 99 cents.");
     gather.say("Press 9 to return to the main menu.");
     twiml.redirect("/voice/membership-purchase");
     res.type("text/xml");
@@ -738,6 +738,7 @@ export async function registerRoutes(
       packageName: pkg.name,
       packageLabel: pkg.label,
       packagePriceCents: pkg.priceCents,
+      priceLabel: pkg.priceLabel,
     });
 
     twiml.say(`You selected ${pkg.label} membership at ${pkg.priceLabel}.`);
@@ -922,7 +923,7 @@ export async function registerRoutes(
         paymentSessions.delete(callSid);
         twiml.say(
           `Payment successful! Welcome to ${session.packageLabel} membership. ` +
-          `Your card has been charged ${session.packageLabel === "Bronze" ? "9 dollars and 99 cents" : session.packageLabel === "Silver" ? "19 dollars and 99 cents" : "29 dollars and 99 cents"}. ` +
+          `Your card has been charged ${session.priceLabel}. ` +
           "Thank you for joining. Returning to the main menu."
         );
       } else {
