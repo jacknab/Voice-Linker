@@ -65,6 +65,9 @@ interface CallerBrowseState {
 }
 const callerBrowseState = new Map<string, CallerBrowseState>();
 
+// Maps CallSid → regionId for the duration of a call
+const callRegion = new Map<string, string>();
+
 // Build the base URL of this server from an incoming Twilio request
 function baseUrl(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
@@ -258,6 +261,80 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Admin: Region CRUD ────────────────────────────────────────────────────
+
+  app.get("/api/regions", async (_req, res) => {
+    try {
+      const all = await storage.getAllRegions();
+      const withCounts = await Promise.all(
+        all.map(async (r) => ({
+          ...r,
+          activeUsers: await storage.getRegionActiveUserCount(r.id),
+        }))
+      );
+      res.json(withCounts);
+    } catch (e) {
+      console.error("[regions] Failed to list regions:", e);
+      res.status(500).json({ message: "Failed to fetch regions" });
+    }
+  });
+
+  app.post("/api/regions", async (req, res) => {
+    try {
+      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive } = req.body;
+      if (!name || !slug || !phoneNumber) {
+        return res.status(400).json({ message: "name, slug, and phoneNumber are required" });
+      }
+      const region = await storage.createRegion({
+        name: name.trim(),
+        slug: slug.trim().toLowerCase(),
+        phoneNumber: phoneNumber.trim(),
+        timezone: timezone?.trim() || "America/New_York",
+        maxCapacity: maxCapacity ? parseInt(maxCapacity) : 1000,
+        description: description?.trim() || null,
+        isActive: isActive !== false,
+      });
+      res.status(201).json(region);
+    } catch (e: any) {
+      console.error("[regions] Failed to create region:", e);
+      if (e?.message?.includes("unique")) {
+        return res.status(409).json({ message: "A region with that slug already exists" });
+      }
+      res.status(500).json({ message: "Failed to create region" });
+    }
+  });
+
+  app.put("/api/regions/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive } = req.body;
+      const region = await storage.updateRegion(id, {
+        ...(name !== undefined && { name: name.trim() }),
+        ...(slug !== undefined && { slug: slug.trim().toLowerCase() }),
+        ...(phoneNumber !== undefined && { phoneNumber: phoneNumber.trim() }),
+        ...(timezone !== undefined && { timezone: timezone.trim() }),
+        ...(maxCapacity !== undefined && { maxCapacity: parseInt(maxCapacity) }),
+        ...(description !== undefined && { description: description?.trim() || null }),
+        ...(isActive !== undefined && { isActive }),
+      });
+      res.json(region);
+    } catch (e: any) {
+      console.error("[regions] Failed to update region:", e);
+      res.status(500).json({ message: "Failed to update region" });
+    }
+  });
+
+  app.delete("/api/regions/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteRegion(id);
+      res.status(204).send();
+    } catch (e) {
+      console.error("[regions] Failed to delete region:", e);
+      res.status(500).json({ message: "Failed to delete region" });
+    }
+  });
+
   // --- Twilio Voice Webhooks ---
 
   async function getOrCreateUser(phoneNumber: string) {
@@ -284,9 +361,10 @@ export async function registerRoutes(
       } catch (err) {
         console.error(`[status] Error removing active call ${callSid}:`, err);
       }
-      // Clean up per-caller browse queue and payment session
+      // Clean up per-caller browse queue, payment session, and region mapping
       callerBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
+      callRegion.delete(callSid);
     }
 
     // Twilio expects a 2xx response; no TwiML needed for status callbacks
@@ -417,11 +495,13 @@ export async function registerRoutes(
       if (!fromNumber) throw new Error("Missing From field in browse-profiles");
 
       const user = await getOrCreateUser(fromNumber);
+      const callSid = req.body?.CallSid as string;
+      const regionId = callRegion.get(callSid);
 
-      // Count available profiles: active callers + admin-uploaded greetings
-      const availableCount = await storage.getAvailableProfileCount(user.id);
-      const activeCallerCount = await storage.getActiveCallerCount(user.id);
-      console.log(`[voice] browse-profiles: userId=${user.id}, activeOtherCallers=${activeCallerCount}, availableProfiles=${availableCount}`);
+      // Count available profiles: active callers + admin-uploaded greetings (region-scoped)
+      const availableCount = await storage.getAvailableProfileCount(user.id, regionId);
+      const activeCallerCount = await storage.getActiveCallerCount(user.id, regionId);
+      console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, activeOtherCallers=${activeCallerCount}, availableProfiles=${availableCount}`);
 
       if (availableCount === 0) {
         twiml.say("There are no profiles available right now. Please call back later.");
@@ -450,12 +530,10 @@ export async function registerRoutes(
         msgGather.say("Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
-        const callSid = req.body?.CallSid as string;
-
         // Build the queue once per caller, then advance position on each visit
         let state = callerBrowseState.get(callSid);
         if (!state) {
-          const allProfiles = await storage.getAllActiveProfiles(user.id);
+          const allProfiles = await storage.getAllActiveProfiles(user.id, regionId);
           state = { queue: allProfiles.map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl })), index: 0 };
           callerBrowseState.set(callSid, state);
           console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid}`);
@@ -1002,6 +1080,72 @@ export async function registerRoutes(
     }
 
     twiml.redirect("/voice/main-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Regional Entry: POST /voice/:slug ────────────────────────────────────
+  // Each region gets its own Twilio webhook URL, e.g. /voice/denver
+  // This must be defined AFTER all specific /voice/xxx routes so it only
+  // catches unmatched slugs (e.g. region names, not "status", "main-menu", etc.)
+  app.post("/voice/:slug", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const { slug } = req.params;
+    const fromNumber = req.body?.From;
+    const callSid = req.body?.CallSid;
+
+    if (!fromNumber || !callSid) {
+      twiml.say("We could not identify your call. Goodbye.");
+      twiml.hangup();
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const region = await storage.getRegionBySlug(slug);
+
+      if (!region) {
+        twiml.say("This phone number is not currently active. Please try again later.");
+        twiml.hangup();
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      if (!region.isActive) {
+        twiml.say("This market is temporarily unavailable. Please try again later.");
+        twiml.hangup();
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      // Tag this call with its region for the duration of the session
+      callRegion.set(callSid, region.id);
+
+      // Clean up any stale calls
+      await storage.removeStaleActiveCalls(90);
+
+      const user = await getOrCreateUser(fromNumber);
+
+      // Register call as active — scoped to this region
+      await storage.registerActiveCall(callSid, user.id, region.id);
+      console.log(`[voice] [${region.slug}] Registered active call ${callSid} for userId=${user.id}`);
+
+      registerStatusCallback(callSid, req).catch(() => {});
+
+      const profile = await storage.getProfile(user.id);
+      if (!profile) {
+        twiml.say("Welcome! Before using the system you must record a short personal greeting.");
+        twiml.say("After the tone, record your greeting. You have 30 seconds.");
+        twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
+      } else {
+        twiml.redirect("/voice/main-menu");
+      }
+    } catch (error) {
+      console.error(`[voice] /voice/${slug} error:`, error);
+      twiml.say("An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
     res.type("text/xml");
     res.send(twiml.toString());
   });

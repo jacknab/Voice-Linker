@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { users, profiles, messages, activeCalls, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage } from "@shared/schema";
-import { eq, and, not, count, sql, inArray, or, notLike } from "drizzle-orm";
+import { regions, users, profiles, messages, activeCalls, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage } from "@shared/schema";
+import { eq, and, not, count, sql, inArray, or, notLike, isNull } from "drizzle-orm";
 
 const VIRTUAL_PREFIX = "VIRTUAL-";
 
@@ -9,6 +9,15 @@ export interface ProfileWithUser extends Profile {
 }
 
 export interface IStorage {
+  // Regions
+  getAllRegions(): Promise<Region[]>;
+  getRegionBySlug(slug: string): Promise<Region | undefined>;
+  getRegionById(id: string): Promise<Region | undefined>;
+  createRegion(region: InsertRegion): Promise<Region>;
+  updateRegion(id: string, data: Partial<InsertRegion>): Promise<Region>;
+  deleteRegion(id: string): Promise<void>;
+  getRegionActiveUserCount(regionId: string): Promise<number>;
+
   getUserByPhone(phoneNumber: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getOrCreateUser(phoneNumber: string): Promise<User>;
@@ -23,12 +32,12 @@ export interface IStorage {
   markMessageRead(messageId: string): Promise<void>;
 
   // Active call tracking (real-time party line)
-  registerActiveCall(callSid: string, userId: string): Promise<void>;
+  registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void>;
   removeActiveCall(callSid: string): Promise<void>;
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
-  getActiveCallerCount(excludeUserId: string): Promise<number>;
-  getAvailableProfileCount(excludeUserId: string): Promise<number>;
-  getAllActiveProfiles(excludeUserId: string): Promise<Profile[]>;
+  getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number>;
+  getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number>;
+  getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]>;
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User>;
 
@@ -36,6 +45,45 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // --- Region CRUD ---
+
+  async getAllRegions(): Promise<Region[]> {
+    return db.select().from(regions).orderBy(regions.createdAt);
+  }
+
+  async getRegionBySlug(slug: string): Promise<Region | undefined> {
+    const [region] = await db.select().from(regions).where(eq(regions.slug, slug));
+    return region;
+  }
+
+  async getRegionById(id: string): Promise<Region | undefined> {
+    const [region] = await db.select().from(regions).where(eq(regions.id, id));
+    return region;
+  }
+
+  async createRegion(insertRegion: InsertRegion): Promise<Region> {
+    const [region] = await db.insert(regions).values(insertRegion).returning();
+    return region;
+  }
+
+  async updateRegion(id: string, data: Partial<InsertRegion>): Promise<Region> {
+    const [region] = await db.update(regions).set(data).where(eq(regions.id, id)).returning();
+    return region;
+  }
+
+  async deleteRegion(id: string): Promise<void> {
+    await db.delete(regions).where(eq(regions.id, id));
+  }
+
+  async getRegionActiveUserCount(regionId: string): Promise<number> {
+    const [result] = await db.select({ count: count() })
+      .from(activeCalls)
+      .where(eq(activeCalls.regionId, regionId));
+    return result.count;
+  }
+
+  // --- User CRUD ---
+
   async getUserByPhone(phoneNumber: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.phoneNumber, phoneNumber));
     return user;
@@ -118,12 +166,12 @@ export class DatabaseStorage implements IStorage {
 
   // --- Active Call Tracking ---
 
-  async registerActiveCall(callSid: string, userId: string): Promise<void> {
+  async registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void> {
     await db.insert(activeCalls)
-      .values({ callSid, userId })
+      .values({ callSid, userId, regionId: regionId ?? null })
       .onConflictDoUpdate({
         target: activeCalls.callSid,
-        set: { userId, joinedAt: sql`now()` },
+        set: { userId, regionId: regionId ?? null, joinedAt: sql`now()` },
       });
   }
 
@@ -131,8 +179,6 @@ export class DatabaseStorage implements IStorage {
     await db.delete(activeCalls).where(eq(activeCalls.callSid, callSid));
   }
 
-  // Safety valve: clean up calls that have been "active" too long (missed status callbacks).
-  // Excludes virtual simulator entries so they are managed by the simulator only.
   async removeStaleActiveCalls(olderThanMinutes: number): Promise<void> {
     await db.delete(activeCalls)
       .where(
@@ -143,18 +189,24 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
-  async getActiveCallerCount(excludeUserId: string): Promise<number> {
+  async getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number> {
+    const conditions = regionId
+      ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId))
+      : not(eq(activeCalls.userId, excludeUserId));
     const [result] = await db.select({ count: count() })
       .from(activeCalls)
-      .where(not(eq(activeCalls.userId, excludeUserId)));
+      .where(conditions);
     return result.count;
   }
 
-  async getAvailableProfileCount(excludeUserId: string): Promise<number> {
-    // Count profiles from active callers OR admin-uploaded profiles, excluding the caller themselves
+  async getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number> {
     const activeUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
-      .where(not(eq(activeCalls.userId, excludeUserId)));
+      .where(
+        regionId
+          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId))
+          : not(eq(activeCalls.userId, excludeUserId))
+      );
 
     const ids = activeUserIds.map(r => r.userId);
     const conditions = ids.length > 0
@@ -167,18 +219,16 @@ export class DatabaseStorage implements IStorage {
     return result.count;
   }
 
-  async getAllActiveProfiles(excludeUserId: string): Promise<Profile[]> {
-    // Get user IDs of other active callers
+  async getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]> {
     const activeUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
-      .where(not(eq(activeCalls.userId, excludeUserId)));
+      .where(
+        regionId
+          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId))
+          : not(eq(activeCalls.userId, excludeUserId))
+      );
 
     const ids = activeUserIds.map(r => r.userId);
-
-    // Return all profiles from:
-    //  (a) active callers who have a profile, OR
-    //  (b) admin-uploaded profiles (always available in the pool)
-    // Sorted consistently by creation date so the order is stable.
     const conditions = ids.length > 0
       ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
       : eq(profiles.isAdminUploaded, true);

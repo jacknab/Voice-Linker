@@ -3,6 +3,18 @@ import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const regions = pgTable("regions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  phoneNumber: text("phone_number").notNull(),
+  timezone: text("timezone").notNull().default("America/New_York"),
+  maxCapacity: integer("max_capacity").notNull().default(1000),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   phoneNumber: text("phone_number").notNull().unique(),
@@ -33,10 +45,15 @@ export const messages = pgTable("messages", {
 export const activeCalls = pgTable("active_calls", {
   callSid: text("call_sid").primaryKey(),
   userId: uuid("user_id").notNull(),
+  regionId: uuid("region_id"),
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
 // Relations
+export const regionsRelations = relations(regions, ({ many }) => ({
+  activeCalls: many(activeCalls),
+}));
+
 export const usersRelations = relations(users, ({ one, many }) => ({
   profile: one(profiles, {
     fields: [users.id],
@@ -72,11 +89,19 @@ export const activeCallsRelations = relations(activeCalls, ({ one }) => ({
     fields: [activeCalls.userId],
     references: [users.id],
   }),
+  region: one(regions, {
+    fields: [activeCalls.regionId],
+    references: [regions.id],
+  }),
 }));
 
+export const insertRegionSchema = createInsertSchema(regions).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertProfileSchema = createInsertSchema(profiles).omit({ id: true, createdAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, isRead: true });
+
+export type Region = typeof regions.$inferSelect;
+export type InsertRegion = z.infer<typeof insertRegionSchema>;
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
