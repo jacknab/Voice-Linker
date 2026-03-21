@@ -39,9 +39,9 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 
 // ─── Membership Packages ───────────────────────────────────────────────────
 const MEMBERSHIP_PACKAGES: Record<string, { name: string; label: string; priceCents: number; priceLabel: string }> = {
-  "1": { name: "24hour", label: "24 Hour",  priceCents: 299,  priceLabel: "2 dollars and 99 cents" },
-  "2": { name: "7day",   label: "7 Day",    priceCents: 1699, priceLabel: "16 dollars and 99 cents" },
-  "3": { name: "30day",  label: "30 Day",   priceCents: 2999, priceLabel: "29 dollars and 99 cents" },
+  "1": { name: "30day",  label: "30 Day",   priceCents: 2500, priceLabel: "25 dollars" },
+  "2": { name: "14day",  label: "14 Day",   priceCents: 1000, priceLabel: "10 dollars" },
+  "3": { name: "24hour", label: "24 Hour",  priceCents: 300,  priceLabel: "3 dollars" },
 };
 
 // In-memory payment sessions keyed by Twilio CallSid
@@ -50,6 +50,7 @@ interface PaymentSession {
   packageLabel: string;
   packagePriceCents: number;
   priceLabel: string;
+  isFirstPurchase?: boolean;
   cardNumber?: string;
   expMonth?: number;
   expYear?: number;
@@ -702,14 +703,11 @@ export async function registerRoutes(
   });
 
   // ─── 14. Membership Purchase ──────────────────────────────────────────────
-  app.post("/voice/membership-purchase", async (_req, res) => {
+  app.post("/voice/membership-purchase", async (req, res) => {
     const twiml = new VoiceResponse();
-    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-package-selection" });
-    gather.say("Which membership package would you like to purchase?");
-    gather.say("Press 1 for a 24 hour pass at 2 dollars and 99 cents.");
-    gather.say("Press 2 for a 7 day membership at 16 dollars and 99 cents.");
-    gather.say("Press 3 for a 30 day membership at 29 dollars and 99 cents.");
-    gather.say("Press 9 to return to the main menu.");
+    const audioUrl = `${baseUrl(req)}/uploads/membership_packages_1774058642428.mp3`;
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-package-selection", finishOnKey: "" });
+    gather.play(audioUrl);
     twiml.redirect("/voice/membership-purchase");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -717,11 +715,21 @@ export async function registerRoutes(
 
   app.post("/voice/handle-package-selection", async (req, res) => {
     const twiml = new VoiceResponse();
-    const digit = req.body?.Digits;
+    const digit = req.body?.Digits as string;
     const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
 
-    if (digit === "9") {
+    // Press # to cancel
+    if (digit === "#") {
+      twiml.say("Cancelled. Returning to the main menu.");
       twiml.redirect("/voice/main-menu");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    // Press 9 to repeat
+    if (digit === "9") {
+      twiml.redirect("/voice/membership-purchase");
       res.type("text/xml");
       return res.send(twiml.toString());
     }
@@ -734,14 +742,30 @@ export async function registerRoutes(
       return res.send(twiml.toString());
     }
 
+    // Detect first purchase for the 14-day package bonus
+    let isFirstPurchase = false;
+    if (pkg.name === "14day") {
+      try {
+        const user = await getOrCreateUser(fromNumber);
+        isFirstPurchase = !user.membershipTier;
+      } catch {
+        isFirstPurchase = false;
+      }
+    }
+
     paymentSessions.set(callSid, {
       packageName: pkg.name,
       packageLabel: pkg.label,
       packagePriceCents: pkg.priceCents,
       priceLabel: pkg.priceLabel,
+      isFirstPurchase,
     });
 
-    twiml.say(`You selected ${pkg.label} membership at ${pkg.priceLabel}.`);
+    if (pkg.name === "14day" && isFirstPurchase) {
+      twiml.say(`Great choice! You selected 14 days access for ${pkg.priceLabel}, including your free 7-day first purchase bonus.`);
+    } else {
+      twiml.say(`You selected ${pkg.label} access for ${pkg.priceLabel}.`);
+    }
     twiml.say("We will now collect your credit card information.");
     twiml.redirect("/voice/collect-card-number");
     res.type("text/xml");
@@ -921,9 +945,12 @@ export async function registerRoutes(
       if (paymentIntent.status === "succeeded") {
         await storage.updateUserMembership(user.id, { membershipTier: session.packageName });
         paymentSessions.delete(callSid);
+        const bonusMsg = (session.packageName === "14day" && session.isFirstPurchase)
+          ? " Plus your free extra 7 days have been added — enjoy 14 days total!"
+          : "";
         twiml.say(
-          `Payment successful! Welcome to ${session.packageLabel} membership. ` +
-          `Your card has been charged ${session.priceLabel}. ` +
+          `Payment successful! You now have ${session.packageLabel} access. ` +
+          `Your card has been charged ${session.priceLabel}.${bonusMsg} ` +
           "Thank you for joining. Returning to the main menu."
         );
       } else {
