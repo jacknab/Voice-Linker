@@ -701,9 +701,7 @@ export async function registerRoutes(
     }
 
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-greeting-menu" });
-    gather.say("Press 1 to save your recording and continue.");
-    gather.say("Press 2 to re-record your greeting.");
-    gather.say("Press 3 to hear your greeting again.");
+    gather.play(`${baseUrl(req)}/uploads/prompt-greeting-menu.wav`);
     twiml.redirect("/voice/greeting-menu");
     res.type("text/xml");
     res.send(twiml.toString());
