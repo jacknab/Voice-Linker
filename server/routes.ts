@@ -428,8 +428,8 @@ export async function registerRoutes(
         throw new Error(`Missing fields: From=${fromNumber}, RecordingUrl=${recordingUrl}`);
       }
 
-      // Reject greetings shorter than 10 seconds — play error audio and re-prompt
-      if (recordingDuration < 10) {
+      // Reject greetings shorter than 3 seconds — play error audio and re-prompt
+      if (recordingDuration < 3) {
         twiml.play(`${baseUrl(req)}/uploads/greeting_error_1774060225320.mp3`);
         twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
         res.type("text/xml");
