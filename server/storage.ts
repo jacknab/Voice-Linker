@@ -38,6 +38,7 @@ export interface IStorage {
   getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number>;
   getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number>;
   getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]>;
+  getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }>;
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User>;
 
@@ -249,6 +250,34 @@ export class DatabaseStorage implements IStorage {
       .orderBy(membershipPriority, profiles.createdAt);
 
     return rows.map(r => r.profile);
+  }
+
+  async getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }> {
+    // Active callers currently in this region
+    const [activeResult] = await db.select({ count: count() })
+      .from(activeCalls)
+      .where(eq(activeCalls.regionId, regionId));
+
+    // Voice profiles: users currently active in this region + admin-uploaded profiles
+    const activeUserIds = await db.select({ userId: activeCalls.userId })
+      .from(activeCalls)
+      .where(eq(activeCalls.regionId, regionId));
+    const ids = activeUserIds.map(r => r.userId);
+    const profileCondition = ids.length > 0
+      ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
+      : eq(profiles.isAdminUploaded, true);
+    const [profileResult] = await db.select({ count: count() })
+      .from(profiles)
+      .where(profileCondition);
+
+    // Messages relayed system-wide (messages have no region association)
+    const [msgResult] = await db.select({ count: count() }).from(messages);
+
+    return {
+      activeCalls: activeResult.count,
+      voiceProfiles: profileResult.count,
+      messagesRelayed: msgResult.count,
+    };
   }
 
   async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User> {

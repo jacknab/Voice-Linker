@@ -28,7 +28,9 @@ interface Region {
   description: string | null;
   isActive: boolean;
   createdAt: string;
-  activeUsers: number;
+  activeCalls: number;
+  voiceProfiles: number;
+  messagesRelayed: number;
 }
 
 type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing";
@@ -389,18 +391,24 @@ function RegionsTab() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <div className="text-[#f5a623] font-mono font-bold text-2xl">
-                    {String(region.activeUsers).padStart(3, "0")}
+                    {String(region.activeCalls).padStart(3, "0")}
                   </div>
-                  <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Active Users</div>
+                  <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Live on Line</div>
                 </div>
                 <div>
                   <div className="text-[#f5a623] font-mono font-bold text-2xl">
-                    {region.maxCapacity.toLocaleString()}
+                    {String(region.voiceProfiles).padStart(3, "0")}
                   </div>
-                  <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Max Capacity</div>
+                  <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Voice Profiles</div>
+                </div>
+                <div>
+                  <div className="text-[#f5a623] font-mono font-bold text-2xl">
+                    {String(region.messagesRelayed).padStart(3, "0")}
+                  </div>
+                  <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Msgs Relayed</div>
                 </div>
               </div>
 

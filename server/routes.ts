@@ -266,13 +266,13 @@ export async function registerRoutes(
   app.get("/api/regions", async (_req, res) => {
     try {
       const all = await storage.getAllRegions();
-      const withCounts = await Promise.all(
-        all.map(async (r) => ({
-          ...r,
-          activeUsers: await storage.getRegionActiveUserCount(r.id),
-        }))
+      const withStats = await Promise.all(
+        all.map(async (r) => {
+          const stats = await storage.getRegionStats(r.id);
+          return { ...r, ...stats };
+        })
       );
-      res.json(withCounts);
+      res.json(withStats);
     } catch (e) {
       console.error("[regions] Failed to list regions:", e);
       res.status(500).json({ message: "Failed to fetch regions" });
