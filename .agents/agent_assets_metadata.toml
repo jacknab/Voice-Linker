@@ -6,3 +6,9 @@ id = "A94LSjLMF5S8MgWI0l6Vb"
 uri = "file://SETUP.md"
 type = "text"
 title = "VOICE_PROTOCOL — VPS Setup & Operations Guide"
+
+[[outputs]]
+id = "-cCQI6i2oiI3eGwgR92Zi"
+uri = "file://prompts_guide.md"
+type = "text"
+title = "System Prompts Recording Guide"
