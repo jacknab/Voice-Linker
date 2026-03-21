@@ -56,6 +56,13 @@ interface PaymentSession {
 }
 const paymentSessions = new Map<string, PaymentSession>();
 
+// In-memory drafts keyed by phone number (cleared once saved or call ends)
+interface GreetingDraft {
+  firstNameUrl?: string; // set during record-first-name step
+  greetingUrl?: string;  // set during record-greeting step
+}
+const greetingDrafts = new Map<string, GreetingDraft>(); // phoneNumber -> draft
+
 // Build the base URL of this server from an incoming Twilio request
 function baseUrl(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
@@ -308,10 +315,9 @@ export async function registerRoutes(
       registerStatusCallback(callSid, req).catch(() => {});
 
       const profile = await storage.getProfile(user.id);
-      if (!profile) {
-        twiml.say("Welcome! Before using the system you must record a short personal profile.");
-        twiml.say("After the tone, record your profile. You have 30 seconds.");
-        twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
+      if (!profile || !profile.firstNameUrl) {
+        // New caller or caller who hasn't completed the full setup — start from first name
+        twiml.redirect("/voice/record-first-name");
       } else {
         twiml.redirect("/voice/main-menu");
       }
@@ -374,8 +380,7 @@ export async function registerRoutes(
     if (digit === "1") {
       twiml.redirect("/voice/browse-profiles");
     } else if (digit === "2") {
-      twiml.say("After the tone, record your new profile. You have 30 seconds.");
-      twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
+      twiml.redirect("/voice/record-greeting");
     } else if (digit === "4") {
       twiml.redirect("/voice/info-menu");
     } else {
@@ -606,7 +611,157 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // ─── 10. Info Menu ────────────────────────────────────────────────────────
+  // ─── 10. Greeting Recording Flow ──────────────────────────────────────────
+
+  // Step 1: Play the first-name prompt and record the caller's first name
+  app.post("/voice/record-first-name", async (req, res) => {
+    const twiml = new VoiceResponse();
+    twiml.play(`${baseUrl(req)}/uploads/prompt-first-name.wav`);
+    twiml.record({
+      maxLength: 10,
+      playBeep: false,
+      finishOnKey: "1234567890*#",
+      action: "/voice/save-first-name",
+    });
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // Step 1b: Store first name in draft (in-memory), then move to greeting step
+  app.post("/voice/save-first-name", async (req, res) => {
+    const twiml = new VoiceResponse();
+    try {
+      const fromNumber = req.body?.From as string;
+      const recordingUrl = req.body?.RecordingUrl as string;
+      if (!fromNumber || !recordingUrl) throw new Error("Missing From or RecordingUrl");
+
+      const existing = greetingDrafts.get(fromNumber) ?? {};
+      greetingDrafts.set(fromNumber, { ...existing, firstNameUrl: recordingUrl });
+
+      twiml.redirect("/voice/record-greeting");
+    } catch (err) {
+      console.error("[voice] /voice/save-first-name error:", err);
+      twiml.say("Something went wrong. Please try again.");
+      twiml.redirect("/voice/record-first-name");
+    }
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // Step 2: Play the record-greeting prompt and record the caller's greeting
+  app.post("/voice/record-greeting", async (req, res) => {
+    const twiml = new VoiceResponse();
+    twiml.play(`${baseUrl(req)}/uploads/prompt-record-greeting.mp3`);
+    twiml.record({
+      maxLength: 30,
+      playBeep: false,
+      finishOnKey: "1234567890*#",
+      action: "/voice/save-greeting-for-review",
+    });
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // Step 3: Save greeting draft, play back the playback prompt + the recording, then show menu
+  app.post("/voice/save-greeting-for-review", async (req, res) => {
+    const twiml = new VoiceResponse();
+    try {
+      const fromNumber = req.body?.From as string;
+      const recordingUrl = req.body?.RecordingUrl as string;
+      if (!fromNumber || !recordingUrl) throw new Error("Missing From or RecordingUrl");
+
+      // Add greeting URL to the draft (preserving any firstNameUrl already stored)
+      const existing = greetingDrafts.get(fromNumber) ?? {};
+      greetingDrafts.set(fromNumber, { ...existing, greetingUrl: recordingUrl });
+
+      // Play the greeting-playback intro prompt, then the caller's own recording
+      twiml.play(`${baseUrl(req)}/uploads/prompt-greeting-playback.wav`);
+      twiml.play(audioProxyUrl(recordingUrl, req));
+      twiml.redirect("/voice/greeting-menu");
+    } catch (err) {
+      console.error("[voice] /voice/save-greeting-for-review error:", err);
+      twiml.say("Something went wrong. Let's try again.");
+      twiml.redirect("/voice/record-greeting");
+    }
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // Step 4: Greeting review menu
+  app.post("/voice/greeting-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const draft = greetingDrafts.get(fromNumber);
+
+    if (!draft?.greetingUrl) {
+      // No greeting draft — send back to record greeting
+      twiml.redirect("/voice/record-greeting");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-greeting-menu" });
+    gather.say("Press 1 to save your recording and continue.");
+    gather.say("Press 2 to re-record your greeting.");
+    gather.say("Press 3 to hear your greeting again.");
+    twiml.redirect("/voice/greeting-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // Step 5: Handle greeting menu choices
+  app.post("/voice/handle-greeting-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+    const draft = greetingDrafts.get(fromNumber);
+
+    if (!draft?.greetingUrl) {
+      twiml.say("Your session expired. Let's start over.");
+      twiml.redirect("/voice/record-greeting");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    if (digit === "1") {
+      // Save first name + greeting and continue
+      try {
+        const user = await getOrCreateUser(fromNumber);
+        const existing = await storage.getProfile(user.id);
+        // Resolve firstNameUrl: from current draft, then existing profile, then fall back to greeting
+        const firstNameUrl = draft.firstNameUrl ?? existing?.firstNameUrl ?? draft.greetingUrl;
+        await storage.upsertProfile({
+          userId: user.id,
+          recordingUrl: draft.greetingUrl,
+          firstNameUrl,
+        });
+        greetingDrafts.delete(fromNumber);
+        twiml.say("Your greeting has been saved. Welcome to the voice line.");
+        twiml.redirect("/voice/main-menu");
+      } catch (err) {
+        console.error("[voice] /voice/handle-greeting-menu save error:", err);
+        twiml.say("We could not save your greeting. Please try again.");
+        twiml.redirect("/voice/greeting-menu");
+      }
+    } else if (digit === "2") {
+      // Re-record greeting only — keep firstNameUrl draft but clear the greeting
+      const firstNameUrl = draft.firstNameUrl;
+      greetingDrafts.set(fromNumber, { firstNameUrl, greetingUrl: undefined });
+      twiml.redirect("/voice/record-greeting");
+    } else if (digit === "3") {
+      // Play greeting again, then return to menu
+      twiml.play(audioProxyUrl(draft.greetingUrl, req));
+      twiml.redirect("/voice/greeting-menu");
+    } else {
+      twiml.say("Invalid choice.");
+      twiml.redirect("/voice/greeting-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 11. Info Menu ────────────────────────────────────────────────────────
   app.post("/voice/info-menu", async (_req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-info-menu" });

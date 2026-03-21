@@ -14,6 +14,7 @@ export const users = pgTable("users", {
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid("user_id").notNull().unique(),
+  firstNameUrl: text("first_name_url"),
   recordingUrl: text("recording_url").notNull(),
   recordingDuration: integer("recording_duration"),
   isAdminUploaded: boolean("is_admin_uploaded").default(false),
