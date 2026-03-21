@@ -414,6 +414,10 @@ export async function registerRoutes(
           const playUrl = audioProxyUrl(randomProfile.recordingUrl, req);
           console.log(`[voice] Playing profile userId=${randomProfile.userId} url=${playUrl}`);
 
+          // Announce how many callers are currently on the line
+          const callerWord = activeCallerCount === 1 ? "caller" : "callers";
+          twiml.say(`There ${activeCallerCount === 1 ? "is" : "are"} ${activeCallerCount} ${callerWord} on the line.`);
+
           // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one
           const profileGather = twiml.gather({
             numDigits: 1,
