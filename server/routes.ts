@@ -37,6 +37,25 @@ const upload = multer({
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
+// ─── Membership Packages ───────────────────────────────────────────────────
+const MEMBERSHIP_PACKAGES: Record<string, { name: string; label: string; priceCents: number; priceLabel: string }> = {
+  "1": { name: "bronze", label: "Bronze", priceCents: 999,  priceLabel: "9 dollars and 99 cents per month" },
+  "2": { name: "silver", label: "Silver", priceCents: 1999, priceLabel: "19 dollars and 99 cents per month" },
+  "3": { name: "gold",   label: "Gold",   priceCents: 2999, priceLabel: "29 dollars and 99 cents per month" },
+};
+
+// In-memory payment sessions keyed by Twilio CallSid
+interface PaymentSession {
+  packageName: string;
+  packageLabel: string;
+  packagePriceCents: number;
+  cardNumber?: string;
+  expMonth?: number;
+  expYear?: number;
+  cvv?: string;
+}
+const paymentSessions = new Map<string, PaymentSession>();
+
 // Build the base URL of this server from an incoming Twilio request
 function baseUrl(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
@@ -339,7 +358,9 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-main-menu" });
     gather.say("Welcome to the voice line.");
-    gather.say("Press 1 to listen to profiles. Press 2 to re-record your profile.");
+    gather.say("Press 1 to listen to profiles.");
+    gather.say("Press 2 to re-record your profile.");
+    gather.say("Press 4 for information, prices, and membership.");
     twiml.redirect("/voice/main-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -355,6 +376,8 @@ export async function registerRoutes(
     } else if (digit === "2") {
       twiml.say("After the tone, record your new profile. You have 30 seconds.");
       twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
+    } else if (digit === "4") {
+      twiml.redirect("/voice/info-menu");
     } else {
       twiml.say("Invalid choice.");
       twiml.redirect("/voice/main-menu");
@@ -579,6 +602,345 @@ export async function registerRoutes(
       twiml.redirect("/voice/browse-profiles");
     }
 
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 10. Info Menu ────────────────────────────────────────────────────────
+  app.post("/voice/info-menu", async (_req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-info-menu" });
+    gather.say("Information, prices, and membership.");
+    gather.say("Press 1 for membership questions.");
+    gather.say("Press 9 to return to the main menu.");
+    twiml.redirect("/voice/info-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-info-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+
+    if (digit === "1") {
+      twiml.redirect("/voice/membership-questions");
+    } else if (digit === "9") {
+      twiml.redirect("/voice/main-menu");
+    } else {
+      twiml.say("Invalid choice.");
+      twiml.redirect("/voice/info-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 11. Membership Questions ─────────────────────────────────────────────
+  app.post("/voice/membership-questions", async (_req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-membership-questions" });
+    gather.say("Membership questions.");
+    gather.say("Press 1 to learn how membership works.");
+    gather.say("Press 2 to hear our pricing.");
+    gather.say("Press 3 to purchase a membership with a credit card.");
+    gather.say("Press 9 to return to the main menu.");
+    twiml.redirect("/voice/membership-questions");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-membership-questions", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+
+    if (digit === "1") {
+      twiml.redirect("/voice/membership-how-it-works");
+    } else if (digit === "2") {
+      twiml.redirect("/voice/membership-pricing");
+    } else if (digit === "3") {
+      twiml.redirect("/voice/membership-purchase");
+    } else if (digit === "9") {
+      twiml.redirect("/voice/main-menu");
+    } else {
+      twiml.say("Invalid choice.");
+      twiml.redirect("/voice/membership-questions");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 12. How Membership Works ─────────────────────────────────────────────
+  app.post("/voice/membership-how-it-works", async (_req, res) => {
+    const twiml = new VoiceResponse();
+    twiml.say(
+      "Here is how membership works. " +
+      "As a member, you get full access to the voice line community. " +
+      "Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. " +
+      "Membership is billed monthly and can be cancelled at any time. " +
+      "We offer three tiers: Bronze, Silver, and Gold. " +
+      "Each tier unlocks additional features and benefits."
+    );
+    twiml.redirect("/voice/membership-questions");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 13. Membership Pricing ───────────────────────────────────────────────
+  app.post("/voice/membership-pricing", async (_req, res) => {
+    const twiml = new VoiceResponse();
+    twiml.say(
+      "Here are our membership prices. " +
+      "Bronze membership is 9 dollars and 99 cents per month. Bronze members get full access to profiles and messaging. " +
+      "Silver membership is 19 dollars and 99 cents per month. Silver members get everything in Bronze plus enhanced profile visibility. " +
+      "Gold membership is 29 dollars and 99 cents per month. Gold members get everything in Silver plus priority placement and exclusive features. " +
+      "To purchase, press 3 from the membership menu."
+    );
+    twiml.redirect("/voice/membership-questions");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 14. Membership Purchase ──────────────────────────────────────────────
+  app.post("/voice/membership-purchase", async (_req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-package-selection" });
+    gather.say("Which membership package would you like to purchase?");
+    gather.say("Press 1 for Bronze at 9 dollars and 99 cents per month.");
+    gather.say("Press 2 for Silver at 19 dollars and 99 cents per month.");
+    gather.say("Press 3 for Gold at 29 dollars and 99 cents per month.");
+    gather.say("Press 9 to return to the main menu.");
+    twiml.redirect("/voice/membership-purchase");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-package-selection", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+    const callSid = req.body?.CallSid as string;
+
+    if (digit === "9") {
+      twiml.redirect("/voice/main-menu");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const pkg = MEMBERSHIP_PACKAGES[digit];
+    if (!pkg) {
+      twiml.say("Invalid selection.");
+      twiml.redirect("/voice/membership-purchase");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    paymentSessions.set(callSid, {
+      packageName: pkg.name,
+      packageLabel: pkg.label,
+      packagePriceCents: pkg.priceCents,
+    });
+
+    twiml.say(`You selected ${pkg.label} membership at ${pkg.priceLabel}.`);
+    twiml.say("We will now collect your credit card information.");
+    twiml.redirect("/voice/collect-card-number");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 15. Card Collection ──────────────────────────────────────────────────
+  app.post("/voice/collect-card-number", async (_req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 16,
+      action: "/voice/handle-card-number",
+      timeout: 30,
+      finishOnKey: "",
+    });
+    gather.say("Please enter your 16-digit card number now.");
+    twiml.say("We did not receive your card number. Please try again.");
+    twiml.redirect("/voice/collect-card-number");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-card-number", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) || "";
+    const callSid = req.body?.CallSid as string;
+    const session = paymentSessions.get(callSid);
+
+    if (!session) {
+      twiml.say("Your session has expired. Please start over.");
+      twiml.redirect("/voice/membership-purchase");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    if (digits.length !== 16 || !/^\d{16}$/.test(digits)) {
+      twiml.say("Invalid card number. Please try again.");
+      twiml.redirect("/voice/collect-card-number");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    session.cardNumber = digits;
+    twiml.redirect("/voice/collect-card-expiry");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/collect-card-expiry", async (_req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 4,
+      action: "/voice/handle-card-expiry",
+      timeout: 20,
+      finishOnKey: "",
+    });
+    gather.say("Please enter your card expiration date as 4 digits. For example, enter 0 1 2 6 for January 2026.");
+    twiml.say("We did not receive your expiration date. Please try again.");
+    twiml.redirect("/voice/collect-card-expiry");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-card-expiry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) || "";
+    const callSid = req.body?.CallSid as string;
+    const session = paymentSessions.get(callSid);
+
+    if (!session) {
+      twiml.say("Your session has expired. Please start over.");
+      twiml.redirect("/voice/membership-purchase");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    if (!/^\d{4}$/.test(digits)) {
+      twiml.say("Invalid expiration date. Please enter 4 digits. For example, 0 1 2 6 for January 2026.");
+      twiml.redirect("/voice/collect-card-expiry");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const month = parseInt(digits.substring(0, 2), 10);
+    const year = parseInt("20" + digits.substring(2, 4), 10);
+
+    if (month < 1 || month > 12) {
+      twiml.say("Invalid expiration month. Please try again.");
+      twiml.redirect("/voice/collect-card-expiry");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    session.expMonth = month;
+    session.expYear = year;
+    twiml.redirect("/voice/collect-card-cvv");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/collect-card-cvv", async (_req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 4,
+      action: "/voice/handle-card-cvv",
+      timeout: 20,
+      finishOnKey: "#",
+    });
+    gather.say("Please enter your 3 or 4 digit card security code, then press pound.");
+    twiml.say("We did not receive your security code. Please try again.");
+    twiml.redirect("/voice/collect-card-cvv");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-card-cvv", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) || "";
+    const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
+    const session = paymentSessions.get(callSid);
+
+    if (!session || !session.cardNumber || !session.expMonth || !session.expYear) {
+      twiml.say("Your session has expired. Please start over.");
+      twiml.redirect("/voice/membership-purchase");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    if (!/^\d{3,4}$/.test(digits)) {
+      twiml.say("Invalid security code. Please try again.");
+      twiml.redirect("/voice/collect-card-cvv");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    session.cvv = digits;
+
+    twiml.say("Thank you. Please hold while we process your payment.");
+
+    try {
+      const { getUncachableStripeClient } = await import("./stripeClient");
+      const stripe = await getUncachableStripeClient();
+
+      const user = await getOrCreateUser(fromNumber);
+
+      let customerId = user.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          phone: user.phoneNumber,
+          metadata: { userId: user.id },
+        });
+        customerId = customer.id;
+        await storage.updateUserMembership(user.id, { stripeCustomerId: customerId });
+      }
+
+      const paymentMethod = await stripe.paymentMethods.create({
+        type: "card",
+        card: {
+          number: session.cardNumber,
+          exp_month: session.expMonth,
+          exp_year: session.expYear,
+          cvc: session.cvv,
+        },
+      });
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: session.packagePriceCents,
+        currency: "usd",
+        customer: customerId,
+        payment_method: paymentMethod.id,
+        confirm: true,
+        description: `${session.packageLabel} Membership`,
+        off_session: true,
+      });
+
+      if (paymentIntent.status === "succeeded") {
+        await storage.updateUserMembership(user.id, { membershipTier: session.packageName });
+        paymentSessions.delete(callSid);
+        twiml.say(
+          `Payment successful! Welcome to ${session.packageLabel} membership. ` +
+          `Your card has been charged ${session.packageLabel === "Bronze" ? "9 dollars and 99 cents" : session.packageLabel === "Silver" ? "19 dollars and 99 cents" : "29 dollars and 99 cents"}. ` +
+          "Thank you for joining. Returning to the main menu."
+        );
+      } else {
+        paymentSessions.delete(callSid);
+        twiml.say("Your payment could not be completed at this time. Please try again later. Returning to the main menu.");
+      }
+    } catch (err: any) {
+      console.error("[voice] payment error:", err);
+      paymentSessions.delete(callSid);
+      const isStripeError = err?.type?.startsWith("Stripe") || err?.code;
+      if (isStripeError) {
+        twiml.say("Your payment was declined. Please check your card details and try again. Returning to the main menu.");
+      } else {
+        twiml.say("Payment processing is not available right now. Please try again later. Returning to the main menu.");
+      }
+    }
+
+    twiml.redirect("/voice/main-menu");
     res.type("text/xml");
     res.send(twiml.toString());
   });

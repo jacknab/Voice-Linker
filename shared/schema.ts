@@ -6,6 +6,8 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   phoneNumber: text("phone_number").notNull().unique(),
+  stripeCustomerId: text("stripe_customer_id"),
+  membershipTier: text("membership_tier"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

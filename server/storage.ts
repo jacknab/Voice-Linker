@@ -30,6 +30,8 @@ export interface IStorage {
   getAvailableProfileCount(excludeUserId: string): Promise<number>;
   getRandomActiveProfile(excludeUserId: string): Promise<Profile | undefined>;
 
+  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User>;
+
   getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }>;
 }
 
@@ -186,6 +188,11 @@ export class DatabaseStorage implements IStorage {
       .orderBy(sql`RANDOM()`)
       .limit(1);
     return profile;
+  }
+
+  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User> {
+    const [user] = await db.update(users).set(data).where(eq(users.id, userId)).returning();
+    return user;
   }
 
   async getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }> {

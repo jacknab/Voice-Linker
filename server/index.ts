@@ -13,6 +13,27 @@ declare module "http" {
   }
 }
 
+// ─── Stripe Webhook (must be registered BEFORE express.json) ───────────────
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const signature = req.headers["stripe-signature"];
+    if (!signature) {
+      return res.status(400).json({ error: "Missing stripe-signature" });
+    }
+    try {
+      const { WebhookHandlers } = await import("./webhookHandlers");
+      const sig = Array.isArray(signature) ? signature[0] : signature;
+      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+      res.status(200).json({ received: true });
+    } catch (err: any) {
+      console.error("[stripe] webhook error:", err.message);
+      res.status(400).json({ error: "Webhook processing error" });
+    }
+  }
+);
+
 app.use(
   express.json({
     verify: (req, _res, buf) => {
