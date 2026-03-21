@@ -500,7 +500,8 @@ export async function registerRoutes(
 
       // Count available profiles: active callers + admin-uploaded greetings (region-scoped)
       const availableCount = await storage.getAvailableProfileCount(user.id, regionId);
-      const activeCallerCount = await storage.getActiveCallerCount(user.id, regionId);
+      // Caller count is system-wide (no region filter) so virtual callers with no region are included
+      const activeCallerCount = await storage.getActiveCallerCount(user.id);
       console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, activeOtherCallers=${activeCallerCount}, availableProfiles=${availableCount}`);
 
       if (availableCount === 0) {
