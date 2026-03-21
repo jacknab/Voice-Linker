@@ -28,7 +28,7 @@ export interface IStorage {
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
   getActiveCallerCount(excludeUserId: string): Promise<number>;
   getAvailableProfileCount(excludeUserId: string): Promise<number>;
-  getRandomActiveProfile(excludeUserId: string): Promise<Profile | undefined>;
+  getAllActiveProfiles(excludeUserId: string): Promise<Profile[]>;
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User>;
 
@@ -167,7 +167,7 @@ export class DatabaseStorage implements IStorage {
     return result.count;
   }
 
-  async getRandomActiveProfile(excludeUserId: string): Promise<Profile | undefined> {
+  async getAllActiveProfiles(excludeUserId: string): Promise<Profile[]> {
     // Get user IDs of other active callers
     const activeUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
@@ -175,19 +175,18 @@ export class DatabaseStorage implements IStorage {
 
     const ids = activeUserIds.map(r => r.userId);
 
-    // Return a random profile from:
+    // Return all profiles from:
     //  (a) active callers who have a profile, OR
     //  (b) admin-uploaded profiles (always available in the pool)
+    // Sorted consistently by creation date so the order is stable.
     const conditions = ids.length > 0
       ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
       : eq(profiles.isAdminUploaded, true);
 
-    const [profile] = await db.select()
+    return db.select()
       .from(profiles)
       .where(and(conditions, not(eq(profiles.userId, excludeUserId))))
-      .orderBy(sql`RANDOM()`)
-      .limit(1);
-    return profile;
+      .orderBy(profiles.createdAt);
   }
 
   async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User> {

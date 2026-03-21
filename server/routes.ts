@@ -58,6 +58,13 @@ interface PaymentSession {
 }
 const paymentSessions = new Map<string, PaymentSession>();
 
+// Per-caller profile browsing state: each caller gets their own queue + position
+interface CallerBrowseState {
+  queue: { userId: string; recordingUrl: string }[];
+  index: number;
+}
+const callerBrowseState = new Map<string, CallerBrowseState>();
+
 // Build the base URL of this server from an incoming Twilio request
 function baseUrl(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
@@ -277,6 +284,9 @@ export async function registerRoutes(
       } catch (err) {
         console.error(`[status] Error removing active call ${callSid}:`, err);
       }
+      // Clean up per-caller browse queue and payment session
+      callerBrowseState.delete(callSid);
+      paymentSessions.delete(callSid);
     }
 
     // Twilio expects a 2xx response; no TwiML needed for status callbacks
@@ -432,12 +442,28 @@ export async function registerRoutes(
         msgGather.say("Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
-        // Play a random profile (active caller OR admin-uploaded greeting)
-        const randomProfile = await storage.getRandomActiveProfile(user.id);
+        const callSid = req.body?.CallSid as string;
 
-        if (randomProfile) {
-          const playUrl = audioProxyUrl(randomProfile.recordingUrl, req);
-          console.log(`[voice] Playing profile userId=${randomProfile.userId} url=${playUrl}`);
+        // Build the queue once per caller, then advance position on each visit
+        let state = callerBrowseState.get(callSid);
+        if (!state) {
+          const allProfiles = await storage.getAllActiveProfiles(user.id);
+          state = { queue: allProfiles.map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl })), index: 0 };
+          callerBrowseState.set(callSid, state);
+          console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid}`);
+        }
+
+        if (state.queue.length === 0) {
+          twiml.say("No profiles are available right now. Please try again later.");
+          twiml.redirect("/voice/main-menu");
+        } else {
+          const profile = state.queue[state.index];
+
+          // Advance index, wrapping at end of queue
+          state.index = (state.index + 1) % state.queue.length;
+
+          const playUrl = audioProxyUrl(profile.recordingUrl, req);
+          console.log(`[voice] Playing profile userId=${profile.userId} (position ${state.index}/${state.queue.length}) url=${playUrl}`);
 
           // Announce how many callers are currently on the line
           const callerWord = activeCallerCount === 1 ? "caller" : "callers";
@@ -446,16 +472,13 @@ export async function registerRoutes(
           // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one
           const profileGather = twiml.gather({
             numDigits: 1,
-            action: `/voice/handle-profile-menu?profileUserId=${randomProfile.userId}`,
+            action: `/voice/handle-profile-menu?profileUserId=${profile.userId}`,
             timeout: 10,
           });
           profileGather.play(playUrl);
           profileGather.say("Press 1 to send this caller a message.");
           profileGather.say("Press 2 to skip to the next profile.");
           profileGather.say("Press 9 to return to main menu.");
-          twiml.redirect("/voice/main-menu");
-        } else {
-          twiml.say("No profiles are available right now. Please try again later.");
           twiml.redirect("/voice/main-menu");
         }
       }
