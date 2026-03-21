@@ -878,14 +878,14 @@ export async function registerRoutes(
     } else {
       twiml.say(`You selected ${pkg.label} access for ${pkg.priceLabel}.`);
     }
-    twiml.say("We will now collect your credit card information.");
+    twiml.play(`${baseUrl(req)}/uploads/payment_intro_1774066491415.mp3`);
     twiml.redirect("/voice/collect-card-number");
     res.type("text/xml");
     res.send(twiml.toString());
   });
 
   // ─── 15. Card Collection ──────────────────────────────────────────────────
-  app.post("/voice/collect-card-number", async (_req, res) => {
+  app.post("/voice/collect-card-number", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({
       numDigits: 16,
@@ -893,8 +893,8 @@ export async function registerRoutes(
       timeout: 30,
       finishOnKey: "",
     });
-    gather.say("Please enter your 16-digit card number now.");
-    twiml.say("We did not receive your card number. Please try again.");
+    gather.play(`${baseUrl(req)}/uploads/collect_card_number_1774066587203.mp3`);
+    twiml.play(`${baseUrl(req)}/uploads/collect_card_number_retry_1774066910700.mp3`);
     twiml.redirect("/voice/collect-card-number");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -914,7 +914,7 @@ export async function registerRoutes(
     }
 
     if (digits.length !== 16 || !/^\d{16}$/.test(digits)) {
-      twiml.say("Invalid card number. Please try again.");
+      twiml.play(`${baseUrl(req)}/uploads/card_number_invalid_1774067031720.mp3`);
       twiml.redirect("/voice/collect-card-number");
       res.type("text/xml");
       return res.send(twiml.toString());
