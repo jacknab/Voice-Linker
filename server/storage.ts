@@ -233,10 +233,22 @@ export class DatabaseStorage implements IStorage {
       ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
       : eq(profiles.isAdminUploaded, true);
 
-    return db.select()
+    // Priority: 0 = paid members, 1 = free trial / no membership, 2 = admin-uploaded
+    const membershipPriority = sql<number>`
+      CASE
+        WHEN ${profiles.isAdminUploaded} = true THEN 2
+        WHEN ${users.membershipTier} IS NOT NULL AND ${users.membershipTier} != 'free_trial' THEN 0
+        ELSE 1
+      END
+    `;
+
+    const rows = await db.select({ profile: profiles })
       .from(profiles)
+      .leftJoin(users, eq(profiles.userId, users.id))
       .where(and(conditions, not(eq(profiles.userId, excludeUserId))))
-      .orderBy(profiles.createdAt);
+      .orderBy(membershipPriority, profiles.createdAt);
+
+    return rows.map(r => r.profile);
   }
 
   async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User> {
