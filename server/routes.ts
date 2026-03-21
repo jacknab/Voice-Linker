@@ -344,10 +344,18 @@ export async function registerRoutes(
     try {
       const fromNumber = req.body?.From;
       const recordingUrl = req.body?.RecordingUrl;
-      const recordingDuration = parseInt(req.body?.RecordingDuration) || null;
+      const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
 
       if (!fromNumber || !recordingUrl) {
         throw new Error(`Missing fields: From=${fromNumber}, RecordingUrl=${recordingUrl}`);
+      }
+
+      // Reject greetings shorter than 10 seconds — play error audio and re-prompt
+      if (recordingDuration < 10) {
+        twiml.play(`${baseUrl(req)}/uploads/greeting_error_1774060225320.mp3`);
+        twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
+        res.type("text/xml");
+        return res.send(twiml.toString());
       }
 
       const user = await getOrCreateUser(fromNumber);
