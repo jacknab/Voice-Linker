@@ -926,7 +926,7 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  app.post("/voice/collect-card-expiry", async (_req, res) => {
+  app.post("/voice/collect-card-expiry", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({
       numDigits: 4,
@@ -934,7 +934,7 @@ export async function registerRoutes(
       timeout: 20,
       finishOnKey: "",
     });
-    gather.say("Please enter your card expiration date as 4 digits. For example, enter 0 1 2 6 for January 2026.");
+    gather.play(`${baseUrl(req)}/uploads/collect_card_expiry_1774067205293.mp3`);
     twiml.say("We did not receive your expiration date. Please try again.");
     twiml.redirect("/voice/collect-card-expiry");
     res.type("text/xml");
