@@ -15,7 +15,6 @@ export interface IStorage {
 
   getProfile(userId: string): Promise<Profile | undefined>;
   upsertProfile(profile: InsertProfile): Promise<Profile>;
-  saveFirstName(userId: string, firstNameUrl: string): Promise<void>;
   getAllProfilesWithUsers(): Promise<ProfileWithUser[]>;
   deleteProfile(id: string): Promise<void>;
 
@@ -68,15 +67,10 @@ export class DatabaseStorage implements IStorage {
         set: {
           recordingUrl: insertProfile.recordingUrl,
           recordingDuration: insertProfile.recordingDuration,
-          ...(insertProfile.firstNameUrl !== undefined ? { firstNameUrl: insertProfile.firstNameUrl } : {}),
         }
       })
       .returning();
     return profile;
-  }
-
-  async saveFirstName(userId: string, firstNameUrl: string): Promise<void> {
-    await db.update(profiles).set({ firstNameUrl }).where(eq(profiles.userId, userId));
   }
 
   async getAllProfilesWithUsers(): Promise<ProfileWithUser[]> {
