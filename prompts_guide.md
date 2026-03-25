@@ -136,48 +136,37 @@ Drop the recorded `.mp3` into the `uploads/` folder — the system will use your
 
 ---
 
-## 12. Number Files (0 – 100)
+## 12. Number Files (29 files total)
 
-These are used by the system to build the caller count and time-remaining announcements at runtime.  
-Record each number as a clean, single word or natural spoken number. No leading or trailing phrases — just the number itself.
+The system composes any number by playing at most two files in sequence — a tens file followed by a ones file.  
+Only 29 recordings are needed to cover all values from 0 to 100.
 
-| File Name | Say | File Name | Say | File Name | Say |
-|-----------|-----|-----------|-----|-----------|-----|
-| `num_0.mp3` | "zero" | `num_35.mp3` | "thirty-five" | `num_70.mp3` | "seventy" |
-| `num_1.mp3` | "one" | `num_36.mp3` | "thirty-six" | `num_71.mp3` | "seventy-one" |
-| `num_2.mp3` | "two" | `num_37.mp3` | "thirty-seven" | `num_72.mp3` | "seventy-two" |
-| `num_3.mp3` | "three" | `num_38.mp3` | "thirty-eight" | `num_73.mp3` | "seventy-three" |
-| `num_4.mp3` | "four" | `num_39.mp3` | "thirty-nine" | `num_74.mp3` | "seventy-four" |
-| `num_5.mp3` | "five" | `num_40.mp3` | "forty" | `num_75.mp3` | "seventy-five" |
-| `num_6.mp3` | "six" | `num_41.mp3` | "forty-one" | `num_76.mp3` | "seventy-six" |
-| `num_7.mp3` | "seven" | `num_42.mp3` | "forty-two" | `num_77.mp3` | "seventy-seven" |
-| `num_8.mp3` | "eight" | `num_43.mp3` | "forty-three" | `num_78.mp3` | "seventy-eight" |
-| `num_9.mp3` | "nine" | `num_44.mp3` | "forty-four" | `num_79.mp3` | "seventy-nine" |
-| `num_10.mp3` | "ten" | `num_45.mp3` | "forty-five" | `num_80.mp3` | "eighty" |
-| `num_11.mp3` | "eleven" | `num_46.mp3` | "forty-six" | `num_81.mp3` | "eighty-one" |
-| `num_12.mp3` | "twelve" | `num_47.mp3` | "forty-seven" | `num_82.mp3` | "eighty-two" |
-| `num_13.mp3` | "thirteen" | `num_48.mp3` | "forty-eight" | `num_83.mp3` | "eighty-three" |
-| `num_14.mp3` | "fourteen" | `num_49.mp3` | "forty-nine" | `num_84.mp3` | "eighty-four" |
-| `num_15.mp3` | "fifteen" | `num_50.mp3` | "fifty" | `num_85.mp3` | "eighty-five" |
-| `num_16.mp3` | "sixteen" | `num_51.mp3` | "fifty-one" | `num_86.mp3` | "eighty-six" |
-| `num_17.mp3` | "seventeen" | `num_52.mp3` | "fifty-two" | `num_87.mp3` | "eighty-seven" |
-| `num_18.mp3` | "eighteen" | `num_53.mp3` | "fifty-three" | `num_88.mp3` | "eighty-eight" |
-| `num_19.mp3` | "nineteen" | `num_54.mp3` | "fifty-four" | `num_89.mp3` | "eighty-nine" |
-| `num_20.mp3` | "twenty" | `num_55.mp3` | "fifty-five" | `num_90.mp3` | "ninety" |
-| `num_21.mp3` | "twenty-one" | `num_56.mp3` | "fifty-six" | `num_91.mp3` | "ninety-one" |
-| `num_22.mp3` | "twenty-two" | `num_57.mp3` | "fifty-seven" | `num_92.mp3` | "ninety-two" |
-| `num_23.mp3` | "twenty-three" | `num_58.mp3` | "fifty-eight" | `num_93.mp3` | "ninety-three" |
-| `num_24.mp3` | "twenty-four" | `num_59.mp3` | "fifty-nine" | `num_94.mp3` | "ninety-four" |
-| `num_25.mp3` | "twenty-five" | `num_60.mp3` | "sixty" | `num_95.mp3` | "ninety-five" |
-| `num_26.mp3` | "twenty-six" | `num_61.mp3` | "sixty-one" | `num_96.mp3` | "ninety-six" |
-| `num_27.mp3` | "twenty-seven" | `num_62.mp3` | "sixty-two" | `num_97.mp3` | "ninety-seven" |
-| `num_28.mp3` | "twenty-eight" | `num_63.mp3` | "sixty-three" | `num_98.mp3` | "ninety-eight" |
-| `num_29.mp3` | "twenty-nine" | `num_64.mp3` | "sixty-four" | `num_99.mp3` | "ninety-nine" |
-| `num_30.mp3` | "thirty" | `num_65.mp3` | "sixty-five" | `num_100.mp3` | "one hundred" |
-| `num_31.mp3` | "thirty-one" | `num_66.mp3` | "sixty-six" | | |
-| `num_32.mp3` | "thirty-two" | `num_67.mp3` | "sixty-seven" | | |
-| `num_33.mp3` | "thirty-three" | `num_68.mp3` | "sixty-eight" | | |
-| `num_34.mp3` | "thirty-four" | `num_69.mp3` | "sixty-nine" | | |
+**How it works:**
+- **0–19** → played as a single file (one recording per number)
+- **20, 30, 40 … 90** → played as a single tens file
+- **21–99 (non-multiples of 10)** → played as tens file + ones file  
+  e.g. 47 → `num_40.mp3` + `num_7.mp3` → "forty" + "seven"
+- **100** → single file
+
+Record each as a clean standalone word — no leading or trailing context.
+
+### Group A — 0 to 19 (20 files)
+
+| File | Say | File | Say | File | Say | File | Say |
+|------|-----|------|-----|------|-----|------|-----|
+| `num_0.mp3` | "zero" | `num_5.mp3` | "five" | `num_10.mp3` | "ten" | `num_15.mp3` | "fifteen" |
+| `num_1.mp3` | "one" | `num_6.mp3` | "six" | `num_11.mp3` | "eleven" | `num_16.mp3` | "sixteen" |
+| `num_2.mp3` | "two" | `num_7.mp3` | "seven" | `num_12.mp3` | "twelve" | `num_17.mp3` | "seventeen" |
+| `num_3.mp3` | "three" | `num_8.mp3` | "eight" | `num_13.mp3` | "thirteen" | `num_18.mp3` | "eighteen" |
+| `num_4.mp3` | "four" | `num_9.mp3` | "nine" | `num_14.mp3` | "fourteen" | `num_19.mp3` | "nineteen" |
+
+### Group B — Tens (9 files)
+
+| File | Say | File | Say | File | Say |
+|------|-----|------|-----|------|-----|
+| `num_20.mp3` | "twenty" | `num_50.mp3` | "fifty" | `num_80.mp3` | "eighty" |
+| `num_30.mp3` | "thirty" | `num_60.mp3` | "sixty" | `num_90.mp3` | "ninety" |
+| `num_40.mp3` | "forty" | `num_70.mp3` | "seventy" | `num_100.mp3` | "one hundred" |
 
 ---
 

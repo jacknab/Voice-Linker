@@ -46,8 +46,35 @@ const MEMBERSHIP_PACKAGES: Record<string, { name: string; label: string; minutes
   "3": { name: "24hour", label: "1,440 Minute",  minutes: 1440,  priceCents: 300,  priceLabel: "3 dollars" },
 };
 
-// Play the time-remaining announcement by chaining number + phrase audio files.
-// Falls back to TTS only for hour values above 100 (e.g. large memberships).
+// Speak a number using the minimum set of recorded files:
+//   0–19  → single file each  (num_0.mp3 … num_19.mp3)
+//   20–99 → tens file + ones file if non-zero
+//            e.g. 23 → num_20.mp3 + num_3.mp3
+//            e.g. 40 → num_40.mp3 only
+//   100   → num_100.mp3
+//   >100  → TTS fallback (only occurs for large membership hour counts)
+function playNumber(
+  twiml: { say: (text: string) => void; play: (url: string) => void },
+  req: Request,
+  n: number
+): void {
+  if (n <= 19) {
+    playPrompt(twiml, req, `num_${n}.mp3`, String(n));
+  } else if (n < 100) {
+    const tens = Math.floor(n / 10) * 10;
+    const ones = n % 10;
+    playPrompt(twiml, req, `num_${tens}.mp3`, String(tens));
+    if (ones > 0) {
+      playPrompt(twiml, req, `num_${ones}.mp3`, String(ones));
+    }
+  } else if (n === 100) {
+    playPrompt(twiml, req, "num_100.mp3", "one hundred");
+  } else {
+    twiml.say(String(n));
+  }
+}
+
+// Play the time-remaining announcement by chaining phrase + number audio files.
 function playTimeRemaining(
   twiml: { say: (text: string) => void; play: (url: string) => void },
   req: Request,
@@ -57,37 +84,32 @@ function playTimeRemaining(
     // 2+ hours
     const hours = Math.floor(totalMinutes / 60);
     playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
-    if (hours <= 100) {
-      playPrompt(twiml, req, `num_${hours}.mp3`, String(hours));
-    } else {
-      twiml.say(String(hours));
-    }
+    playNumber(twiml, req, hours);
     playPrompt(twiml, req, "phrase_hours_of_pbtr.mp3", "hours of phone booth time remaining.");
   } else if (totalMinutes >= 60) {
     const mins = totalMinutes % 60;
     if (mins === 0) {
       // Exactly 1 hour
       playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
-      playPrompt(twiml, req, "num_1.mp3", "1");
+      playNumber(twiml, req, 1);
       playPrompt(twiml, req, "phrase_hour_of_pbtr.mp3", "hour of phone booth time remaining.");
     } else {
       // 1 hour and X minutes (61–119 minutes)
       playPrompt(twiml, req, "phrase_you_have_1_hour_and.mp3", "You have 1 hour and");
-      playPrompt(twiml, req, `num_${mins}.mp3`, String(mins));
+      playNumber(twiml, req, mins);
       playPrompt(twiml, req, mins === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
         `${mins === 1 ? "minute" : "minutes"} of phone booth time remaining.`);
     }
   } else {
     // Under 60 minutes (1–59; 0 is already blocked at main-menu)
     playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
-    playPrompt(twiml, req, `num_${totalMinutes}.mp3`, String(totalMinutes));
+    playNumber(twiml, req, totalMinutes);
     playPrompt(twiml, req, totalMinutes === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
       `${totalMinutes === 1 ? "minute" : "minutes"} of phone booth time remaining.`);
   }
 }
 
-// Play the active caller count announcement by chaining number + phrase audio files.
-// Falls back to TTS only for counts above 100.
+// Play the active caller count announcement by chaining phrase + number audio files.
 function playCallerCount(
   twiml: { say: (text: string) => void; play: (url: string) => void },
   req: Request,
@@ -96,11 +118,7 @@ function playCallerCount(
   const isSingular = count === 1;
   playPrompt(twiml, req, isSingular ? "phrase_there_is.mp3" : "phrase_there_are.mp3",
     isSingular ? "There is" : "There are");
-  if (count <= 100) {
-    playPrompt(twiml, req, `num_${count}.mp3`, String(count));
-  } else {
-    twiml.say(String(count));
-  }
+  playNumber(twiml, req, count);
   playPrompt(twiml, req,
     isSingular ? "phrase_caller_on_the_line.mp3" : "phrase_callers_on_the_line.mp3",
     isSingular ? "caller on the line." : "callers on the line.");
