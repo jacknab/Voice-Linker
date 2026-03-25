@@ -1,15 +1,12 @@
 import { useStats } from "@/hooks/use-stats";
 import { StatPanel } from "@/components/StatPanel";
 import { TerminalBlock } from "@/components/TerminalBlock";
-import { FeatureCard } from "@/components/FeatureCard";
 import { motion } from "framer-motion";
 import { 
   Users, 
   Mic, 
   Voicemail, 
   PhoneCall, 
-  Headphones, 
-  CornerDownRight, 
   ServerCrash
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -108,47 +105,11 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8">
-          
-          {/* Features Section */}
-          <section className="space-y-6">
-            <div className="flex items-center gap-4 text-primary/80 uppercase tracking-widest text-sm font-display border-b border-border pb-2">
-              Capabilities_
-            </div>
-            
-            <div className="flex flex-col gap-4">
-              <FeatureCard 
-                index={0}
-                icon={<Mic className="w-5 h-5" />}
-                title="Initialize Profile"
-                description="Callers can record a personal greeting that acts as their public voice identity on the network."
-              />
-              <FeatureCard 
-                index={1}
-                icon={<Headphones className="w-5 h-5" />}
-                title="Scan Network"
-                description="Navigate the directory to listen to voice profiles broadcasted by other active nodes."
-              />
-              <FeatureCard 
-                index={2}
-                icon={<Voicemail className="w-5 h-5" />}
-                title="Transmit Message"
-                description="Drop a direct, asynchronous voice transmission to another user's inbox."
-              />
-              <FeatureCard 
-                index={3}
-                icon={<CornerDownRight className="w-5 h-5" />}
-                title="Acknowledge & Reply"
-                description="Review received transmissions and instantly route a recorded reply back to the sender."
-              />
-            </div>
-          </section>
-
-          {/* Configuration Section */}
-          <section className="space-y-6">
-            <div className="flex items-center gap-4 text-primary/80 uppercase tracking-widest text-sm font-display border-b border-border pb-2">
-              Hardware Setup_
-            </div>
+        {/* Configuration Section */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-4 text-primary/80 uppercase tracking-widest text-sm font-display border-b border-border pb-2">
+            Hardware Setup_
+          </div>
             
             <motion.div 
               initial={{ opacity: 0 }}
@@ -182,9 +143,7 @@ export default function Home() {
                 </ol>
               </div>
             </motion.div>
-          </section>
-
-        </div>
+        </section>
 
         {/* Footer */}
         <footer className="pt-12 pb-8 text-center text-xs text-muted-foreground/50 uppercase tracking-[0.2em] font-display border-t border-border/30">
