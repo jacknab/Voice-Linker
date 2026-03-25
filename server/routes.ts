@@ -80,6 +80,22 @@ function getRecordingSid(url: string): string | null {
   return match ? match[1] : null;
 }
 
+// Play a pre-recorded prompt from uploads/ if the file exists, otherwise fall back to TTS.
+// This lets you drop a clean-named .mp3 into uploads/ and it will be picked up instantly.
+function playPrompt(
+  node: { say: (text: string) => void; play: (url: string) => void },
+  req: Request,
+  filename: string,
+  fallbackText: string
+): void {
+  const filePath = path.join(UPLOADS_DIR, filename);
+  if (fs.existsSync(filePath)) {
+    node.play(`${baseUrl(req)}/uploads/${filename}`);
+  } else {
+    node.say(fallbackText);
+  }
+}
+
 // Build a URL pointing to our local audio proxy (or a full URL for local uploads)
 function audioProxyUrl(recordingUrl: string, req: Request): string {
   // Local admin-uploaded file — just make it a full absolute URL
@@ -378,7 +394,7 @@ export async function registerRoutes(
     const callSid = req.body?.CallSid;
 
     if (!fromNumber || !callSid) {
-      twiml.say("We could not identify your call. Goodbye.");
+      playPrompt(twiml, req, "no_caller_id.mp3", "We could not identify your call. Goodbye.");
       twiml.hangup();
       res.type("text/xml");
       return res.send(twiml.toString());
@@ -399,15 +415,14 @@ export async function registerRoutes(
 
       const profile = await storage.getProfile(user.id);
       if (!profile) {
-        twiml.say("Welcome! Before using the system you must create a short voice profile.");
-        twiml.say("First, say your first name only after the tone. You have 5 seconds.");
+        playPrompt(twiml, req, "welcome_record_name.mp3", "Welcome! Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds.");
         twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else {
         twiml.redirect("/voice/main-menu");
       }
     } catch (error) {
       console.error("[voice] /voice error:", error);
-      twiml.say("An error occurred. Please try again later.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
       twiml.hangup();
     }
 
@@ -425,7 +440,7 @@ export async function registerRoutes(
     const nameDuration = parseInt(req.body?.RecordingDuration) || 0;
 
     if (!nameRecordingUrl || nameDuration < 1) {
-      twiml.say("We didn't catch your name. Please try again.");
+      playPrompt(twiml, req, "name_retry.mp3", "We didn't catch your name. Please try again.");
       twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       res.type("text/xml");
       return res.send(twiml.toString());
@@ -434,7 +449,7 @@ export async function registerRoutes(
     // Hold the name recording until the greeting is saved
     pendingNameRecordings.set(callSid, nameRecordingUrl);
 
-    twiml.say("Great. Now record your greeting for other callers. After the tone, you have 60 seconds.");
+    playPrompt(twiml, req, "name_saved_record_greeting.mp3", "Great. Now record your greeting for other callers. After the tone, you have 60 seconds.");
     twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
     res.type("text/xml");
     res.send(twiml.toString());
@@ -458,7 +473,7 @@ export async function registerRoutes(
 
       // Reject greetings shorter than 3 seconds — play error audio and re-prompt
       if (recordingDuration < 3) {
-        twiml.play(`${baseUrl(req)}/uploads/greeting_error_1774060225320.mp3`);
+        playPrompt(twiml, req, "greeting_error.mp3", "That greeting was too short. Please try again after the tone.");
         twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
         res.type("text/xml");
         return res.send(twiml.toString());
@@ -471,11 +486,11 @@ export async function registerRoutes(
       const user = await getOrCreateUser(fromNumber);
       await storage.upsertProfile({ userId: user.id, nameRecordingUrl, recordingUrl, recordingDuration });
 
-      twiml.say("Your profile has been saved.");
+      playPrompt(twiml, req, "profile_saved.mp3", "Your profile has been saved.");
       twiml.redirect("/voice/main-menu");
     } catch (error) {
       console.error("[voice] /voice/save-profile error:", error);
-      twiml.say("We could not save your profile. Please try again.");
+      playPrompt(twiml, req, "profile_save_error.mp3", "We could not save your profile. Please try again.");
       twiml.hangup();
     }
 
