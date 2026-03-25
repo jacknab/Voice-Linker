@@ -136,19 +136,21 @@ Drop the recorded `.mp3` into the `uploads/` folder — the system will use your
 
 ---
 
-## 12. Number Files (29 files total)
+## 12. Number Files (37 files total)
 
-The system composes any number by playing at most two files in sequence — a tens file followed by a ones file.  
-Only 29 recordings are needed to cover all values from 0 to 100.
+The system composes any number by playing up to three files in sequence — a hundreds file, a tens file, and a ones file.  
+Only 37 recordings are needed to cover all values from 0 to 999.
 
 **How it works:**
-- **0–19** → played as a single file (one recording per number)
-- **20, 30, 40 … 90** → played as a single tens file
-- **21–99 (non-multiples of 10)** → played as tens file + ones file  
-  e.g. 47 → `num_40.mp3` + `num_7.mp3` → "forty" + "seven"
-- **100** → single file
+- **0–19** → single file each
+- **20–99** → tens file + ones file (ones skipped if zero)  
+  e.g. 47 → `num_40.mp3` + `num_7.mp3` → "forty" "seven"
+- **100–999** → hundreds file + tens/ones as above  
+  e.g. 336 → `num_300.mp3` + `num_30.mp3` + `num_6.mp3` → "three hundred" "thirty" "six"  
+  e.g. 720 → `num_700.mp3` + `num_20.mp3` → "seven hundred" "twenty"
+- **1000+** → TTS fallback only (not reachable with current membership hour values)
 
-Record each as a clean standalone word — no leading or trailing context.
+Record each as a clean standalone word or phrase — no leading or trailing context.
 
 ### Group A — 0 to 19 (20 files)
 
@@ -160,13 +162,20 @@ Record each as a clean standalone word — no leading or trailing context.
 | `num_3.mp3` | "three" | `num_8.mp3` | "eight" | `num_13.mp3` | "thirteen" | `num_18.mp3` | "eighteen" |
 | `num_4.mp3` | "four" | `num_9.mp3` | "nine" | `num_14.mp3` | "fourteen" | `num_19.mp3` | "nineteen" |
 
-### Group B — Tens (9 files)
+### Group B — Tens (8 files)
+
+| File | Say | File | Say | File | Say | File | Say |
+|------|-----|------|-----|------|-----|------|-----|
+| `num_20.mp3` | "twenty" | `num_40.mp3` | "forty" | `num_60.mp3` | "sixty" | `num_80.mp3` | "eighty" |
+| `num_30.mp3` | "thirty" | `num_50.mp3` | "fifty" | `num_70.mp3` | "seventy" | `num_90.mp3` | "ninety" |
+
+### Group C — Hundreds (9 files)
 
 | File | Say | File | Say | File | Say |
 |------|-----|------|-----|------|-----|
-| `num_20.mp3` | "twenty" | `num_50.mp3` | "fifty" | `num_80.mp3` | "eighty" |
-| `num_30.mp3` | "thirty" | `num_60.mp3` | "sixty" | `num_90.mp3` | "ninety" |
-| `num_40.mp3` | "forty" | `num_70.mp3` | "seventy" | `num_100.mp3` | "one hundred" |
+| `num_100.mp3` | "one hundred" | `num_400.mp3` | "four hundred" | `num_700.mp3` | "seven hundred" |
+| `num_200.mp3` | "two hundred" | `num_500.mp3` | "five hundred" | `num_800.mp3` | "eight hundred" |
+| `num_300.mp3` | "three hundred" | `num_600.mp3` | "six hundred" | `num_900.mp3` | "nine hundred" |
 
 ---
 
@@ -207,7 +216,7 @@ Record each as a natural, flowing phrase — as if it were the middle of a sente
 | 8 guys on the line | `phrase_there_are` → `num_8` → `phrase_callers_on_the_line` |
 | 1 guy on the line | `phrase_there_is` → `num_1` → `phrase_caller_on_the_line` |
 
-> **Note:** For hour values above 100 (e.g. a full 30-day membership = 720 hours), the system uses TTS for the number only and falls back gracefully. All other values are fully covered by the recorded files.
+> **Note:** All membership hour values (max 720 hours for a 30-day membership) are fully covered by the recorded files. TTS is only used as a fallback for values 1000 and above, which are not reachable with current membership packages.
 
 ---
 

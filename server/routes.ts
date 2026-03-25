@@ -46,31 +46,46 @@ const MEMBERSHIP_PACKAGES: Record<string, { name: string; label: string; minutes
   "3": { name: "24hour", label: "1,440 Minute",  minutes: 1440,  priceCents: 300,  priceLabel: "3 dollars" },
 };
 
+// Hundreds word lookup for TTS fallback text
+const HUNDREDS_WORDS: Record<number, string> = {
+  100: "one hundred", 200: "two hundred", 300: "three hundred",
+  400: "four hundred", 500: "five hundred", 600: "six hundred",
+  700: "seven hundred", 800: "eight hundred", 900: "nine hundred",
+};
+
 // Speak a number using the minimum set of recorded files:
-//   0–19  → single file each  (num_0.mp3 … num_19.mp3)
-//   20–99 → tens file + ones file if non-zero
-//            e.g. 23 → num_20.mp3 + num_3.mp3
-//            e.g. 40 → num_40.mp3 only
-//   100   → num_100.mp3
-//   >100  → TTS fallback (only occurs for large membership hour counts)
+//   0–19    → single file each  (num_0.mp3 … num_19.mp3)
+//   20–99   → tens file + ones file if non-zero
+//              e.g. 23 → num_20.mp3 + num_3.mp3
+//              e.g. 40 → num_40.mp3 only
+//   100–999 → hundreds file + tens/ones as above
+//              e.g. 336 → num_300.mp3 + num_30.mp3 + num_6.mp3
+//              e.g. 720 → num_700.mp3 + num_20.mp3
+//   1000+   → TTS fallback (not reachable with current membership values)
 function playNumber(
   twiml: { say: (text: string) => void; play: (url: string) => void },
   req: Request,
   n: number
 ): void {
+  if (n >= 1000) {
+    twiml.say(String(n));
+    return;
+  }
+  if (n >= 100) {
+    const hundreds = Math.floor(n / 100) * 100;
+    playPrompt(twiml, req, `num_${hundreds}.mp3`, HUNDREDS_WORDS[hundreds] ?? String(hundreds));
+    n = n % 100;
+    if (n === 0) return;
+  }
   if (n <= 19) {
     playPrompt(twiml, req, `num_${n}.mp3`, String(n));
-  } else if (n < 100) {
+  } else {
     const tens = Math.floor(n / 10) * 10;
     const ones = n % 10;
     playPrompt(twiml, req, `num_${tens}.mp3`, String(tens));
     if (ones > 0) {
       playPrompt(twiml, req, `num_${ones}.mp3`, String(ones));
     }
-  } else if (n === 100) {
-    playPrompt(twiml, req, "num_100.mp3", "one hundred");
-  } else {
-    twiml.say(String(n));
   }
 }
 
