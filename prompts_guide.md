@@ -136,9 +136,92 @@ Drop the recorded `.mp3` into the `uploads/` folder — the system will use your
 
 ---
 
+## 12. Number Files (0 – 100)
+
+These are used by the system to build the caller count and time-remaining announcements at runtime.  
+Record each number as a clean, single word or natural spoken number. No leading or trailing phrases — just the number itself.
+
+| File Name | Say | File Name | Say | File Name | Say |
+|-----------|-----|-----------|-----|-----------|-----|
+| `num_0.mp3` | "zero" | `num_35.mp3` | "thirty-five" | `num_70.mp3` | "seventy" |
+| `num_1.mp3` | "one" | `num_36.mp3` | "thirty-six" | `num_71.mp3` | "seventy-one" |
+| `num_2.mp3` | "two" | `num_37.mp3` | "thirty-seven" | `num_72.mp3` | "seventy-two" |
+| `num_3.mp3` | "three" | `num_38.mp3` | "thirty-eight" | `num_73.mp3` | "seventy-three" |
+| `num_4.mp3` | "four" | `num_39.mp3` | "thirty-nine" | `num_74.mp3` | "seventy-four" |
+| `num_5.mp3` | "five" | `num_40.mp3` | "forty" | `num_75.mp3` | "seventy-five" |
+| `num_6.mp3` | "six" | `num_41.mp3` | "forty-one" | `num_76.mp3` | "seventy-six" |
+| `num_7.mp3` | "seven" | `num_42.mp3` | "forty-two" | `num_77.mp3` | "seventy-seven" |
+| `num_8.mp3` | "eight" | `num_43.mp3` | "forty-three" | `num_78.mp3` | "seventy-eight" |
+| `num_9.mp3` | "nine" | `num_44.mp3` | "forty-four" | `num_79.mp3` | "seventy-nine" |
+| `num_10.mp3` | "ten" | `num_45.mp3` | "forty-five" | `num_80.mp3` | "eighty" |
+| `num_11.mp3` | "eleven" | `num_46.mp3` | "forty-six" | `num_81.mp3` | "eighty-one" |
+| `num_12.mp3` | "twelve" | `num_47.mp3` | "forty-seven" | `num_82.mp3` | "eighty-two" |
+| `num_13.mp3` | "thirteen" | `num_48.mp3` | "forty-eight" | `num_83.mp3` | "eighty-three" |
+| `num_14.mp3` | "fourteen" | `num_49.mp3` | "forty-nine" | `num_84.mp3` | "eighty-four" |
+| `num_15.mp3` | "fifteen" | `num_50.mp3` | "fifty" | `num_85.mp3` | "eighty-five" |
+| `num_16.mp3` | "sixteen" | `num_51.mp3` | "fifty-one" | `num_86.mp3` | "eighty-six" |
+| `num_17.mp3` | "seventeen" | `num_52.mp3` | "fifty-two" | `num_87.mp3` | "eighty-seven" |
+| `num_18.mp3` | "eighteen" | `num_53.mp3` | "fifty-three" | `num_88.mp3` | "eighty-eight" |
+| `num_19.mp3` | "nineteen" | `num_54.mp3` | "fifty-four" | `num_89.mp3` | "eighty-nine" |
+| `num_20.mp3` | "twenty" | `num_55.mp3` | "fifty-five" | `num_90.mp3` | "ninety" |
+| `num_21.mp3` | "twenty-one" | `num_56.mp3` | "fifty-six" | `num_91.mp3` | "ninety-one" |
+| `num_22.mp3` | "twenty-two" | `num_57.mp3` | "fifty-seven" | `num_92.mp3` | "ninety-two" |
+| `num_23.mp3` | "twenty-three" | `num_58.mp3` | "fifty-eight" | `num_93.mp3` | "ninety-three" |
+| `num_24.mp3` | "twenty-four" | `num_59.mp3` | "fifty-nine" | `num_94.mp3` | "ninety-four" |
+| `num_25.mp3` | "twenty-five" | `num_60.mp3` | "sixty" | `num_95.mp3` | "ninety-five" |
+| `num_26.mp3` | "twenty-six" | `num_61.mp3` | "sixty-one" | `num_96.mp3` | "ninety-six" |
+| `num_27.mp3` | "twenty-seven" | `num_62.mp3` | "sixty-two" | `num_97.mp3` | "ninety-seven" |
+| `num_28.mp3` | "twenty-eight" | `num_63.mp3` | "sixty-three" | `num_98.mp3` | "ninety-eight" |
+| `num_29.mp3` | "twenty-nine" | `num_64.mp3` | "sixty-four" | `num_99.mp3` | "ninety-nine" |
+| `num_30.mp3` | "thirty" | `num_65.mp3` | "sixty-five" | `num_100.mp3` | "one hundred" |
+| `num_31.mp3` | "thirty-one" | `num_66.mp3` | "sixty-six" | | |
+| `num_32.mp3` | "thirty-two" | `num_67.mp3` | "sixty-seven" | | |
+| `num_33.mp3` | "thirty-three" | `num_68.mp3` | "sixty-eight" | | |
+| `num_34.mp3` | "thirty-four" | `num_69.mp3` | "sixty-nine" | | |
+
+---
+
+## 13. Phrase Fragments
+
+These short phrases are stitched together with the number files above to form complete sentences.  
+Record each as a natural, flowing phrase — as if it were the middle of a sentence (no unnatural pauses at the start or end).
+
+### Caller Count Phrases
+
+| File Name | Say | Used In |
+|-----------|-----|---------|
+| `phrase_there_is.mp3` | "There is" | "There is **[N]** caller on the line." |
+| `phrase_there_are.mp3` | "There are" | "There are **[N]** callers on the line." |
+| `phrase_caller_on_the_line.mp3` | "caller on the line." | Singular caller count ending |
+| `phrase_callers_on_the_line.mp3` | "callers on the line." | Plural caller count ending |
+
+### Time Remaining Phrases
+
+| File Name | Say | Used In |
+|-----------|-----|---------|
+| `phrase_you_have.mp3` | "You have" | Starts all time-remaining announcements |
+| `phrase_you_have_1_hour_and.mp3` | "You have 1 hour and" | "You have 1 hour and **[N]** minutes of phone booth time remaining." |
+| `phrase_hour_of_pbtr.mp3` | "hour of phone booth time remaining." | "You have 1 **hour of phone booth time remaining.**" |
+| `phrase_hours_of_pbtr.mp3` | "hours of phone booth time remaining." | "You have **[N]** **hours of phone booth time remaining.**" |
+| `phrase_minute_of_pbtr.mp3` | "minute of phone booth time remaining." | "You have 1 **minute of phone booth time remaining.**" |
+| `phrase_minutes_of_pbtr.mp3` | "minutes of phone booth time remaining." | "You have **[N]** **minutes of phone booth time remaining.**" |
+
+**How announcements are assembled:**
+
+| Scenario | Files played in order |
+|----------|-----------------------|
+| 2+ hours remaining (e.g. 5 hours) | `phrase_you_have` → `num_5` → `phrase_hours_of_pbtr` |
+| Exactly 1 hour remaining | `phrase_you_have` → `num_1` → `phrase_hour_of_pbtr` |
+| 1 hour and X minutes (e.g. 1h 23m) | `phrase_you_have_1_hour_and` → `num_23` → `phrase_minutes_of_pbtr` |
+| Under 60 minutes (e.g. 14 minutes) | `phrase_you_have` → `num_14` → `phrase_minutes_of_pbtr` |
+| Exactly 1 minute | `phrase_you_have` → `num_1` → `phrase_minute_of_pbtr` |
+| 8 callers on the line | `phrase_there_are` → `num_8` → `phrase_callers_on_the_line` |
+| 1 caller on the line | `phrase_there_is` → `num_1` → `phrase_caller_on_the_line` |
+
+> **Note:** For hour values above 100 (e.g. a full 30-day membership = 720 hours), the system uses TTS for the number only and falls back gracefully. All other values are fully covered by the recorded files.
+
+---
+
 ## Notes
 
-- **Dynamic prompts (not pre-recordable):** Two prompts are assembled at runtime and cannot be pre-recorded:
-  - The time-remaining announcement ("You have X hours of phone booth time remaining") — spoken dynamically when a caller first reaches the main menu
-  - The active caller count ("There are X callers on the line") — spoken at the start of each browse session
-- **Existing audio files already in `uploads/`:** `membership_packages_*.mp3` and `payment_intro_*.mp3` are already loaded and used directly — they do not go through `playPrompt()`.
+- **Existing audio files already in `uploads/`:** `membership_packages_*.mp3` and `payment_intro_*.mp3` are already loaded and used directly — they do not go through `playPrompt()` and do not need to be re-recorded unless you want to replace them.
