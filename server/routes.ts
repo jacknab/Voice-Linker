@@ -499,13 +499,10 @@ export async function registerRoutes(
   });
 
   // ─── 3. Main Menu ─────────────────────────────────────────────────────────
-  app.post("/voice/main-menu", async (_req, res) => {
+  app.post("/voice/main-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-main-menu" });
-    gather.say("Welcome to the voice line.");
-    gather.say("Press 1 to listen to profiles.");
-    gather.say("Press 2 to re-record your profile.");
-    gather.say("Press 4 for information, prices, and membership.");
+    playPrompt(gather, req, "main_menu.mp3", "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership.");
     twiml.redirect("/voice/main-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -519,7 +516,7 @@ export async function registerRoutes(
     if (digit === "1") {
       twiml.redirect("/voice/browse-profiles");
     } else if (digit === "2") {
-      twiml.say("Let's re-record your profile. First, say your first name only after the tone. You have 5 seconds.");
+      playPrompt(twiml, req, "rerecord_name.mp3", "Let's re-record your profile. First, say your first name only after the tone. You have 5 seconds.");
       twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
     } else if (digit === "4") {
       twiml.redirect("/voice/info-menu");
@@ -552,7 +549,7 @@ export async function registerRoutes(
       console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, activeOtherCallers=${activeCallerCount}, availableProfiles=${availableCount}`);
 
       if (availableCount === 0) {
-        twiml.say("There are no profiles available right now. Please call back later.");
+        playPrompt(twiml, req, "no_profiles.mp3", "There are no profiles available right now. Please call back later.");
         twiml.redirect("/voice/main-menu");
         res.type("text/xml");
         return res.send(twiml.toString());
@@ -580,10 +577,7 @@ export async function registerRoutes(
           msgGather.say("You have a new message.");
         }
         msgGather.play(audioProxyUrl(unreadMessage.recordingUrl, req));
-        msgGather.say("Press 1 to reply to this message.");
-        msgGather.say("Press 2 to hear the sender's profile.");
-        msgGather.say("Press 3 to continue browsing profiles.");
-        msgGather.say("Press 9 to return to the main menu.");
+        playPrompt(msgGather, req, "message_options.mp3", "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
         // Build the queue once per caller, then advance position on each visit
@@ -596,7 +590,7 @@ export async function registerRoutes(
         }
 
         if (state.queue.length === 0) {
-          twiml.say("No profiles are available right now. Please try again later.");
+          playPrompt(twiml, req, "no_profiles.mp3", "No profiles are available right now. Please try again later.");
           twiml.redirect("/voice/main-menu");
         } else {
           const profile = state.queue[state.index];
@@ -620,15 +614,13 @@ export async function registerRoutes(
             timeout: 10,
           });
           profileGather.play(playUrl);
-          profileGather.say("Press 1 to send this caller a message.");
-          profileGather.say("Press 2 to skip to the next profile.");
-          profileGather.say("Press 9 to return to main menu.");
+          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         }
       }
     } catch (error) {
       console.error("[voice] /voice/browse-profiles error:", error);
-      twiml.say("An error occurred while browsing. Returning to the main menu.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred while browsing. Returning to the main menu.");
       twiml.redirect("/voice/main-menu");
     }
 
