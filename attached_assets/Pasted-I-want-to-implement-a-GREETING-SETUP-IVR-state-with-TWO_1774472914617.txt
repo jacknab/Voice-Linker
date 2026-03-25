@@ -1,0 +1,70 @@
+I want to implement a GREETING_SETUP IVR state with TWO distinct branches:
+
+====================================
+STATE: GREETING_SETUP
+====================================
+
+Audio prompt:
+
+"Your last greeting you recorded is still available.
+To use it again, press 1.
+To record a new greeting, press 2.
+To hear your greeting, press 3.
+To repeat these choices, press 9.
+To continue, press pound."
+
+Behavior:
+- This is a decision gate before entering the live system.
+- User must choose between existing greeting or creating a new one.
+
+------------------------------------
+
+IF USER PRESSES 1 → USE_EXISTING_GREETING
+
+State: USE_EXISTING_GREETING
+
+Behavior:
+- Set user's active greeting = existing saved greeting
+- Do NOT play any audio prompt
+- Immediately route user to LANGUAGE_SELECTION (next IVR state)
+- This is a fast-path with no recording or confirmation
+
+------------------------------------
+
+IF USER PRESSES 2 → CREATE_NEW_GREETING
+
+State: CREATE_NEW_GREETING (this starts a separate flow)
+
+Step 1: RECORD_NAME
+Prompt:
+"Say your first name after the tone."
+Record duration: 5 seconds
+Save audio as temporary draft
+
+Step 2: RECORD_PROFILE
+Prompt:
+"Record your greeting. Tell other callers about yourself and what you're looking for. When you are finished, press pound."
+Record duration: up to 30 seconds
+Save audio as temporary draft
+
+Step 3: REVIEW_GREETING
+
+Prompt:
+"To hear your greeting, press 1.
+To re-record, press 2.
+To accept and continue, press 3.
+To repeat these choices, press 9."
+
+Behavior:
+- 1 = play name + profile audio then return to REVIEW_GREETING
+- 2 = restart CREATE_NEW_GREETING from RECORD_NAME
+- 3 = save draft as active greeting and route to LANGUAGE_SELECTION
+- 9 = repeat menu
+
+------------------------------------
+
+RULES:
+- A user must always end up with an ACTIVE greeting before continuing into the system
+- USE_EXISTING_GREETING bypasses all recording steps
+- CREATE_NEW_GREETING always overwrites previous draft until accepted
+- GREETING_SETUP is a strict gate before entering the main IVR system

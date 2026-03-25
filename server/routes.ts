@@ -57,6 +57,14 @@ const paymentSessions = new Map<string, PaymentSession>();
 // Temporary store for the name recording URL between the save-name and save-profile steps
 const pendingNameRecordings = new Map<string, string>(); // CallSid → nameRecordingUrl
 
+// Draft greeting recordings held in memory until the caller accepts them in REVIEW_GREETING
+interface GreetingDraft {
+  nameRecordingUrl?: string;
+  greetingRecordingUrl: string;
+  greetingDuration: number;
+}
+const pendingGreetingDrafts = new Map<string, GreetingDraft>(); // CallSid → draft
+
 // Per-caller profile browsing state: each caller gets their own queue + position
 interface CallerBrowseState {
   queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null }[];
@@ -376,10 +384,11 @@ export async function registerRoutes(
       } catch (err) {
         console.error(`[status] Error removing active call ${callSid}:`, err);
       }
-      // Clean up per-caller browse queue, payment session, name recording, and region mapping
+      // Clean up per-caller browse queue, payment session, name recording, greeting draft, and region mapping
       callerBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
+      pendingGreetingDrafts.delete(callSid);
       callRegion.delete(callSid);
     }
 
@@ -418,7 +427,7 @@ export async function registerRoutes(
         playPrompt(twiml, req, "welcome_record_name.mp3", "Welcome! Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds.");
         twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else {
-        twiml.redirect("/voice/main-menu");
+        twiml.redirect("/voice/greeting-setup");
       }
     } catch (error) {
       console.error("[voice] /voice error:", error);
@@ -483,11 +492,9 @@ export async function registerRoutes(
       const nameRecordingUrl = pendingNameRecordings.get(callSid) ?? undefined;
       if (nameRecordingUrl) pendingNameRecordings.delete(callSid);
 
-      const user = await getOrCreateUser(fromNumber);
-      await storage.upsertProfile({ userId: user.id, nameRecordingUrl, recordingUrl, recordingDuration });
-
-      playPrompt(twiml, req, "profile_saved.mp3", "Your profile has been saved.");
-      twiml.redirect("/voice/main-menu");
+      // Store as draft — only written to DB once the caller accepts in REVIEW_GREETING
+      pendingGreetingDrafts.set(callSid, { nameRecordingUrl, greetingRecordingUrl: recordingUrl, greetingDuration: recordingDuration });
+      twiml.redirect("/voice/review-greeting");
     } catch (error) {
       console.error("[voice] /voice/save-profile error:", error);
       playPrompt(twiml, req, "profile_save_error.mp3", "We could not save your profile. Please try again.");
@@ -529,7 +536,147 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // ─── 5. Browse Profiles ───────────────────────────────────────────────────
+  // ─── 5. Greeting Setup ────────────────────────────────────────────────────
+  // Gate shown to RETURNING callers before entering the live system.
+  // First-time callers skip this and go straight to the record-name flow.
+  app.post("/voice/greeting-setup", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-greeting-setup", finishOnKey: "#" });
+    playPrompt(gather, req, "greeting_setup.mp3",
+      "Your last greeting you recorded is still available. " +
+      "To use it again, press 1. " +
+      "To record a new greeting, press 2. " +
+      "To hear your greeting, press 3. " +
+      "To repeat these choices, press 9. " +
+      "To continue, press pound."
+    );
+    twiml.redirect("/voice/greeting-setup");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-greeting-setup", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    // digit "" means the caller pressed # (finishOnKey) with no preceding digit → treat as "use existing"
+    if (digit === "1" || digit === "" || !digit) {
+      // USE_EXISTING_GREETING: fast-path, no prompt, straight to main menu
+      twiml.redirect("/voice/main-menu");
+    } else if (digit === "2") {
+      // CREATE_NEW_GREETING: kick off the record-name flow
+      playPrompt(twiml, req, "welcome_record_name.mp3",
+        "Say your first name only after the tone. You have 5 seconds."
+      );
+      twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+    } else if (digit === "3") {
+      // HEAR existing greeting then loop back
+      try {
+        const user = await getOrCreateUser(fromNumber);
+        const profile = await storage.getProfile(user.id);
+        if (profile?.recordingUrl) {
+          if (profile.nameRecordingUrl) {
+            twiml.play(audioProxyUrl(profile.nameRecordingUrl, req));
+          }
+          twiml.play(audioProxyUrl(profile.recordingUrl, req));
+        } else {
+          twiml.say("No greeting found.");
+        }
+      } catch (err) {
+        console.error("[voice] handle-greeting-setup hear error:", err);
+        twiml.say("Could not retrieve your greeting.");
+      }
+      twiml.redirect("/voice/greeting-setup");
+    } else {
+      // 9 or anything else → repeat
+      twiml.redirect("/voice/greeting-setup");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 5b. Review Greeting ──────────────────────────────────────────────────
+  // Presented after recording a new greeting (first-time or re-record).
+  // The draft is held in pendingGreetingDrafts until the caller presses 3 to accept.
+  app.post("/voice/review-greeting", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-review-greeting" });
+    playPrompt(gather, req, "review_greeting.mp3",
+      "To hear your greeting, press 1. " +
+      "To re-record, press 2. " +
+      "To accept and continue, press 3. " +
+      "To repeat these choices, press 9."
+    );
+    twiml.redirect("/voice/review-greeting");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-review-greeting", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    const draft = pendingGreetingDrafts.get(callSid);
+
+    try {
+      if (digit === "1") {
+        // Play back the draft recording(s) then return to review menu
+        if (draft?.nameRecordingUrl) {
+          twiml.play(audioProxyUrl(draft.nameRecordingUrl, req));
+        }
+        if (draft?.greetingRecordingUrl) {
+          twiml.play(audioProxyUrl(draft.greetingRecordingUrl, req));
+        } else {
+          twiml.say("No recording found.");
+        }
+        twiml.redirect("/voice/review-greeting");
+      } else if (digit === "2") {
+        // Re-record from scratch — discard draft and restart name step
+        pendingGreetingDrafts.delete(callSid);
+        playPrompt(twiml, req, "welcome_record_name.mp3",
+          "Say your first name only after the tone. You have 5 seconds."
+        );
+        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+      } else if (digit === "3") {
+        // Accept — write draft to DB and proceed to main menu
+        if (!draft) {
+          twiml.say("Your session has expired. Please re-record your greeting.");
+          playPrompt(twiml, req, "welcome_record_name.mp3",
+            "Say your first name only after the tone. You have 5 seconds."
+          );
+          twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+        } else {
+          const user = await getOrCreateUser(fromNumber);
+          await storage.upsertProfile({
+            userId: user.id,
+            nameRecordingUrl: draft.nameRecordingUrl,
+            recordingUrl: draft.greetingRecordingUrl,
+            recordingDuration: draft.greetingDuration,
+          });
+          pendingGreetingDrafts.delete(callSid);
+          playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
+          twiml.redirect("/voice/main-menu");
+        }
+      } else {
+        // 9 or anything else → repeat review menu
+        twiml.redirect("/voice/review-greeting");
+      }
+    } catch (error) {
+      console.error("[voice] /voice/handle-review-greeting error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the main menu.");
+      twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 6. Browse Profiles ───────────────────────────────────────────────────
   // Only shows profiles of callers currently active on the party line.
   app.post("/voice/browse-profiles", async (req, res) => {
     const twiml = new VoiceResponse();
@@ -1058,7 +1205,7 @@ export async function registerRoutes(
         twiml.say("First, say your first name only after the tone. You have 5 seconds.");
         twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else {
-        twiml.redirect("/voice/main-menu");
+        twiml.redirect("/voice/greeting-setup");
       }
     } catch (error) {
       console.error(`[voice] /voice/${slug} error:`, error);
