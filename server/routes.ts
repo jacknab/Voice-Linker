@@ -38,11 +38,22 @@ const upload = multer({
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
 // ─── Membership Packages ───────────────────────────────────────────────────
-const MEMBERSHIP_PACKAGES: Record<string, { name: string; label: string; priceCents: number; priceLabel: string }> = {
-  "1": { name: "30day",  label: "30 Day",   priceCents: 2500, priceLabel: "25 dollars" },
-  "2": { name: "14day",  label: "14 Day",   priceCents: 1000, priceLabel: "10 dollars" },
-  "3": { name: "24hour", label: "24 Hour",  priceCents: 300,  priceLabel: "3 dollars" },
+const FREE_TRIAL_HOURS = 2; // Hours granted to brand-new callers automatically
+
+const MEMBERSHIP_PACKAGES: Record<string, { name: string; label: string; hours: number; priceCents: number; priceLabel: string }> = {
+  "1": { name: "30day",  label: "720 Hour", hours: 720, priceCents: 2500, priceLabel: "25 dollars" },
+  "2": { name: "14day",  label: "336 Hour", hours: 336, priceCents: 1000, priceLabel: "10 dollars" },
+  "3": { name: "24hour", label: "24 Hour",  hours: 24,  priceCents: 300,  priceLabel: "3 dollars" },
 };
+
+// Format remaining minutes into a spoken time string (hours if >= 60, minutes otherwise)
+function formatTimeRemaining(totalMinutes: number): string {
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    return `You have ${hours} ${hours === 1 ? "hour" : "hours"} remaining.`;
+  }
+  return `You have ${totalMinutes} ${totalMinutes === 1 ? "minute" : "minutes"} remaining.`;
+}
 
 // In-memory payment sessions keyed by Twilio CallSid
 interface PaymentSession {
@@ -74,6 +85,10 @@ const callerBrowseState = new Map<string, CallerBrowseState>();
 
 // Maps CallSid → regionId for the duration of a call
 const callRegion = new Map<string, string>();
+
+// Per-call flags — track whether time announcements have been made this session
+const callTimeAnnounced = new Set<string>(); // already heard the "you have X hours/minutes" announcement
+const callWarningShown  = new Set<string>(); // already heard the < 15-minute warning
 
 // Build the base URL of this server from an incoming Twilio request
 function baseUrl(req: Request): string {
@@ -384,11 +399,13 @@ export async function registerRoutes(
       } catch (err) {
         console.error(`[status] Error removing active call ${callSid}:`, err);
       }
-      // Clean up per-caller browse queue, payment session, name recording, greeting draft, and region mapping
+      // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, and region mapping
       callerBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
       pendingGreetingDrafts.delete(callSid);
+      callTimeAnnounced.delete(callSid);
+      callWarningShown.delete(callSid);
       callRegion.delete(callSid);
     }
 
@@ -413,7 +430,16 @@ export async function registerRoutes(
       // Clean up any stale calls (safety valve for missed status callbacks)
       await storage.removeStaleActiveCalls(90);
 
-      const user = await getOrCreateUser(fromNumber);
+      let user = await getOrCreateUser(fromNumber);
+
+      // Grant a free trial to brand-new callers who have no membership yet
+      if (!user.membershipTier) {
+        user = await storage.updateUserMembership(user.id, {
+          membershipTier: "free_trial",
+          membershipExpiresAt: new Date(Date.now() + FREE_TRIAL_HOURS * 3_600_000),
+        });
+        console.log(`[voice] Granted ${FREE_TRIAL_HOURS}-hour free trial to userId=${user.id}`);
+      }
 
       // Mark this caller as active on the party line
       await storage.registerActiveCall(callSid, user.id);
@@ -508,6 +534,42 @@ export async function registerRoutes(
   // ─── 3. Main Menu ─────────────────────────────────────────────────────────
   app.post("/voice/main-menu", async (req, res) => {
     const twiml = new VoiceResponse();
+    const callSid  = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const now = new Date();
+      const expiresAt = user.membershipExpiresAt;
+
+      // ── Access expired ──────────────────────────────────────────────────
+      if (expiresAt && expiresAt <= now) {
+        twiml.say("Your access has expired.");
+        twiml.redirect("/voice/membership-purchase");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const remainingMs      = expiresAt ? expiresAt.getTime() - now.getTime() : null;
+      const remainingMinutes = remainingMs !== null ? Math.max(0, Math.floor(remainingMs / 60_000)) : null;
+
+      // ── 15-minute warning (shown once per call) ─────────────────────────
+      if (remainingMinutes !== null && remainingMinutes < 15 && !callWarningShown.has(callSid)) {
+        callWarningShown.add(callSid);
+        twiml.redirect("/voice/time-warning");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      // ── First-visit time announcement ───────────────────────────────────
+      if (remainingMinutes !== null && !callTimeAnnounced.has(callSid)) {
+        callTimeAnnounced.add(callSid);
+        twiml.say(formatTimeRemaining(remainingMinutes));
+      }
+    } catch (err) {
+      console.error("[voice] main-menu time check error:", err);
+    }
+
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-main-menu" });
     playPrompt(gather, req, "main_menu.mp3", "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership.");
     twiml.redirect("/voice/main-menu");
@@ -529,6 +591,58 @@ export async function registerRoutes(
       twiml.redirect("/voice/info-menu");
     } else {
       twiml.say("Invalid choice.");
+      twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4b. Time Warning ─────────────────────────────────────────────────────
+  // Played once per call when the caller has < 15 minutes of access remaining.
+  app.post("/voice/time-warning", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    let isFreeTrialCaller = false;
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      isFreeTrialCaller = user.membershipTier === "free_trial";
+    } catch (err) {
+      console.error("[voice] time-warning user lookup error:", err);
+    }
+
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-time-warning", finishOnKey: "#" });
+    if (isFreeTrialCaller) {
+      playPrompt(gather, req, "trial_warning.mp3",
+        "You have less than 15 minutes remaining in your free trial. " +
+        "Stay connected by joining now. " +
+        "You won't be interrupted by ads. " +
+        "Access member only features like off-line messaging, connect live for one on one chat. " +
+        "To join right now press 1. " +
+        "To continue press pound."
+      );
+    } else {
+      playPrompt(gather, req, "member_warning.mp3",
+        "You have less than 15 minutes remaining in your membership. " +
+        "To renew now press 1. " +
+        "To continue press pound."
+      );
+    }
+
+    twiml.redirect("/voice/main-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-time-warning", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+
+    if (digit === "1") {
+      twiml.redirect("/voice/membership-purchase");
+    } else {
+      // # or anything else → continue into the system
       twiml.redirect("/voice/main-menu");
     }
 
@@ -985,7 +1099,8 @@ export async function registerRoutes(
       "Here is how membership works. " +
       "As a member, you get full access to the voice line community. " +
       "Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. " +
-      "We offer three membership options: a 24 hour pass, a 7 day membership, and a 30 day membership. " +
+      "We offer three membership options: a 24 hour pass, a 336 hour membership, and a 720 hour membership. " +
+      "Your remaining time is tracked in hours. When you have less than 60 minutes left, the system will tell you in minutes. " +
       "Choose the option that works best for you."
     );
     twiml.redirect("/voice/membership-questions");
@@ -998,9 +1113,9 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     twiml.say(
       "Here are our membership prices. " +
-      "A 24 hour pass is 2 dollars and 99 cents. " +
-      "A 7 day membership is 16 dollars and 99 cents. " +
-      "A 30 day membership is 29 dollars and 99 cents. " +
+      "A 24 hour pass is 3 dollars. " +
+      "A 336 hour membership is 10 dollars. " +
+      "A 720 hour membership is 25 dollars. " +
       "To purchase, press 3 from the membership menu."
     );
     twiml.redirect("/voice/membership-questions");
@@ -1122,10 +1237,18 @@ export async function registerRoutes(
     if (result === "success") {
       try {
         const user = await getOrCreateUser(fromNumber);
-        await storage.updateUserMembership(user.id, { membershipTier: session.packageName });
+        const pkg = Object.values(MEMBERSHIP_PACKAGES).find(p => p.name === session.packageName);
+        const hours = pkg?.hours ?? 24;
+        const bonusHours = (session.packageName === "14day" && session.isFirstPurchase) ? hours : 0;
+        const totalHours = hours + bonusHours;
+        const expiresAt = new Date(Date.now() + totalHours * 3_600_000);
+        await storage.updateUserMembership(user.id, {
+          membershipTier: session.packageName,
+          membershipExpiresAt: expiresAt,
+        });
 
-        const bonusMsg = (session.packageName === "14day" && session.isFirstPurchase)
-          ? " Plus your free extra 7 days have been added — enjoy 14 days total!"
+        const bonusMsg = bonusHours > 0
+          ? ` Plus your bonus ${bonusHours} hours have been added — enjoy ${totalHours} hours total!`
           : "";
         twiml.say(
           `Payment successful! You now have ${session.packageLabel} access. ` +
@@ -1191,7 +1314,16 @@ export async function registerRoutes(
       // Clean up any stale calls
       await storage.removeStaleActiveCalls(90);
 
-      const user = await getOrCreateUser(fromNumber);
+      let user = await getOrCreateUser(fromNumber);
+
+      // Grant a free trial to brand-new callers who have no membership yet
+      if (!user.membershipTier) {
+        user = await storage.updateUserMembership(user.id, {
+          membershipTier: "free_trial",
+          membershipExpiresAt: new Date(Date.now() + FREE_TRIAL_HOURS * 3_600_000),
+        });
+        console.log(`[voice] [${region.slug}] Granted ${FREE_TRIAL_HOURS}-hour free trial to userId=${user.id}`);
+      }
 
       // Register call as active — scoped to this region
       await storage.registerActiveCall(callSid, user.id, region.id);

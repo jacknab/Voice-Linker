@@ -40,7 +40,7 @@ export interface IStorage {
   getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]>;
   getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }>;
 
-  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User>;
+  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; membershipExpiresAt?: Date }): Promise<User>;
 
   getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }>;
 }
@@ -283,7 +283,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string }): Promise<User> {
+  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; membershipExpiresAt?: Date }): Promise<User> {
     const [user] = await db.update(users).set(data).where(eq(users.id, userId)).returning();
     return user;
   }
