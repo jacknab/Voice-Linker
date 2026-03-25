@@ -179,21 +179,21 @@ Record each as a natural, flowing phrase — as if it were the middle of a sente
 
 | File Name | Say | Used In |
 |-----------|-----|---------|
-| `phrase_there_is.mp3` | "There is" | "There is **[N]** caller on the line." |
-| `phrase_there_are.mp3` | "There are" | "There are **[N]** callers on the line." |
-| `phrase_caller_on_the_line.mp3` | "caller on the line." | Singular caller count ending |
-| `phrase_callers_on_the_line.mp3` | "callers on the line." | Plural caller count ending |
+| `phrase_there_is.mp3` | "There is" | "There is **[N]** guy on the line." |
+| `phrase_there_are.mp3` | "There are" | "There are **[N]** guys on the line." |
+| `phrase_caller_on_the_line.mp3` | "guy on the line." | Singular caller count ending |
+| `phrase_callers_on_the_line.mp3` | "guys on the line." | Plural caller count ending |
 
 ### Time Remaining Phrases
 
 | File Name | Say | Used In |
 |-----------|-----|---------|
 | `phrase_you_have.mp3` | "You have" | Starts all time-remaining announcements |
-| `phrase_you_have_1_hour_and.mp3` | "You have 1 hour and" | "You have 1 hour and **[N]** minutes of phone booth time remaining." |
+| `phrase_you_have_1_hour_and.mp3` | "You have 1 hour and" | "You have 1 hour and **[N]** minutes remaining." |
 | `phrase_hour_of_pbtr.mp3` | "hour of phone booth time remaining." | "You have 1 **hour of phone booth time remaining.**" |
 | `phrase_hours_of_pbtr.mp3` | "hours of phone booth time remaining." | "You have **[N]** **hours of phone booth time remaining.**" |
-| `phrase_minute_of_pbtr.mp3` | "minute of phone booth time remaining." | "You have 1 **minute of phone booth time remaining.**" |
-| `phrase_minutes_of_pbtr.mp3` | "minutes of phone booth time remaining." | "You have **[N]** **minutes of phone booth time remaining.**" |
+| `phrase_minute_of_pbtr.mp3` | "minute remaining." | "You have 1 **minute remaining.**" |
+| `phrase_minutes_of_pbtr.mp3` | "minutes remaining." | "You have **[N]** **minutes remaining.**" |
 
 **How announcements are assembled:**
 
@@ -204,8 +204,8 @@ Record each as a natural, flowing phrase — as if it were the middle of a sente
 | 1 hour and X minutes (e.g. 1h 23m) | `phrase_you_have_1_hour_and` → `num_23` → `phrase_minutes_of_pbtr` |
 | Under 60 minutes (e.g. 14 minutes) | `phrase_you_have` → `num_14` → `phrase_minutes_of_pbtr` |
 | Exactly 1 minute | `phrase_you_have` → `num_1` → `phrase_minute_of_pbtr` |
-| 8 callers on the line | `phrase_there_are` → `num_8` → `phrase_callers_on_the_line` |
-| 1 caller on the line | `phrase_there_is` → `num_1` → `phrase_caller_on_the_line` |
+| 8 guys on the line | `phrase_there_are` → `num_8` → `phrase_callers_on_the_line` |
+| 1 guy on the line | `phrase_there_is` → `num_1` → `phrase_caller_on_the_line` |
 
 > **Note:** For hour values above 100 (e.g. a full 30-day membership = 720 hours), the system uses TTS for the number only and falls back gracefully. All other values are fully covered by the recorded files.
 

@@ -98,14 +98,14 @@ function playTimeRemaining(
       playPrompt(twiml, req, "phrase_you_have_1_hour_and.mp3", "You have 1 hour and");
       playNumber(twiml, req, mins);
       playPrompt(twiml, req, mins === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
-        `${mins === 1 ? "minute" : "minutes"} of phone booth time remaining.`);
+        mins === 1 ? "minute remaining." : "minutes remaining.");
     }
   } else {
     // Under 60 minutes (1–59; 0 is already blocked at main-menu)
     playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
     playNumber(twiml, req, totalMinutes);
     playPrompt(twiml, req, totalMinutes === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
-      `${totalMinutes === 1 ? "minute" : "minutes"} of phone booth time remaining.`);
+      totalMinutes === 1 ? "minute remaining." : "minutes remaining.");
   }
 }
 
@@ -121,7 +121,7 @@ function playCallerCount(
   playNumber(twiml, req, count);
   playPrompt(twiml, req,
     isSingular ? "phrase_caller_on_the_line.mp3" : "phrase_callers_on_the_line.mp3",
-    isSingular ? "caller on the line." : "callers on the line.");
+    isSingular ? "guy on the line." : "guys on the line.");
 }
 
 // In-memory payment sessions keyed by Twilio CallSid
