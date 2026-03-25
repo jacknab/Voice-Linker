@@ -54,9 +54,12 @@ interface PaymentSession {
 }
 const paymentSessions = new Map<string, PaymentSession>();
 
+// Temporary store for the name recording URL between the save-name and save-profile steps
+const pendingNameRecordings = new Map<string, string>(); // CallSid → nameRecordingUrl
+
 // Per-caller profile browsing state: each caller gets their own queue + position
 interface CallerBrowseState {
-  queue: { userId: string; recordingUrl: string }[];
+  queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null }[];
   index: number;
 }
 const callerBrowseState = new Map<string, CallerBrowseState>();
@@ -357,9 +360,10 @@ export async function registerRoutes(
       } catch (err) {
         console.error(`[status] Error removing active call ${callSid}:`, err);
       }
-      // Clean up per-caller browse queue, payment session, and region mapping
+      // Clean up per-caller browse queue, payment session, name recording, and region mapping
       callerBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
+      pendingNameRecordings.delete(callSid);
       callRegion.delete(callSid);
     }
 
@@ -395,9 +399,9 @@ export async function registerRoutes(
 
       const profile = await storage.getProfile(user.id);
       if (!profile) {
-        twiml.say("Welcome! Before using the system you must record a short personal profile.");
-        twiml.say("After the tone, record your profile. You have 30 seconds.");
-        twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
+        twiml.say("Welcome! Before using the system you must create a short voice profile.");
+        twiml.say("First, say your first name only after the tone. You have 5 seconds.");
+        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else {
         twiml.redirect("/voice/main-menu");
       }
@@ -411,12 +415,40 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // ─── 2. Save Profile ──────────────────────────────────────────────────────
+  // ─── 2a. Save Name Recording ──────────────────────────────────────────────
+  // First step of profile creation: record the caller's first name (≤5 seconds).
+  // Stores the name recording in memory then prompts for the greeting.
+  app.post("/voice/save-name", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const nameRecordingUrl = req.body?.RecordingUrl as string;
+    const nameDuration = parseInt(req.body?.RecordingDuration) || 0;
+
+    if (!nameRecordingUrl || nameDuration < 1) {
+      twiml.say("We didn't catch your name. Please try again.");
+      twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    // Hold the name recording until the greeting is saved
+    pendingNameRecordings.set(callSid, nameRecordingUrl);
+
+    twiml.say("Great. Now record your greeting for other callers. After the tone, you have 60 seconds.");
+    twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 2b. Save Profile Greeting ────────────────────────────────────────────
+  // Second step (or standalone re-record). Saves the greeting and, if present,
+  // links the name recording captured just before it.
   app.post("/voice/save-profile", async (req, res) => {
     const twiml = new VoiceResponse();
 
     try {
       const fromNumber = req.body?.From;
+      const callSid = req.body?.CallSid as string;
       const recordingUrl = req.body?.RecordingUrl;
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
 
@@ -432,8 +464,12 @@ export async function registerRoutes(
         return res.send(twiml.toString());
       }
 
+      // Consume any pending name recording from the prior step
+      const nameRecordingUrl = pendingNameRecordings.get(callSid) ?? undefined;
+      if (nameRecordingUrl) pendingNameRecordings.delete(callSid);
+
       const user = await getOrCreateUser(fromNumber);
-      await storage.upsertProfile({ userId: user.id, recordingUrl, recordingDuration });
+      await storage.upsertProfile({ userId: user.id, nameRecordingUrl, recordingUrl, recordingDuration });
 
       twiml.say("Your profile has been saved.");
       twiml.redirect("/voice/main-menu");
@@ -468,8 +504,8 @@ export async function registerRoutes(
     if (digit === "1") {
       twiml.redirect("/voice/browse-profiles");
     } else if (digit === "2") {
-      twiml.say("After the tone, record your new profile. You have 60 seconds.");
-      twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
+      twiml.say("Let's re-record your profile. First, say your first name only after the tone. You have 5 seconds.");
+      twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
     } else if (digit === "4") {
       twiml.redirect("/voice/info-menu");
     } else {
@@ -512,14 +548,22 @@ export async function registerRoutes(
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
       if (unreadMessage) {
-        twiml.say("You have a new message.");
+        // Fetch sender's profile to get their name recording
+        const senderProfile = await storage.getProfile(unreadMessage.fromUserId);
 
-        // Nest <Play> inside <Gather> so pressing a digit during playback skips immediately
+        // Nest <Play> + name announcement inside <Gather>
         const msgGather = twiml.gather({
           numDigits: 1,
           action: `/voice/handle-message-menu?msgId=${unreadMessage.id}&senderId=${unreadMessage.fromUserId}`,
           timeout: 10,
         });
+        if (senderProfile?.nameRecordingUrl) {
+          msgGather.say("New message.");
+          msgGather.play(audioProxyUrl(senderProfile.nameRecordingUrl, req));
+          msgGather.say("has sent you a message.");
+        } else {
+          msgGather.say("You have a new message.");
+        }
         msgGather.play(audioProxyUrl(unreadMessage.recordingUrl, req));
         msgGather.say("Press 1 to reply to this message.");
         msgGather.say("Press 2 to hear the sender's profile.");
@@ -531,7 +575,7 @@ export async function registerRoutes(
         let state = callerBrowseState.get(callSid);
         if (!state) {
           const allProfiles = await storage.getAllActiveProfiles(user.id, regionId);
-          state = { queue: allProfiles.map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl })), index: 0 };
+          state = { queue: allProfiles.map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl })), index: 0 };
           callerBrowseState.set(callSid, state);
           console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid}`);
         }
@@ -1003,9 +1047,9 @@ export async function registerRoutes(
 
       const profile = await storage.getProfile(user.id);
       if (!profile) {
-        twiml.say("Welcome! Before using the system you must record a short personal greeting.");
-        twiml.say("After the tone, record your greeting. You have 60 seconds.");
-        twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
+        twiml.say("Welcome! Before using the system you must create a short voice profile.");
+        twiml.say("First, say your first name only after the tone. You have 5 seconds.");
+        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else {
         twiml.redirect("/voice/main-menu");
       }

@@ -114,6 +114,9 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({
         target: profiles.userId,
         set: {
+          ...(insertProfile.nameRecordingUrl !== undefined && {
+            nameRecordingUrl: insertProfile.nameRecordingUrl,
+          }),
           recordingUrl: insertProfile.recordingUrl,
           recordingDuration: insertProfile.recordingDuration,
         }
