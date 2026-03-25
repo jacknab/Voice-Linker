@@ -40,7 +40,8 @@ export interface IStorage {
   getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]>;
   getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }>;
 
-  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; membershipExpiresAt?: Date }): Promise<User>;
+  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingMinutes?: number }): Promise<User>;
+  deductMinutes(userId: string, minutes: number): Promise<User>;
 
   getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }>;
 }
@@ -283,8 +284,16 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; membershipExpiresAt?: Date }): Promise<User> {
+  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingMinutes?: number }): Promise<User> {
     const [user] = await db.update(users).set(data).where(eq(users.id, userId)).returning();
+    return user;
+  }
+
+  async deductMinutes(userId: string, minutes: number): Promise<User> {
+    const [user] = await db.update(users)
+      .set({ remainingMinutes: sql`GREATEST(0, COALESCE(${users.remainingMinutes}, 0) - ${minutes})` })
+      .where(eq(users.id, userId))
+      .returning();
     return user;
   }
 

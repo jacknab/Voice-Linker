@@ -20,7 +20,7 @@ export const users = pgTable("users", {
   phoneNumber: text("phone_number").notNull().unique(),
   stripeCustomerId: text("stripe_customer_id"),
   membershipTier: text("membership_tier"),
-  membershipExpiresAt: timestamp("membership_expires_at"),
+  remainingMinutes: integer("remaining_minutes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
