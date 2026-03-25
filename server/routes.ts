@@ -51,10 +51,6 @@ interface PaymentSession {
   packagePriceCents: number;
   priceLabel: string;
   isFirstPurchase?: boolean;
-  cardNumber?: string;
-  expMonth?: number;
-  expYear?: number;
-  cvv?: string;
 }
 const paymentSessions = new Map<string, PaymentSession>();
 
@@ -879,184 +875,57 @@ export async function registerRoutes(
       twiml.say(`You selected ${pkg.label} access for ${pkg.priceLabel}.`);
     }
     twiml.play(`${baseUrl(req)}/uploads/payment_intro_1774066491415.mp3`);
-    twiml.redirect("/voice/collect-card-number");
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
 
-  // ─── 15. Card Collection ──────────────────────────────────────────────────
-  app.post("/voice/collect-card-number", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const gather = twiml.gather({
-      numDigits: 16,
-      action: "/voice/handle-card-number",
+    // ── Twilio <Pay> verb: PCI-compliant card collection ────────────────────
+    // Twilio collects card number, expiry, and CVV directly in its own
+    // secure environment — raw card data never reaches this server.
+    // Requires a Pay Connector (Stripe) configured in your Twilio Console
+    // under Account › Payments › Manage Pay Connectors.
+    // Set TWILIO_PAY_CONNECTOR env var to the unique name of that connector
+    // (default: "stripe").
+    const connectorName = process.env.TWILIO_PAY_CONNECTOR || "stripe";
+    const chargeAmount = (pkg.priceCents / 100).toFixed(2);
+
+    twiml.pay({
+      action: `${baseUrl(req)}/voice/handle-payment-complete`,
+      chargeAmount,
+      currency: "usd",
+      description: `${pkg.label} Membership — VOICE PROTOCOL`,
+      paymentConnector: connectorName,
+      postalCode: false,
+      securityCode: true,
       timeout: 30,
-      finishOnKey: "",
-    });
-    gather.play(`${baseUrl(req)}/uploads/collect_card_number_1774066587203.mp3`);
-    twiml.play(`${baseUrl(req)}/uploads/collect_card_number_retry_1774066910700.mp3`);
-    twiml.redirect("/voice/collect-card-number");
+      maxAttempts: 2,
+    } as any);
+
     res.type("text/xml");
     res.send(twiml.toString());
   });
 
-  app.post("/voice/handle-card-number", async (req, res) => {
+  // ─── 15. Payment Result Handler ───────────────────────────────────────────
+  // Twilio posts here after <Pay> completes — with a token, never raw card data
+  app.post("/voice/handle-payment-complete", async (req, res) => {
     const twiml = new VoiceResponse();
-    const digits = (req.body?.Digits as string) || "";
     const callSid = req.body?.CallSid as string;
-    const session = paymentSessions.get(callSid);
-
-    if (!session) {
-      twiml.say("Your session has expired. Please start over.");
-      twiml.redirect("/voice/membership-purchase");
-      res.type("text/xml");
-      return res.send(twiml.toString());
-    }
-
-    if (digits.length !== 16 || !/^\d{16}$/.test(digits)) {
-      twiml.play(`${baseUrl(req)}/uploads/card_number_invalid_1774067031720.mp3`);
-      twiml.redirect("/voice/collect-card-number");
-      res.type("text/xml");
-      return res.send(twiml.toString());
-    }
-
-    session.cardNumber = digits;
-    twiml.redirect("/voice/collect-card-expiry");
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  app.post("/voice/collect-card-expiry", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const gather = twiml.gather({
-      numDigits: 4,
-      action: "/voice/handle-card-expiry",
-      timeout: 20,
-      finishOnKey: "",
-    });
-    gather.play(`${baseUrl(req)}/uploads/collect_card_expiry_1774067205293.mp3`);
-    twiml.say("We did not receive your expiration date. Please try again.");
-    twiml.redirect("/voice/collect-card-expiry");
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  app.post("/voice/handle-card-expiry", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const digits = (req.body?.Digits as string) || "";
-    const callSid = req.body?.CallSid as string;
-    const session = paymentSessions.get(callSid);
-
-    if (!session) {
-      twiml.say("Your session has expired. Please start over.");
-      twiml.redirect("/voice/membership-purchase");
-      res.type("text/xml");
-      return res.send(twiml.toString());
-    }
-
-    if (!/^\d{4}$/.test(digits)) {
-      twiml.say("Invalid expiration date. Please enter 4 digits. For example, 0 1 2 6 for January 2026.");
-      twiml.redirect("/voice/collect-card-expiry");
-      res.type("text/xml");
-      return res.send(twiml.toString());
-    }
-
-    const month = parseInt(digits.substring(0, 2), 10);
-    const year = parseInt("20" + digits.substring(2, 4), 10);
-
-    if (month < 1 || month > 12) {
-      twiml.say("Invalid expiration month. Please try again.");
-      twiml.redirect("/voice/collect-card-expiry");
-      res.type("text/xml");
-      return res.send(twiml.toString());
-    }
-
-    session.expMonth = month;
-    session.expYear = year;
-    twiml.redirect("/voice/collect-card-cvv");
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  app.post("/voice/collect-card-cvv", async (_req, res) => {
-    const twiml = new VoiceResponse();
-    const gather = twiml.gather({
-      numDigits: 4,
-      action: "/voice/handle-card-cvv",
-      timeout: 20,
-      finishOnKey: "#",
-    });
-    gather.say("Please enter your 3 or 4 digit card security code, then press pound.");
-    twiml.say("We did not receive your security code. Please try again.");
-    twiml.redirect("/voice/collect-card-cvv");
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  app.post("/voice/handle-card-cvv", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const digits = (req.body?.Digits as string) || "";
-    const callSid = req.body?.CallSid as string;
+    const result = (req.body?.Result as string) || "";
     const fromNumber = req.body?.From as string;
+    const errorCode = req.body?.ErrorCode as string;
+
     const session = paymentSessions.get(callSid);
+    paymentSessions.delete(callSid);
 
-    if (!session || !session.cardNumber || !session.expMonth || !session.expYear) {
-      twiml.say("Your session has expired. Please start over.");
-      twiml.redirect("/voice/membership-purchase");
+    if (!session) {
+      twiml.say("Your session has expired. Please try again.");
+      twiml.redirect("/voice/main-menu");
       res.type("text/xml");
       return res.send(twiml.toString());
     }
 
-    if (!/^\d{3,4}$/.test(digits)) {
-      twiml.say("Invalid security code. Please try again.");
-      twiml.redirect("/voice/collect-card-cvv");
-      res.type("text/xml");
-      return res.send(twiml.toString());
-    }
-
-    session.cvv = digits;
-
-    twiml.say("Thank you. Please hold while we process your payment.");
-
-    try {
-      const { getUncachableStripeClient } = await import("./stripeClient");
-      const stripe = await getUncachableStripeClient();
-
-      const user = await getOrCreateUser(fromNumber);
-
-      let customerId = user.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          phone: user.phoneNumber,
-          metadata: { userId: user.id },
-        });
-        customerId = customer.id;
-        await storage.updateUserMembership(user.id, { stripeCustomerId: customerId });
-      }
-
-      const paymentMethod = await stripe.paymentMethods.create({
-        type: "card",
-        card: {
-          number: session.cardNumber,
-          exp_month: session.expMonth,
-          exp_year: session.expYear,
-          cvc: session.cvv,
-        },
-      });
-
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: session.packagePriceCents,
-        currency: "usd",
-        customer: customerId,
-        payment_method: paymentMethod.id,
-        confirm: true,
-        description: `${session.packageLabel} Membership`,
-        off_session: true,
-      });
-
-      if (paymentIntent.status === "succeeded") {
+    if (result === "success") {
+      try {
+        const user = await getOrCreateUser(fromNumber);
         await storage.updateUserMembership(user.id, { membershipTier: session.packageName });
-        paymentSessions.delete(callSid);
+
         const bonusMsg = (session.packageName === "14day" && session.isFirstPurchase)
           ? " Plus your free extra 7 days have been added — enjoy 14 days total!"
           : "";
@@ -1065,18 +934,17 @@ export async function registerRoutes(
           `Your card has been charged ${session.priceLabel}.${bonusMsg} ` +
           "Thank you for joining. Returning to the main menu."
         );
-      } else {
-        paymentSessions.delete(callSid);
-        twiml.say("Your payment could not be completed at this time. Please try again later. Returning to the main menu.");
+      } catch (err) {
+        console.error("[voice] membership activation error after payment:", err);
+        twiml.say("Your payment was received but there was an error activating your membership. Please contact support.");
       }
-    } catch (err: any) {
-      console.error("[voice] payment error:", err);
-      paymentSessions.delete(callSid);
-      const isStripeError = err?.type?.startsWith("Stripe") || err?.code;
-      if (isStripeError) {
-        twiml.say("Your payment was declined. Please check your card details and try again. Returning to the main menu.");
+    } else {
+      console.warn(`[voice] payment failed — CallSid=${callSid} ErrorCode=${errorCode}`);
+      // Error code 22001 = card declined; 22002 = processing failure
+      if (errorCode === "22001") {
+        twiml.say("Your card was declined. Please check your details and try again later.");
       } else {
-        twiml.say("Payment processing is not available right now. Please try again later. Returning to the main menu.");
+        twiml.say("Your payment could not be completed at this time. Please try again later.");
       }
     }
 
