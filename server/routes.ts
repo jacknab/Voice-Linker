@@ -576,7 +576,7 @@ export async function registerRoutes(
 
       // ── Access expired ──────────────────────────────────────────────────
       if (user.membershipTier && remaining <= 0) {
-        twiml.say("Your access has expired.");
+        playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         twiml.redirect("/voice/membership-purchase");
         res.type("text/xml");
         return res.send(twiml.toString());
@@ -619,7 +619,7 @@ export async function registerRoutes(
     } else if (digit === "4") {
       twiml.redirect("/voice/info-menu");
     } else {
-      twiml.say("Invalid choice.");
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
       twiml.redirect("/voice/main-menu");
     }
 
@@ -725,11 +725,11 @@ export async function registerRoutes(
           }
           twiml.play(audioProxyUrl(profile.recordingUrl, req));
         } else {
-          twiml.say("No greeting found.");
+          playPrompt(twiml, req, "no_greeting_found.mp3", "No greeting found.");
         }
       } catch (err) {
         console.error("[voice] handle-greeting-setup hear error:", err);
-        twiml.say("Could not retrieve your greeting.");
+        playPrompt(twiml, req, "error_generic.mp3", "Could not retrieve your greeting.");
       }
       twiml.redirect("/voice/greeting-setup");
     } else {
@@ -775,7 +775,7 @@ export async function registerRoutes(
         if (draft?.greetingRecordingUrl) {
           twiml.play(audioProxyUrl(draft.greetingRecordingUrl, req));
         } else {
-          twiml.say("No recording found.");
+          playPrompt(twiml, req, "no_greeting_found.mp3", "No recording found.");
         }
         twiml.redirect("/voice/review-greeting");
       } else if (digit === "2") {
@@ -788,7 +788,7 @@ export async function registerRoutes(
       } else if (digit === "3") {
         // Accept — write draft to DB and proceed to main menu
         if (!draft) {
-          twiml.say("Your session has expired. Please re-record your greeting.");
+          playPrompt(twiml, req, "session_expired_greeting.mp3", "Your session has expired. Please re-record your greeting.");
           playPrompt(twiml, req, "welcome_record_name.mp3",
             "Say your first name only after the tone. You have 5 seconds."
           );
@@ -931,7 +931,7 @@ export async function registerRoutes(
 
       if (digit === "1") {
         await storage.markMessageRead(msgId);
-        twiml.say("Record your reply after the tone.");
+        playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}` });
       } else if (digit === "2") {
         const senderProfile = await storage.getProfile(senderId);
@@ -955,12 +955,12 @@ export async function registerRoutes(
         await storage.markMessageRead(msgId);
         twiml.redirect("/voice/main-menu");
       } else {
-        twiml.say("Invalid choice.");
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
         twiml.redirect("/voice/browse-profiles");
       }
     } catch (error) {
       console.error("[voice] /voice/handle-message-menu error:", error);
-      twiml.say("An error occurred. Returning to the main menu.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the main menu.");
       twiml.redirect("/voice/main-menu");
     }
 
@@ -979,7 +979,7 @@ export async function registerRoutes(
 
       if (digit === "1") {
         await storage.markMessageRead(msgId);
-        twiml.say("Record your message after the tone.");
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}` });
       } else if (digit === "2") {
         await storage.markMessageRead(msgId);
@@ -988,12 +988,12 @@ export async function registerRoutes(
         await storage.markMessageRead(msgId);
         twiml.redirect("/voice/main-menu");
       } else {
-        twiml.say("Invalid choice.");
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
         twiml.redirect("/voice/browse-profiles");
       }
     } catch (error) {
       console.error("[voice] /voice/handle-sender-profile-menu error:", error);
-      twiml.say("An error occurred. Returning to the main menu.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the main menu.");
       twiml.redirect("/voice/main-menu");
     }
 
@@ -1010,19 +1010,19 @@ export async function registerRoutes(
       const profileUserId = req.query.profileUserId as string;
 
       if (digit === "1") {
-        twiml.say("Record your message after the tone.");
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${profileUserId}` });
       } else if (digit === "2") {
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "9") {
         twiml.redirect("/voice/main-menu");
       } else {
-        twiml.say("Invalid choice.");
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
         twiml.redirect("/voice/browse-profiles");
       }
     } catch (error) {
       console.error("[voice] /voice/handle-profile-menu error:", error);
-      twiml.say("An error occurred. Returning to the main menu.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the main menu.");
       twiml.redirect("/voice/main-menu");
     }
 
@@ -1045,11 +1045,11 @@ export async function registerRoutes(
 
       const user = await getOrCreateUser(fromNumber);
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
-      twiml.say("Your message has been sent. Returning to profiles.");
+      playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
       twiml.redirect("/voice/browse-profiles");
     } catch (error) {
       console.error("[voice] /voice/save-message error:", error);
-      twiml.say("Failed to send your message. Returning to profiles.");
+      playPrompt(twiml, req, "message_send_error.mp3", "Failed to send your message. Returning to profiles.");
       twiml.redirect("/voice/browse-profiles");
     }
 
@@ -1058,12 +1058,10 @@ export async function registerRoutes(
   });
 
   // ─── 10. Info Menu ────────────────────────────────────────────────────────
-  app.post("/voice/info-menu", async (_req, res) => {
+  app.post("/voice/info-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-info-menu" });
-    gather.say("Information, prices, and membership.");
-    gather.say("Press 1 for membership questions.");
-    gather.say("Press 9 to return to the main menu.");
+    playPrompt(gather, req, "info_menu.mp3", "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu.");
     twiml.redirect("/voice/info-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -1078,7 +1076,7 @@ export async function registerRoutes(
     } else if (digit === "9") {
       twiml.redirect("/voice/main-menu");
     } else {
-      twiml.say("Invalid choice.");
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
       twiml.redirect("/voice/info-menu");
     }
 
@@ -1087,14 +1085,10 @@ export async function registerRoutes(
   });
 
   // ─── 11. Membership Questions ─────────────────────────────────────────────
-  app.post("/voice/membership-questions", async (_req, res) => {
+  app.post("/voice/membership-questions", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-membership-questions" });
-    gather.say("Membership questions.");
-    gather.say("Press 1 to learn how membership works.");
-    gather.say("Press 2 to hear our pricing.");
-    gather.say("Press 3 to purchase a membership with a credit card.");
-    gather.say("Press 9 to return to the main menu.");
+    playPrompt(gather, req, "membership_questions.mp3", "Membership questions. Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership with a credit card. Press 9 to return to the main menu.");
     twiml.redirect("/voice/membership-questions");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -1113,7 +1107,7 @@ export async function registerRoutes(
     } else if (digit === "9") {
       twiml.redirect("/voice/main-menu");
     } else {
-      twiml.say("Invalid choice.");
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
       twiml.redirect("/voice/membership-questions");
     }
 
@@ -1122,13 +1116,13 @@ export async function registerRoutes(
   });
 
   // ─── 12. How Membership Works ─────────────────────────────────────────────
-  app.post("/voice/membership-how-it-works", async (_req, res) => {
+  app.post("/voice/membership-how-it-works", async (req, res) => {
     const twiml = new VoiceResponse();
-    twiml.say(
+    playPrompt(twiml, req, "membership_how_it_works.mp3",
       "Here is how membership works. " +
       "As a member, you get full access to the voice line community. " +
       "Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. " +
-      "We offer three membership options: a 24 hour pass, a 336 hour membership, and a 720 hour membership. " +
+      "We offer three membership options: a 24 hour pass, a 14 day membership, and a 30 day membership. " +
       "Your remaining time is tracked in hours. When you have less than 60 minutes left, the system will tell you in minutes. " +
       "Choose the option that works best for you."
     );
@@ -1138,13 +1132,13 @@ export async function registerRoutes(
   });
 
   // ─── 13. Membership Pricing ───────────────────────────────────────────────
-  app.post("/voice/membership-pricing", async (_req, res) => {
+  app.post("/voice/membership-pricing", async (req, res) => {
     const twiml = new VoiceResponse();
-    twiml.say(
+    playPrompt(twiml, req, "membership_pricing.mp3",
       "Here are our membership prices. " +
       "A 24 hour pass is 3 dollars. " +
-      "A 336 hour membership is 10 dollars. " +
-      "A 720 hour membership is 25 dollars. " +
+      "A 14 day membership is 10 dollars. " +
+      "A 30 day membership is 25 dollars. " +
       "To purchase, press 3 from the membership menu."
     );
     twiml.redirect("/voice/membership-questions");
@@ -1171,7 +1165,7 @@ export async function registerRoutes(
 
     // Press # to cancel
     if (digit === "#") {
-      twiml.say("Cancelled. Returning to the main menu.");
+      playPrompt(twiml, req, "package_cancelled.mp3", "Cancelled. Returning to the main menu.");
       twiml.redirect("/voice/main-menu");
       res.type("text/xml");
       return res.send(twiml.toString());
@@ -1186,7 +1180,7 @@ export async function registerRoutes(
 
     const pkg = MEMBERSHIP_PACKAGES[digit];
     if (!pkg) {
-      twiml.say("Invalid selection.");
+      playPrompt(twiml, req, "package_invalid.mp3", "Invalid selection.");
       twiml.redirect("/voice/membership-purchase");
       res.type("text/xml");
       return res.send(twiml.toString());
@@ -1212,7 +1206,13 @@ export async function registerRoutes(
     });
 
     if (pkg.name === "14day" && isFirstPurchase) {
-      twiml.say(`Great choice! You selected 14 days access for ${pkg.priceLabel}, including your free 7-day first purchase bonus.`);
+      playPrompt(twiml, req, "package_confirm_14day_bonus.mp3", `Great choice! You selected 14 days access for ${pkg.priceLabel}, including your free 7-day first purchase bonus.`);
+    } else if (pkg.name === "30day") {
+      playPrompt(twiml, req, "package_confirm_30day.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
+    } else if (pkg.name === "14day") {
+      playPrompt(twiml, req, "package_confirm_14day.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
+    } else if (pkg.name === "24hour") {
+      playPrompt(twiml, req, "package_confirm_24hour.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
     } else {
       twiml.say(`You selected ${pkg.label} access for ${pkg.priceLabel}.`);
     }
@@ -1257,7 +1257,7 @@ export async function registerRoutes(
     paymentSessions.delete(callSid);
 
     if (!session) {
-      twiml.say("Your session has expired. Please try again.");
+      playPrompt(twiml, req, "payment_session_expired.mp3", "Your session has expired. Please try again.");
       twiml.redirect("/voice/main-menu");
       res.type("text/xml");
       return res.send(twiml.toString());
@@ -1278,22 +1278,32 @@ export async function registerRoutes(
         const bonusMsg = bonusMinutes > 0
           ? ` Plus your bonus ${bonusMinutes} minutes have been added — enjoy ${totalMinutes} minutes total!`
           : "";
-        twiml.say(
+        const successText =
           `Payment successful! You now have ${session.packageLabel} access. ` +
           `Your card has been charged ${session.priceLabel}.${bonusMsg} ` +
-          "Thank you for joining. Returning to the main menu."
-        );
+          "Thank you for joining. Returning to the main menu.";
+        if (session.packageName === "30day") {
+          playPrompt(twiml, req, "payment_success_30day.mp3", successText);
+        } else if (session.packageName === "14day" && bonusMinutes > 0) {
+          playPrompt(twiml, req, "payment_success_14day_bonus.mp3", successText);
+        } else if (session.packageName === "14day") {
+          playPrompt(twiml, req, "payment_success_14day.mp3", successText);
+        } else if (session.packageName === "24hour") {
+          playPrompt(twiml, req, "payment_success_24hour.mp3", successText);
+        } else {
+          twiml.say(successText);
+        }
       } catch (err) {
         console.error("[voice] membership activation error after payment:", err);
-        twiml.say("Your payment was received but there was an error activating your membership. Please contact support.");
+        playPrompt(twiml, req, "payment_activation_error.mp3", "Your payment was received but there was an error activating your membership. Please contact support.");
       }
     } else {
       console.warn(`[voice] payment failed — CallSid=${callSid} ErrorCode=${errorCode}`);
       // Error code 22001 = card declined; 22002 = processing failure
       if (errorCode === "22001") {
-        twiml.say("Your card was declined. Please check your details and try again later.");
+        playPrompt(twiml, req, "payment_declined.mp3", "Your card was declined. Please check your details and try again later.");
       } else {
-        twiml.say("Your payment could not be completed at this time. Please try again later.");
+        playPrompt(twiml, req, "payment_failed.mp3", "Your payment could not be completed at this time. Please try again later.");
       }
     }
 
@@ -1313,7 +1323,7 @@ export async function registerRoutes(
     const callSid = req.body?.CallSid;
 
     if (!fromNumber || !callSid) {
-      twiml.say("We could not identify your call. Goodbye.");
+      playPrompt(twiml, req, "no_caller_id.mp3", "We could not identify your call. Goodbye.");
       twiml.hangup();
       res.type("text/xml");
       return res.send(twiml.toString());
@@ -1323,14 +1333,14 @@ export async function registerRoutes(
       const region = await storage.getRegionBySlug(slug);
 
       if (!region) {
-        twiml.say("This phone number is not currently active. Please try again later.");
+        playPrompt(twiml, req, "region_not_active.mp3", "This phone number is not currently active. Please try again later.");
         twiml.hangup();
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
       if (!region.isActive) {
-        twiml.say("This market is temporarily unavailable. Please try again later.");
+        playPrompt(twiml, req, "region_unavailable.mp3", "This market is temporarily unavailable. Please try again later.");
         twiml.hangup();
         res.type("text/xml");
         return res.send(twiml.toString());
@@ -1361,15 +1371,14 @@ export async function registerRoutes(
 
       const profile = await storage.getProfile(user.id);
       if (!profile) {
-        twiml.say("Welcome! Before using the system you must create a short voice profile.");
-        twiml.say("First, say your first name only after the tone. You have 5 seconds.");
+        playPrompt(twiml, req, "welcome_record_name.mp3", "Welcome! Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds.");
         twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else {
         twiml.redirect("/voice/greeting-setup");
       }
     } catch (error) {
       console.error(`[voice] /voice/${slug} error:`, error);
-      twiml.say("An error occurred. Please try again later.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
       twiml.hangup();
     }
 
