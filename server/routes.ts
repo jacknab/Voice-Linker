@@ -401,7 +401,7 @@ export async function registerRoutes(
       if (!profile) {
         twiml.say("Welcome! Before using the system you must record a short personal profile.");
         twiml.say("After the tone, record your profile. You have 30 seconds.");
-        twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
+        twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
       } else {
         twiml.redirect("/voice/main-menu");
       }
@@ -431,7 +431,7 @@ export async function registerRoutes(
       // Reject greetings shorter than 3 seconds — play error audio and re-prompt
       if (recordingDuration < 3) {
         twiml.play(`${baseUrl(req)}/uploads/greeting_error_1774060225320.mp3`);
-        twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
+        twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -472,8 +472,8 @@ export async function registerRoutes(
     if (digit === "1") {
       twiml.redirect("/voice/browse-profiles");
     } else if (digit === "2") {
-      twiml.say("After the tone, record your new profile. You have 30 seconds.");
-      twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
+      twiml.say("After the tone, record your new profile. You have 60 seconds.");
+      twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
     } else if (digit === "4") {
       twiml.redirect("/voice/info-menu");
     } else {
@@ -1136,8 +1136,8 @@ export async function registerRoutes(
       const profile = await storage.getProfile(user.id);
       if (!profile) {
         twiml.say("Welcome! Before using the system you must record a short personal greeting.");
-        twiml.say("After the tone, record your greeting. You have 30 seconds.");
-        twiml.record({ maxLength: 30, playBeep: true, action: "/voice/save-profile" });
+        twiml.say("After the tone, record your greeting. You have 60 seconds.");
+        twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
       } else {
         twiml.redirect("/voice/main-menu");
       }
