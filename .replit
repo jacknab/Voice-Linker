@@ -43,3 +43,8 @@ waitForPort = 5000
 
 [agent]
 expertMode = true
+
+[userenv]
+
+[userenv.shared]
+ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
