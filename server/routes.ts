@@ -683,8 +683,8 @@ export async function registerRoutes(
     // Hold the name recording until the greeting is saved
     pendingNameRecordings.set(callSid, nameRecordingUrl);
 
-    playPrompt(twiml, req, "name_saved_record_greeting.mp3", "Great. Now record your greeting for other callers. After the tone, you have 60 seconds.");
-    twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
+    playPrompt(twiml, req, "name_saved_record_greeting.mp3", "Great. Now record your greeting for other callers. After the tone, record at least 8 seconds. Press pound when you are finished.");
+    twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-profile" });
     res.type("text/xml");
     res.send(twiml.toString());
   });
