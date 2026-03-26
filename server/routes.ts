@@ -9,6 +9,7 @@ import path from "path";
 import fs from "fs";
 import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
+import { generateTTS, listVoices } from "./elevenlabs";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -385,6 +386,70 @@ export async function registerRoutes(
     } catch (e) {
       res.status(500).json({ message: "Failed to get simulator status" });
     }
+  });
+
+  // ─── Admin: ElevenLabs TTS ────────────────────────────────────────────────
+
+  // List all prompt files currently in uploads/ with their TTS-friendly name
+  app.get("/api/admin/tts/prompts", (_req, res) => {
+    try {
+      const files = fs.readdirSync(UPLOADS_DIR)
+        .filter(f => f.endsWith(".mp3"))
+        .map(f => ({
+          filename: f,
+          url: `/uploads/${f}`,
+          size: fs.statSync(path.join(UPLOADS_DIR, f)).size,
+        }));
+      res.json(files);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to list prompts" });
+    }
+  });
+
+  // Generate a TTS audio file via ElevenLabs and save it to uploads/
+  app.post("/api/admin/tts/generate", async (req, res) => {
+    try {
+      const { text, filename } = req.body as { text?: string; filename?: string };
+      if (!text?.trim()) return res.status(400).json({ message: "text is required" });
+      if (!filename?.trim()) return res.status(400).json({ message: "filename is required" });
+
+      // Enforce .mp3 extension and sanitize
+      const safe = filename.replace(/[^a-zA-Z0-9_\-]/g, "_").replace(/\.mp3$/i, "") + ".mp3";
+      await generateTTS(text.trim(), safe);
+      res.json({ filename: safe, url: `/uploads/${safe}` });
+    } catch (e: any) {
+      console.error("[admin/tts] generation failed:", e);
+      res.status(500).json({ message: e?.message ?? "TTS generation failed" });
+    }
+  });
+
+  // Delete a prompt file from uploads/
+  app.delete("/api/admin/tts/prompts/:filename", (req, res) => {
+    try {
+      const { filename } = req.params;
+      if (!filename.endsWith(".mp3")) return res.status(400).json({ message: "Invalid filename" });
+      const filePath = path.join(UPLOADS_DIR, filename);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found" });
+      fs.unlinkSync(filePath);
+      res.status(204).send();
+    } catch (e) {
+      res.status(500).json({ message: "Failed to delete file" });
+    }
+  });
+
+  // Fetch available ElevenLabs voices
+  app.get("/api/admin/tts/voices", async (_req, res) => {
+    try {
+      const voices = await listVoices();
+      res.json(voices);
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed to fetch voices" });
+    }
+  });
+
+  // Return current voice ID setting
+  app.get("/api/admin/tts/settings", (_req, res) => {
+    res.json({ voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM" });
   });
 
   // ─── Admin: Region CRUD ────────────────────────────────────────────────────

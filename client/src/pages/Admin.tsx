@@ -6,7 +6,7 @@ import { Link } from "wouter";
 import {
   Upload, Trash2, Play, Pause, Plus, Phone, LayoutDashboard,
   MessageSquare, PhoneCall, X, MapPin, Clock, Copy, Eye, EyeOff,
-  Pencil, Globe,
+  Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2,
 } from "lucide-react";
 
 interface ProfileWithUser {
@@ -33,7 +33,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen";
 
 function AudioPlayer({ src }: { src: string }) {
   const [playing, setPlaying] = useState(false);
@@ -569,6 +569,296 @@ function VoiceProfilesTab() {
   );
 }
 
+const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
+  { filename: "no_caller_id.mp3", label: "No Caller ID", text: "We could not identify your call. Goodbye." },
+  { filename: "welcome_record_name.mp3", label: "Welcome — Record Name", text: "Welcome! Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds." },
+  { filename: "error_generic.mp3", label: "Generic Error", text: "An error occurred. Please try again later." },
+  { filename: "name_retry.mp3", label: "Name Retry", text: "We didn't catch your name. Please try again." },
+  { filename: "name_saved_record_greeting.mp3", label: "Name Saved — Record Greeting", text: "Great. Now record your greeting for other callers. After the tone, you have 60 seconds." },
+  { filename: "greeting_error.mp3", label: "Greeting Too Short", text: "That greeting was too short. Please try again after the tone." },
+  { filename: "profile_save_error.mp3", label: "Profile Save Error", text: "We could not save your profile. Please try again." },
+  { filename: "access_expired.mp3", label: "Access Expired", text: "Your access has expired." },
+  { filename: "main_menu.mp3", label: "Main Menu", text: "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership." },
+  { filename: "rerecord_name.mp3", label: "Re-record Name", text: "Let's re-record your profile. First, say your first name only after the tone. You have 5 seconds." },
+  { filename: "invalid_choice.mp3", label: "Invalid Choice", text: "Invalid choice." },
+  { filename: "trial_warning.mp3", label: "Trial Warning", text: "You have less than 15 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
+  { filename: "member_warning.mp3", label: "Member Warning", text: "You have less than 15 minutes remaining in your membership. To renew now press 1. To continue press pound." },
+  { filename: "greeting_setup.mp3", label: "Greeting Setup", text: "Your last greeting you recorded is still available. To use it again, press 1. To record a new greeting, press 2. To hear your greeting, press 3. To repeat these choices, press 9. To continue, press pound." },
+  { filename: "review_greeting.mp3", label: "Review Greeting", text: "To hear your greeting, press 1. To re-record, press 2. To accept and continue, press 3. To repeat these choices, press 9." },
+  { filename: "no_greeting_found.mp3", label: "No Greeting Found", text: "No greeting found." },
+  { filename: "session_expired_greeting.mp3", label: "Session Expired — Greeting", text: "Your session has expired. Please re-record your greeting." },
+  { filename: "profile_saved.mp3", label: "Profile Saved", text: "Your greeting has been saved." },
+  { filename: "no_profiles.mp3", label: "No Profiles Available", text: "There are no profiles available right now. Please call back later." },
+  { filename: "message_options.mp3", label: "Message Options", text: "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 9 to return to the main menu." },
+  { filename: "profile_options.mp3", label: "Profile Options", text: "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 9 to return to main menu." },
+  { filename: "record_reply.mp3", label: "Record Reply", text: "Record your reply after the tone." },
+  { filename: "record_message.mp3", label: "Record Message", text: "Record your message after the tone." },
+  { filename: "message_sent.mp3", label: "Message Sent", text: "Your message has been sent. Returning to profiles." },
+  { filename: "message_send_error.mp3", label: "Message Send Error", text: "Failed to send your message. Returning to profiles." },
+  { filename: "info_menu.mp3", label: "Info Menu", text: "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu." },
+  { filename: "membership_questions.mp3", label: "Membership Questions", text: "Membership questions. Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership with a credit card. Press 9 to return to the main menu." },
+  { filename: "membership_how_it_works.mp3", label: "How Membership Works", text: "Here is how membership works. As a member, you get full access to the voice line community. Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. We offer three membership options: a 24 hour pass, a 14 day membership, and a 30 day membership. Your remaining time is tracked in hours. When you have less than 60 minutes left, the system will tell you in minutes. Choose the option that works best for you." },
+  { filename: "membership_pricing.mp3", label: "Membership Pricing", text: "Here are our membership prices. A 24 hour pass is 3 dollars. A 14 day membership is 10 dollars. A 30 day membership is 25 dollars. To purchase, press 3 from the membership menu." },
+  { filename: "membership_packages.mp3", label: "Membership Packages", text: "Press 1 for a 30 day membership at 25 dollars. Press 2 for a 14 day membership at 10 dollars. Press 3 for a 24 hour pass at 3 dollars. Press 9 to repeat. Press pound to cancel." },
+  { filename: "package_cancelled.mp3", label: "Package Cancelled", text: "Cancelled. Returning to the main menu." },
+  { filename: "package_invalid.mp3", label: "Package Invalid", text: "Invalid selection." },
+  { filename: "package_confirm_30day.mp3", label: "Package Confirm — 30 Day", text: "You selected 43,200 Minute access for 25 dollars." },
+  { filename: "package_confirm_14day.mp3", label: "Package Confirm — 14 Day", text: "You selected 20,160 Minute access for 10 dollars." },
+  { filename: "package_confirm_14day_bonus.mp3", label: "Package Confirm — 14 Day (Bonus)", text: "Great choice! You selected 14 days access for 10 dollars, including your free 7-day first purchase bonus." },
+  { filename: "package_confirm_24hour.mp3", label: "Package Confirm — 24 Hour", text: "You selected 1,440 Minute access for 3 dollars." },
+  { filename: "payment_intro.mp3", label: "Payment Intro", text: "Please have your credit card ready. You will be asked to enter your card number, expiry date, and security code." },
+  { filename: "payment_session_expired.mp3", label: "Payment Session Expired", text: "Your session has expired. Please try again." },
+  { filename: "payment_success_30day.mp3", label: "Payment Success — 30 Day", text: "Payment successful! You now have 43,200 Minute access. Your card has been charged 25 dollars. Thank you for joining. Returning to the main menu." },
+  { filename: "payment_success_14day.mp3", label: "Payment Success — 14 Day", text: "Payment successful! You now have 20,160 Minute access. Your card has been charged 10 dollars. Thank you for joining. Returning to the main menu." },
+  { filename: "payment_success_14day_bonus.mp3", label: "Payment Success — 14 Day (Bonus)", text: "Payment successful! You now have 20,160 Minute access. Your card has been charged 10 dollars. Plus your bonus 20,160 minutes have been added — enjoy 40,320 minutes total! Thank you for joining. Returning to the main menu." },
+  { filename: "payment_success_24hour.mp3", label: "Payment Success — 24 Hour", text: "Payment successful! You now have 1,440 Minute access. Your card has been charged 3 dollars. Thank you for joining. Returning to the main menu." },
+  { filename: "payment_declined.mp3", label: "Payment Declined", text: "Your card was declined. Please check your details and try again later." },
+  { filename: "payment_failed.mp3", label: "Payment Failed", text: "Your payment could not be completed at this time. Please try again later." },
+  { filename: "payment_activation_error.mp3", label: "Payment Activation Error", text: "Your payment was received but there was an error activating your membership. Please contact support." },
+  { filename: "region_not_active.mp3", label: "Region Not Active", text: "This phone number is not currently active. Please try again later." },
+  { filename: "region_unavailable.mp3", label: "Region Unavailable", text: "This market is temporarily unavailable. Please try again later." },
+  { filename: "phrase_you_have.mp3", label: "Phrase — You Have", text: "You have" },
+  { filename: "phrase_you_have_1_hour_and.mp3", label: "Phrase — You Have 1 Hour And", text: "You have 1 hour and" },
+  { filename: "phrase_hours_of_pbtr.mp3", label: "Phrase — Hours Remaining", text: "hours of phone booth time remaining." },
+  { filename: "phrase_hour_of_pbtr.mp3", label: "Phrase — Hour Remaining", text: "hour of phone booth time remaining." },
+  { filename: "phrase_minutes_of_pbtr.mp3", label: "Phrase — Minutes Remaining", text: "minutes remaining." },
+  { filename: "phrase_minute_of_pbtr.mp3", label: "Phrase — Minute Remaining", text: "minute remaining." },
+  { filename: "phrase_there_are.mp3", label: "Phrase — There Are", text: "There are" },
+  { filename: "phrase_there_is.mp3", label: "Phrase — There Is", text: "There is" },
+  { filename: "phrase_callers_on_the_line.mp3", label: "Phrase — Callers On The Line", text: "guys on the line." },
+  { filename: "phrase_caller_on_the_line.mp3", label: "Phrase — Caller On The Line", text: "guy on the line." },
+];
+
+function TTSTab() {
+  const { toast } = useToast();
+  const [customText, setCustomText] = useState("");
+  const [customFilename, setCustomFilename] = useState("");
+  const [editingText, setEditingText] = useState<Record<string, string>>({});
+  const [generating, setGenerating] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+
+  const { data: settings } = useQuery<{ voiceId: string }>({
+    queryKey: ["/api/admin/tts/settings"],
+  });
+
+  const { data: existingFiles, refetch: refetchFiles } = useQuery<{ filename: string; url: string; size: number }[]>({
+    queryKey: ["/api/admin/tts/prompts"],
+  });
+
+  const existingSet = new Set((existingFiles ?? []).map(f => f.filename));
+
+  const generateMutation = useMutation({
+    mutationFn: async ({ text, filename }: { text: string; filename: string }) => {
+      const res = await fetch("/api/admin/tts/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, filename }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Generation failed" }));
+        throw new Error(err.message);
+      }
+      return res.json() as Promise<{ filename: string; url: string }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
+      toast({ title: "Audio generated", description: data.filename });
+      setGenerating(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+      setGenerating(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (filename: string) => {
+      const res = await fetch(`/api/admin/tts/prompts/${encodeURIComponent(filename)}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) throw new Error("Delete failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
+      toast({ title: "File deleted" });
+    },
+    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+  });
+
+  function handleGenerate(filename: string, text: string) {
+    setGenerating(filename);
+    generateMutation.mutate({ text, filename });
+  }
+
+  function handleCustomGenerate() {
+    if (!customText.trim() || !customFilename.trim()) return;
+    const fn = customFilename.trim().replace(/\.mp3$/i, "") + ".mp3";
+    setGenerating(fn);
+    generateMutation.mutate({ text: customText.trim(), filename: fn });
+    setCustomText("");
+    setCustomFilename("");
+  }
+
+  const filtered = SYSTEM_PROMPTS.filter(p =>
+    !filter || p.label.toLowerCase().includes(filter.toLowerCase()) || p.filename.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  const generatedCount = SYSTEM_PROMPTS.filter(p => existingSet.has(p.filename)).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-[#f5a623] font-mono text-lg font-bold tracking-widest uppercase flex items-center gap-2">
+            <Volume2 size={18} />
+            Audio Generation_
+          </h2>
+          <p className="text-[#4caf82]/50 font-mono text-xs mt-1">
+            Generate phone system audio files using ElevenLabs TTS
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-[#f5a623] font-mono font-bold text-2xl">{generatedCount}/{SYSTEM_PROMPTS.length}</div>
+          <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Prompts Generated</div>
+        </div>
+      </div>
+
+      <div className="bg-black/30 border border-[#4caf82]/20 rounded-lg p-4 space-y-1">
+        <div className="text-[#4caf82] font-mono text-xs tracking-widest uppercase mb-2">Current Voice ID_</div>
+        <div className="text-[#f5a623] font-mono text-sm break-all">{settings?.voiceId ?? "Loading..."}</div>
+        <div className="text-[#4caf82]/40 font-mono text-xs mt-1">Change via ELEVENLABS_VOICE_ID environment variable</div>
+      </div>
+
+      <div className="border border-[#f5a623]/20 rounded-lg p-5 space-y-4">
+        <h3 className="text-[#f5a623] font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+          <Wand2 size={14} />
+          Custom Audio File_
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[#4caf82] font-mono text-xs tracking-widest mb-1.5 uppercase">Output Filename_</label>
+            <input
+              data-testid="input-custom-filename"
+              type="text"
+              value={customFilename}
+              onChange={e => setCustomFilename(e.target.value)}
+              placeholder="my_custom_prompt"
+              className="w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors"
+            />
+            <div className="text-[#4caf82]/30 font-mono text-xs mt-1">.mp3 appended automatically</div>
+          </div>
+          <div>
+            <label className="block text-[#4caf82] font-mono text-xs tracking-widest mb-1.5 uppercase">Text to Speak_</label>
+            <input
+              data-testid="input-custom-text"
+              type="text"
+              value={customText}
+              onChange={e => setCustomText(e.target.value)}
+              placeholder="Enter the text to convert to speech..."
+              className="w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors"
+            />
+          </div>
+        </div>
+        <button
+          data-testid="btn-generate-custom"
+          onClick={handleCustomGenerate}
+          disabled={!customText.trim() || !customFilename.trim() || generateMutation.isPending}
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#f5a623] hover:bg-[#f5a623]/80 disabled:bg-[#f5a623]/30 disabled:cursor-not-allowed text-black font-mono text-xs font-bold tracking-widest uppercase rounded transition-colors"
+        >
+          {generateMutation.isPending && generating === customFilename ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+          Generate Audio_
+        </button>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-[#f5a623] font-mono text-sm font-bold tracking-widest uppercase">System Prompts_</h3>
+          <input
+            data-testid="input-filter-prompts"
+            type="text"
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="Filter prompts..."
+            className="bg-black/40 border border-[#4caf82]/30 rounded px-3 py-1.5 text-[#4caf82] font-mono text-xs placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors w-48"
+          />
+        </div>
+        <div className="border border-[#f5a623]/20 rounded-lg overflow-hidden">
+          <div className="max-h-[600px] overflow-y-auto">
+            <table className="w-full">
+              <thead className="sticky top-0 bg-[#0d1117] z-10">
+                <tr className="border-b border-[#f5a623]/20">
+                  <th className="text-left px-4 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase w-6">Status</th>
+                  <th className="text-left px-4 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Prompt</th>
+                  <th className="text-left px-4 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase hidden md:table-cell">Filename</th>
+                  <th className="text-left px-4 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(prompt => {
+                  const exists = existingSet.has(prompt.filename);
+                  const isGen = generating === prompt.filename && generateMutation.isPending;
+                  const currentText = editingText[prompt.filename] ?? prompt.text;
+                  return (
+                    <tr key={prompt.filename} data-testid={`row-prompt-${prompt.filename}`} className="border-t border-[#4caf82]/10 hover:bg-[#4caf82]/5 transition-colors">
+                      <td className="px-4 py-3">
+                        {isGen ? (
+                          <Loader2 size={14} className="text-[#f5a623] animate-spin" />
+                        ) : exists ? (
+                          <CheckCircle size={14} className="text-[#4caf82]" />
+                        ) : (
+                          <AlertCircle size={14} className="text-[#4caf82]/30" />
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-white font-mono text-xs font-semibold mb-1">{prompt.label}</div>
+                        <input
+                          data-testid={`input-text-${prompt.filename}`}
+                          type="text"
+                          value={currentText}
+                          onChange={e => setEditingText(prev => ({ ...prev, [prompt.filename]: e.target.value }))}
+                          className="w-full bg-black/30 border border-[#4caf82]/20 rounded px-2 py-1 text-[#4caf82]/80 font-mono text-xs placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/40 transition-colors"
+                        />
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <span className="text-[#4caf82]/40 font-mono text-xs">{prompt.filename}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            data-testid={`btn-generate-${prompt.filename}`}
+                            onClick={() => handleGenerate(prompt.filename, currentText)}
+                            disabled={generateMutation.isPending || !currentText.trim()}
+                            title={exists ? "Regenerate" : "Generate"}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded font-mono text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${exists ? "border border-[#f5a623]/40 bg-[#f5a623]/10 hover:bg-[#f5a623]/20 text-[#f5a623]" : "border border-[#4caf82]/30 bg-[#4caf82]/10 hover:bg-[#4caf82]/20 text-[#4caf82]"}`}
+                          >
+                            {isGen ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />}
+                            {exists ? "Regen" : "Gen"}
+                          </button>
+                          {exists && (
+                            <>
+                              <AudioPlayer src={`/uploads/${prompt.filename}`} />
+                              <button
+                                data-testid={`btn-delete-prompt-${prompt.filename}`}
+                                onClick={() => { if (confirm(`Delete ${prompt.filename}?`)) deleteMutation.mutate(prompt.filename); }}
+                                disabled={deleteMutation.isPending}
+                                className="text-red-400/50 hover:text-red-400 transition-colors disabled:opacity-30"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DashboardTab() {
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
@@ -609,6 +899,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={14} /> },
   { id: "voice-profiles", label: "Voice Profiles", icon: <Phone size={14} /> },
   { id: "regions", label: "Regions", icon: <Globe size={14} /> },
+  { id: "audio-gen", label: "Audio Gen", icon: <Volume2 size={14} /> },
   { id: "messages", label: "Messages", icon: <MessageSquare size={14} /> },
   { id: "phone-testing", label: "Phone Testing", icon: <PhoneCall size={14} /> },
 ];
@@ -640,6 +931,7 @@ export default function Admin() {
           {activeTab === "dashboard" && <DashboardTab />}
           {activeTab === "voice-profiles" && <VoiceProfilesTab />}
           {activeTab === "regions" && <RegionsTab />}
+          {activeTab === "audio-gen" && <TTSTab />}
           {activeTab === "messages" && <PlaceholderTab label="Messages" />}
           {activeTab === "phone-testing" && <PlaceholderTab label="Phone Testing" />}
         </div>
