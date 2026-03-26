@@ -208,6 +208,29 @@ function playPrompt(
   }
 }
 
+// Returns true if Twilio credentials are configured for audio proxy
+function hasTwilioCredentials(): boolean {
+  return !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+}
+
+// Play a user-recorded audio clip safely:
+// - Local /uploads/ files are always served directly
+// - Twilio-hosted recordings require credentials; if missing, speak fallbackText via TTS instead
+function safePlayRecording(
+  node: { say: (text: string) => void; play: (url: string) => void },
+  recordingUrl: string,
+  req: Request,
+  fallbackText = ""
+): void {
+  const isLocal = recordingUrl.startsWith("/uploads/");
+  if (isLocal || hasTwilioCredentials()) {
+    node.play(audioProxyUrl(recordingUrl, req));
+  } else {
+    if (fallbackText) node.say(fallbackText);
+    console.warn("[audio] Skipping Twilio recording playback — credentials not configured");
+  }
+}
+
 // Build a URL pointing to our local audio proxy (or a full URL for local uploads)
 function audioProxyUrl(recordingUrl: string, req: Request): string {
   // Local admin-uploaded file — just make it a full absolute URL
@@ -864,9 +887,9 @@ export async function registerRoutes(
         const profile = await storage.getProfile(user.id);
         if (profile?.recordingUrl) {
           if (profile.nameRecordingUrl) {
-            twiml.play(audioProxyUrl(profile.nameRecordingUrl, req));
+            safePlayRecording(twiml, profile.nameRecordingUrl, req, "");
           }
-          twiml.play(audioProxyUrl(profile.recordingUrl, req));
+          safePlayRecording(twiml, profile.recordingUrl, req, "Your greeting recording is not available for playback at this time.");
         } else {
           playPrompt(twiml, req, "no_greeting_found.mp3", "No greeting found.");
         }
@@ -913,10 +936,10 @@ export async function registerRoutes(
       if (digit === "1") {
         // Play back the draft recording(s) then return to review menu
         if (draft?.nameRecordingUrl) {
-          twiml.play(audioProxyUrl(draft.nameRecordingUrl, req));
+          safePlayRecording(twiml, draft.nameRecordingUrl, req, "");
         }
         if (draft?.greetingRecordingUrl) {
-          twiml.play(audioProxyUrl(draft.greetingRecordingUrl, req));
+          safePlayRecording(twiml, draft.greetingRecordingUrl, req, "Your greeting recording is not available for playback at this time.");
         } else {
           playPrompt(twiml, req, "no_greeting_found.mp3", "No recording found.");
         }
@@ -1004,12 +1027,12 @@ export async function registerRoutes(
         });
         if (senderProfile?.nameRecordingUrl) {
           msgGather.say("New message.");
-          msgGather.play(audioProxyUrl(senderProfile.nameRecordingUrl, req));
+          safePlayRecording(msgGather, senderProfile.nameRecordingUrl, req, "");
           msgGather.say("has sent you a message.");
         } else {
           msgGather.say("You have a new message.");
         }
-        msgGather.play(audioProxyUrl(unreadMessage.recordingUrl, req));
+        safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available for playback.");
         playPrompt(msgGather, req, "message_options.mp3", "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
@@ -1031,8 +1054,7 @@ export async function registerRoutes(
           // Advance index, wrapping at end of queue
           state.index = (state.index + 1) % state.queue.length;
 
-          const playUrl = audioProxyUrl(profile.recordingUrl, req);
-          console.log(`[voice] Playing profile userId=${profile.userId} (position ${state.index}/${state.queue.length}) url=${playUrl}`);
+          console.log(`[voice] Playing profile userId=${profile.userId} (position ${state.index}/${state.queue.length})`);
 
           // Announce caller count only at the very start of the queue
           if (state.index === 1) {
@@ -1045,7 +1067,10 @@ export async function registerRoutes(
             action: `/voice/handle-profile-menu?profileUserId=${profile.userId}`,
             timeout: 10,
           });
-          profileGather.play(playUrl);
+          if (profile.nameRecordingUrl) {
+            safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
+          }
+          safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
           playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         }
@@ -1084,7 +1109,10 @@ export async function registerRoutes(
         });
         if (senderProfile) {
           // Nested inside gather so pressing 2 during playback skips immediately
-          senderGather.play(audioProxyUrl(senderProfile.recordingUrl, req));
+          if (senderProfile.nameRecordingUrl) {
+            safePlayRecording(senderGather, senderProfile.nameRecordingUrl, req, "");
+          }
+          safePlayRecording(senderGather, senderProfile.recordingUrl, req, "This profile's greeting is not available.");
         } else {
           senderGather.say("This caller no longer has a profile.");
         }
