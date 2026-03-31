@@ -786,15 +786,8 @@ export async function registerRoutes(
           playTimeRemaining(twiml, req, remaining);
           callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
         }
-        // Route to profile setup or the main greeting screen
-        const profile = await storage.getProfile(user.id);
-        if (!profile) {
-          playPrompt(twiml, req, "welcome_record_name.mp3",
-            "Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds.");
-          twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
-        } else {
-          twiml.redirect("/voice/greeting-setup");
-        }
+        // Hand off to the phone booth (plays welcome intro, then handles profile check)
+        twiml.redirect("/voice/phone-booth");
       }
     } catch (error) {
       console.error("[voice] /voice/entry error:", error);
@@ -843,15 +836,8 @@ export async function registerRoutes(
           "Your free trial will expire in seven days and it must be used from this phone number.");
         callTimeAnnounced.add(callSid);
 
-        // Route to profile setup or greeting screen
-        const profile = await storage.getProfile(user.id);
-        if (!profile) {
-          playPrompt(twiml, req, "welcome_record_name.mp3",
-            "Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds.");
-          twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
-        } else {
-          twiml.redirect("/voice/greeting-setup");
-        }
+        // Hand off to the phone booth (plays welcome intro, then handles profile check)
+        twiml.redirect("/voice/phone-booth");
       } catch (error) {
         console.error("[voice] handle-free-trial-offer error:", error);
         playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
@@ -859,6 +845,40 @@ export async function registerRoutes(
       }
     } else {
       playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1e. Phone Booth Welcome ──────────────────────────────────────────────
+  // Common landing point after account-state handling.
+  // Always plays the phone booth intro, then checks whether this caller has
+  // already recorded a profile name. If not, kicks off the name-recording flow.
+  app.post("/voice/phone-booth", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    try {
+      // Play the phone booth welcome intro every time
+      playPrompt(twiml, req, "phone_booth_welcome.mp3",
+        "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
+
+      const user = await getOrCreateUser(fromNumber);
+      const profile = await storage.getProfile(user.id);
+
+      if (!profile) {
+        // No profile yet — need to record their name first
+        playPrompt(twiml, req, "welcome_record_name.mp3",
+          "You need to record a greeting to introduce yourself to the other guys first. Let's record the name you want to use. After the tone, record just your first name.");
+        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+      } else {
+        twiml.redirect("/voice/greeting-setup");
+      }
+    } catch (error) {
+      console.error("[voice] /voice/phone-booth error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
       twiml.hangup();
     }
 
