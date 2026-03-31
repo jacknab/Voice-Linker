@@ -660,6 +660,8 @@ function TTSTab() {
   const { data: settings } = useQuery<{ voiceId: string }>({ queryKey: ["/api/admin/tts/settings"] });
   const { data: existingFiles, refetch: refetchFiles } = useQuery<{ filename: string; url: string; size: number }[]>({ queryKey: ["/api/admin/tts/prompts"] });
   const existingSet = new Set((existingFiles ?? []).map(f => f.filename));
+  const { data: zipEntries = [] } = useQuery<ZipEntry[]>({ queryKey: ["/api/admin/zip-codes"] });
+  const neighborhoodEntries = zipEntries.filter(e => e.audioFile && e.neighborhood);
 
   const generateMutation = useMutation({
     mutationFn: async ({ text, filename }: { text: string; filename: string }) => {
@@ -734,6 +736,79 @@ function TTSTab() {
           Generate
         </button>
       </div>
+
+      {neighborhoodEntries.length > 0 && (
+        <div className={C.card}>
+          <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+            <MapPin size={14} className="text-[#f5a623]" /> Neighborhood Audio Files
+          </h3>
+          <p className="text-gray-400 font-mono text-xs -mt-1">
+            One audio file per neighborhood. Generate each so the system knows what to play for that zip code area.
+          </p>
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className={C.th}>Neighborhood</th>
+                  <th className={C.th}>File</th>
+                  <th className={C.th + " w-32"}>Status</th>
+                  <th className={C.th + " w-40"}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {neighborhoodEntries.map(entry => {
+                  const filename = entry.audioFile!;
+                  const exists = existingSet.has(filename);
+                  const isGen = generating === filename;
+                  const existingFile = (existingFiles ?? []).find(f => f.filename === filename);
+                  return (
+                    <tr key={entry.id} data-testid={`row-neighborhood-audio-${entry.id}`} className={C.row}>
+                      <td className={C.td + " w-48"}>
+                        <div className="text-gray-800 font-mono text-xs font-bold">{entry.neighborhood}</div>
+                        <div className="text-gray-400 font-mono text-[10px] mt-0.5">{entry.code}</div>
+                      </td>
+                      <td className={C.td}>
+                        <span className="font-mono text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">{filename}</span>
+                      </td>
+                      <td className={C.td}>
+                        <span className={`${C.badge} ${exists ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
+                          {exists ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                          {exists ? "Generated" : "Missing"}
+                        </span>
+                      </td>
+                      <td className={C.td}>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            data-testid={`btn-generate-neighborhood-${entry.id}`}
+                            onClick={() => handleGenerate(filename, entry.neighborhood!)}
+                            disabled={!!generating}
+                            className={C.btnGhost + " text-[10px]"}
+                          >
+                            {isGen ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                            {exists ? "Regen" : "Generate"}
+                          </button>
+                          {exists && (
+                            <>
+                              {existingFile && <AudioPlayer src={existingFile.url} />}
+                              <button
+                                data-testid={`btn-delete-neighborhood-${entry.id}`}
+                                onClick={() => deleteMutation.mutate(filename)}
+                                className={C.btnDanger + " text-[10px]"}
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className={C.card}>
         <div className="flex items-center justify-between">
@@ -1895,6 +1970,7 @@ interface ZipEntry {
   city: string | null;
   state: string | null;
   neighborhood: string | null;
+  audioFile: string | null;
   latitude: number | null;
   longitude: number | null;
   createdAt: string;
@@ -2004,6 +2080,7 @@ function ZipCodesTab() {
                 <tr className="border-b border-gray-200 text-left text-gray-500 uppercase tracking-widest text-[10px]">
                   <th className="px-4 py-2.5">Zip</th>
                   <th className="px-4 py-2.5">Neighborhood / City</th>
+                  <th className="px-4 py-2.5">Audio File</th>
                   <th className="px-4 py-2.5">Lat / Lon</th>
                   <th className="px-4 py-2.5 text-right">Actions</th>
                 </tr>
@@ -2045,6 +2122,20 @@ function ZipCodesTab() {
                             <span className="text-gray-400 ml-1">({entry.city})</span>
                           )}
                         </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {entry.audioFile ? (
+                        <span
+                          data-testid={`text-audiofile-${entry.id}`}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-700 font-mono text-[10px]"
+                          title={entry.audioFile}
+                        >
+                          <Volume2 size={10} />
+                          {entry.audioFile}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-gray-400">

@@ -26,6 +26,7 @@ export const zipCodes = pgTable("zip_codes", {
   city: text("city"),
   state: text("state"),
   neighborhood: text("neighborhood"),
+  audioFile: text("audio_file"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

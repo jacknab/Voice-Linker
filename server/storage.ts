@@ -150,6 +150,14 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
+function neighborhoodToAudioFile(neighborhood: string): string {
+  const slug = neighborhood
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+  return `neighborhood_${slug}.mp3`;
+}
+
 export class DatabaseStorage implements IStorage {
   // --- Region CRUD ---
 
@@ -514,15 +522,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertAdminZipEntry(code: string, neighborhood: string): Promise<ZipCode> {
+    const audioFile = neighborhoodToAudioFile(neighborhood);
     const [existing] = await db.select().from(zipCodes).where(eq(zipCodes.code, code));
     if (existing) {
       const [updated] = await db.update(zipCodes)
-        .set({ neighborhood })
+        .set({ neighborhood, audioFile })
         .where(eq(zipCodes.id, existing.id))
         .returning();
       return updated;
     }
-    const [created] = await db.insert(zipCodes).values({ code, neighborhood }).returning();
+    const [created] = await db.insert(zipCodes).values({ code, neighborhood, audioFile }).returning();
     return created;
   }
 
@@ -531,8 +540,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateZipNeighborhood(id: string, neighborhood: string): Promise<ZipCode> {
+    const audioFile = neighborhoodToAudioFile(neighborhood);
     const [updated] = await db.update(zipCodes)
-      .set({ neighborhood })
+      .set({ neighborhood, audioFile })
       .where(eq(zipCodes.id, id))
       .returning();
     return updated;
