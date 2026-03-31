@@ -175,6 +175,40 @@ export const membershipSettings = pgTable("membership_settings", {
   bonusPlanKey: text("bonus_plan_key"),
 });
 
+export const promoCodes = pgTable("promo_codes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  description: text("description"),
+  valueMinutes: integer("value_minutes").notNull(),
+  maxUses: integer("max_uses"),
+  usedCount: integer("used_count").notNull().default(0),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const promoRedemptions = pgTable("promo_redemptions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  promoCodeId: uuid("promo_code_id").notNull().references(() => promoCodes.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  secondsAwarded: integer("seconds_awarded").notNull(),
+  redeemedAt: timestamp("redeemed_at").defaultNow(),
+});
+
+export const promoCodesRelations = relations(promoCodes, ({ many }) => ({
+  redemptions: many(promoRedemptions),
+}));
+
+export const promoRedemptionsRelations = relations(promoRedemptions, ({ one }) => ({
+  promoCode: one(promoCodes, { fields: [promoRedemptions.promoCodeId], references: [promoCodes.id] }),
+  user: one(users, { fields: [promoRedemptions.userId], references: [users.id] }),
+}));
+
+export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({ id: true, createdAt: true, usedCount: true });
+export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
+export type PromoCode = typeof promoCodes.$inferSelect;
+export type PromoRedemption = typeof promoRedemptions.$inferSelect;
+
 export const insertRegionSchema = createInsertSchema(regions).omit({ id: true, createdAt: true });
 export const insertZipCodeSchema = createInsertSchema(zipCodes).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });

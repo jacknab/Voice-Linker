@@ -39,7 +39,7 @@
 ## System Configuration
 
 - **Announcement / MOTD** — A message read to every caller at login. Used for rotating promotions, maintenance notices, or featured profiles.
-- **Promo Codes** — Time-limited free trial minutes or discounted memberships redeemable via phone keypad entry.
+- **Promo Codes** — Time-limited free trial minutes or discounted memberships redeemable via phone keypad entry. ✅ COMPLETE
 
 ---
 

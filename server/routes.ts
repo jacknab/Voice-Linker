@@ -662,6 +662,76 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Promo Codes ---
+  app.get("/api/admin/promo-codes", async (_req, res) => {
+    try {
+      const codes = await storage.getAllPromoCodes();
+      res.json(codes);
+    } catch (e) {
+      console.error("[admin] promo-codes GET error:", e);
+      res.status(500).json({ message: "Failed to fetch promo codes" });
+    }
+  });
+
+  app.post("/api/admin/promo-codes", async (req, res) => {
+    try {
+      const { code, description, valueMinutes, maxUses, expiresAt, isActive } = req.body;
+      if (!code?.trim() || !valueMinutes || isNaN(Number(valueMinutes)) || Number(valueMinutes) < 1) {
+        return res.status(400).json({ message: "Code and valueMinutes (≥1) are required" });
+      }
+      const created = await storage.createPromoCode({
+        code: String(code).toUpperCase().trim(),
+        description: description?.trim() || null,
+        valueMinutes: Math.floor(Number(valueMinutes)),
+        maxUses: maxUses ? Math.floor(Number(maxUses)) : null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        isActive: isActive !== false,
+      });
+      res.json(created);
+    } catch (e: any) {
+      if (e?.code === "23505") return res.status(409).json({ message: "That promo code already exists" });
+      console.error("[admin] promo-codes POST error:", e);
+      res.status(500).json({ message: "Failed to create promo code" });
+    }
+  });
+
+  app.patch("/api/admin/promo-codes/:id", async (req, res) => {
+    try {
+      const { description, valueMinutes, maxUses, expiresAt, isActive } = req.body;
+      const data: Record<string, unknown> = {};
+      if (description !== undefined) data.description = description?.trim() || null;
+      if (valueMinutes !== undefined) data.valueMinutes = Math.floor(Number(valueMinutes));
+      if (maxUses !== undefined) data.maxUses = maxUses ? Math.floor(Number(maxUses)) : null;
+      if (expiresAt !== undefined) data.expiresAt = expiresAt ? new Date(expiresAt) : null;
+      if (isActive !== undefined) data.isActive = Boolean(isActive);
+      const updated = await storage.updatePromoCode(req.params.id, data as any);
+      res.json(updated);
+    } catch (e) {
+      console.error("[admin] promo-codes PATCH error:", e);
+      res.status(500).json({ message: "Failed to update promo code" });
+    }
+  });
+
+  app.delete("/api/admin/promo-codes/:id", async (req, res) => {
+    try {
+      await storage.deletePromoCode(req.params.id);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] promo-codes DELETE error:", e);
+      res.status(500).json({ message: "Failed to delete promo code" });
+    }
+  });
+
+  app.get("/api/admin/promo-codes/:id/redemptions", async (req, res) => {
+    try {
+      const redemptions = await storage.getPromoRedemptions(req.params.id);
+      res.json(redemptions);
+    } catch (e) {
+      console.error("[admin] promo-codes redemptions GET error:", e);
+      res.status(500).json({ message: "Failed to fetch redemptions" });
+    }
+  });
+
   // --- Admin: Phone number stats ---
   app.get("/api/admin/phone-stats", async (req, res) => {
     try {
@@ -1375,7 +1445,7 @@ export async function registerRoutes(
     }
 
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-main-menu" });
-    playPrompt(gather, req, "main_menu.mp3", "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership.");
+    playPrompt(gather, req, "main_menu.mp3", "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership. Press 5 to enter a promotional code.");
     twiml.redirect("/voice/main-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -1393,6 +1463,8 @@ export async function registerRoutes(
       twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
     } else if (digit === "4") {
       twiml.redirect("/voice/info-menu");
+    } else if (digit === "5") {
+      twiml.redirect("/voice/promo-code");
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
       twiml.redirect("/voice/main-menu");
@@ -1450,6 +1522,47 @@ export async function registerRoutes(
       twiml.redirect("/voice/main-menu");
     }
 
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4c. Promo Code Entry ──────────────────────────────────────────────────
+  app.post("/voice/promo-code", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 10, action: "/voice/handle-promo-code", finishOnKey: "#", timeout: 15 });
+    gather.say("Enter your promotional code followed by the pound key. Press star to cancel.");
+    twiml.redirect("/voice/main-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-promo-code", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) ?? "";
+    const fromNumber = req.body?.From as string;
+
+    if (!digits || digits === "*") {
+      twiml.say("Cancelled.");
+      twiml.redirect("/voice/main-menu");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const result = await storage.redeemPromoCode(digits, user.id);
+      if ("error" in result) {
+        twiml.say(result.error + " Returning to the main menu.");
+      } else {
+        const minutes = Math.floor(result.secondsAwarded / 60);
+        twiml.say(`Success! ${minutes} minute${minutes === 1 ? "" : "s"} have been added to your account. Enjoy your time on the line.`);
+      }
+    } catch (err) {
+      console.error("[voice] handle-promo-code error:", err);
+      twiml.say("An error occurred. Please try again later.");
+    }
+
+    twiml.redirect("/voice/main-menu");
     res.type("text/xml");
     res.send(twiml.toString());
   });

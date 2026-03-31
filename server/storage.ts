@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, flaggedContent, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent } from "@shared/schema";
-import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull } from "drizzle-orm";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption } from "@shared/schema";
+import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 const VIRTUAL_PREFIX = "VIRTUAL-";
@@ -139,6 +139,14 @@ export interface IStorage {
   createFlaggedItem(data: InsertFlaggedContent): Promise<FlaggedContent>;
   resolveFlaggedItem(id: string, status: string): Promise<void>;
   deleteFlaggedItem(id: string): Promise<void>;
+
+  // Promo codes
+  getAllPromoCodes(): Promise<(PromoCode & { redemptionCount: number })[]>;
+  createPromoCode(data: InsertPromoCode): Promise<PromoCode>;
+  updatePromoCode(id: string, data: Partial<InsertPromoCode>): Promise<PromoCode>;
+  deletePromoCode(id: string): Promise<void>;
+  redeemPromoCode(code: string, userId: string): Promise<{ promoCode: PromoCode; secondsAwarded: number } | { error: string }>;
+  getPromoRedemptions(promoCodeId: string): Promise<(PromoRedemption & { phoneNumber: string })[]>;
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -778,6 +786,72 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFlaggedItem(id: string): Promise<void> {
     await db.delete(flaggedContent).where(eq(flaggedContent.id, id));
+  }
+
+  // ── Promo Codes ──────────────────────────────────────────────────────────────
+
+  async getAllPromoCodes(): Promise<(PromoCode & { redemptionCount: number })[]> {
+    const rows = await db.select().from(promoCodes).orderBy(promoCodes.createdAt);
+    const counts = await db
+      .select({ promoCodeId: promoRedemptions.promoCodeId, cnt: count() })
+      .from(promoRedemptions)
+      .groupBy(promoRedemptions.promoCodeId);
+    const countMap = new Map(counts.map(c => [c.promoCodeId, Number(c.cnt)]));
+    return rows.map(r => ({ ...r, redemptionCount: countMap.get(r.id) ?? 0 }));
+  }
+
+  async createPromoCode(data: InsertPromoCode): Promise<PromoCode> {
+    const [created] = await db.insert(promoCodes).values(data).returning();
+    return created;
+  }
+
+  async updatePromoCode(id: string, data: Partial<InsertPromoCode>): Promise<PromoCode> {
+    const [updated] = await db.update(promoCodes).set(data).where(eq(promoCodes.id, id)).returning();
+    return updated;
+  }
+
+  async deletePromoCode(id: string): Promise<void> {
+    await db.delete(promoCodes).where(eq(promoCodes.id, id));
+  }
+
+  async redeemPromoCode(code: string, userId: string): Promise<{ promoCode: PromoCode; secondsAwarded: number } | { error: string }> {
+    const upperCode = code.toUpperCase().trim();
+    const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.code, upperCode));
+    if (!promo) return { error: "Invalid promo code." };
+    if (!promo.isActive) return { error: "This promo code is no longer active." };
+    if (promo.expiresAt && promo.expiresAt < new Date()) return { error: "This promo code has expired." };
+    if (promo.maxUses !== null && promo.usedCount >= promo.maxUses) return { error: "This promo code has reached its maximum number of uses." };
+
+    const [existing] = await db.select().from(promoRedemptions)
+      .where(and(eq(promoRedemptions.promoCodeId, promo.id), eq(promoRedemptions.userId, userId)));
+    if (existing) return { error: "You have already redeemed this promo code." };
+
+    const secondsAwarded = promo.valueMinutes * 60;
+    await db.update(users)
+      .set({ remainingSeconds: sql`COALESCE(${users.remainingSeconds}, 0) + ${secondsAwarded}` })
+      .where(eq(users.id, userId));
+    await db.insert(promoRedemptions).values({ promoCodeId: promo.id, userId, secondsAwarded });
+    await db.update(promoCodes)
+      .set({ usedCount: sql`${promoCodes.usedCount} + 1` })
+      .where(eq(promoCodes.id, promo.id));
+    const [refreshed] = await db.select().from(promoCodes).where(eq(promoCodes.id, promo.id));
+    return { promoCode: refreshed, secondsAwarded };
+  }
+
+  async getPromoRedemptions(promoCodeId: string): Promise<(PromoRedemption & { phoneNumber: string })[]> {
+    const rows = await db.select({
+      id: promoRedemptions.id,
+      promoCodeId: promoRedemptions.promoCodeId,
+      userId: promoRedemptions.userId,
+      secondsAwarded: promoRedemptions.secondsAwarded,
+      redeemedAt: promoRedemptions.redeemedAt,
+      phoneNumber: users.phoneNumber,
+    })
+      .from(promoRedemptions)
+      .innerJoin(users, eq(promoRedemptions.userId, users.id))
+      .where(eq(promoRedemptions.promoCodeId, promoCodeId))
+      .orderBy(promoRedemptions.redeemedAt);
+    return rows;
   }
 }
 

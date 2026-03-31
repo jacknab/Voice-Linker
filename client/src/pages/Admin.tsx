@@ -9,7 +9,7 @@ import {
   Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2,
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
-  XCircle, AlertTriangle,
+  XCircle, AlertTriangle, Tag,
 } from "lucide-react";
 
 interface ProfileWithUser {
@@ -38,7 +38,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes";
 
 interface FlaggedItem {
   id: string;
@@ -1963,6 +1963,313 @@ function FlaggedContentTab() {
   );
 }
 
+// ── PromoCodesTab ─────────────────────────────────────────────────────────────
+interface PromoCode {
+  id: string;
+  code: string;
+  description: string | null;
+  valueMinutes: number;
+  maxUses: number | null;
+  usedCount: number;
+  expiresAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+  redemptionCount: number;
+}
+
+interface PromoRedemption {
+  id: string;
+  promoCodeId: string;
+  userId: string;
+  secondsAwarded: number;
+  redeemedAt: string | null;
+  phoneNumber: string;
+}
+
+function PromoCodesTab() {
+  const { toast } = useToast();
+  const [newCode, setNewCode] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  const [newMinutes, setNewMinutes] = useState("");
+  const [newMaxUses, setNewMaxUses] = useState("");
+  const [newExpiry, setNewExpiry] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const { data: codes = [], isLoading } = useQuery<PromoCode[]>({
+    queryKey: ["/api/admin/promo-codes"],
+  });
+
+  const { data: redemptions = [] } = useQuery<PromoRedemption[]>({
+    queryKey: ["/api/admin/promo-codes", expandedId, "redemptions"],
+    enabled: !!expandedId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (body: object) => apiRequest("POST", "/api/admin/promo-codes", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
+      setNewCode(""); setNewDesc(""); setNewMinutes(""); setNewMaxUses(""); setNewExpiry("");
+      toast({ title: "Promo code created" });
+    },
+    onError: (e: any) => toast({ title: e?.message ?? "Failed to create promo code", variant: "destructive" }),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      apiRequest("PATCH", `/api/admin/promo-codes/${id}`, { isActive }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] }),
+    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/admin/promo-codes/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
+      toast({ title: "Promo code deleted" });
+    },
+    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
+  });
+
+  function handleCreate() {
+    if (!newCode.trim() || !newMinutes || Number(newMinutes) < 1) return;
+    createMutation.mutate({
+      code: newCode.trim(),
+      description: newDesc.trim() || null,
+      valueMinutes: Number(newMinutes),
+      maxUses: newMaxUses ? Number(newMaxUses) : null,
+      expiresAt: newExpiry || null,
+      isActive: true,
+    });
+  }
+
+  const activeCount = codes.filter(c => c.isActive).length;
+  const totalRedemptions = codes.reduce((s, c) => s + c.redemptionCount, 0);
+
+  function fmtExpiry(raw: string | null) {
+    if (!raw) return "—";
+    const d = new Date(raw);
+    return d < new Date() ? <span className="text-red-500">{d.toLocaleDateString()} (expired)</span> : d.toLocaleDateString();
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <div className={C.cardAlt}>
+          <div className={C.statLabel}>Total Codes</div>
+          <div className={C.statValue}>{codes.length}</div>
+        </div>
+        <div className={C.cardAlt}>
+          <div className={C.statLabel}>Active</div>
+          <div className={C.statValue}>{activeCount}</div>
+        </div>
+        <div className={C.cardAlt}>
+          <div className={C.statLabel}>Total Redemptions</div>
+          <div className={C.statValue}>{totalRedemptions}</div>
+        </div>
+      </div>
+
+      {/* Create form */}
+      <div className={C.card}>
+        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+          <PlusCircle size={14} className="text-[#f5a623]" /> Create Promo Code
+        </h3>
+        <p className="text-gray-400 font-mono text-xs -mt-1">
+          Callers press 5 on the main menu then dial the code and press #. Codes are stored uppercase.
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div>
+            <label className={C.label}>Code</label>
+            <input
+              data-testid="input-promo-code"
+              value={newCode}
+              onChange={e => setNewCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
+              placeholder="e.g. SUMMER25"
+              maxLength={20}
+              className={C.input}
+            />
+          </div>
+          <div>
+            <label className={C.label}>Free Minutes</label>
+            <input
+              data-testid="input-promo-minutes"
+              type="number"
+              min={1}
+              value={newMinutes}
+              onChange={e => setNewMinutes(e.target.value)}
+              placeholder="e.g. 30"
+              className={C.input}
+            />
+          </div>
+          <div>
+            <label className={C.label}>Max Uses (blank = unlimited)</label>
+            <input
+              data-testid="input-promo-max-uses"
+              type="number"
+              min={1}
+              value={newMaxUses}
+              onChange={e => setNewMaxUses(e.target.value)}
+              placeholder="e.g. 100"
+              className={C.input}
+            />
+          </div>
+          <div>
+            <label className={C.label}>Description (optional)</label>
+            <input
+              data-testid="input-promo-desc"
+              value={newDesc}
+              onChange={e => setNewDesc(e.target.value)}
+              placeholder="e.g. Summer promo 2026"
+              className={C.input}
+            />
+          </div>
+          <div>
+            <label className={C.label}>Expiry Date (optional)</label>
+            <input
+              data-testid="input-promo-expiry"
+              type="date"
+              value={newExpiry}
+              onChange={e => setNewExpiry(e.target.value)}
+              className={C.input}
+            />
+          </div>
+        </div>
+        <button
+          data-testid="btn-create-promo"
+          onClick={handleCreate}
+          disabled={!newCode.trim() || !newMinutes || Number(newMinutes) < 1 || createMutation.isPending}
+          className={C.btnPrimary}
+        >
+          {createMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+          Create Code
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className={C.card}>
+        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">All Promo Codes</h3>
+        {isLoading ? (
+          <div className="flex justify-center py-10"><Loader2 className="animate-spin text-gray-400" size={20} /></div>
+        ) : codes.length === 0 ? (
+          <p className="text-xs text-gray-400 font-mono text-center py-8">No promo codes yet. Create one above.</p>
+        ) : (
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className={C.th}>Code</th>
+                  <th className={C.th}>Description</th>
+                  <th className={C.th}>Minutes</th>
+                  <th className={C.th}>Used / Max</th>
+                  <th className={C.th}>Expires</th>
+                  <th className={C.th}>Status</th>
+                  <th className={C.th}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {codes.map(promo => {
+                  const isExpanded = expandedId === promo.id;
+                  const isExpired = promo.expiresAt ? new Date(promo.expiresAt) < new Date() : false;
+                  return (
+                    <>
+                      <tr key={promo.id} data-testid={`row-promo-${promo.id}`} className={C.row}>
+                        <td className={C.td}>
+                          <span className="font-mono font-bold text-sm tracking-widest text-gray-900">{promo.code}</span>
+                        </td>
+                        <td className={C.td}>
+                          <span className="text-gray-500 text-xs">{promo.description || <span className="italic text-gray-300">—</span>}</span>
+                        </td>
+                        <td className={C.td}>
+                          <span className="text-amber-700 font-bold">{promo.valueMinutes}</span>
+                          <span className="text-gray-400 text-xs ml-1">min</span>
+                        </td>
+                        <td className={C.td}>
+                          <span className={promo.maxUses !== null && promo.usedCount >= promo.maxUses ? "text-red-500 font-bold" : "text-gray-700"}>
+                            {promo.usedCount}
+                          </span>
+                          <span className="text-gray-400"> / {promo.maxUses ?? "∞"}</span>
+                        </td>
+                        <td className={C.td + " text-xs"}>{fmtExpiry(promo.expiresAt)}</td>
+                        <td className={C.td}>
+                          <span className={`${C.badge} ${promo.isActive && !isExpired ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
+                            {promo.isActive && !isExpired ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                            {isExpired ? "Expired" : promo.isActive ? "Active" : "Disabled"}
+                          </span>
+                        </td>
+                        <td className={C.td}>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              data-testid={`btn-toggle-promo-${promo.id}`}
+                              onClick={() => toggleMutation.mutate({ id: promo.id, isActive: !promo.isActive })}
+                              disabled={toggleMutation.isPending}
+                              className={C.btnGhost + " text-[10px]"}
+                              title={promo.isActive ? "Disable" : "Enable"}
+                            >
+                              {promo.isActive ? <MinusCircle size={10} /> : <PlusCircle size={10} />}
+                              {promo.isActive ? "Disable" : "Enable"}
+                            </button>
+                            <button
+                              data-testid={`btn-redemptions-promo-${promo.id}`}
+                              onClick={() => setExpandedId(isExpanded ? null : promo.id)}
+                              className={`${C.btnSecondary} text-[10px]`}
+                            >
+                              <Users size={10} />
+                              {promo.redemptionCount}
+                            </button>
+                            <button
+                              data-testid={`btn-delete-promo-${promo.id}`}
+                              onClick={() => deleteMutation.mutate(promo.id)}
+                              disabled={deleteMutation.isPending}
+                              className={C.btnDanger + " text-[10px]"}
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${promo.id}-redemptions`}>
+                          <td colSpan={7} className="bg-gray-50 px-6 py-3 border-b border-gray-200">
+                            <div className="font-mono text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+                              Redemptions for {promo.code}
+                            </div>
+                            {redemptions.length === 0 ? (
+                              <p className="text-gray-400 font-mono text-xs">No redemptions yet.</p>
+                            ) : (
+                              <table className="w-full max-w-2xl">
+                                <thead>
+                                  <tr>
+                                    <th className="text-left text-[10px] font-mono text-gray-400 uppercase tracking-widest pb-1 pr-6">Phone</th>
+                                    <th className="text-left text-[10px] font-mono text-gray-400 uppercase tracking-widest pb-1 pr-6">Minutes Awarded</th>
+                                    <th className="text-left text-[10px] font-mono text-gray-400 uppercase tracking-widest pb-1">Redeemed At</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {redemptions.map(r => (
+                                    <tr key={r.id}>
+                                      <td className="font-mono text-xs text-gray-700 pr-6 py-1">{r.phoneNumber}</td>
+                                      <td className="font-mono text-xs text-amber-700 font-bold pr-6 py-1">{Math.floor(r.secondsAwarded / 60)} min</td>
+                                      <td className="font-mono text-xs text-gray-400 py-1">{r.redeemedAt ? new Date(r.redeemedAt).toLocaleString() : "—"}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── ZipCodesTab ───────────────────────────────────────────────────────────────
 interface ZipEntry {
   id: string;
@@ -2189,6 +2496,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "messages",       label: "Messages",        icon: <MessageSquare size={15} /> },
   { id: "phone-numbers",  label: "Phone Numbers",   icon: <Phone size={15} /> },
   { id: "blocked",        label: "Blocked Numbers", icon: <X size={15} /> },
+  { id: "promo-codes",    label: "Promo Codes",     icon: <Tag size={15} /> },
   { id: "zip-codes",      label: "Zip Codes",       icon: <MapPin size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
 ];
@@ -2311,6 +2619,7 @@ export default function Admin() {
           {activeTab === "messages"       && <PlaceholderTab label="Messages" />}
           {activeTab === "phone-numbers"  && <PhoneNumbersTab />}
           {activeTab === "blocked"        && <BlockedNumbersTab />}
+          {activeTab === "promo-codes"    && <PromoCodesTab />}
           {activeTab === "zip-codes"      && <ZipCodesTab />}
           {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
         </div>
