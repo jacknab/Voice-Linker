@@ -11,6 +11,7 @@ import fs from "fs";
 import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { generateTTS, listVoices } from "./elevenlabs";
+import { lookupZipCode } from "./zipLookup";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -1126,8 +1127,13 @@ export async function registerRoutes(
       // Only save if exactly 5 numeric digits were entered
       if (/^\d{5}$/.test(digits)) {
         const user = await getOrCreateUser(fromNumber);
-        await storage.updateZipCode(user.id, digits);
-        console.log(`[voice] zip-code saved: userId=${user.id}, zip=${digits}`);
+        const geo = await lookupZipCode(digits);
+        await storage.updateZipCode(user.id, digits, geo ?? undefined);
+        if (geo) {
+          console.log(`[voice] zip-code saved: userId=${user.id}, zip=${digits}, city=${geo.city}, state=${geo.state}, lat=${geo.latitude}, lon=${geo.longitude}`);
+        } else {
+          console.log(`[voice] zip-code saved: userId=${user.id}, zip=${digits} (no geo data found)`);
+        }
         playPrompt(twiml, req, "zip_code_saved.mp3", "Got it. We'll use your zip code to show you nearby callers.");
       }
       // Anything else (empty = pressed #, partial, invalid) → silently skip

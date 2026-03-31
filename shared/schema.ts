@@ -23,6 +23,10 @@ export const users = pgTable("users", {
   membershipTier: text("membership_tier"),
   remainingMinutes: integer("remaining_minutes"),
   zipCode: text("zip_code"),
+  latitude: text("latitude"),
+  longitude: text("longitude"),
+  city: text("city"),
+  state: text("state"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
