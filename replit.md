@@ -20,7 +20,9 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - `server/webhookHandlers.ts` — Stripe webhook handler
 - `shared/schema.ts` — Drizzle ORM schema (includes `callLogs` table for per-number stats)
 - `scripts/seed-membership.ts` — Seeds Bronze/Silver/Gold products in Stripe
-- `client/src/pages/` — Admin dashboard pages
+- `client/src/pages/Landing.tsx` — Public-facing customer marketing page ("TalkSpark" brand, `/` route)
+- `client/src/pages/Home.tsx` — System status & Twilio setup page (`/setup` route)
+- `client/src/pages/Admin.tsx` — Full admin dashboard (`/admin` route)
 
 ## Voice Menu Structure
 
