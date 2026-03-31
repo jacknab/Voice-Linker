@@ -1072,9 +1072,13 @@ function MembershipsTab() {
                   </div>
                   <div className="pt-2 border-t border-[#4caf82]/10">
                     <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest">
-                      {parseInt(plan.minutes) >= 60
-                        ? `≈ ${Math.round(parseInt(plan.minutes) / 60)} hrs`
-                        : `${plan.minutes} min`}
+                      {(() => {
+                        const m = parseInt(plan.minutes) || 0;
+                        if (m < 60) return `${m} min`;
+                        const hrs = Math.floor(m / 60);
+                        const mins = m % 60;
+                        return mins === 0 ? `${hrs} hr${hrs !== 1 ? "s" : ""}` : `${hrs} hr ${mins} min`;
+                      })()}
                       {" · "}
                       ${parseFloat(plan.price || "0").toFixed(2)}
                     </div>
