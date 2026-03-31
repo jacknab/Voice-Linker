@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, flaggedContent, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, or, notLike, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -29,6 +29,25 @@ export interface CallerDetail {
   receivedMessages: { id: string; fromPhoneNumber: string; createdAt: Date | null; isRead: boolean | null }[];
   blockedByUser: { id: string; phoneNumber: string; blockedAt: Date | null }[];
   blockedByOthers: { id: string; phoneNumber: string; blockedAt: Date | null }[];
+}
+
+export interface FlaggedItemWithDetails {
+  id: string;
+  contentType: string;
+  contentId: string;
+  reason: string;
+  status: string;
+  createdAt: Date | null;
+  reviewedAt: Date | null;
+  reportedByPhone: string | null;
+  // Profile fields (when contentType === "profile")
+  profilePhone: string | null;
+  profileRecordingUrl: string | null;
+  profileDuration: number | null;
+  // Message fields (when contentType === "message")
+  messageFromPhone: string | null;
+  messageToPhone: string | null;
+  messageRecordingUrl: string | null;
 }
 
 export interface IStorage {
@@ -110,6 +129,12 @@ export interface IStorage {
   adjustUserCredits(userId: string, deltaSeconds: number): Promise<User>;
   adminBlockByUserIds(blockerId: string, blockedUserId: string): Promise<void>;
   adminUnblockByUserIds(blockerId: string, blockedUserId: string): Promise<void>;
+
+  // Flagged content queue
+  getAllFlaggedItems(status?: string): Promise<FlaggedItemWithDetails[]>;
+  createFlaggedItem(data: InsertFlaggedContent): Promise<FlaggedContent>;
+  resolveFlaggedItem(id: string, status: string): Promise<void>;
+  deleteFlaggedItem(id: string): Promise<void>;
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -642,6 +667,56 @@ export class DatabaseStorage implements IStorage {
     await db.delete(blockedUsers).where(
       and(eq(blockedUsers.blockerId, blockerId), eq(blockedUsers.blockedUserId, blockedUserId))
     );
+  }
+
+  async getAllFlaggedItems(status?: string): Promise<FlaggedItemWithDetails[]> {
+    const whereClause = status ? `AND fc.status = '${status}'` : "";
+    const result = await db.execute(sql`
+      SELECT
+        fc.id,
+        fc.content_type     AS "contentType",
+        fc.content_id       AS "contentId",
+        fc.reason,
+        fc.status,
+        fc.created_at       AS "createdAt",
+        fc.reviewed_at      AS "reviewedAt",
+        rep.phone_number    AS "reportedByPhone",
+        -- Profile fields
+        pu.phone_number     AS "profilePhone",
+        p.recording_url     AS "profileRecordingUrl",
+        p.recording_duration AS "profileDuration",
+        -- Message fields
+        mu.phone_number     AS "messageFromPhone",
+        mtu.phone_number    AS "messageToPhone",
+        m.recording_url     AS "messageRecordingUrl"
+      FROM flagged_content fc
+      LEFT JOIN users rep ON rep.id = fc.reported_by_user_id
+      -- Profile join (only applies when content_type = 'profile')
+      LEFT JOIN profiles p ON p.id = fc.content_id AND fc.content_type = 'profile'
+      LEFT JOIN users pu ON pu.id = p.user_id
+      -- Message join (only applies when content_type = 'message')
+      LEFT JOIN messages m ON m.id = fc.content_id AND fc.content_type = 'message'
+      LEFT JOIN users mu ON mu.id = m.from_user_id
+      LEFT JOIN users mtu ON mtu.id = m.to_user_id
+      ${status ? sql`WHERE fc.status = ${status}` : sql``}
+      ORDER BY fc.created_at DESC
+    `);
+    return result.rows as FlaggedItemWithDetails[];
+  }
+
+  async createFlaggedItem(data: InsertFlaggedContent): Promise<FlaggedContent> {
+    const [item] = await db.insert(flaggedContent).values(data).returning();
+    return item;
+  }
+
+  async resolveFlaggedItem(id: string, status: string): Promise<void> {
+    await db.update(flaggedContent)
+      .set({ status, reviewedAt: new Date() })
+      .where(eq(flaggedContent.id, id));
+  }
+
+  async deleteFlaggedItem(id: string): Promise<void> {
+    await db.delete(flaggedContent).where(eq(flaggedContent.id, id));
   }
 }
 

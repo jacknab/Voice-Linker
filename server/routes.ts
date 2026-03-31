@@ -493,6 +493,54 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Flagged content queue ---
+  app.get("/api/admin/flagged", async (req, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const items = await storage.getAllFlaggedItems(status);
+      res.json(items);
+    } catch (e) {
+      console.error("[admin] /api/admin/flagged GET error:", e);
+      res.status(500).json({ message: "Failed to fetch flagged content" });
+    }
+  });
+
+  app.post("/api/admin/flagged", async (req, res) => {
+    try {
+      const { contentType, contentId, reason, reportedByUserId } = req.body as {
+        contentType: string; contentId: string; reason: string; reportedByUserId?: string;
+      };
+      if (!contentType || !contentId || !reason) return res.status(400).json({ message: "contentType, contentId, and reason are required" });
+      const item = await storage.createFlaggedItem({ contentType, contentId, reason, reportedByUserId: reportedByUserId ?? null, status: "pending" });
+      res.status(201).json(item);
+    } catch (e) {
+      console.error("[admin] /api/admin/flagged POST error:", e);
+      res.status(500).json({ message: "Failed to create flag" });
+    }
+  });
+
+  app.patch("/api/admin/flagged/:id", async (req, res) => {
+    try {
+      const { status } = req.body as { status: string };
+      if (!["approved", "removed"].includes(status)) return res.status(400).json({ message: "status must be 'approved' or 'removed'" });
+      await storage.resolveFlaggedItem(req.params.id, status);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] /api/admin/flagged PATCH error:", e);
+      res.status(500).json({ message: "Failed to resolve flag" });
+    }
+  });
+
+  app.delete("/api/admin/flagged/:id", async (req, res) => {
+    try {
+      await storage.deleteFlaggedItem(req.params.id);
+      res.status(204).send();
+    } catch (e) {
+      console.error("[admin] /api/admin/flagged DELETE error:", e);
+      res.status(500).json({ message: "Failed to delete flag" });
+    }
+  });
+
   // --- Admin: Caller directory ---
   app.get("/api/admin/callers", async (_req, res) => {
     try {

@@ -145,6 +145,18 @@ export const blockedUsersRelations = relations(blockedUsers, ({ one }) => ({
   blocked: one(users, { fields: [blockedUsers.blockedUserId], references: [users.id], relationName: "blocked" }),
 }));
 
+// Flagged content queue — profiles or messages flagged for admin review
+export const flaggedContent = pgTable("flagged_content", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  contentType: text("content_type").notNull(), // "profile" | "message"
+  contentId: uuid("content_id").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"), // "pending" | "approved" | "removed"
+  reportedByUserId: uuid("reported_by_user_id"), // null = auto-flagged by system
+  createdAt: timestamp("created_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
 // Singleton settings row for membership/free-trial configuration
 export const membershipSettings = pgTable("membership_settings", {
   id: text("id").primaryKey().default("singleton"),
@@ -194,3 +206,7 @@ export type BlockedUser = typeof blockedUsers.$inferSelect;
 export type InsertBlockedUser = z.infer<typeof insertBlockedUserSchema>;
 
 export type CallLog = typeof callLogs.$inferSelect;
+
+export const insertFlaggedContentSchema = createInsertSchema(flaggedContent).omit({ id: true, createdAt: true, reviewedAt: true });
+export type FlaggedContent = typeof flaggedContent.$inferSelect;
+export type InsertFlaggedContent = z.infer<typeof insertFlaggedContentSchema>;

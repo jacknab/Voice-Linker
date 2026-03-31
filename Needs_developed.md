@@ -17,7 +17,7 @@
 ## Moderation
 
 - **Blocked Numbers Tab** — View, search, and unblock the full list of currently blocked callers.
-- **Flagged Content Queue** — Messages or profiles that have been reported or auto-flagged for review, with approve/remove actions.
+- **Flagged Content Queue** — Messages or profiles that have been reported or auto-flagged for review, with approve/remove actions. ✅ COMPLETE
 
 ---
 

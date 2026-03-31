@@ -8,7 +8,8 @@ import {
   MessageSquare, PhoneCall, X, MapPin, Clock, Copy, Eye, EyeOff,
   Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2,
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ShieldOff,
-  Shield, PlusCircle, MinusCircle, ArrowUpDown,
+  Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
+  XCircle, AlertTriangle,
 } from "lucide-react";
 
 interface ProfileWithUser {
@@ -37,7 +38,24 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged";
+
+interface FlaggedItem {
+  id: string;
+  contentType: string;
+  contentId: string;
+  reason: string;
+  status: string;
+  createdAt: string | null;
+  reviewedAt: string | null;
+  reportedByPhone: string | null;
+  profilePhone: string | null;
+  profileRecordingUrl: string | null;
+  profileDuration: number | null;
+  messageFromPhone: string | null;
+  messageToPhone: string | null;
+  messageRecordingUrl: string | null;
+}
 
 interface CallerSummary {
   id: string;
@@ -1594,10 +1612,263 @@ function CallersTab() {
   );
 }
 
+// ── Flagged Content Queue ──────────────────────────────────────────────────────
+const FLAG_REASONS = [
+  "Inappropriate language",
+  "Explicit/adult content",
+  "Hate speech",
+  "Spam or solicitation",
+  "Impersonation",
+  "Harassment",
+  "Other",
+];
+
+function FlaggedContentTab() {
+  const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "removed" | "all">("pending");
+  const [showAddFlag, setShowAddFlag] = useState(false);
+  const [addForm, setAddForm] = useState({ contentType: "profile", contentId: "", reason: FLAG_REASONS[0] });
+  const [addError, setAddError] = useState("");
+
+  const { data: items, isLoading } = useQuery<FlaggedItem[]>({
+    queryKey: ["/api/admin/flagged", statusFilter],
+    queryFn: () =>
+      fetch(statusFilter === "all" ? "/api/admin/flagged" : `/api/admin/flagged?status=${statusFilter}`)
+        .then(r => r.json()),
+    refetchInterval: 15000,
+  });
+
+  const { data: allItems } = useQuery<FlaggedItem[]>({
+    queryKey: ["/api/admin/flagged", "all"],
+    queryFn: () => fetch("/api/admin/flagged").then(r => r.json()),
+    refetchInterval: 15000,
+  });
+
+  const resolveMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiRequest("PATCH", `/api/admin/flagged/${id}`, { status }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/flagged"] }); },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/admin/flagged/${id}`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/flagged"] }); },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data: { contentType: string; contentId: string; reason: string }) =>
+      apiRequest("POST", "/api/admin/flagged", data),
+    onSuccess: () => {
+      setShowAddFlag(false);
+      setAddForm({ contentType: "profile", contentId: "", reason: FLAG_REASONS[0] });
+      setAddError("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/flagged"] });
+    },
+  });
+
+  const statusBadge = (s: string) => {
+    if (s === "pending")  return "bg-amber-50 border-amber-200 text-amber-700";
+    if (s === "approved") return "bg-emerald-50 border-emerald-200 text-emerald-700";
+    if (s === "removed")  return "bg-red-50 border-red-200 text-red-600";
+    return "bg-gray-50 border-gray-200 text-gray-500";
+  };
+
+  const typeBadge = (t: string) => t === "profile"
+    ? "bg-blue-50 border-blue-200 text-blue-700"
+    : "bg-purple-50 border-purple-200 text-purple-700";
+
+  const displayLabel = (item: FlaggedItem) => {
+    if (item.contentType === "profile") return item.profilePhone ?? item.contentId.slice(0, 8);
+    return item.messageFromPhone ? `${item.messageFromPhone} → ${item.messageToPhone ?? "?"}` : item.contentId.slice(0, 8);
+  };
+
+  const pendingCount = (allItems ?? []).filter(i => i.status === "pending").length;
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 text-gray-400 font-mono text-xs">
+          {(["pending", "approved", "removed", "all"] as const).map(s => (
+            <button
+              key={s}
+              data-testid={`btn-filter-${s}`}
+              onClick={() => setStatusFilter(s)}
+              className={`px-2.5 py-0.5 rounded font-mono text-xs tracking-widest uppercase transition-colors ${statusFilter === s ? "bg-[#f5a623] text-black" : "text-gray-400 hover:text-gray-700"}`}
+            >{s}{s === "pending" && pendingCount > 0 ? ` (${pendingCount})` : ""}</button>
+          ))}
+        </div>
+        <span className="ml-auto" />
+        <button
+          data-testid="btn-add-flag"
+          onClick={() => setShowAddFlag(!showAddFlag)}
+          className={C.btnGhost}
+        ><Flag size={12} /> Flag Content</button>
+      </div>
+
+      {/* Manual Flag Form */}
+      {showAddFlag && (
+        <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
+          <h3 className="font-mono text-xs font-bold tracking-widest uppercase text-amber-800">Flag Content Manually</h3>
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="space-y-1">
+              <label className="font-mono text-xs text-gray-500 uppercase tracking-widest">Type</label>
+              <select
+                data-testid="select-flag-type"
+                value={addForm.contentType}
+                onChange={e => setAddForm(f => ({ ...f, contentType: e.target.value }))}
+                className="border border-gray-200 rounded px-2 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none focus:border-[#f5a623]"
+              >
+                <option value="profile">Profile</option>
+                <option value="message">Message</option>
+              </select>
+            </div>
+            <div className="space-y-1 flex-1 min-w-48">
+              <label className="font-mono text-xs text-gray-500 uppercase tracking-widest">Content ID (UUID)</label>
+              <input
+                data-testid="input-flag-content-id"
+                type="text"
+                placeholder="paste UUID here…"
+                value={addForm.contentId}
+                onChange={e => setAddForm(f => ({ ...f, contentId: e.target.value.trim() }))}
+                className="w-full border border-gray-200 rounded px-2 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none focus:border-[#f5a623]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="font-mono text-xs text-gray-500 uppercase tracking-widest">Reason</label>
+              <select
+                data-testid="select-flag-reason"
+                value={addForm.reason}
+                onChange={e => setAddForm(f => ({ ...f, reason: e.target.value }))}
+                className="border border-gray-200 rounded px-2 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none focus:border-[#f5a623]"
+              >
+                {FLAG_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <button
+              data-testid="btn-submit-flag"
+              onClick={() => {
+                setAddError("");
+                if (!addForm.contentId) { setAddError("Content ID is required."); return; }
+                createMutation.mutate(addForm);
+              }}
+              disabled={createMutation.isPending}
+              className={C.btnPrimary}
+            >
+              {createMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Flag size={12} />}
+              Submit Flag
+            </button>
+            <button data-testid="btn-cancel-flag" onClick={() => setShowAddFlag(false)} className={C.btnGhost}>Cancel</button>
+          </div>
+          {addError && <p className="font-mono text-xs text-red-500">{addError}</p>}
+        </div>
+      )}
+
+      {/* Queue table */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className={C.th}>Type</th>
+              <th className={C.th}>Content</th>
+              <th className={C.th}>Reason</th>
+              <th className={C.th}>Reported By</th>
+              <th className={C.th}>Flagged</th>
+              <th className={C.th}>Status</th>
+              <th className={C.th}>Reviewed</th>
+              <th className={C.th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest"><Loader2 size={14} className="inline animate-spin mr-2" />LOADING…</td></tr>
+            ) : !items || items.length === 0 ? (
+              <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">
+                {statusFilter === "pending" ? "NO PENDING FLAGS" : "NO ITEMS IN THIS CATEGORY"}
+              </td></tr>
+            ) : items.map(item => (
+              <tr key={item.id} data-testid={`row-flag-${item.id}`} className={C.row}>
+                <td className={C.td}>
+                  <span className={`${C.badge} ${typeBadge(item.contentType)}`}>{item.contentType.toUpperCase()}</span>
+                </td>
+                <td className={C.td}>
+                  <div className="space-y-0.5">
+                    <div className="font-mono text-xs text-gray-800">{displayLabel(item)}</div>
+                    {item.contentType === "profile" && item.profileDuration != null && (
+                      <div className="font-mono text-xs text-gray-400">{fmtSecs(item.profileDuration)} recording</div>
+                    )}
+                    <div className="font-mono text-[10px] text-gray-300">{item.contentId.slice(0, 12)}…</div>
+                  </div>
+                </td>
+                <td className={C.td}>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                    <AlertTriangle size={11} className="text-amber-400 shrink-0" />
+                    {item.reason}
+                  </div>
+                </td>
+                <td className={C.td + " font-mono text-xs text-gray-500"}>
+                  {item.reportedByPhone ?? <span className="text-gray-300 italic">auto</span>}
+                </td>
+                <td className={C.td + " text-gray-400 text-xs"}>
+                  {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "—"}
+                </td>
+                <td className={C.td}>
+                  <span className={`${C.badge} ${statusBadge(item.status)}`}>{item.status.toUpperCase()}</span>
+                </td>
+                <td className={C.td + " text-gray-400 text-xs"}>
+                  {item.reviewedAt ? new Date(item.reviewedAt).toLocaleDateString() : "—"}
+                </td>
+                <td className={C.td}>
+                  <div className="flex items-center gap-1">
+                    {item.status === "pending" && (
+                      <>
+                        <button
+                          data-testid={`btn-approve-flag-${item.id}`}
+                          title="Approve — keep content visible"
+                          onClick={() => resolveMutation.mutate({ id: item.id, status: "approved" })}
+                          disabled={resolveMutation.isPending}
+                          className="flex items-center gap-0.5 px-2 py-1 rounded text-xs font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                        ><CheckCircle2 size={11} /> OK</button>
+                        <button
+                          data-testid={`btn-remove-flag-${item.id}`}
+                          title="Remove — mark content for removal"
+                          onClick={() => resolveMutation.mutate({ id: item.id, status: "removed" })}
+                          disabled={resolveMutation.isPending}
+                          className="flex items-center gap-0.5 px-2 py-1 rounded text-xs font-mono bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition-colors"
+                        ><XCircle size={11} /> Remove</button>
+                      </>
+                    )}
+                    {item.status !== "pending" && (
+                      <button
+                        data-testid={`btn-reopen-flag-${item.id}`}
+                        title="Re-open flag as pending"
+                        onClick={() => resolveMutation.mutate({ id: item.id, status: "pending" })}
+                        disabled={resolveMutation.isPending}
+                        className="flex items-center gap-0.5 px-2 py-1 rounded text-xs font-mono bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 transition-colors"
+                      ><Flag size={11} /> Reopen</button>
+                    )}
+                    <button
+                      data-testid={`btn-delete-flag-${item.id}`}
+                      title="Dismiss flag record"
+                      onClick={() => deleteMutation.mutate(item.id)}
+                      disabled={deleteMutation.isPending}
+                      className="flex items-center gap-0.5 px-2 py-1 rounded text-xs font-mono bg-gray-50 border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-red-500 transition-colors"
+                    ><Trash2 size={11} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Tab definitions ───────────────────────────────────────────────────────────
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard",      label: "Dashboard",      icon: <LayoutDashboard size={15} /> },
   { id: "callers",        label: "Callers",         icon: <Users size={15} /> },
+  { id: "flagged",        label: "Flagged Content", icon: <Flag size={15} /> },
   { id: "voice-profiles", label: "Voice Profiles",  icon: <Phone size={15} /> },
   { id: "regions",        label: "Regions",         icon: <Globe size={15} /> },
   { id: "memberships",    label: "Memberships",     icon: <CreditCard size={15} /> },
@@ -1718,6 +1989,7 @@ export default function Admin() {
 
           {activeTab === "dashboard"      && <DashboardTab />}
           {activeTab === "callers"        && <CallersTab />}
+          {activeTab === "flagged"        && <FlaggedContentTab />}
           {activeTab === "voice-profiles" && <VoiceProfilesTab key={String(showUpload)} />}
           {activeTab === "regions"        && <RegionsTab />}
           {activeTab === "memberships"    && <MembershipsTab />}
