@@ -592,7 +592,7 @@ export async function registerRoutes(
 
   app.post("/api/regions", async (req, res) => {
     try {
-      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionId } = req.body;
+      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionId, defaultZipCode } = req.body;
       if (!name || !slug || !phoneNumber) {
         return res.status(400).json({ message: "name, slug, and phoneNumber are required" });
       }
@@ -605,6 +605,7 @@ export async function registerRoutes(
         description: description?.trim() || null,
         isActive: isActive !== false,
         linkedRegionId: linkedRegionId || null,
+        defaultZipCode: defaultZipCode?.trim() || null,
       });
       res.status(201).json(region);
     } catch (e: any) {
@@ -619,7 +620,7 @@ export async function registerRoutes(
   app.put("/api/regions/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionId } = req.body;
+      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionId, defaultZipCode } = req.body;
       const region = await storage.updateRegion(id, {
         ...(name !== undefined && { name: name.trim() }),
         ...(slug !== undefined && { slug: slug.trim().toLowerCase() }),
@@ -629,6 +630,7 @@ export async function registerRoutes(
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(isActive !== undefined && { isActive }),
         ...("linkedRegionId" in req.body && { linkedRegionId: linkedRegionId || null }),
+        ...("defaultZipCode" in req.body && { defaultZipCode: defaultZipCode?.trim() || null }),
       });
       res.json(region);
     } catch (e: any) {
@@ -1164,8 +1166,24 @@ export async function registerRoutes(
 
       // Resolve caller's location for proximity sorting
       const callerZip = user.zipCodeId ? await storage.getZipEntryById(user.zipCodeId) : null;
-      const callerLat = callerZip?.latitude ?? null;
-      const callerLon = callerZip?.longitude ?? null;
+      let callerLat = callerZip?.latitude ?? null;
+      let callerLon = callerZip?.longitude ?? null;
+
+      // If the caller has no zip, fall back to the region's default zip code
+      if (callerLat == null && regionId) {
+        const region = await storage.getRegionById(regionId);
+        if (region?.defaultZipCode) {
+          let regionZip = await storage.getZipEntryByCode(region.defaultZipCode);
+          if (!regionZip) {
+            const geoRaw = await lookupZipCode(region.defaultZipCode);
+            const geo = geoRaw ? { latitude: parseFloat(geoRaw.latitude), longitude: parseFloat(geoRaw.longitude), city: geoRaw.city, state: geoRaw.state, neighborhood: geoRaw.neighborhood } : undefined;
+            regionZip = await storage.getOrCreateZipEntry(region.defaultZipCode, geo);
+          }
+          callerLat = regionZip.latitude ?? null;
+          callerLon = regionZip.longitude ?? null;
+          console.log(`[voice] browse-profiles: using region default zip ${region.defaultZipCode} for proximity sort (userId=${user.id})`);
+        }
+      }
 
       // Count available profiles: active callers + admin-uploaded greetings (region-scoped)
       const availableCount = await storage.getAvailableProfileCount(user.id, regionId);

@@ -50,6 +50,7 @@ export interface IStorage {
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingMinutes?: number }): Promise<User>;
   deductMinutes(userId: string, minutes: number): Promise<User>;
+  getZipEntryByCode(code: string): Promise<ZipCode | undefined>;
   getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string; neighborhood?: string | null }): Promise<ZipCode>;
   setUserZipCode(userId: string, zipCodeId: string): Promise<void>;
 
@@ -364,6 +365,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return user;
+  }
+
+  async getZipEntryByCode(code: string): Promise<ZipCode | undefined> {
+    const [entry] = await db.select().from(zipCodes).where(eq(zipCodes.code, code)).limit(1);
+    return entry;
   }
 
   async getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string; neighborhood?: string | null }): Promise<ZipCode> {

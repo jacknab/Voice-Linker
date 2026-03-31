@@ -13,6 +13,7 @@ export const regions = pgTable("regions", {
   description: text("description"),
   isActive: boolean("is_active").notNull().default(true),
   linkedRegionId: uuid("linked_region_id"),
+  defaultZipCode: text("default_zip_code"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

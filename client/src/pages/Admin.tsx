@@ -28,6 +28,7 @@ interface Region {
   description: string | null;
   isActive: boolean;
   linkedRegionId: string | null;
+  defaultZipCode: string | null;
   createdAt: string;
   activeCalls: number;
   voiceProfiles: number;
@@ -174,6 +175,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
   const [description, setDescription] = useState(region?.description ?? "");
   const [isActive, setIsActive] = useState(region?.isActive ?? true);
   const [linkedRegionId, setLinkedRegionId] = useState<string>(region?.linkedRegionId ?? "");
+  const [defaultZipCode, setDefaultZipCode] = useState<string>(region?.defaultZipCode ?? "");
 
   const { data: allRegions } = useQuery<Region[]>({ queryKey: ["/api/regions"] });
   const otherRegions = (allRegions ?? []).filter(r => r.id !== region?.id);
@@ -185,7 +187,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const body = { name: name.trim(), slug: slug.trim(), phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive, linkedRegionId: linkedRegionId || null };
+      const body = { name: name.trim(), slug: slug.trim(), phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive, linkedRegionId: linkedRegionId || null, defaultZipCode: defaultZipCode.trim() || null };
       if (isEdit) {
         return apiRequest("PUT", `/api/regions/${region.id}`, body);
       } else {
@@ -232,6 +234,22 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
           <div>
             <label className={labelClass}>Phone Number_</label>
             <input data-testid="input-region-phone" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="+1 303 555 0123" className={inputClass} />
+          </div>
+          <div>
+            <label className={labelClass}>Default Zip Code_</label>
+            <input
+              data-testid="input-region-default-zip"
+              type="text"
+              inputMode="numeric"
+              maxLength={5}
+              value={defaultZipCode}
+              onChange={e => setDefaultZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
+              placeholder="e.g. 80202"
+              className={inputClass}
+            />
+            <p className="text-[#4caf82]/40 font-mono text-xs mt-1.5">
+              Used for proximity sorting when a caller hasn't provided their own zip code.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
