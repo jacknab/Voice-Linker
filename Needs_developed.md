@@ -43,6 +43,13 @@
 
 ---
 
+## IVR Phone System
+
+- **Caller Block Option (IVR)** — Within the phone system, give a caller the ability to block another caller directly via keypad (e.g., after listening to a profile or message, press a key to block that user so they can no longer message or interact with the blocking caller).
+- **Flag Greeting / Message for Review (IVR)** — Within the phone system, give a caller the ability to flag another caller's recorded greeting (profile) or a received voice message for admin review, via keypad. Flagged items should flow into the existing Flagged Content Queue in the admin panel.
+
+---
+
 ## Operational
 
 - **Audit Log** — A record of all admin actions: who changed what setting, when, and what the previous value was.
