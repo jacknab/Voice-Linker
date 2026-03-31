@@ -1,3 +1,6 @@
+import { config } from "dotenv";
+config();
+
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
