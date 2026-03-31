@@ -624,6 +624,10 @@ function VoiceProfilesTab() {
 }
 
 const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
+  { filename: "system_greeting.mp3", label: "System Greeting / Legal Notice", text: "Welcome to Interactive Mail. Interactive Mail assumes no responsibility for personal meetings. This service is for adults only. If you are under 18, please hang up now." },
+  { filename: "free_trial_offer.mp3", label: "Free Trial Offer", text: "We would like to offer you a free trial so you can check out the system and start meeting new people. To start your free trial press the pound key." },
+  { filename: "free_trial_terms.mp3", label: "Free Trial Terms", text: "Your free trial will expire in seven days and it must be used from this phone number." },
+  { filename: "goodbye.mp3", label: "Goodbye", text: "Thank you for calling. Goodbye." },
   { filename: "no_caller_id.mp3", label: "No Caller ID", text: "We could not identify your call. Goodbye." },
   { filename: "welcome_record_name.mp3", label: "Welcome — Record Name", text: "Welcome! Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds." },
   { filename: "error_generic.mp3", label: "Generic Error", text: "An error occurred. Please try again later." },
@@ -635,8 +639,8 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "main_menu.mp3", label: "Main Menu", text: "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership." },
   { filename: "rerecord_name.mp3", label: "Re-record Name", text: "Let's re-record your profile. First, say your first name only after the tone. You have 5 seconds." },
   { filename: "invalid_choice.mp3", label: "Invalid Choice", text: "Invalid choice." },
-  { filename: "trial_warning.mp3", label: "Trial Warning", text: "You have less than 15 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
-  { filename: "member_warning.mp3", label: "Member Warning", text: "You have less than 15 minutes remaining in your membership. To renew now press 1. To continue press pound." },
+  { filename: "trial_warning.mp3", label: "Trial Warning", text: "You have less than 5 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
+  { filename: "member_warning.mp3", label: "Member Warning", text: "You have less than 5 minutes remaining in your membership. To renew now press 1. To continue press pound." },
   { filename: "greeting_setup.mp3", label: "Greeting Setup", text: "Your last greeting you recorded is still available. To use it again, press 1. To record a new greeting, press 2. To hear your greeting, press 3. To repeat these choices, press 9. To continue, press pound." },
   { filename: "review_greeting.mp3", label: "Review Greeting", text: "To hear your greeting, press 1. To re-record, press 2. To accept and continue, press 3. To repeat these choices, press 9." },
   { filename: "no_greeting_found.mp3", label: "No Greeting Found", text: "No greeting found." },

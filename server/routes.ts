@@ -950,11 +950,9 @@ export async function registerRoutes(
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         twiml.redirect("/voice/membership-purchase");
       } else {
-        // Has time — announce remaining time for free trial callers here at entry
-        if (user.membershipTier === "free_trial") {
-          playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
-          callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
-        }
+        // Has time — announce remaining time to all callers at entry
+        playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
+        callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
         // Hand off to the phone booth (plays welcome intro, then handles profile check)
         twiml.redirect("/voice/phone-booth");
       }
@@ -970,12 +968,12 @@ export async function registerRoutes(
 
   // ─── 1c. Free Trial Offer ─────────────────────────────────────────────────
   // Shown to brand-new callers who have no account yet.
-  // They press 1 to accept the free trial; no response hangs up politely.
+  // They press # to accept the free trial; no response hangs up politely.
   app.post("/voice/free-trial-offer", async (req, res) => {
     const twiml = new VoiceResponse();
-    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-free-trial-offer", timeout: 15 });
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-free-trial-offer", timeout: 15 });
     playPrompt(gather, req, "free_trial_offer.mp3",
-      "We'd like to offer you a free trial so you can check out the system and start meeting new people. To get your free trial now, press 1.");
+      "We would like to offer you a free trial so you can check out the system and start meeting new people. To start your free trial press the pound key.");
     playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
     twiml.hangup();
     res.type("text/xml");
@@ -989,7 +987,7 @@ export async function registerRoutes(
     const fromNumber = req.body?.From as string;
     const callSid = req.body?.CallSid as string;
 
-    if (digit === "1") {
+    if (digit === "#") {
       try {
         const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
         const freeTrialSeconds = freeTrialMinutes * 60;
