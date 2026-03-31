@@ -42,7 +42,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log";
 
 interface FlaggedItem {
   id: string;
@@ -2708,6 +2708,164 @@ function ZipCodesTab() {
   );
 }
 
+// ── AuditLogTab ───────────────────────────────────────────────────────────────
+interface AuditLogEntry {
+  id: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  targetLabel: string | null;
+  detail: string | null;
+  performedBy: string;
+  createdAt: string | null;
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  profile_uploaded:            "Profile Uploaded",
+  profile_deleted:             "Profile Deleted",
+  region_created:              "Region Created",
+  region_updated:              "Region Updated",
+  region_deleted:              "Region Deleted",
+  caller_credited:             "Credits Adjusted",
+  caller_blocked:              "Caller Blocked",
+  caller_unblocked:            "Caller Unblocked",
+  user_unblocked:              "Block Removed",
+  content_flagged:             "Content Flagged",
+  flagged_resolved:            "Flag Resolved",
+  flagged_deleted:             "Flag Deleted",
+  promo_code_created:          "Promo Code Created",
+  promo_code_updated:          "Promo Code Updated",
+  promo_code_deleted:          "Promo Code Deleted",
+  zip_code_created:            "Zip Code Added",
+  zip_code_updated:            "Zip Code Updated",
+  zip_code_deleted:            "Zip Code Deleted",
+  audio_generated:             "Audio Generated",
+  audio_deleted:               "Audio Deleted",
+  membership_settings_updated: "Membership Settings Updated",
+};
+
+const ACTION_COLORS: Record<string, string> = {
+  profile_uploaded:            "bg-blue-100 text-blue-700",
+  profile_deleted:             "bg-red-100 text-red-700",
+  region_created:              "bg-green-100 text-green-700",
+  region_updated:              "bg-amber-100 text-amber-700",
+  region_deleted:              "bg-red-100 text-red-700",
+  caller_credited:             "bg-emerald-100 text-emerald-700",
+  caller_blocked:              "bg-red-100 text-red-700",
+  caller_unblocked:            "bg-green-100 text-green-700",
+  user_unblocked:              "bg-green-100 text-green-700",
+  content_flagged:             "bg-orange-100 text-orange-700",
+  flagged_resolved:            "bg-blue-100 text-blue-700",
+  flagged_deleted:             "bg-red-100 text-red-700",
+  promo_code_created:          "bg-purple-100 text-purple-700",
+  promo_code_updated:          "bg-amber-100 text-amber-700",
+  promo_code_deleted:          "bg-red-100 text-red-700",
+  zip_code_created:            "bg-teal-100 text-teal-700",
+  zip_code_updated:            "bg-amber-100 text-amber-700",
+  zip_code_deleted:            "bg-red-100 text-red-700",
+  audio_generated:             "bg-indigo-100 text-indigo-700",
+  audio_deleted:               "bg-red-100 text-red-700",
+  membership_settings_updated: "bg-gray-100 text-gray-700",
+};
+
+function AuditLogTab() {
+  const { data: logs, isLoading, refetch, isFetching } = useQuery<AuditLogEntry[]>({
+    queryKey: ["/api/admin/audit-logs"],
+    refetchOnWindowFocus: false,
+  });
+
+  function fmtTime(raw: string | null) {
+    if (!raw) return "—";
+    const d = new Date(raw);
+    return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true });
+  }
+
+  function fmtDetail(entry: AuditLogEntry): string {
+    if (entry.action === "caller_credited" && entry.detail) {
+      try {
+        const { deltaSeconds } = JSON.parse(entry.detail);
+        const mins = Math.abs(Math.round(deltaSeconds / 60));
+        return deltaSeconds >= 0 ? `+${mins} min` : `−${mins} min`;
+      } catch { return ""; }
+    }
+    if (entry.action === "flagged_resolved" && entry.detail) {
+      try {
+        const { status } = JSON.parse(entry.detail);
+        return status;
+      } catch { return ""; }
+    }
+    return "";
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-48 text-gray-400 font-mono text-xs tracking-widest">
+        <Loader2 size={16} className="animate-spin mr-2" /> Loading audit log…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="font-mono text-xs text-gray-500 tracking-widest uppercase">Last 300 admin actions, newest first</p>
+        <button
+          data-testid="btn-refresh-audit-log"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-600 hover:bg-gray-50 transition-colors"
+        >
+          <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} /> Refresh
+        </button>
+      </div>
+
+      {(!logs || logs.length === 0) ? (
+        <div className="bg-white border border-gray-200 rounded-lg p-12 text-center">
+          <p className="font-mono text-xs text-gray-400 uppercase tracking-widest">No admin actions recorded yet</p>
+          <p className="font-mono text-[10px] text-gray-300 mt-1">Actions you take in the admin panel will appear here</p>
+        </div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50">
+                <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-widest text-gray-400 font-normal">Time</th>
+                <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-widest text-gray-400 font-normal">Action</th>
+                <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-widest text-gray-400 font-normal">Target</th>
+                <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-widest text-gray-400 font-normal">Detail</th>
+                <th className="text-left px-4 py-2.5 text-[10px] uppercase tracking-widest text-gray-400 font-normal">By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log, i) => (
+                <tr
+                  key={log.id}
+                  data-testid={`audit-row-${log.id}`}
+                  className={`border-b border-gray-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
+                >
+                  <td className="px-4 py-2.5 text-gray-400 whitespace-nowrap">{fmtTime(log.createdAt)}</td>
+                  <td className="px-4 py-2.5 whitespace-nowrap">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wide ${ACTION_COLORS[log.action] ?? "bg-gray-100 text-gray-600"}`}>
+                      {ACTION_LABELS[log.action] ?? log.action}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-700">
+                    {log.targetLabel && <span className="font-semibold">{log.targetLabel}</span>}
+                    {log.targetType && !log.targetLabel && <span className="text-gray-400 italic">{log.targetType}</span>}
+                    {!log.targetLabel && !log.targetType && <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5 text-gray-500">{fmtDetail(log) || "—"}</td>
+                  <td className="px-4 py-2.5 text-gray-400">{log.performedBy}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AnalyticsTab ──────────────────────────────────────────────────────────────
 interface AnalyticsData {
   funnel: { totalCallers: number; withProfile: number; withMessage: number; withMembership: number };
@@ -2947,6 +3105,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "zip-codes",      label: "Zip Codes",       icon: <MapPin size={15} /> },
   { id: "announcements",  label: "Announcements",   icon: <Megaphone size={15} /> },
   { id: "analytics",      label: "Analytics",       icon: <BarChart2 size={15} /> },
+  { id: "audit-log",      label: "Audit Log",       icon: <TrendingUp size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
 ];
 
@@ -3071,8 +3230,9 @@ export default function Admin() {
           {activeTab === "promo-codes"    && <PromoCodesTab />}
           {activeTab === "zip-codes"      && <ZipCodesTab />}
           {activeTab === "announcements"  && <AnnouncementsTab />}
-          {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
           {activeTab === "analytics"      && <AnalyticsTab />}
+          {activeTab === "audit-log"      && <AuditLogTab />}
+          {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
         </div>
       </div>
     </div>

@@ -360,6 +360,16 @@ export async function registerRoutes(
 ): Promise<Server> {
   app.use(express.urlencoded({ extended: true }));
 
+  // ── Audit log helper ──────────────────────────────────────────────────────
+  function logAudit(
+    action: string,
+    opts?: { targetType?: string; targetId?: string; targetLabel?: string; detail?: Record<string, unknown> }
+  ): void {
+    storage.logAuditEvent(action, opts).catch(err =>
+      console.error("[audit] Failed to write audit log:", err)
+    );
+  }
+
   // Log all voice webhook requests
   app.use("/voice", (req: Request, _res: Response, next: NextFunction) => {
     console.log(`[voice] ${req.method} ${req.path} | From=${req.body?.From} CallSid=${req.body?.CallSid} Digits=${req.body?.Digits} CallStatus=${req.body?.CallStatus}`);
@@ -462,6 +472,7 @@ export async function registerRoutes(
       // Register this profile with the virtual caller simulator
       addVirtualCaller(user.id);
 
+      logAudit("profile_uploaded", { targetType: "profile", targetId: profile.id, targetLabel: user.phoneNumber });
       res.json({ profile, phoneNumber: user.phoneNumber });
     } catch (e) {
       console.error("[admin] Failed to upload profile:", e);
@@ -478,6 +489,7 @@ export async function registerRoutes(
       const target = allProfiles.find(p => p.id === id);
       if (target) removeVirtualCaller(target.userId);
       await storage.deleteProfile(id);
+      logAudit("profile_deleted", { targetType: "profile", targetId: id, targetLabel: target?.phoneNumber });
       res.status(204).send();
     } catch (e) {
       console.error("[admin] Failed to delete profile:", e);
@@ -510,6 +522,7 @@ export async function registerRoutes(
   app.delete("/api/admin/blocked/:id", async (req, res) => {
     try {
       await storage.adminUnblockById(req.params.id);
+      logAudit("user_unblocked", { targetType: "blocked", targetId: req.params.id });
       res.json({ success: true });
     } catch (e) {
       console.error("[admin] /api/admin/blocked DELETE error:", e);
@@ -536,6 +549,7 @@ export async function registerRoutes(
       };
       if (!contentType || !contentId || !reason) return res.status(400).json({ message: "contentType, contentId, and reason are required" });
       const item = await storage.createFlaggedItem({ contentType, contentId, reason, reportedByUserId: reportedByUserId ?? null, status: "pending" });
+      logAudit("content_flagged", { targetType: "flagged", targetId: item.id, targetLabel: contentType });
       res.status(201).json(item);
     } catch (e) {
       console.error("[admin] /api/admin/flagged POST error:", e);
@@ -548,6 +562,7 @@ export async function registerRoutes(
       const { status } = req.body as { status: string };
       if (!["approved", "removed"].includes(status)) return res.status(400).json({ message: "status must be 'approved' or 'removed'" });
       await storage.resolveFlaggedItem(req.params.id, status);
+      logAudit("flagged_resolved", { targetType: "flagged", targetId: req.params.id, detail: { status } });
       res.json({ success: true });
     } catch (e) {
       console.error("[admin] /api/admin/flagged PATCH error:", e);
@@ -558,6 +573,7 @@ export async function registerRoutes(
   app.delete("/api/admin/flagged/:id", async (req, res) => {
     try {
       await storage.deleteFlaggedItem(req.params.id);
+      logAudit("flagged_deleted", { targetType: "flagged", targetId: req.params.id });
       res.status(204).send();
     } catch (e) {
       console.error("[admin] /api/admin/flagged DELETE error:", e);
@@ -594,6 +610,7 @@ export async function registerRoutes(
       const { deltaSeconds } = req.body as { deltaSeconds: number };
       if (typeof deltaSeconds !== "number") return res.status(400).json({ message: "deltaSeconds must be a number" });
       const user = await storage.adjustUserCredits(req.params.id, deltaSeconds);
+      logAudit("caller_credited", { targetType: "caller", targetId: req.params.id, targetLabel: user.phoneNumber, detail: { deltaSeconds } });
       res.json(user);
     } catch (e) {
       console.error("[admin] /api/admin/callers/:id/credits PATCH error:", e);
@@ -605,6 +622,7 @@ export async function registerRoutes(
   app.post("/api/admin/callers/:id/block/:targetId", async (req, res) => {
     try {
       await storage.adminBlockByUserIds(req.params.id, req.params.targetId);
+      logAudit("caller_blocked", { targetType: "caller", targetId: req.params.id, detail: { blockedUserId: req.params.targetId } });
       res.json({ success: true });
     } catch (e) {
       console.error("[admin] /api/admin/callers block POST error:", e);
@@ -616,6 +634,7 @@ export async function registerRoutes(
   app.delete("/api/admin/callers/:id/block/:targetId", async (req, res) => {
     try {
       await storage.adminUnblockByUserIds(req.params.id, req.params.targetId);
+      logAudit("caller_unblocked", { targetType: "caller", targetId: req.params.id, detail: { unblockedUserId: req.params.targetId } });
       res.json({ success: true });
     } catch (e) {
       console.error("[admin] /api/admin/callers unblock DELETE error:", e);
@@ -641,6 +660,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Valid 5-digit zip code and neighborhood name are required" });
       }
       const entry = await storage.upsertAdminZipEntry(code.trim(), neighborhood.trim());
+      logAudit("zip_code_created", { targetType: "zip_code", targetId: entry.id, targetLabel: code });
       res.json(entry);
     } catch (e) {
       console.error("[admin] /api/admin/zip-codes POST error:", e);
@@ -655,6 +675,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Neighborhood name is required" });
       }
       const entry = await storage.updateZipNeighborhood(req.params.id, neighborhood.trim());
+      logAudit("zip_code_updated", { targetType: "zip_code", targetId: req.params.id, detail: { neighborhood } });
       res.json(entry);
     } catch (e) {
       console.error("[admin] /api/admin/zip-codes PATCH error:", e);
@@ -665,6 +686,7 @@ export async function registerRoutes(
   app.delete("/api/admin/zip-codes/:id", async (req, res) => {
     try {
       await storage.deleteZipEntry(req.params.id);
+      logAudit("zip_code_deleted", { targetType: "zip_code", targetId: req.params.id });
       res.json({ success: true });
     } catch (e) {
       console.error("[admin] /api/admin/zip-codes DELETE error:", e);
@@ -697,6 +719,7 @@ export async function registerRoutes(
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         isActive: isActive !== false,
       });
+      logAudit("promo_code_created", { targetType: "promo_code", targetId: created.id, targetLabel: created.code, detail: { valueMinutes: created.valueMinutes } });
       res.json(created);
     } catch (e: any) {
       if (e?.code === "23505") return res.status(409).json({ message: "That promo code already exists" });
@@ -715,6 +738,7 @@ export async function registerRoutes(
       if (expiresAt !== undefined) data.expiresAt = expiresAt ? new Date(expiresAt) : null;
       if (isActive !== undefined) data.isActive = Boolean(isActive);
       const updated = await storage.updatePromoCode(req.params.id, data as any);
+      logAudit("promo_code_updated", { targetType: "promo_code", targetId: req.params.id, targetLabel: updated.code });
       res.json(updated);
     } catch (e) {
       console.error("[admin] promo-codes PATCH error:", e);
@@ -725,6 +749,7 @@ export async function registerRoutes(
   app.delete("/api/admin/promo-codes/:id", async (req, res) => {
     try {
       await storage.deletePromoCode(req.params.id);
+      logAudit("promo_code_deleted", { targetType: "promo_code", targetId: req.params.id });
       res.json({ success: true });
     } catch (e) {
       console.error("[admin] promo-codes DELETE error:", e);
@@ -743,6 +768,16 @@ export async function registerRoutes(
   });
 
   // --- Admin: Phone number stats ---
+  app.get("/api/admin/audit-logs", async (_req, res) => {
+    try {
+      const logs = await storage.getAuditLogs(300);
+      res.json(logs);
+    } catch (e) {
+      console.error("[admin] /api/admin/audit-logs error:", e);
+      res.status(500).json({ message: "Failed to fetch audit logs" });
+    }
+  });
+
   app.get("/api/admin/analytics", async (_req, res) => {
     try {
       const data = await storage.getAnalytics();
@@ -804,6 +839,7 @@ export async function registerRoutes(
       // Enforce .mp3 extension and sanitize
       const safe = filename.replace(/[^a-zA-Z0-9_\-]/g, "_").replace(/\.mp3$/i, "") + ".mp3";
       await generateTTS(text.trim(), safe);
+      logAudit("audio_generated", { targetType: "audio", targetLabel: safe });
       res.json({ filename: safe, url: `/uploads/${safe}` });
     } catch (e: any) {
       console.error("[admin/tts] generation failed:", e);
@@ -819,6 +855,7 @@ export async function registerRoutes(
       const filePath = path.join(UPLOADS_DIR, filename);
       if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found" });
       fs.unlinkSync(filePath);
+      logAudit("audio_deleted", { targetType: "audio", targetLabel: filename });
       res.status(204).send();
     } catch (e) {
       res.status(500).json({ message: "Failed to delete file" });
@@ -877,6 +914,7 @@ export async function registerRoutes(
 
       const updated = await storage.updateMembershipSettings(data);
       invalidateMembershipSettingsCache();
+      logAudit("membership_settings_updated", { targetType: "settings", detail: data as Record<string, unknown> });
       res.json(updated);
     } catch (e) {
       console.error("[admin] Failed to update membership settings:", e);
@@ -919,6 +957,7 @@ export async function registerRoutes(
         linkedRegionId: linkedRegionId || null,
         defaultZipCode: defaultZipCode?.trim() || null,
       });
+      logAudit("region_created", { targetType: "region", targetId: region.id, targetLabel: region.name });
       res.status(201).json(region);
     } catch (e: any) {
       console.error("[regions] Failed to create region:", e);
@@ -944,6 +983,7 @@ export async function registerRoutes(
         ...("linkedRegionId" in req.body && { linkedRegionId: linkedRegionId || null }),
         ...("defaultZipCode" in req.body && { defaultZipCode: defaultZipCode?.trim() || null }),
       });
+      logAudit("region_updated", { targetType: "region", targetId: id, targetLabel: region.name });
       res.json(region);
     } catch (e: any) {
       console.error("[regions] Failed to update region:", e);
@@ -955,6 +995,7 @@ export async function registerRoutes(
     try {
       const { id } = req.params;
       await storage.deleteRegion(id);
+      logAudit("region_deleted", { targetType: "region", targetId: id });
       res.status(204).send();
     } catch (e) {
       console.error("[regions] Failed to delete region:", e);

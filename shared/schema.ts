@@ -207,6 +207,20 @@ export const promoRedemptionsRelations = relations(promoRedemptions, ({ one }) =
   user: one(users, { fields: [promoRedemptions.userId], references: [users.id] }),
 }));
 
+// Admin action audit log — every write action in the admin panel creates a row
+export const auditLogs = pgTable("audit_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  action: text("action").notNull(),         // e.g. "profile_deleted", "caller_credited"
+  targetType: text("target_type"),          // e.g. "profile", "region", "caller", "settings"
+  targetId: text("target_id"),             // entity UUID/id (nullable)
+  targetLabel: text("target_label"),        // human-readable label (e.g. phone number, code)
+  detail: text("detail"),                   // optional JSON string with extra context
+  performedBy: text("performed_by").notNull().default("admin"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+
 export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({ id: true, createdAt: true, usedCount: true });
 export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
 export type PromoCode = typeof promoCodes.$inferSelect;

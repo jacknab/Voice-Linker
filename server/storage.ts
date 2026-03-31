@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -155,6 +155,10 @@ export interface IStorage {
   deletePromoCode(id: string): Promise<void>;
   redeemPromoCode(code: string, userId: string): Promise<{ promoCode: PromoCode; secondsAwarded: number } | { error: string }>;
   getPromoRedemptions(promoCodeId: string): Promise<(PromoRedemption & { phoneNumber: string })[]>;
+
+  // Audit log
+  logAuditEvent(action: string, opts?: { targetType?: string; targetId?: string; targetLabel?: string; detail?: Record<string, unknown> }): Promise<void>;
+  getAuditLogs(limit?: number): Promise<AuditLog[]>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -894,6 +898,21 @@ export class DatabaseStorage implements IStorage {
       .where(eq(promoRedemptions.promoCodeId, promoCodeId))
       .orderBy(promoRedemptions.redeemedAt);
     return rows;
+  }
+
+  async logAuditEvent(action: string, opts?: { targetType?: string; targetId?: string; targetLabel?: string; detail?: Record<string, unknown> }): Promise<void> {
+    await db.insert(auditLogs).values({
+      action,
+      targetType: opts?.targetType ?? null,
+      targetId: opts?.targetId ?? null,
+      targetLabel: opts?.targetLabel ?? null,
+      detail: opts?.detail ? JSON.stringify(opts.detail) : null,
+      performedBy: "admin",
+    });
+  }
+
+  async getAuditLogs(limit = 200): Promise<AuditLog[]> {
+    return db.select().from(auditLogs).orderBy(sql`${auditLogs.createdAt} DESC`).limit(limit);
   }
 
   async getAnalytics(): Promise<{
