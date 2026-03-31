@@ -1127,12 +1127,16 @@ export async function registerRoutes(
       // Only save if exactly 5 numeric digits were entered
       if (/^\d{5}$/.test(digits)) {
         const user = await getOrCreateUser(fromNumber);
-        const geo = await lookupZipCode(digits);
-        await storage.updateZipCode(user.id, digits, geo ?? undefined);
+        const geoRaw = await lookupZipCode(digits);
+        const geo = geoRaw
+          ? { latitude: parseFloat(geoRaw.latitude), longitude: parseFloat(geoRaw.longitude), city: geoRaw.city, state: geoRaw.state }
+          : undefined;
+        const zipEntry = await storage.getOrCreateZipEntry(digits, geo);
+        await storage.setUserZipCode(user.id, zipEntry.id);
         if (geo) {
-          console.log(`[voice] zip-code saved: userId=${user.id}, zip=${digits}, city=${geo.city}, state=${geo.state}, lat=${geo.latitude}, lon=${geo.longitude}`);
+          console.log(`[voice] zip saved: userId=${user.id}, zip=${digits}, city=${geo.city}, state=${geo.state}, lat=${geo.latitude}, lon=${geo.longitude}, zipEntryId=${zipEntry.id}`);
         } else {
-          console.log(`[voice] zip-code saved: userId=${user.id}, zip=${digits} (no geo data found)`);
+          console.log(`[voice] zip saved: userId=${user.id}, zip=${digits}, zipEntryId=${zipEntry.id} (no geo data found)`);
         }
         playPrompt(twiml, req, "zip_code_saved.mp3", "Got it. We'll use your zip code to show you nearby callers.");
       }

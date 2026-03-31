@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, or, notLike, isNull } from "drizzle-orm";
 
 const VIRTUAL_PREFIX = "VIRTUAL-";
@@ -49,7 +49,8 @@ export interface IStorage {
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingMinutes?: number }): Promise<User>;
   deductMinutes(userId: string, minutes: number): Promise<User>;
-  updateZipCode(userId: string, zipCode: string | null, geo?: { latitude: string; longitude: string; city: string; state: string }): Promise<void>;
+  getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string }): Promise<ZipCode>;
+  setUserZipCode(userId: string, zipCodeId: string): Promise<void>;
 
   getMembershipSettings(): Promise<MembershipSettings>;
   updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
@@ -336,8 +337,15 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async updateZipCode(userId: string, zipCode: string | null, geo?: { latitude: string; longitude: string; city: string; state: string }): Promise<void> {
-    await db.update(users).set({ zipCode, ...geo }).where(eq(users.id, userId));
+  async getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string }): Promise<ZipCode> {
+    const [existing] = await db.select().from(zipCodes).where(eq(zipCodes.code, code));
+    if (existing) return existing;
+    const [created] = await db.insert(zipCodes).values({ code, ...geo }).returning();
+    return created;
+  }
+
+  async setUserZipCode(userId: string, zipCodeId: string): Promise<void> {
+    await db.update(users).set({ zipCodeId }).where(eq(users.id, userId));
   }
 
   async getMembershipSettings(): Promise<MembershipSettings> {

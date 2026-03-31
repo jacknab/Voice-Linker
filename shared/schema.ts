@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, timestamp, integer, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, timestamp, integer, uuid, doublePrecision } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -16,17 +16,24 @@ export const regions = pgTable("regions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Lookup table — one row per unique US zip code, populated on first use
+export const zipCodes = pgTable("zip_codes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  city: text("city"),
+  state: text("state"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   phoneNumber: text("phone_number").notNull().unique(),
   stripeCustomerId: text("stripe_customer_id"),
   membershipTier: text("membership_tier"),
   remainingMinutes: integer("remaining_minutes"),
-  zipCode: text("zip_code"),
-  latitude: text("latitude"),
-  longitude: text("longitude"),
-  city: text("city"),
-  state: text("state"),
+  zipCodeId: uuid("zip_code_id").references(() => zipCodes.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -62,10 +69,18 @@ export const regionsRelations = relations(regions, ({ many }) => ({
   activeCalls: many(activeCalls),
 }));
 
+export const zipCodesRelations = relations(zipCodes, ({ many }) => ({
+  users: many(users),
+}));
+
 export const usersRelations = relations(users, ({ one, many }) => ({
   profile: one(profiles, {
     fields: [users.id],
     references: [profiles.userId],
+  }),
+  zipCode: one(zipCodes, {
+    fields: [users.zipCodeId],
+    references: [zipCodes.id],
   }),
   sentMessages: many(messages, { relationName: "sentMessages" }),
   receivedMessages: many(messages, { relationName: "receivedMessages" }),
@@ -134,6 +149,7 @@ export const membershipSettings = pgTable("membership_settings", {
 });
 
 export const insertRegionSchema = createInsertSchema(regions).omit({ id: true, createdAt: true });
+export const insertZipCodeSchema = createInsertSchema(zipCodes).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertProfileSchema = createInsertSchema(profiles).omit({ id: true, createdAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, isRead: true });
@@ -141,6 +157,9 @@ export const insertMembershipSettingsSchema = createInsertSchema(membershipSetti
 
 export type Region = typeof regions.$inferSelect;
 export type InsertRegion = z.infer<typeof insertRegionSchema>;
+
+export type ZipCode = typeof zipCodes.$inferSelect;
+export type InsertZipCode = z.infer<typeof insertZipCodeSchema>;
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
