@@ -868,9 +868,21 @@ function MembershipsTab() {
       <div className={C.card}>
         <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">Free Trial</h3>
         <p className="text-gray-400 font-mono text-xs">Minutes granted automatically to first-time callers with no membership.</p>
-        <div className="max-w-xs">
-          <label className={C.label}>Free Trial Minutes</label>
-          <input data-testid="input-free-trial-minutes" type="number" min="1" value={freeTrialMinutes} onChange={e => setFreeTrialMinutes(e.target.value)} className={C.input} placeholder="90" />
+        <div className="max-w-xs space-y-2">
+          <div>
+            <label className={C.label}>Free Trial Minutes</label>
+            <input data-testid="input-free-trial-minutes" type="number" min="1" value={freeTrialMinutes} onChange={e => setFreeTrialMinutes(e.target.value)} className={C.input} placeholder="90" />
+          </div>
+          <div>
+            <label className={C.label + " text-gray-300"}>Seconds (system value — auto-calculated)</label>
+            <input
+              data-testid="display-free-trial-seconds"
+              type="text"
+              readOnly
+              value={`${(parseInt(freeTrialMinutes) || 0) * 60} sec`}
+              className={C.input + " bg-gray-50 text-gray-400 cursor-default select-none"}
+            />
+          </div>
         </div>
       </div>
 
@@ -889,9 +901,21 @@ function MembershipsTab() {
                   <label className={C.label}>Plan Name</label>
                   <input data-testid={`input-${plan.testPrefix}-name`} type="text" value={plan.name} onChange={e => plan.setName(e.target.value)} placeholder="e.g. Premium" className={C.input} />
                 </div>
-                <div>
-                  <label className={C.label}>Minutes</label>
-                  <input data-testid={`input-${plan.testPrefix}-minutes`} type="number" min="1" value={plan.minutes} onChange={e => plan.setMinutes(e.target.value)} placeholder="43200" className={C.input} />
+                <div className="space-y-2">
+                  <div>
+                    <label className={C.label}>Minutes</label>
+                    <input data-testid={`input-${plan.testPrefix}-minutes`} type="number" min="1" value={plan.minutes} onChange={e => plan.setMinutes(e.target.value)} placeholder="43200" className={C.input} />
+                  </div>
+                  <div>
+                    <label className={C.label + " text-gray-300"}>Seconds (system value — auto-calculated)</label>
+                    <input
+                      data-testid={`display-${plan.testPrefix}-seconds`}
+                      type="text"
+                      readOnly
+                      value={`${(parseInt(plan.minutes) || 0) * 60} sec`}
+                      className={C.input + " bg-gray-50 text-gray-400 cursor-default select-none"}
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className={C.label}>Price (USD)</label>
