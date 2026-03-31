@@ -97,10 +97,26 @@ export const activeCallsRelations = relations(activeCalls, ({ one }) => ({
   }),
 }));
 
+// Singleton settings row for membership/free-trial configuration
+export const membershipSettings = pgTable("membership_settings", {
+  id: text("id").primaryKey().default("singleton"),
+  freeTrialMinutes: integer("free_trial_minutes").notNull().default(90),
+  plan1Name: text("plan1_name").notNull().default("Premium"),
+  plan1Minutes: integer("plan1_minutes").notNull().default(43200),
+  plan1PriceCents: integer("plan1_price_cents").notNull().default(2500),
+  plan2Name: text("plan2_name").notNull().default("Standard"),
+  plan2Minutes: integer("plan2_minutes").notNull().default(20160),
+  plan2PriceCents: integer("plan2_price_cents").notNull().default(1000),
+  plan3Name: text("plan3_name").notNull().default("Basic"),
+  plan3Minutes: integer("plan3_minutes").notNull().default(1440),
+  plan3PriceCents: integer("plan3_price_cents").notNull().default(300),
+});
+
 export const insertRegionSchema = createInsertSchema(regions).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertProfileSchema = createInsertSchema(profiles).omit({ id: true, createdAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, isRead: true });
+export const insertMembershipSettingsSchema = createInsertSchema(membershipSettings).omit({ id: true });
 
 export type Region = typeof regions.$inferSelect;
 export type InsertRegion = z.infer<typeof insertRegionSchema>;
@@ -115,3 +131,6 @@ export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
 export type ActiveCall = typeof activeCalls.$inferSelect;
+
+export type MembershipSettings = typeof membershipSettings.$inferSelect;
+export type InsertMembershipSettings = z.infer<typeof insertMembershipSettingsSchema>;

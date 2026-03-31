@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
+import type { MembershipSettings } from "@shared/schema";
 import express from "express";
 import twilio from "twilio";
 import multer from "multer";
@@ -38,14 +39,40 @@ const upload = multer({
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
-// ─── Membership Packages ───────────────────────────────────────────────────
-const FREE_TRIAL_MINUTES = 90; // Minutes granted to brand-new callers automatically
+// ─── Membership Settings Cache ─────────────────────────────────────────────
+// Settings are loaded from DB and cached for 60 seconds to avoid hitting
+// the DB on every incoming call.
 
-const MEMBERSHIP_PACKAGES: Record<string, { name: string; label: string; minutes: number; priceCents: number; priceLabel: string }> = {
-  "1": { name: "30day",  label: "43,200 Minute", minutes: 43200, priceCents: 2500, priceLabel: "25 dollars" },
-  "2": { name: "14day",  label: "20,160 Minute", minutes: 20160, priceCents: 1000, priceLabel: "10 dollars" },
-  "3": { name: "24hour", label: "1,440 Minute",  minutes: 1440,  priceCents: 300,  priceLabel: "3 dollars" },
-};
+let _cachedSettings: MembershipSettings | null = null;
+let _cacheExpiresAt = 0;
+
+async function getMembershipSettingsCached(): Promise<MembershipSettings> {
+  if (_cachedSettings && Date.now() < _cacheExpiresAt) return _cachedSettings;
+  _cachedSettings = await storage.getMembershipSettings();
+  _cacheExpiresAt = Date.now() + 60_000;
+  return _cachedSettings;
+}
+
+function invalidateMembershipSettingsCache(): void {
+  _cachedSettings = null;
+  _cacheExpiresAt = 0;
+}
+
+function centsToLabel(cents: number): string {
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? `${dollars} dollars` : `${dollars.toFixed(2)} dollars`;
+}
+
+type MembershipPackage = { name: string; label: string; minutes: number; priceCents: number; priceLabel: string };
+
+async function getMembershipPackages(): Promise<Record<string, MembershipPackage>> {
+  const s = await getMembershipSettingsCached();
+  return {
+    "1": { name: "plan1", label: `${s.plan1Minutes.toLocaleString()} Minute`, minutes: s.plan1Minutes, priceCents: s.plan1PriceCents, priceLabel: centsToLabel(s.plan1PriceCents) },
+    "2": { name: "plan2", label: `${s.plan2Minutes.toLocaleString()} Minute`, minutes: s.plan2Minutes, priceCents: s.plan2PriceCents, priceLabel: centsToLabel(s.plan2PriceCents) },
+    "3": { name: "plan3", label: `${s.plan3Minutes.toLocaleString()} Minute`, minutes: s.plan3Minutes, priceCents: s.plan3PriceCents, priceLabel: centsToLabel(s.plan3PriceCents) },
+  };
+}
 
 // Hundreds word lookup for TTS fallback text
 const HUNDREDS_WORDS: Record<number, string> = {
@@ -146,7 +173,6 @@ interface PaymentSession {
   packageLabel: string;
   packagePriceCents: number;
   priceLabel: string;
-  isFirstPurchase?: boolean;
 }
 const paymentSessions = new Map<string, PaymentSession>();
 
@@ -475,6 +501,48 @@ export async function registerRoutes(
     res.json({ voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM" });
   });
 
+  // ─── Admin: Membership Settings ───────────────────────────────────────────
+
+  app.get("/api/admin/membership-settings", async (_req, res) => {
+    try {
+      const settings = await storage.getMembershipSettings();
+      res.json(settings);
+    } catch (e) {
+      console.error("[admin] Failed to get membership settings:", e);
+      res.status(500).json({ message: "Failed to fetch membership settings" });
+    }
+  });
+
+  app.put("/api/admin/membership-settings", async (req, res) => {
+    try {
+      const {
+        freeTrialMinutes,
+        plan1Name, plan1Minutes, plan1PriceCents,
+        plan2Name, plan2Minutes, plan2PriceCents,
+        plan3Name, plan3Minutes, plan3PriceCents,
+      } = req.body;
+
+      const data: Record<string, number | string> = {};
+      if (freeTrialMinutes !== undefined) data.freeTrialMinutes = parseInt(freeTrialMinutes);
+      if (plan1Name !== undefined) data.plan1Name = String(plan1Name).trim();
+      if (plan1Minutes !== undefined) data.plan1Minutes = parseInt(plan1Minutes);
+      if (plan1PriceCents !== undefined) data.plan1PriceCents = parseInt(plan1PriceCents);
+      if (plan2Name !== undefined) data.plan2Name = String(plan2Name).trim();
+      if (plan2Minutes !== undefined) data.plan2Minutes = parseInt(plan2Minutes);
+      if (plan2PriceCents !== undefined) data.plan2PriceCents = parseInt(plan2PriceCents);
+      if (plan3Name !== undefined) data.plan3Name = String(plan3Name).trim();
+      if (plan3Minutes !== undefined) data.plan3Minutes = parseInt(plan3Minutes);
+      if (plan3PriceCents !== undefined) data.plan3PriceCents = parseInt(plan3PriceCents);
+
+      const updated = await storage.updateMembershipSettings(data);
+      invalidateMembershipSettingsCache();
+      res.json(updated);
+    } catch (e) {
+      console.error("[admin] Failed to update membership settings:", e);
+      res.status(500).json({ message: "Failed to update membership settings" });
+    }
+  });
+
   // ─── Admin: Region CRUD ────────────────────────────────────────────────────
 
   app.get("/api/regions", async (_req, res) => {
@@ -633,11 +701,12 @@ export async function registerRoutes(
 
       // Grant a free trial to brand-new callers who have no membership yet
       if (!user.membershipTier) {
+        const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
         user = await storage.updateUserMembership(user.id, {
           membershipTier: "free_trial",
-          remainingMinutes: FREE_TRIAL_MINUTES,
+          remainingMinutes: freeTrialMinutes,
         });
-        console.log(`[voice] Granted ${FREE_TRIAL_MINUTES}-minute free trial to userId=${user.id}`);
+        console.log(`[voice] Granted ${freeTrialMinutes}-minute free trial to userId=${user.id}`);
       }
 
       // Mark this caller as active on the party line
@@ -1348,7 +1417,8 @@ export async function registerRoutes(
       return res.send(twiml.toString());
     }
 
-    const pkg = MEMBERSHIP_PACKAGES[digit];
+    const packages = await getMembershipPackages();
+    const pkg = packages[digit];
     if (!pkg) {
       playPrompt(twiml, req, "package_invalid.mp3", "Invalid selection.");
       twiml.redirect("/voice/membership-purchase");
@@ -1356,32 +1426,18 @@ export async function registerRoutes(
       return res.send(twiml.toString());
     }
 
-    // Detect first purchase for the 14-day package bonus
-    let isFirstPurchase = false;
-    if (pkg.name === "14day") {
-      try {
-        const user = await getOrCreateUser(fromNumber);
-        isFirstPurchase = !user.membershipTier;
-      } catch {
-        isFirstPurchase = false;
-      }
-    }
-
     paymentSessions.set(callSid, {
       packageName: pkg.name,
       packageLabel: pkg.label,
       packagePriceCents: pkg.priceCents,
       priceLabel: pkg.priceLabel,
-      isFirstPurchase,
     });
 
-    if (pkg.name === "14day" && isFirstPurchase) {
-      playPrompt(twiml, req, "package_confirm_14day_bonus.mp3", `Great choice! You selected 14 days access for ${pkg.priceLabel}, including your free 7-day first purchase bonus.`);
-    } else if (pkg.name === "30day") {
+    if (pkg.name === "plan1") {
       playPrompt(twiml, req, "package_confirm_30day.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
-    } else if (pkg.name === "14day") {
+    } else if (pkg.name === "plan2") {
       playPrompt(twiml, req, "package_confirm_14day.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
-    } else if (pkg.name === "24hour") {
+    } else if (pkg.name === "plan3") {
       playPrompt(twiml, req, "package_confirm_24hour.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
     } else {
       twiml.say(`You selected ${pkg.label} access for ${pkg.priceLabel}.`);
@@ -1436,29 +1492,23 @@ export async function registerRoutes(
     if (result === "success") {
       try {
         const user = await getOrCreateUser(fromNumber);
-        const pkg = Object.values(MEMBERSHIP_PACKAGES).find(p => p.name === session.packageName);
-        const minutes = pkg?.minutes ?? 1440;
-        const bonusMinutes = (session.packageName === "14day" && session.isFirstPurchase) ? minutes : 0;
-        const totalMinutes = minutes + bonusMinutes;
+        const packages = await getMembershipPackages();
+        const pkg = Object.values(packages).find(p => p.name === session.packageName);
+        const minutes = pkg?.minutes ?? (await getMembershipSettingsCached()).plan3Minutes;
         await storage.updateUserMembership(user.id, {
           membershipTier: session.packageName,
-          remainingMinutes: totalMinutes,
+          remainingMinutes: minutes,
         });
 
-        const bonusMsg = bonusMinutes > 0
-          ? ` Plus your bonus ${bonusMinutes} minutes have been added — enjoy ${totalMinutes} minutes total!`
-          : "";
         const successText =
           `Payment successful! You now have ${session.packageLabel} access. ` +
-          `Your card has been charged ${session.priceLabel}.${bonusMsg} ` +
+          `Your card has been charged ${session.priceLabel}. ` +
           "Thank you for joining. Returning to the main menu.";
-        if (session.packageName === "30day") {
+        if (session.packageName === "plan1") {
           playPrompt(twiml, req, "payment_success_30day.mp3", successText);
-        } else if (session.packageName === "14day" && bonusMinutes > 0) {
-          playPrompt(twiml, req, "payment_success_14day_bonus.mp3", successText);
-        } else if (session.packageName === "14day") {
+        } else if (session.packageName === "plan2") {
           playPrompt(twiml, req, "payment_success_14day.mp3", successText);
-        } else if (session.packageName === "24hour") {
+        } else if (session.packageName === "plan3") {
           playPrompt(twiml, req, "payment_success_24hour.mp3", successText);
         } else {
           twiml.say(successText);
@@ -1526,11 +1576,12 @@ export async function registerRoutes(
 
       // Grant a free trial to brand-new callers who have no membership yet
       if (!user.membershipTier) {
+        const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
         user = await storage.updateUserMembership(user.id, {
           membershipTier: "free_trial",
-          remainingMinutes: FREE_TRIAL_MINUTES,
+          remainingMinutes: freeTrialMinutes,
         });
-        console.log(`[voice] [${region.slug}] Granted ${FREE_TRIAL_MINUTES}-minute free trial to userId=${user.id}`);
+        console.log(`[voice] [${region.slug}] Granted ${freeTrialMinutes}-minute free trial to userId=${user.id}`);
       }
 
       // Register call as active — scoped to this region

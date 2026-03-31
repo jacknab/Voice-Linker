@@ -6,7 +6,7 @@ import { Link } from "wouter";
 import {
   Upload, Trash2, Play, Pause, Plus, Phone, LayoutDashboard,
   MessageSquare, PhoneCall, X, MapPin, Clock, Copy, Eye, EyeOff,
-  Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2,
+  Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2, CreditCard, Save,
 } from "lucide-react";
 
 interface ProfileWithUser {
@@ -33,7 +33,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships";
 
 function AudioPlayer({ src }: { src: string }) {
   const [playing, setPlaying] = useState(false);
@@ -896,6 +896,199 @@ function TTSTab() {
   );
 }
 
+interface MembershipSettingsData {
+  id: string;
+  freeTrialMinutes: number;
+  plan1Name: string; plan1Minutes: number; plan1PriceCents: number;
+  plan2Name: string; plan2Minutes: number; plan2PriceCents: number;
+  plan3Name: string; plan3Minutes: number; plan3PriceCents: number;
+}
+
+function MembershipsTab() {
+  const { toast } = useToast();
+
+  const { data: settings, isLoading } = useQuery<MembershipSettingsData>({
+    queryKey: ["/api/admin/membership-settings"],
+  });
+
+  const [freeTrialMinutes, setFreeTrialMinutes] = useState("");
+  const [plan1Name, setPlan1Name] = useState("");
+  const [plan1Minutes, setPlan1Minutes] = useState("");
+  const [plan1Price, setPlan1Price] = useState("");
+  const [plan2Name, setPlan2Name] = useState("");
+  const [plan2Minutes, setPlan2Minutes] = useState("");
+  const [plan2Price, setPlan2Price] = useState("");
+  const [plan3Name, setPlan3Name] = useState("");
+  const [plan3Minutes, setPlan3Minutes] = useState("");
+  const [plan3Price, setPlan3Price] = useState("");
+
+  const [initialized, setInitialized] = useState(false);
+
+  if (settings && !initialized) {
+    setFreeTrialMinutes(String(settings.freeTrialMinutes));
+    setPlan1Name(settings.plan1Name);
+    setPlan1Minutes(String(settings.plan1Minutes));
+    setPlan1Price(String((settings.plan1PriceCents / 100).toFixed(2)));
+    setPlan2Name(settings.plan2Name);
+    setPlan2Minutes(String(settings.plan2Minutes));
+    setPlan2Price(String((settings.plan2PriceCents / 100).toFixed(2)));
+    setPlan3Name(settings.plan3Name);
+    setPlan3Minutes(String(settings.plan3Minutes));
+    setPlan3Price(String((settings.plan3PriceCents / 100).toFixed(2)));
+    setInitialized(true);
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const toMinutes = (v: string) => Math.max(1, parseInt(v) || 0);
+      const toCents = (v: string) => Math.round(parseFloat(v) * 100);
+      return apiRequest("PUT", "/api/admin/membership-settings", {
+        freeTrialMinutes: toMinutes(freeTrialMinutes),
+        plan1Name: plan1Name.trim() || "Plan 1",
+        plan1Minutes: toMinutes(plan1Minutes),
+        plan1PriceCents: toCents(plan1Price),
+        plan2Name: plan2Name.trim() || "Plan 2",
+        plan2Minutes: toMinutes(plan2Minutes),
+        plan2PriceCents: toCents(plan2Price),
+        plan3Name: plan3Name.trim() || "Plan 3",
+        plan3Minutes: toMinutes(plan3Minutes),
+        plan3PriceCents: toCents(plan3Price),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-settings"] });
+      toast({ title: "Membership settings saved" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save settings", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const inputClass = "w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors";
+  const labelClass = "block text-[#4caf82] font-mono text-xs tracking-widest mb-2 uppercase";
+
+  const plans = [
+    { label: "Plan 1", keyBadge: "Press 1", name: plan1Name, setName: setPlan1Name, minutes: plan1Minutes, setMinutes: setPlan1Minutes, price: plan1Price, setPrice: setPlan1Price, testPrefix: "plan1" },
+    { label: "Plan 2", keyBadge: "Press 2", name: plan2Name, setName: setPlan2Name, minutes: plan2Minutes, setMinutes: setPlan2Minutes, price: plan2Price, setPrice: setPlan2Price, testPrefix: "plan2" },
+    { label: "Plan 3", keyBadge: "Press 3", name: plan3Name, setName: setPlan3Name, minutes: plan3Minutes, setMinutes: setPlan3Minutes, price: plan3Price, setPrice: setPlan3Price, testPrefix: "plan3" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-[#f5a623] font-mono text-lg font-bold tracking-widest uppercase flex items-center gap-2">
+            <CreditCard size={18} />
+            Membership Settings_
+          </h2>
+          <p className="text-[#4caf82]/50 font-mono text-xs mt-1">
+            Configure free trial minutes and the three membership plans
+          </p>
+        </div>
+        <button
+          data-testid="btn-save-membership-settings"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending || isLoading}
+          className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] hover:bg-[#f5a623]/80 disabled:bg-[#f5a623]/30 disabled:cursor-not-allowed text-black font-mono text-xs font-bold tracking-widest uppercase rounded transition-colors"
+        >
+          {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          Save Settings_
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="py-20 text-center text-[#4caf82]/40 font-mono text-xs tracking-widest">LOADING SETTINGS...</div>
+      ) : (
+        <>
+          <div className="border border-[#f5a623]/20 rounded-lg p-5 bg-black/30 space-y-4">
+            <h3 className="text-[#f5a623] font-mono text-sm font-bold tracking-widest uppercase">Free Trial_</h3>
+            <p className="text-[#4caf82]/50 font-mono text-xs">Minutes granted automatically to first-time callers with no membership.</p>
+            <div className="max-w-xs">
+              <label className={labelClass}>Free Trial Minutes_</label>
+              <input
+                data-testid="input-free-trial-minutes"
+                type="number"
+                min="1"
+                value={freeTrialMinutes}
+                onChange={e => setFreeTrialMinutes(e.target.value)}
+                className={inputClass}
+                placeholder="90"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-[#f5a623] font-mono text-sm font-bold tracking-widest uppercase">Membership Plans_</h3>
+            <p className="text-[#4caf82]/50 font-mono text-xs">Three plans offered to callers when purchasing membership. Callers press 1, 2, or 3 to select a plan.</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {plans.map(plan => (
+                <div key={plan.label} className="border border-[#f5a623]/20 rounded-lg p-5 bg-black/30 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-white font-mono text-sm font-bold tracking-widest uppercase">{plan.label}_</h4>
+                    <span className="px-2 py-0.5 rounded border border-[#f5a623]/40 bg-[#f5a623]/10 text-[#f5a623] font-mono text-xs tracking-widest">
+                      {plan.keyBadge}
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className={labelClass}>Plan Name_</label>
+                      <input
+                        data-testid={`input-${plan.testPrefix}-name`}
+                        type="text"
+                        value={plan.name}
+                        onChange={e => plan.setName(e.target.value)}
+                        placeholder="e.g. Premium"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Minutes_</label>
+                      <input
+                        data-testid={`input-${plan.testPrefix}-minutes`}
+                        type="number"
+                        min="1"
+                        value={plan.minutes}
+                        onChange={e => plan.setMinutes(e.target.value)}
+                        placeholder="43200"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Price (USD)_</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4caf82]/50 font-mono text-sm">$</span>
+                        <input
+                          data-testid={`input-${plan.testPrefix}-price`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={plan.price}
+                          onChange={e => plan.setPrice(e.target.value)}
+                          placeholder="25.00"
+                          className={inputClass + " pl-7"}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-[#4caf82]/10">
+                    <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest">
+                      {parseInt(plan.minutes) >= 60
+                        ? `≈ ${Math.round(parseInt(plan.minutes) / 60)} hrs`
+                        : `${plan.minutes} min`}
+                      {" · "}
+                      ${parseFloat(plan.price || "0").toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function DashboardTab() {
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
@@ -936,6 +1129,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={14} /> },
   { id: "voice-profiles", label: "Voice Profiles", icon: <Phone size={14} /> },
   { id: "regions", label: "Regions", icon: <Globe size={14} /> },
+  { id: "memberships", label: "Memberships", icon: <CreditCard size={14} /> },
   { id: "audio-gen", label: "Audio Gen", icon: <Volume2 size={14} /> },
   { id: "messages", label: "Messages", icon: <MessageSquare size={14} /> },
   { id: "phone-testing", label: "Phone Testing", icon: <PhoneCall size={14} /> },
@@ -968,6 +1162,7 @@ export default function Admin() {
           {activeTab === "dashboard" && <DashboardTab />}
           {activeTab === "voice-profiles" && <VoiceProfilesTab />}
           {activeTab === "regions" && <RegionsTab />}
+          {activeTab === "memberships" && <MembershipsTab />}
           {activeTab === "audio-gen" && <TTSTab />}
           {activeTab === "messages" && <PlaceholderTab label="Messages" />}
           {activeTab === "phone-testing" && <PlaceholderTab label="Phone Testing" />}

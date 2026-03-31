@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, or, notLike, isNull } from "drizzle-orm";
 
 const VIRTUAL_PREFIX = "VIRTUAL-";
@@ -42,6 +42,9 @@ export interface IStorage {
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingMinutes?: number }): Promise<User>;
   deductMinutes(userId: string, minutes: number): Promise<User>;
+
+  getMembershipSettings(): Promise<MembershipSettings>;
+  updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
 
   getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }>;
 }
@@ -295,6 +298,21 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return user;
+  }
+
+  async getMembershipSettings(): Promise<MembershipSettings> {
+    const [settings] = await db.select().from(membershipSettings).where(eq(membershipSettings.id, "singleton"));
+    if (settings) return settings;
+    const [created] = await db.insert(membershipSettings).values({ id: "singleton" }).returning();
+    return created;
+  }
+
+  async updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings> {
+    const [updated] = await db.insert(membershipSettings)
+      .values({ id: "singleton", ...data })
+      .onConflictDoUpdate({ target: membershipSettings.id, set: data })
+      .returning();
+    return updated;
   }
 
   async getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }> {
