@@ -754,6 +754,7 @@ export async function registerRoutes(
           membershipTier: "free_trial",
           remainingMinutes: freeTrialMinutes,
         });
+        playPrompt(twiml, req, "free_trial_welcome.mp3", `Welcome! You have a ${freeTrialMinutes}-minute free trial.`);
         console.log(`[voice] Granted ${freeTrialMinutes}-minute free trial to userId=${user.id}`);
       }
 
@@ -2214,6 +2215,7 @@ export async function registerRoutes(
           membershipTier: "free_trial",
           remainingMinutes: freeTrialMinutes,
         });
+        playPrompt(twiml, req, "free_trial_welcome.mp3", `Welcome! You have a ${freeTrialMinutes}-minute free trial.`);
         console.log(`[voice] [${region.slug}] Granted ${freeTrialMinutes}-minute free trial to userId=${user.id}`);
       }
 
