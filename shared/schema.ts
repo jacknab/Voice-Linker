@@ -34,7 +34,7 @@ export const users = pgTable("users", {
   phoneNumber: text("phone_number").notNull().unique(),
   stripeCustomerId: text("stripe_customer_id"),
   membershipTier: text("membership_tier"),
-  remainingMinutes: integer("remaining_minutes"),
+  remainingSeconds: integer("remaining_seconds"),
   zipCodeId: uuid("zip_code_id").references(() => zipCodes.id),
   createdAt: timestamp("created_at").defaultNow(),
 });

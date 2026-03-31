@@ -49,8 +49,8 @@ export interface IStorage {
   blockUser(blockerId: string, blockedUserId: string): Promise<void>;
   unblockUser(blockerId: string, blockedUserId: string): Promise<void>;
 
-  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingMinutes?: number }): Promise<User>;
-  deductMinutes(userId: string, minutes: number): Promise<User>;
+  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number }): Promise<User>;
+  deductSeconds(userId: string, seconds: number): Promise<User>;
   getZipEntryByCode(code: string): Promise<ZipCode | undefined>;
   getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string; neighborhood?: string | null }): Promise<ZipCode>;
   setUserZipCode(userId: string, zipCodeId: string): Promise<void>;
@@ -356,14 +356,14 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingMinutes?: number }): Promise<User> {
+  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number }): Promise<User> {
     const [user] = await db.update(users).set(data).where(eq(users.id, userId)).returning();
     return user;
   }
 
-  async deductMinutes(userId: string, minutes: number): Promise<User> {
+  async deductSeconds(userId: string, seconds: number): Promise<User> {
     const [user] = await db.update(users)
-      .set({ remainingMinutes: sql`GREATEST(0, COALESCE(${users.remainingMinutes}, 0) - ${minutes})` })
+      .set({ remainingSeconds: sql`GREATEST(0, COALESCE(${users.remainingSeconds}, 0) - ${seconds})` })
       .where(eq(users.id, userId))
       .returning();
     return user;

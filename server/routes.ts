@@ -228,9 +228,10 @@ const LIVE_INVITE_TTL_MS = 30_000;
 const callTimeAnnounced = new Set<string>(); // already heard the "you have X hours/minutes" announcement
 const callWarningShown  = new Set<string>(); // already heard the < 15-minute warning
 
-// Phone booth session: tracks when a caller is actively listening (time being deducted)
-interface PhoneBoothSession { enteredAt: Date; fromNumber: string; }
-const phoneBoothSessions = new Map<string, PhoneBoothSession>(); // CallSid → session
+// Billing checkpoint: tracks the last sync time so seconds are deducted incrementally
+// during IVR navigation (syncBilling), not just at call end.
+interface BillingCheckpoint { lastCheck: number; fromNumber: string; }
+const billingCheckpoints = new Map<string, BillingCheckpoint>(); // CallSid → checkpoint
 
 // Build the base URL of this server from an incoming Twilio request
 function baseUrl(req: Request): string {
@@ -660,22 +661,36 @@ export async function registerRoutes(
     return user;
   }
 
-  // Deducts accumulated phone booth time from the caller's balance.
-  // Removes the session from phoneBoothSessions and writes to DB.
-  // Returns the number of minutes deducted (0 if no active session).
-  async function deductPhoneBoothTime(callSid: string): Promise<number> {
-    const session = phoneBoothSessions.get(callSid);
-    if (!session) return 0;
-    phoneBoothSessions.delete(callSid);
-    const elapsed = Math.max(1, Math.ceil((Date.now() - session.enteredAt.getTime()) / 60_000));
-    try {
-      const user = await storage.getOrCreateUser(session.fromNumber);
-      await storage.deductMinutes(user.id, elapsed);
-      console.log(`[voice] Phone booth: deducted ${elapsed} min from userId=${user.id}`);
-    } catch (err) {
-      console.error("[voice] Failed to deduct phone booth time:", err);
+  // Starts billing for a call. Safe to call multiple times — only initialises once.
+  function startBilling(callSid: string, fromNumber: string): void {
+    if (!billingCheckpoints.has(callSid)) {
+      billingCheckpoints.set(callSid, { lastCheck: Date.now(), fromNumber });
+      console.log(`[billing] Started for callSid=${callSid}`);
     }
-    return elapsed;
+  }
+
+  // Deducts seconds elapsed since the last billing checkpoint.
+  // Called before each greeting/navigation step for accurate incremental billing.
+  async function syncBilling(callSid: string): Promise<void> {
+    const checkpoint = billingCheckpoints.get(callSid);
+    if (!checkpoint) return;
+    const now = Date.now();
+    const elapsedSeconds = Math.floor((now - checkpoint.lastCheck) / 1000);
+    if (elapsedSeconds <= 0) return;
+    checkpoint.lastCheck = now;
+    try {
+      const user = await storage.getOrCreateUser(checkpoint.fromNumber);
+      await storage.deductSeconds(user.id, elapsedSeconds);
+      console.log(`[billing] syncBilling: deducted ${elapsedSeconds}s from userId=${user.id}`);
+    } catch (err) {
+      console.error("[billing] syncBilling error:", err);
+    }
+  }
+
+  // Runs a final sync and clears the billing checkpoint when a call ends.
+  async function finalizeCallBilling(callSid: string): Promise<void> {
+    await syncBilling(callSid);
+    billingCheckpoints.delete(callSid);
   }
 
   // ─── Call Status Callback ──────────────────────────────────────────────────
@@ -688,9 +703,9 @@ export async function registerRoutes(
 
     const terminalStatuses = ["completed", "failed", "busy", "no-answer", "canceled"];
     if (callSid && terminalStatuses.includes(callStatus)) {
-      // If the call ended while the caller was in the phone booth, deduct their remaining session time
-      if (phoneBoothSessions.has(callSid)) {
-        await deductPhoneBoothTime(callSid);
+      // Final billing sync — deducts any remaining elapsed seconds and clears the checkpoint
+      if (billingCheckpoints.has(callSid)) {
+        await finalizeCallBilling(callSid);
       }
 
       try {
@@ -771,19 +786,19 @@ export async function registerRoutes(
         "Welcome to Interactive Mail. Interactive Mail assumes no responsibility for personal meetings.");
 
       const user = await getOrCreateUser(fromNumber);
-      const remaining = user.remainingMinutes ?? 0;
+      const remainingSeconds = user.remainingSeconds ?? 0;
 
       if (!user.membershipTier) {
         // Brand new — never had an account, offer the free trial
         twiml.redirect("/voice/free-trial-offer");
-      } else if (remaining <= 0) {
+      } else if (remainingSeconds <= 0) {
         // Access fully expired
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         twiml.redirect("/voice/membership-purchase");
       } else {
-        // Has minutes — announce remaining time for free trial callers here at entry
+        // Has time — announce remaining time for free trial callers here at entry
         if (user.membershipTier === "free_trial") {
-          playTimeRemaining(twiml, req, remaining);
+          playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
           callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
         }
         // Hand off to the phone booth (plays welcome intro, then handles profile check)
@@ -823,12 +838,13 @@ export async function registerRoutes(
     if (digit === "1") {
       try {
         const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
+        const freeTrialSeconds = freeTrialMinutes * 60;
         const user = await getOrCreateUser(fromNumber);
         await storage.updateUserMembership(user.id, {
           membershipTier: "free_trial",
-          remainingMinutes: freeTrialMinutes,
+          remainingSeconds: freeTrialSeconds,
         });
-        console.log(`[voice] Free trial accepted — granted ${freeTrialMinutes} min to userId=${user.id}`);
+        console.log(`[voice] Free trial accepted — granted ${freeTrialMinutes} min (${freeTrialSeconds}s) to userId=${user.id}`);
 
         // Announce the trial minutes, then play the terms
         playTimeRemaining(twiml, req, freeTrialMinutes);
@@ -960,18 +976,18 @@ export async function registerRoutes(
 
     try {
       const user = await getOrCreateUser(fromNumber);
-      const remaining = user.remainingMinutes ?? 0;
+      const remainingSeconds = user.remainingSeconds ?? 0;
 
       // ── Access expired ──────────────────────────────────────────────────
-      if (user.membershipTier && remaining <= 0) {
+      if (user.membershipTier && remainingSeconds <= 0) {
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         twiml.redirect("/voice/membership-purchase");
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
-      // ── 15-minute warning at main menu (shown once per call) ────────────
-      if (user.membershipTier && remaining < 15 && remaining > 0 && !callWarningShown.has(callSid)) {
+      // ── Under-15-minute warning at main menu (shown once per call) ──────
+      if (user.membershipTier && remainingSeconds < 900 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
         callWarningShown.add(callSid);
         twiml.redirect("/voice/time-warning");
         res.type("text/xml");
@@ -979,9 +995,9 @@ export async function registerRoutes(
       }
 
       // ── First-visit balance announcement ────────────────────────────────
-      if (user.membershipTier && remaining > 0 && !callTimeAnnounced.has(callSid)) {
+      if (user.membershipTier && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
         callTimeAnnounced.add(callSid);
-        playTimeRemaining(twiml, req, remaining);
+        playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
       }
     } catch (err) {
       console.error("[voice] main-menu time check error:", err);
@@ -1277,11 +1293,8 @@ export async function registerRoutes(
       playPrompt(twiml, req, "time_deduction_start.mp3",
         "Time is now being deducted from your membership.");
 
-      // Start the phone booth session timer (only if not already running this call)
-      if (!phoneBoothSessions.has(callSid)) {
-        phoneBoothSessions.set(callSid, { enteredAt: new Date(), fromNumber });
-        console.log(`[voice] Phone booth session started for callSid=${callSid}`);
-      }
+      // Start the billing checkpoint (only if not already running this call)
+      startBilling(callSid, fromNumber);
 
       twiml.redirect("/voice/browse-profiles");
     } catch (error) {
@@ -1303,8 +1316,12 @@ export async function registerRoutes(
       const fromNumber = req.body?.From;
       if (!fromNumber) throw new Error("Missing From field in browse-profiles");
 
-      const user = await getOrCreateUser(fromNumber);
       const callSid = req.body?.CallSid as string;
+
+      // Sync billing before playing the next greeting — deducts elapsed seconds since last check
+      await syncBilling(callSid);
+
+      const user = await getOrCreateUser(fromNumber);
       const regionId = callRegion.get(callSid);
 
       // Resolve caller's location for proximity sorting
@@ -1703,8 +1720,8 @@ export async function registerRoutes(
         } else {
           const user = await getOrCreateUser(fromNumber);
 
-          // 1. Check initiator has ≥ 5 minutes remaining
-          if ((user.remainingMinutes ?? 0) < 5) {
+          // 1. Check initiator has ≥ 5 minutes (300 seconds) remaining
+          if ((user.remainingSeconds ?? 0) < 300) {
             playPrompt(twiml, req, "live_connect_no_minutes.mp3",
               "You need at least 5 minutes remaining on your membership to connect live. Please add more time and try again.");
             twiml.redirect("/voice/browse-profiles");
@@ -1732,9 +1749,9 @@ export async function registerRoutes(
             return res.send(twiml.toString());
           }
 
-          // 4. Check target has ≥ 5 minutes remaining
+          // 4. Check target has ≥ 5 minutes (300 seconds) remaining
           const targetUser = await storage.getUserById(profileUserId);
-          if (!targetUser || (targetUser.remainingMinutes ?? 0) < 5) {
+          if (!targetUser || (targetUser.remainingSeconds ?? 0) < 300) {
             playPrompt(twiml, req, "live_connect_unavailable.mp3",
               "That caller does not have enough time remaining for a live connection.");
             twiml.redirect("/voice/browse-profiles");
@@ -2264,10 +2281,11 @@ export async function registerRoutes(
         const baseMinutes = pkg?.minutes ?? (await getMembershipSettingsCached()).plan3Minutes;
         const bonusMinutes = session.isFirstPurchase ? baseMinutes : 0;
         const totalMinutes = baseMinutes + bonusMinutes;
+        const totalSeconds = totalMinutes * 60;
 
         await storage.updateUserMembership(user.id, {
           membershipTier: session.packageName,
-          remainingMinutes: totalMinutes,
+          remainingSeconds: totalSeconds,
         });
 
         const bonusMsg = bonusMinutes > 0
