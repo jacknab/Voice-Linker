@@ -426,6 +426,112 @@ export async function registerRoutes(
     }
   });
 
+  // --- Local number lookup via IP geolocation ---
+  app.get("/api/local-number", async (req, res) => {
+    function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+      const R = 6371;
+      const toRad = (v: number) => (v * Math.PI) / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    try {
+      const forwarded = req.headers["x-forwarded-for"] as string | undefined;
+      const rawIp =
+        forwarded?.split(",")[0]?.trim() ||
+        (req.headers["x-real-ip"] as string | undefined) ||
+        req.socket.remoteAddress ||
+        "";
+      const ip = rawIp.replace(/^::ffff:/, "");
+
+      const isPrivate =
+        ip === "127.0.0.1" ||
+        ip === "::1" ||
+        ip === "" ||
+        /^10\./.test(ip) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+        /^192\.168\./.test(ip);
+
+      let geoCity: string | null = null;
+      let geoState: string | null = null;
+      let geoLat: number | null = null;
+      let geoLon: number | null = null;
+
+      if (!isPrivate) {
+        try {
+          const geoRes = await fetch(
+            `http://ip-api.com/json/${ip}?fields=status,city,regionName,lat,lon`
+          );
+          if (geoRes.ok) {
+            const geo = await geoRes.json() as {
+              status: string;
+              city?: string;
+              regionName?: string;
+              lat?: number;
+              lon?: number;
+            };
+            if (geo.status === "success") {
+              geoCity = geo.city || null;
+              geoState = geo.regionName || null;
+              geoLat = geo.lat ?? null;
+              geoLon = geo.lon ?? null;
+            }
+          }
+        } catch (geoErr) {
+          console.warn("[local-number] IP geolocation failed:", geoErr);
+        }
+      }
+
+      const allRegions = await storage.getAllRegions();
+      const activeRegions = allRegions.filter((r) => r.isActive);
+
+      if (activeRegions.length === 0) {
+        return res.json({ city: geoCity, state: geoState, phoneNumber: null, regionName: null });
+      }
+
+      // If we have coordinates, find the closest region by its defaultZipCode
+      if (geoLat !== null && geoLon !== null) {
+        let closestRegion = null;
+        let closestDist = Infinity;
+
+        for (const region of activeRegions) {
+          if (!region.defaultZipCode) continue;
+          const zipEntry = await storage.getZipEntryByCode(region.defaultZipCode);
+          if (!zipEntry?.latitude || !zipEntry?.longitude) continue;
+          const dist = haversineKm(geoLat!, geoLon!, zipEntry.latitude, zipEntry.longitude);
+          if (dist < closestDist) {
+            closestDist = dist;
+            closestRegion = region;
+          }
+        }
+
+        if (closestRegion) {
+          return res.json({
+            city: geoCity,
+            state: geoState,
+            phoneNumber: closestRegion.phoneNumber,
+            regionName: closestRegion.name,
+          });
+        }
+      }
+
+      // Fallback: just return the first active region's number
+      return res.json({
+        city: geoCity,
+        state: geoState,
+        phoneNumber: activeRegions[0].phoneNumber,
+        regionName: activeRegions[0].name,
+      });
+    } catch (err) {
+      console.error("[local-number] error:", err);
+      return res.json({ city: null, state: null, phoneNumber: null, regionName: null });
+    }
+  });
+
   // --- Admin: List all profiles ---
   app.get("/api/admin/profiles", async (_req, res) => {
     try {
