@@ -196,7 +196,7 @@ export default function Landing() {
                 letterSpacing: "-0.02em",
               }}
             >
-              TalkSpark
+              Phone Booth
             </span>
           </div>
 
@@ -487,7 +487,7 @@ export default function Landing() {
                 <span style={{ background: "linear-gradient(90deg, #F472B6, #A78BFA)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Always in control.</span>
               </h2>
               <p style={{ color: "rgba(241,240,255,0.65)", lineHeight: 1.8, fontSize: "1rem", marginBottom: "2rem", textTransform: "none", fontWeight: 400 }}>
-                TalkSpark is completely free for women. Browse voice profiles at your own pace, send voice messages to anyone who catches your ear, and go live only when you're ready. You set the pace — always.
+                Phone Booth is completely free for women. Browse voice profiles at your own pace, send voice messages to anyone who catches your ear, and go live only when you're ready. You set the pace — always.
               </p>
               <ul style={{ listStyle: "none", padding: 0, margin: "0 0 2rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                 {["100% free, forever", "You control who you hear from", "Block anyone instantly", "No photos — just authentic voices"].map((item, i) => (
@@ -580,7 +580,7 @@ export default function Landing() {
       <section style={{ background: "rgba(139, 92, 246, 0.04)", borderTop: "1px solid rgba(139, 92, 246, 0.12)", borderBottom: "1px solid rgba(139, 92, 246, 0.12)", padding: "6rem 0" }}>
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
-            <p style={{ fontSize: "0.8rem", color: "#A78BFA", textTransform: "uppercase", letterSpacing: "0.15em", fontWeight: 600, marginBottom: "0.75rem" }}>Why TalkSpark</p>
+            <p style={{ fontSize: "0.8rem", color: "#A78BFA", textTransform: "uppercase", letterSpacing: "0.15em", fontWeight: 600, marginBottom: "0.75rem" }}>Why Phone Booth</p>
             <h2 style={{ fontSize: "clamp(2rem, 4vw, 3rem)", fontWeight: 800, letterSpacing: "-0.03em", textTransform: "none", color: "#F1F0FF", fontFamily: "system-ui, sans-serif" }}>
               Built for connection. Not distraction.
             </h2>
@@ -747,7 +747,7 @@ export default function Landing() {
               <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #8B5CF6, #EC4899)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Phone className="w-3.5 h-3.5 text-white" />
               </div>
-              <span style={{ fontSize: "1.1rem", fontWeight: 700, background: "linear-gradient(90deg, #A78BFA, #F472B6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>TalkSpark</span>
+              <span style={{ fontSize: "1.1rem", fontWeight: 700, background: "linear-gradient(90deg, #A78BFA, #F472B6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Phone Booth</span>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-6">
               {["Privacy Policy", "Terms of Use", "Safety Tips", "Customer Support", "FAQ"].map((link) => (
@@ -761,7 +761,7 @@ export default function Landing() {
               ))}
             </div>
             <p style={{ fontSize: "0.75rem", color: "rgba(241,240,255,0.25)", textTransform: "none", fontWeight: 400, textAlign: "center" }}>
-              © 2026 TalkSpark. All rights reserved.<br />All members 18+ only.
+              © 2026 Phone Booth. All rights reserved.<br />All members 18+ only.
             </p>
           </div>
         </div>
