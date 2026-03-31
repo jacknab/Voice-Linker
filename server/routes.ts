@@ -193,6 +193,7 @@ const pendingGreetingDrafts = new Map<string, GreetingDraft>(); // CallSid → d
 interface CallerBrowseState {
   queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; isNearby?: boolean }[];
   index: number;
+  lastPlayedIndex: number | null; // index of the most-recently played profile (for Press 5 "go back")
   hasWrapped: boolean;        // true after the queue index cycled back to 0
   linkedRegionLoaded: boolean; // true once the linked-region offer has been made (or skipped)
   localUserIds: string[];      // user IDs from the original local-region queue snapshot
@@ -1723,6 +1724,7 @@ export async function registerRoutes(
               isNearby: nearbySet.has(p.userId),
             })),
             index: 0,
+            lastPlayedIndex: null,
             hasWrapped: false,
             linkedRegionLoaded: false,
             localUserIds: allProfiles.map(p => p.userId),
@@ -1772,7 +1774,7 @@ export async function registerRoutes(
                 safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
               }
               safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
-              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 7 to flag this profile for review. Press 9 to return to main menu.");
               twiml.redirect("/voice/browse-profiles");
               res.type("text/xml");
               return res.send(twiml.toString());
@@ -1783,6 +1785,7 @@ export async function registerRoutes(
           const prevIndex = state.index;
 
           // Advance index, wrapping at end of queue — track first wrap
+          state.lastPlayedIndex = prevIndex;
           state.index = (state.index + 1) % state.queue.length;
           if (state.index === 0 && prevIndex > 0) state.hasWrapped = true;
 
@@ -1806,7 +1809,7 @@ export async function registerRoutes(
             safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
           }
           safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
-          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 7 to flag this profile for review. Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         }
       }
@@ -2142,6 +2145,18 @@ export async function registerRoutes(
         }
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
         twiml.redirect("/voice/browse-profiles");
+      } else if (digit === "5") {
+        // ── Play previous profile ───────────────────────────────────────────
+        const callSid = req.body?.CallSid as string;
+        const state = callerBrowseState.get(callSid);
+        if (state && state.lastPlayedIndex !== null && state.lastPlayedIndex > 0) {
+          state.index = state.lastPlayedIndex - 1;
+          console.log(`[voice] handle-profile-menu: press 5 → rewinding to index ${state.index} for callSid=${callSid}`);
+          twiml.redirect("/voice/browse-profiles");
+        } else {
+          playPrompt(twiml, req, "no_previous_profile.mp3", "There is no previous profile. Continuing to the next.");
+          twiml.redirect("/voice/browse-profiles");
+        }
       } else if (digit === "7") {
         // ── Flag this profile for review ────────────────────────────────────
         const fromNumber = req.body?.From as string;
