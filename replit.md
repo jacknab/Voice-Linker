@@ -40,10 +40,28 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
                       └─ Enter CVV → charges card via Stripe API
 ```
 
+## Environment Variables (.env)
+
+The project uses a `.env` file for all credentials. `dotenv` is loaded at the very top of `server/index.ts` and `drizzle.config.ts` so it applies everywhere (including `npm run db:push`).
+
+`.env` is git-ignored. Copy `.env.example` to `.env` and fill in values:
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SESSION_SECRET` | Long random string for session signing |
+| `TWILIO_ACCOUNT_SID` | Twilio Console → Account Info |
+| `TWILIO_AUTH_TOKEN` | Twilio Console → Account Info |
+| `TWILIO_PHONE_NUMBER` | Twilio Console → Phone Numbers |
+| `ELEVENLABS_API_KEY` | ElevenLabs → Profile → API Key |
+| `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID (default: `21m00Tcm4TlvDq8ikWAM`) |
+| `STRIPE_SECRET_KEY` | Stripe Dashboard → Developers → API Keys |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Webhooks |
+
 ## Stripe Integration
 
-- **NOTE**: The Replit native Stripe integration was dismissed by the user. Stripe is connected via the `STRIPE_SECRET_KEY` environment secret directly.
-- Do NOT attempt to use the Replit Stripe connector (`ccfg_stripe_01K611P4YQR0SZM11XFRQJC44Y`) — use `STRIPE_SECRET_KEY` secret instead.
+- **NOTE**: The Replit native Stripe integration was dismissed by the user. Stripe is connected via the `STRIPE_SECRET_KEY` env var in `.env`.
+- Do NOT attempt to use the Replit Stripe connector (`ccfg_stripe_01K611P4YQR0SZM11XFRQJC44Y`) — use `STRIPE_SECRET_KEY` in `.env` instead.
 - Membership products (Bronze/Silver/Gold) are seeded via `npx tsx scripts/seed-membership.ts`
 - Stripe webhook endpoint: `POST /api/stripe/webhook` (registered before `express.json()`)
 
@@ -121,6 +139,7 @@ Regions can be linked together so callers overflow into a nearby region's caller
 
 ## Running
 
-- Dev: `npm run dev` (port 5000)
-- DB push: `npm run db:push`
-- Seed Stripe products: `npx tsx scripts/seed-membership.ts`
+1. Copy `.env.example` to `.env` and fill in all credentials (see Environment Variables section above)
+2. `npm run dev` — starts dev server on port 5000
+3. `npm run db:push` — syncs database schema (reads `DATABASE_URL` from `.env`)
+4. `npx tsx scripts/seed-membership.ts` — seeds Stripe Bronze/Silver/Gold products
