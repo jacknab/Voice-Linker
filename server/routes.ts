@@ -1162,6 +1162,11 @@ export async function registerRoutes(
       const callSid = req.body?.CallSid as string;
       const regionId = callRegion.get(callSid);
 
+      // Resolve caller's location for proximity sorting
+      const callerZip = user.zipCodeId ? await storage.getZipEntryById(user.zipCodeId) : null;
+      const callerLat = callerZip?.latitude ?? null;
+      const callerLon = callerZip?.longitude ?? null;
+
       // Count available profiles: active callers + admin-uploaded greetings (region-scoped)
       const availableCount = await storage.getAvailableProfileCount(user.id, regionId);
       // Caller count is system-wide (no region filter) so virtual callers with no region are included
@@ -1223,7 +1228,7 @@ export async function registerRoutes(
         // Build the queue once per caller, then advance position on each visit
         let state = callerBrowseState.get(callSid);
         if (!state) {
-          const allProfiles = await storage.getAllActiveProfiles(user.id, regionId);
+          const allProfiles = await storage.getAllActiveProfiles(user.id, regionId, callerLat, callerLon);
           state = { queue: allProfiles.map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl })), index: 0, hasWrapped: false, linkedRegionLoaded: false, localUserIds: allProfiles.map(p => p.userId), announcedNewLocalIds: [] };
           callerBrowseState.set(callSid, state);
           console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid}`);
@@ -1252,7 +1257,7 @@ export async function registerRoutes(
           // their HOME region since they left it.
           if (state.linkedRegionLoaded && regionId) {
             const knownIds = new Set([...state.localUserIds, ...state.announcedNewLocalIds]);
-            const currentLocalProfiles = await storage.getAllActiveProfiles(user.id, regionId);
+            const currentLocalProfiles = await storage.getAllActiveProfiles(user.id, regionId, callerLat, callerLon);
             const newLocalCaller = currentLocalProfiles.find(p => !knownIds.has(p.userId));
 
             if (newLocalCaller) {
@@ -1361,7 +1366,8 @@ export async function registerRoutes(
       if (digit === "1" && state && linkedRegionId) {
         // Load profiles from the linked region
         const user = await getOrCreateUser(fromNumber);
-        const linkedProfiles = await storage.getAllActiveProfiles(user.id, linkedRegionId);
+        const callerZip = user.zipCodeId ? await storage.getZipEntryById(user.zipCodeId) : null;
+        const linkedProfiles = await storage.getAllActiveProfiles(user.id, linkedRegionId, callerZip?.latitude ?? null, callerZip?.longitude ?? null);
         const linkedRegion = await storage.getRegionById(linkedRegionId);
 
         if (linkedProfiles.length > 0) {

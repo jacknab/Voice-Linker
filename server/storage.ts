@@ -38,8 +38,9 @@ export interface IStorage {
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
   getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number>;
   getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number>;
-  getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]>;
+  getAllActiveProfiles(excludeUserId: string, regionId?: string, callerLat?: number | null, callerLon?: number | null): Promise<Profile[]>;
   getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined>;
+  getZipEntryById(id: string): Promise<ZipCode | undefined>;
   getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }>;
 
   // Block list
@@ -241,7 +242,7 @@ export class DatabaseStorage implements IStorage {
     return result.count;
   }
 
-  async getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]> {
+  async getAllActiveProfiles(excludeUserId: string, regionId?: string, callerLat?: number | null, callerLon?: number | null): Promise<Profile[]> {
     const activeUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(
@@ -264,13 +265,41 @@ export class DatabaseStorage implements IStorage {
       END
     `;
 
-    const rows = await db.select({ profile: profiles })
+    const hasCallerLocation = callerLat != null && callerLon != null;
+
+    // Haversine distance in km — profiles with no location sort last (99999)
+    const distanceKm = hasCallerLocation
+      ? sql<number>`
+          CASE
+            WHEN ${zipCodes.latitude} IS NOT NULL AND ${zipCodes.longitude} IS NOT NULL THEN
+              2 * 6371 * asin(
+                sqrt(
+                  power(sin(radians((${zipCodes.latitude} - ${callerLat}) / 2)), 2) +
+                  cos(radians(${callerLat})) * cos(radians(${zipCodes.latitude})) *
+                  power(sin(radians((${zipCodes.longitude} - ${callerLon}) / 2)), 2)
+                )
+              )
+            ELSE 99999
+          END
+        `
+      : undefined;
+
+    const query = db.select({ profile: profiles })
       .from(profiles)
       .leftJoin(users, eq(profiles.userId, users.id))
-      .where(and(conditions, not(eq(profiles.userId, excludeUserId))))
-      .orderBy(membershipPriority, profiles.createdAt);
+      .leftJoin(zipCodes, eq(users.zipCodeId, zipCodes.id))
+      .where(and(conditions, not(eq(profiles.userId, excludeUserId))));
+
+    const rows = distanceKm
+      ? await query.orderBy(membershipPriority, distanceKm, profiles.createdAt)
+      : await query.orderBy(membershipPriority, profiles.createdAt);
 
     return rows.map(r => r.profile);
+  }
+
+  async getZipEntryById(id: string): Promise<ZipCode | undefined> {
+    const [entry] = await db.select().from(zipCodes).where(eq(zipCodes.id, id)).limit(1);
+    return entry;
   }
 
   async getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined> {
