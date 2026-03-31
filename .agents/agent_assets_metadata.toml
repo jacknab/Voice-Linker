@@ -18,3 +18,9 @@ id = "QcCUfEggXuxgUvciaTIW7"
 uri = "file://Needs_developed.md"
 type = "text"
 title = "Admin Dashboard — Features Needing Development"
+
+[[outputs]]
+id = "X0Fk7Wb4SRKhRnlD_cpUi"
+uri = "file://IVR_Customization_Guide.md"
+type = "text"
+title = "IVR Customization Guide"
