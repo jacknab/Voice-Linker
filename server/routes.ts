@@ -1774,7 +1774,7 @@ export async function registerRoutes(
                 safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
               }
               safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
-              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
               twiml.redirect("/voice/browse-profiles");
               res.type("text/xml");
               return res.send(twiml.toString());
@@ -1809,7 +1809,7 @@ export async function registerRoutes(
             safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
           }
           safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
-          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         }
       }
@@ -2157,6 +2157,29 @@ export async function registerRoutes(
           playPrompt(twiml, req, "no_previous_profile.mp3", "There is no previous profile. Continuing to the next.");
           twiml.redirect("/voice/browse-profiles");
         }
+      } else if (digit === "6") {
+        // ── Hear this caller's location ─────────────────────────────────────
+        if (profileUserId) {
+          const targetUser = await storage.getUserById(profileUserId);
+          const zipEntry = targetUser?.zipCodeId
+            ? await storage.getZipEntryById(targetUser.zipCodeId)
+            : null;
+          const location = zipEntry?.neighborhood || zipEntry?.city || null;
+
+          const locationGather = twiml.gather({
+            numDigits: 1,
+            action: `/voice/handle-location-menu?profileUserId=${profileUserId}`,
+            timeout: 10,
+          });
+          if (location) {
+            locationGather.say(`This caller is located in: ${location}. To send them a message, press 1.`);
+          } else {
+            locationGather.say("This caller's location is not available. To send them a message, press 1.");
+          }
+          twiml.redirect("/voice/browse-profiles");
+        } else {
+          twiml.redirect("/voice/browse-profiles");
+        }
       } else if (digit === "7") {
         // ── Flag this profile for review ────────────────────────────────────
         const fromNumber = req.body?.From as string;
@@ -2183,6 +2206,28 @@ export async function registerRoutes(
       console.error("[voice] /voice/handle-profile-menu error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the main menu.");
       twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 8a-pre. Location Menu (after Press 6 on profile menu) ──────────────
+  app.post("/voice/handle-location-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+    const profileUserId = req.query.profileUserId as string;
+
+    try {
+      if (digit === "1" && profileUserId) {
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${profileUserId}` });
+      } else {
+        twiml.redirect("/voice/browse-profiles");
+      }
+    } catch (error) {
+      console.error("[voice] /voice/handle-location-menu error:", error);
+      twiml.redirect("/voice/browse-profiles");
     }
 
     res.type("text/xml");
