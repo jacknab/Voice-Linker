@@ -12,3 +12,9 @@ id = "-cCQI6i2oiI3eGwgR92Zi"
 uri = "file://prompts_guide.md"
 type = "text"
 title = "System Prompts Recording Guide"
+
+[[outputs]]
+id = "QcCUfEggXuxgUvciaTIW7"
+uri = "file://Needs_developed.md"
+type = "text"
+title = "Admin Dashboard — Features Needing Development"
