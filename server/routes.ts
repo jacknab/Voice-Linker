@@ -191,7 +191,7 @@ const pendingGreetingDrafts = new Map<string, GreetingDraft>(); // CallSid → d
 
 // Per-caller profile browsing state: each caller gets their own queue + position
 interface CallerBrowseState {
-  queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null }[];
+  queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; isNearby?: boolean }[];
   index: number;
   hasWrapped: boolean;        // true after the queue index cycled back to 0
   linkedRegionLoaded: boolean; // true once the linked-region offer has been made (or skipped)
@@ -1246,10 +1246,27 @@ export async function registerRoutes(
         // Build the queue once per caller, then advance position on each visit
         let state = callerBrowseState.get(callSid);
         if (!state) {
-          const allProfiles = await storage.getAllActiveProfiles(user.id, regionId, callerLat, callerLon);
-          state = { queue: allProfiles.map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl })), index: 0, hasWrapped: false, linkedRegionLoaded: false, localUserIds: allProfiles.map(p => p.userId), announcedNewLocalIds: [] };
+          const allProfiles = await storage.getAllActiveProfiles(user.id, regionId);
+          const nearbySet = new Set<string>(
+            callerLat != null && callerLon != null
+              ? await storage.getNearbyProfileUserIds(user.id, regionId, callerLat, callerLon, 80)
+              : []
+          );
+          state = {
+            queue: allProfiles.map(p => ({
+              userId: p.userId,
+              recordingUrl: p.recordingUrl,
+              nameRecordingUrl: p.nameRecordingUrl,
+              isNearby: nearbySet.has(p.userId),
+            })),
+            index: 0,
+            hasWrapped: false,
+            linkedRegionLoaded: false,
+            localUserIds: allProfiles.map(p => p.userId),
+            announcedNewLocalIds: [],
+          };
           callerBrowseState.set(callSid, state);
-          console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid}`);
+          console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid} (${nearbySet.size} nearby)`);
         }
 
         if (state.queue.length === 0) {
@@ -1275,7 +1292,7 @@ export async function registerRoutes(
           // their HOME region since they left it.
           if (state.linkedRegionLoaded && regionId) {
             const knownIds = new Set([...state.localUserIds, ...state.announcedNewLocalIds]);
-            const currentLocalProfiles = await storage.getAllActiveProfiles(user.id, regionId, callerLat, callerLon);
+            const currentLocalProfiles = await storage.getAllActiveProfiles(user.id, regionId);
             const newLocalCaller = currentLocalProfiles.find(p => !knownIds.has(p.userId));
 
             if (newLocalCaller) {
@@ -1319,6 +1336,9 @@ export async function registerRoutes(
             action: `/voice/handle-profile-menu?profileUserId=${profile.userId}`,
             timeout: 10,
           });
+          if (profile.isNearby) {
+            playPrompt(profileGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
+          }
           if (profile.nameRecordingUrl) {
             safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
           }
@@ -1385,12 +1405,19 @@ export async function registerRoutes(
         // Load profiles from the linked region
         const user = await getOrCreateUser(fromNumber);
         const callerZip = user.zipCodeId ? await storage.getZipEntryById(user.zipCodeId) : null;
-        const linkedProfiles = await storage.getAllActiveProfiles(user.id, linkedRegionId, callerZip?.latitude ?? null, callerZip?.longitude ?? null);
+        const callerLat = callerZip?.latitude ?? null;
+        const callerLon = callerZip?.longitude ?? null;
+        const linkedProfiles = await storage.getAllActiveProfiles(user.id, linkedRegionId);
+        const linkedNearbySet = new Set<string>(
+          callerLat != null && callerLon != null
+            ? await storage.getNearbyProfileUserIds(user.id, linkedRegionId, callerLat, callerLon, 80)
+            : []
+        );
         const linkedRegion = await storage.getRegionById(linkedRegionId);
 
         if (linkedProfiles.length > 0) {
           // Replace the queue with linked region profiles only
-          state.queue = linkedProfiles.map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl }));
+          state.queue = linkedProfiles.map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, isNearby: linkedNearbySet.has(p.userId) }));
           state.index = 0;
           state.hasWrapped = false;
           state.linkedRegionLoaded = true;

@@ -271,7 +271,7 @@ export class DatabaseStorage implements IStorage {
       .from(profiles)
       .leftJoin(users, eq(profiles.userId, users.id))
       .where(and(conditions, not(eq(profiles.userId, excludeUserId))))
-      .orderBy(profiles.createdAt);
+      .orderBy(sql`RANDOM()`);
 
     return rows.map(r => r.profile);
   }
