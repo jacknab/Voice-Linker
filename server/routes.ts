@@ -221,6 +221,23 @@ const liveConnectionUserIds = new Set<string>();
 // callSid → userId so we can clean up on hangup
 const liveConnectionCallSidMap = new Map<string, string>();
 
+// Live billing: real-time per-second tracking while two callers are connected
+interface LiveBillingSession {
+  intervalId: NodeJS.Timeout;
+  initiatorCallSid: string;
+  inviteeCallSid: string;
+  initiatorUserId: string;
+  inviteeUserId: string;
+  room: string;
+  storedBaseUrl: string;
+  initiatorWarned: boolean;
+  inviteeWarned: boolean;
+}
+const liveBillingSessions = new Map<string, LiveBillingSession>(); // room → session
+
+const LIVE_TICK_MS = 5_000;             // deduct every 5 seconds
+const LIVE_LOW_BALANCE_SECONDS = 300;   // warn at < 5 minutes remaining
+
 // How long (ms) an invite stays valid. Covers: disclaimer (~3s) + "Calling now" (~3s) + ringing (~15s) + buffer
 const LIVE_INVITE_TTL_MS = 30_000;
 
@@ -693,6 +710,140 @@ export async function registerRoutes(
     billingCheckpoints.delete(callSid);
   }
 
+  // ─── Live Billing Helpers ─────────────────────────────────────────────────
+
+  // Resets IVR billing checkpoints to now for both call legs.
+  // Prevents syncBilling from accumulating time gaps during a live call.
+  function resetLiveBillingCheckpoints(initiatorCallSid: string, inviteeCallSid: string): void {
+    const now = Date.now();
+    const ic = billingCheckpoints.get(initiatorCallSid);
+    if (ic) ic.lastCheck = now;
+    const vc = billingCheckpoints.get(inviteeCallSid);
+    if (vc) vc.lastCheck = now;
+  }
+
+  // Resolves a Twilio conference SID from its friendly name.
+  async function getConferenceSid(client: ReturnType<typeof twilio>, room: string): Promise<string | null> {
+    try {
+      const list = await client.conferences.list({ friendlyName: room, status: "in-progress", limit: 1 });
+      return list[0]?.sid ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Stops the live billing interval and resets billing checkpoints.
+  function stopLiveBilling(room: string): void {
+    const session = liveBillingSessions.get(room);
+    if (!session) return;
+    clearInterval(session.intervalId);
+    resetLiveBillingCheckpoints(session.initiatorCallSid, session.inviteeCallSid);
+    liveBillingSessions.delete(room);
+    console.log(`[live-billing] Stopped for room=${room}`);
+  }
+
+  // Stops live billing for any session that contains this callSid (for unexpected hangups).
+  function stopLiveBillingByCallSid(callSid: string): void {
+    for (const [room, session] of liveBillingSessions.entries()) {
+      if (session.initiatorCallSid === callSid || session.inviteeCallSid === callSid) {
+        stopLiveBilling(room);
+        return;
+      }
+    }
+  }
+
+  // Starts a real-time billing interval for two callers in a live conference.
+  // Ticks every LIVE_TICK_MS, deducts seconds from both callers, plays per-participant
+  // low-balance warnings, and auto-disconnects a caller when their balance hits zero.
+  function startLiveBilling(
+    room: string,
+    initiatorCallSid: string, inviteeCallSid: string,
+    initiatorUserId: string, inviteeUserId: string,
+    storedBaseUrl: string,
+  ): void {
+    if (liveBillingSessions.has(room)) return;
+
+    // Reset IVR checkpoints so syncBilling won't double-deduct during this live call
+    resetLiveBillingCheckpoints(initiatorCallSid, inviteeCallSid);
+
+    const session: LiveBillingSession = {
+      intervalId: null as unknown as NodeJS.Timeout,
+      initiatorCallSid, inviteeCallSid,
+      initiatorUserId, inviteeUserId,
+      room, storedBaseUrl,
+      initiatorWarned: false, inviteeWarned: false,
+    };
+
+    session.intervalId = setInterval(async () => {
+      try {
+        const s = liveBillingSessions.get(room);
+        if (!s) return;
+
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        if (!accountSid || !authToken) return;
+        const client = twilio(accountSid, authToken);
+
+        const tickSeconds = LIVE_TICK_MS / 1000;
+        const [initiatorUser, inviteeUser] = await Promise.all([
+          storage.deductSeconds(s.initiatorUserId, tickSeconds),
+          storage.deductSeconds(s.inviteeUserId, tickSeconds),
+        ]);
+
+        const initiatorRemaining = initiatorUser.remainingSeconds ?? 0;
+        const inviteeRemaining = inviteeUser.remainingSeconds ?? 0;
+        console.log(`[live-billing] room=${room} initiator=${initiatorRemaining}s invitee=${inviteeRemaining}s`);
+
+        const warningUrl = `${s.storedBaseUrl}/voice/live-low-balance-warning`;
+
+        // Play low-balance warning to the specific participant only
+        if (!s.initiatorWarned && initiatorRemaining > 0 && initiatorRemaining < LIVE_LOW_BALANCE_SECONDS) {
+          s.initiatorWarned = true;
+          const conferenceSid = await getConferenceSid(client, room);
+          if (conferenceSid) {
+            await client.conferences(conferenceSid)
+              .participants(s.initiatorCallSid)
+              .update({ announceUrl: warningUrl, announceMethod: "POST" } as any)
+              .catch(e => console.error("[live-billing] Warning announce error (initiator):", e));
+            console.log(`[live-billing] Low-balance warning → initiator callSid=${s.initiatorCallSid}`);
+          }
+        }
+        if (!s.inviteeWarned && inviteeRemaining > 0 && inviteeRemaining < LIVE_LOW_BALANCE_SECONDS) {
+          s.inviteeWarned = true;
+          const conferenceSid = await getConferenceSid(client, room);
+          if (conferenceSid) {
+            await client.conferences(conferenceSid)
+              .participants(s.inviteeCallSid)
+              .update({ announceUrl: warningUrl, announceMethod: "POST" } as any)
+              .catch(e => console.error("[live-billing] Warning announce error (invitee):", e));
+            console.log(`[live-billing] Low-balance warning → invitee callSid=${s.inviteeCallSid}`);
+          }
+        }
+
+        // Auto-disconnect whichever caller ran out of time
+        if (initiatorRemaining <= 0) {
+          console.log(`[live-billing] Initiator userId=${s.initiatorUserId} out of time — ending call`);
+          stopLiveBilling(room);
+          client.calls(s.initiatorCallSid).update({ status: "completed" })
+            .catch(e => console.error("[live-billing] End-call error (initiator):", e));
+          return;
+        }
+        if (inviteeRemaining <= 0) {
+          console.log(`[live-billing] Invitee userId=${s.inviteeUserId} out of time — ending call`);
+          stopLiveBilling(room);
+          client.calls(s.inviteeCallSid).update({ status: "completed" })
+            .catch(e => console.error("[live-billing] End-call error (invitee):", e));
+          return;
+        }
+      } catch (err) {
+        console.error("[live-billing] Tick error:", err);
+      }
+    }, LIVE_TICK_MS);
+
+    liveBillingSessions.set(room, session);
+    console.log(`[live-billing] Started for room=${room}, tick every ${LIVE_TICK_MS / 1000}s`);
+  }
+
   // ─── Call Status Callback ──────────────────────────────────────────────────
   // Twilio POSTs here when a call ends (completed/failed/canceled/etc.)
   // This is how we remove callers from the active party line in real time.
@@ -707,6 +858,9 @@ export async function registerRoutes(
       if (billingCheckpoints.has(callSid)) {
         await finalizeCallBilling(callSid);
       }
+
+      // Stop live billing if this call was in an active conference (handles unexpected hangups)
+      stopLiveBillingByCallSid(callSid);
 
       try {
         await storage.removeActiveCall(callSid);
@@ -1835,7 +1989,7 @@ export async function registerRoutes(
         // B accepted (possibly right as ringing finished — race condition handled here)
         playPrompt(twiml, req, "live_connect_connecting.mp3",
           "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
-        const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}` });
+        const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}&room=${encodeURIComponent(invite.conferenceRoom)}` });
         (dial.conference as any)(invite.conferenceRoom, {
           startConferenceOnEnter: true,
           endConferenceOnExit: true,
@@ -1914,6 +2068,14 @@ export async function registerRoutes(
             const joinUrl = `${baseUrl(req)}/voice/live-connect-join?room=${encodeURIComponent(room)}&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}`;
             await client.calls(invite.initiatorCallSid).update({ url: joinUrl, method: "POST" });
             console.log(`[live-connect] Redirected initiator ${invite.initiatorCallSid} to conference ${room}`);
+
+            // Start real-time billing interval now that both legs are headed to the conference
+            startLiveBilling(
+              room,
+              invite.initiatorCallSid, callSid,
+              invite.initiatorUserId, user.id,
+              baseUrl(req),
+            );
           } catch (err) {
             console.error("[live-connect] Failed to redirect initiator via REST API:", err);
             // Undo tracking on failure
@@ -1934,7 +2096,7 @@ export async function registerRoutes(
         // B joins the conference (waits briefly for A to arrive)
         playPrompt(twiml, req, "live_connect_connecting.mp3",
           "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
-        const dial = twiml.dial({ action: `/voice/live-connect-complete?role=invitee&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}` });
+        const dial = twiml.dial({ action: `/voice/live-connect-complete?role=invitee&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}&room=${encodeURIComponent(room)}` });
         (dial.conference as any)(room, {
           startConferenceOnEnter: true,
           endConferenceOnExit: true,
@@ -1996,7 +2158,7 @@ export async function registerRoutes(
     try {
       playPrompt(twiml, req, "live_connect_connecting.mp3",
         "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
-      const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(initiatorUserId)}` });
+      const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(initiatorUserId)}&room=${encodeURIComponent(room)}` });
       (dial.conference as any)(room, {
         startConferenceOnEnter: true,
         endConferenceOnExit: true,
@@ -2020,7 +2182,11 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     const targetUserId = req.query.targetUserId as string;
     const initiatorUserId = req.query.initiatorUserId as string;
+    const room = req.query.room as string;
     const callSid = req.body?.CallSid as string;
+
+    // Stop live billing interval (safe to call multiple times — only acts once)
+    if (room) stopLiveBilling(room);
 
     // Clean up live connection tracking
     if (targetUserId) liveConnectionUserIds.delete(targetUserId);
@@ -2034,6 +2200,16 @@ export async function registerRoutes(
       "Your live connection has ended. Returning you to the phone booth.");
     twiml.redirect("/voice/browse-profiles");
 
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 8e. Live Connect: Low Balance Warning (per-participant) ─────────────
+  // Twilio calls this via announceUrl on the specific participant's conference leg.
+  // Only that participant hears it — the other caller is unaffected.
+  app.post("/voice/live-low-balance-warning", (_req, res) => {
+    const twiml = new VoiceResponse();
+    twiml.say("Warning: you have less than 5 minutes remaining. Please note your live connection will end when your time expires.");
     res.type("text/xml");
     res.send(twiml.toString());
   });
