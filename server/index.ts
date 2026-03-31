@@ -90,6 +90,17 @@ app.use((req, res, next) => {
   // Start the virtual caller simulator after a short delay to let the DB settle
   setTimeout(() => startSimulator().catch(err => console.error("[simulator] startup error:", err)), 3000);
 
+  // Periodically purge any active_calls rows that are more than 90 minutes old.
+  // This catches calls where Twilio's status callback never fired (e.g. network issues).
+  const { storage } = await import("./storage");
+  setInterval(async () => {
+    try {
+      await storage.removeStaleActiveCalls(90);
+    } catch (err) {
+      console.error("[cleanup] stale active-call purge failed:", err);
+    }
+  }, 5 * 60 * 1000); // every 5 minutes
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
