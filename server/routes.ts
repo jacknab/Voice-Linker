@@ -1080,8 +1080,8 @@ export async function registerRoutes(
   });
 
   // ─── 2b. Save Profile Greeting ────────────────────────────────────────────
-  // Second step (or standalone re-record). Saves the greeting and, if present,
-  // links the name recording captured just before it.
+  // Second step (or standalone re-record). Saves the greeting immediately to
+  // the database so playback works right away, then sends to the review screen.
   app.post("/voice/save-profile", async (req, res) => {
     const twiml = new VoiceResponse();
 
@@ -1107,8 +1107,16 @@ export async function registerRoutes(
       const nameRecordingUrl = pendingNameRecordings.get(callSid) ?? undefined;
       if (nameRecordingUrl) pendingNameRecordings.delete(callSid);
 
-      // Store as draft — only written to DB once the caller accepts in REVIEW_GREETING
-      pendingGreetingDrafts.set(callSid, { nameRecordingUrl, greetingRecordingUrl: recordingUrl, greetingDuration: recordingDuration });
+      // Save immediately to DB so playback works right away at the review screen
+      const user = await getOrCreateUser(fromNumber);
+      await storage.upsertProfile({
+        userId: user.id,
+        nameRecordingUrl,
+        recordingUrl,
+        recordingDuration,
+      });
+      console.log(`[voice] Profile saved immediately for userId=${user.id} (dur=${recordingDuration}s)`);
+
       twiml.redirect("/voice/review-greeting");
     } catch (error) {
       console.error("[voice] /voice/save-profile error:", error);
@@ -1318,49 +1326,31 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
     const fromNumber = req.body?.From as string;
-    const callSid = req.body?.CallSid as string;
-
-    const draft = pendingGreetingDrafts.get(callSid);
 
     try {
       if (digit === "1") {
-        // Play back the draft recording(s) then return to review menu
-        if (draft?.nameRecordingUrl) {
-          safePlayRecording(twiml, draft.nameRecordingUrl, req, "");
+        // Play back the saved profile (already written to DB in save-profile)
+        const user = await getOrCreateUser(fromNumber);
+        const profile = await storage.getProfile(user.id);
+        if (profile?.nameRecordingUrl) {
+          safePlayRecording(twiml, profile.nameRecordingUrl, req, "");
         }
-        if (draft?.greetingRecordingUrl) {
-          safePlayRecording(twiml, draft.greetingRecordingUrl, req, "Your greeting recording is not available for playback at this time.");
+        if (profile?.recordingUrl) {
+          safePlayRecording(twiml, profile.recordingUrl, req, "Your greeting is not available for playback right now.");
         } else {
           playPrompt(twiml, req, "no_greeting_found.mp3", "No recording found.");
         }
         twiml.redirect("/voice/review-greeting");
       } else if (digit === "2") {
-        // Re-record from scratch — discard draft and restart name step
-        pendingGreetingDrafts.delete(callSid);
+        // Re-record from scratch — restart name step
         playPrompt(twiml, req, "welcome_record_name.mp3",
           "Say your first name only after the tone. You have 5 seconds."
         );
         twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else if (digit === "3") {
-        // Accept — write draft to DB then ask optional zip code before main menu
-        if (!draft) {
-          playPrompt(twiml, req, "session_expired_greeting.mp3", "Your session has expired. Please re-record your greeting.");
-          playPrompt(twiml, req, "welcome_record_name.mp3",
-            "Say your first name only after the tone. You have 5 seconds."
-          );
-          twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
-        } else {
-          const user = await getOrCreateUser(fromNumber);
-          await storage.upsertProfile({
-            userId: user.id,
-            nameRecordingUrl: draft.nameRecordingUrl,
-            recordingUrl: draft.greetingRecordingUrl,
-            recordingDuration: draft.greetingDuration,
-          });
-          pendingGreetingDrafts.delete(callSid);
-          playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
-          twiml.redirect("/voice/zip-code-prompt");
-        }
+        // Accept — profile is already saved; confirm and continue
+        playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
+        twiml.redirect("/voice/zip-code-prompt");
       } else {
         // 9 or anything else → repeat review menu
         twiml.redirect("/voice/review-greeting");
