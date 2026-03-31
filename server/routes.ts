@@ -346,7 +346,6 @@ async function registerStatusCallback(callSid: string, req: Request): Promise<vo
     await client.calls(callSid).update({
       statusCallback: statusCallbackUrl,
       statusCallbackMethod: "POST",
-      statusCallbackEvent: ["completed", "failed", "busy", "no-answer", "canceled"],
     });
     console.log(`[status] Registered status callback for ${callSid} → ${statusCallbackUrl}`);
   } catch (err) {
@@ -1018,7 +1017,7 @@ export async function registerRoutes(
 
   // Stops live billing for any session that contains this callSid (for unexpected hangups).
   function stopLiveBillingByCallSid(callSid: string): void {
-    for (const [room, session] of liveBillingSessions.entries()) {
+    for (const [room, session] of Array.from(liveBillingSessions.entries())) {
       if (session.initiatorCallSid === callSid || session.inviteeCallSid === callSid) {
         stopLiveBilling(room);
         return;
@@ -1158,7 +1157,7 @@ export async function registerRoutes(
       callRegion.delete(callSid);
 
       // Clean up any live connect invite that this caller initiated
-      for (const [targetUserId, invite] of pendingLiveInvites.entries()) {
+      for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
         if (invite.initiatorCallSid === callSid) {
           pendingLiveInvites.delete(targetUserId);
           console.log(`[live-connect] Cleaned up dangling invite for targetUserId=${targetUserId} (initiator hung up)`);

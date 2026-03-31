@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
+import { z } from "zod";
 import { api } from "@shared/routes";
+
+type StatsResponse = z.infer<typeof api.stats.get.responses[200]>;
 
 // Log zod errors for debugging
 function parseWithLogging<T>(schema: any, data: unknown, label: string): T {
@@ -12,7 +15,7 @@ function parseWithLogging<T>(schema: any, data: unknown, label: string): T {
 }
 
 export function useStats() {
-  return useQuery({
+  return useQuery<StatsResponse>({
     queryKey: [api.stats.get.path],
     queryFn: async () => {
       const res = await fetch(api.stats.get.path, { credentials: "include" });

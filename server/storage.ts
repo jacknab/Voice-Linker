@@ -256,6 +256,7 @@ export class DatabaseStorage implements IStorage {
       .select({
         id: profiles.id,
         userId: profiles.userId,
+        nameRecordingUrl: profiles.nameRecordingUrl,
         recordingUrl: profiles.recordingUrl,
         recordingDuration: profiles.recordingDuration,
         isAdminUploaded: profiles.isAdminUploaded,
@@ -654,7 +655,7 @@ export class DatabaseStorage implements IStorage {
       ) bl ON bl.blocker_id = u.id
       ORDER BY u.created_at DESC
     `);
-    return result.rows as CallerSummary[];
+    return result.rows as unknown as CallerSummary[];
   }
 
   async getCallerDetailById(userId: string): Promise<CallerDetail | null> {
@@ -770,7 +771,7 @@ export class DatabaseStorage implements IStorage {
       ${status ? sql`WHERE fc.status = ${status}` : sql``}
       ORDER BY fc.created_at DESC
     `);
-    return result.rows as FlaggedItemWithDetails[];
+    return result.rows as unknown as FlaggedItemWithDetails[];
   }
 
   async createFlaggedItem(data: InsertFlaggedContent): Promise<FlaggedContent> {
