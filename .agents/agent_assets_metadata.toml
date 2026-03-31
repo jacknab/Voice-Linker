@@ -18,6 +18,12 @@ uri = "file://attached_assets/hero_guy_3.png"
 type = "image"
 title = "hero guy phone 3"
 
+[[generated]]
+id = "L0Wg2JiNvk6wgAgIyp7LK"
+uri = "file://attached_assets/phone_booth.png"
+type = "image"
+title = "classic phone booth"
+
 [[outputs]]
 id = "A94LSjLMF5S8MgWI0l6Vb"
 uri = "file://SETUP.md"

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import heroGuy1 from "@assets/hero_guy_1.png";
 import heroGuy2 from "@assets/hero_guy_2.png";
 import heroGuy3 from "@assets/hero_guy_3.png";
+import phoneBooth from "@assets/phone_booth_nobg.png";
 
 const DEFAULT_PHONE = "1-800-555-0100";
 
@@ -444,56 +445,65 @@ export default function Landing() {
               </motion.div>
             </div>
 
-            {/* ── RIGHT: photo collage ── */}
+            {/* ── RIGHT: phone booth + floating guy cards ── */}
             <motion.div
               initial={{ opacity: 0, x: 40 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.7, delay: 0.2 }}
-              style={{ position: "relative", height: "560px", display: "none" }}
+              style={{ position: "relative", height: "620px", display: "none" }}
               className="md:!block"
               data-testid="hero-photo-collage"
             >
-              {/* Glow behind collage */}
-              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "20rem", height: "20rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.25) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
+              {/* Purple glow behind booth */}
+              <div style={{ position: "absolute", bottom: "-4rem", left: "50%", transform: "translateX(-50%)", width: "28rem", height: "28rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.32) 0%, transparent 68%)", pointerEvents: "none", zIndex: 0 }} />
 
-              {/* Photo 1 — large, left-center */}
+              {/* Phone booth — large, centred, pops out bottom */}
               <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.35 }}
-                style={{ position: "absolute", left: 0, top: "5%", width: "52%", zIndex: 3 }}
+                initial={{ opacity: 0, y: 30, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
+                style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", bottom: "-3rem", width: "58%", zIndex: 2, filter: "drop-shadow(0 32px 64px rgba(124,58,237,0.55)) drop-shadow(0 0 24px rgba(124,58,237,0.3))" }}
               >
-                <div style={{ borderRadius: "1.25rem", overflow: "hidden", border: "2px solid rgba(124,58,237,0.35)", boxShadow: "0 24px 56px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.15)" }}>
+                <img src={phoneBooth} alt="Classic phone booth" style={{ width: "100%", display: "block" }} />
+              </motion.div>
+
+              {/* Guy card 1 — left, overlapping booth */}
+              <motion.div
+                initial={{ opacity: 0, x: -20, y: 20 }}
+                animate={{ opacity: 1, x: 0, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.5 }}
+                style={{ position: "absolute", left: 0, top: "12%", width: "38%", zIndex: 5 }}
+              >
+                <div style={{ borderRadius: "1rem", overflow: "hidden", border: "2px solid rgba(124,58,237,0.4)", boxShadow: "0 20px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(124,58,237,0.15)" }}>
                   <img src={heroGuy1} alt="Man on the phone" style={{ width: "100%", display: "block", objectFit: "cover", aspectRatio: "3/4" }} />
                 </div>
               </motion.div>
 
-              {/* Photo 2 — medium, right-top */}
+              {/* Guy card 2 — right, top */}
               <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.45 }}
-                style={{ position: "absolute", right: 0, top: 0, width: "44%", zIndex: 4 }}
+                initial={{ opacity: 0, x: 20, y: -20 }}
+                animate={{ opacity: 1, x: 0, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.6 }}
+                style={{ position: "absolute", right: 0, top: "4%", width: "35%", zIndex: 5 }}
               >
-                <div style={{ borderRadius: "1.25rem", overflow: "hidden", border: "2px solid rgba(168,85,247,0.3)", boxShadow: "0 16px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(168,85,247,0.1)" }}>
+                <div style={{ borderRadius: "1rem", overflow: "hidden", border: "2px solid rgba(168,85,247,0.35)", boxShadow: "0 16px 40px rgba(0,0,0,0.65), 0 0 0 1px rgba(168,85,247,0.1)" }}>
                   <img src={heroGuy2} alt="Man on the phone" style={{ width: "100%", display: "block", objectFit: "cover", aspectRatio: "3/4" }} />
                 </div>
               </motion.div>
 
-              {/* Photo 3 — small, right-bottom */}
+              {/* Guy card 3 — right-bottom, with live pill */}
               <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.55 }}
-                style={{ position: "absolute", right: "6%", bottom: "2%", width: "40%", zIndex: 5 }}
+                initial={{ opacity: 0, x: 20, y: 20 }}
+                animate={{ opacity: 1, x: 0, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.7 }}
+                style={{ position: "absolute", right: "2%", bottom: "6%", width: "32%", zIndex: 6 }}
               >
-                <div style={{ borderRadius: "1.25rem", overflow: "hidden", border: "2px solid rgba(109,40,217,0.4)", boxShadow: "0 16px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(109,40,217,0.2)" }}>
+                <div style={{ borderRadius: "1rem", overflow: "hidden", border: "2px solid rgba(109,40,217,0.45)", boxShadow: "0 16px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(109,40,217,0.2)", position: "relative" }}>
                   <img src={heroGuy3} alt="Man on the phone" style={{ width: "100%", display: "block", objectFit: "cover", aspectRatio: "3/4" }} />
-                </div>
-                {/* Live pill on photo 3 */}
-                <div style={{ position: "absolute", bottom: "0.75rem", left: "50%", transform: "translateX(-50%)", background: "rgba(10,7,20,0.85)", backdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.4)", borderRadius: "2rem", padding: "0.3rem 0.75rem", fontSize: "0.7rem", color: "#C4B5FD", fontWeight: 600, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ADE80", display: "inline-block" }} />
-                  Live now
+                  <div style={{ position: "absolute", bottom: "0.6rem", left: "50%", transform: "translateX(-50%)", background: "rgba(10,7,20,0.88)", backdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.45)", borderRadius: "2rem", padding: "0.25rem 0.65rem", fontSize: "0.65rem", color: "#C4B5FD", fontWeight: 700, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#4ADE80", display: "inline-block", animation: "pulse 2s infinite" }} />
+                    Live now
+                  </div>
                 </div>
               </motion.div>
             </motion.div>
