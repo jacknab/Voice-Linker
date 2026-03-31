@@ -36,7 +36,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked";
 
 // ── Shared class tokens for light content area ────────────────────────────────
 const C = {
@@ -1048,6 +1048,105 @@ function PhoneNumbersTab() {
   );
 }
 
+// ── Blocked Numbers Tab ───────────────────────────────────────────────────────
+interface BlockedEntry {
+  id: string;
+  blockerPhone: string;
+  blockedPhone: string;
+  createdAt: string;
+}
+
+function BlockedNumbersTab() {
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+
+  const { data: entries = [], isLoading, refetch } = useQuery<BlockedEntry[]>({
+    queryKey: ["/api/admin/blocked"],
+  });
+
+  const unblockMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("DELETE", `/api/admin/blocked/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/blocked"] });
+      toast({ title: "Unblocked", description: "The block has been removed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not remove block.", variant: "destructive" });
+    },
+  });
+
+  const filtered = entries.filter(e =>
+    e.blockerPhone.includes(search) || e.blockedPhone.includes(search)
+  );
+
+  function fmtDate(d: string) {
+    return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-5">
+        <input
+          data-testid="input-blocked-search"
+          type="text"
+          placeholder="Filter by phone number…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="border border-gray-200 rounded px-3 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none w-64"
+        />
+        <span className="text-gray-400 font-mono text-xs">{filtered.length} record{filtered.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-gray-400 font-mono text-xs py-10 justify-center">
+          <Loader2 size={14} className="animate-spin" /> Loading…
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-gray-400 font-mono text-xs text-center py-16">
+          {search ? "No matches found." : "No blocked numbers on record."}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded border border-gray-100">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50 text-gray-500 uppercase tracking-widest">
+                <th className="text-left px-4 py-3">Blocked By</th>
+                <th className="text-left px-4 py-3">Blocked Number</th>
+                <th className="text-left px-4 py-3">Date</th>
+                <th className="text-right px-4 py-3">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row, i) => (
+                <tr
+                  key={row.id}
+                  data-testid={`row-blocked-${i}`}
+                  className="border-b border-gray-50 last:border-0 hover:bg-amber-50 transition-colors"
+                >
+                  <td className="px-4 py-3 text-gray-600" data-testid={`text-blocker-${i}`}>{row.blockerPhone}</td>
+                  <td className="px-4 py-3 text-gray-800 font-semibold" data-testid={`text-blocked-${i}`}>{row.blockedPhone}</td>
+                  <td className="px-4 py-3 text-gray-400">{fmtDate(row.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      data-testid={`btn-unblock-${i}`}
+                      onClick={() => unblockMutation.mutate(row.id)}
+                      disabled={unblockMutation.isPending}
+                      className="text-xs font-mono text-red-400 hover:text-red-600 border border-red-200 hover:border-red-400 rounded px-2 py-1 transition-colors disabled:opacity-40"
+                    >
+                      {unblockMutation.isPending ? <Loader2 size={11} className="animate-spin inline" /> : "Unblock"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Tab definitions ───────────────────────────────────────────────────────────
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard",      label: "Dashboard",      icon: <LayoutDashboard size={15} /> },
@@ -1057,6 +1156,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "audio-gen",      label: "Audio Gen",       icon: <Volume2 size={15} /> },
   { id: "messages",       label: "Messages",        icon: <MessageSquare size={15} /> },
   { id: "phone-numbers",  label: "Phone Numbers",   icon: <Phone size={15} /> },
+  { id: "blocked",        label: "Blocked Numbers", icon: <X size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
 ];
 
@@ -1175,6 +1275,7 @@ export default function Admin() {
           {activeTab === "audio-gen"      && <TTSTab />}
           {activeTab === "messages"       && <PlaceholderTab label="Messages" />}
           {activeTab === "phone-numbers"  && <PhoneNumbersTab />}
+          {activeTab === "blocked"        && <BlockedNumbersTab />}
           {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
         </div>
       </div>

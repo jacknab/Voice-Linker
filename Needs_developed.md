@@ -7,6 +7,7 @@
 - Memberships / pricing tiers
 - Audio Gen (TTS for system prompts)
 - Phone Numbers (call stats by number/month)
+- Blocked Numbers (view, search, and unblock all caller blocks)
 - Messages *(placeholder — no functionality yet)*
 - Phone Testing *(placeholder — no functionality yet)*
 

@@ -472,6 +472,27 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Blocked numbers list ---
+  app.get("/api/admin/blocked", async (_req, res) => {
+    try {
+      const list = await storage.getAdminBlockedList();
+      res.json(list);
+    } catch (e) {
+      console.error("[admin] /api/admin/blocked GET error:", e);
+      res.status(500).json({ message: "Failed to fetch blocked list" });
+    }
+  });
+
+  app.delete("/api/admin/blocked/:id", async (req, res) => {
+    try {
+      await storage.adminUnblockById(req.params.id);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] /api/admin/blocked DELETE error:", e);
+      res.status(500).json({ message: "Failed to unblock" });
+    }
+  });
+
   // --- Admin: Phone number stats ---
   app.get("/api/admin/phone-stats", async (req, res) => {
     try {

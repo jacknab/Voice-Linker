@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, or, notLike, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 const VIRTUAL_PREFIX = "VIRTUAL-";
 
@@ -48,6 +49,15 @@ export interface IStorage {
   isUserBlocked(blockerId: string, blockedUserId: string): Promise<boolean>;
   blockUser(blockerId: string, blockedUserId: string): Promise<void>;
   unblockUser(blockerId: string, blockedUserId: string): Promise<void>;
+
+  // Admin blocked list
+  getAdminBlockedList(): Promise<{
+    id: string;
+    blockerPhone: string;
+    blockedPhone: string;
+    createdAt: Date;
+  }[]>;
+  adminUnblockById(id: string): Promise<void>;
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number }): Promise<User>;
   deductSeconds(userId: string, seconds: number): Promise<User>;
@@ -332,6 +342,32 @@ export class DatabaseStorage implements IStorage {
 
   async blockUser(blockerId: string, blockedUserId: string): Promise<void> {
     await db.insert(blockedUsers).values({ blockerId, blockedUserId }).onConflictDoNothing();
+  }
+
+  async getAdminBlockedList(): Promise<{
+    id: string;
+    blockerPhone: string;
+    blockedPhone: string;
+    createdAt: Date;
+  }[]> {
+    const blocker = alias(users, "blocker");
+    const blocked = alias(users, "blocked");
+    const rows = await db
+      .select({
+        id: blockedUsers.id,
+        blockerPhone: blocker.phoneNumber,
+        blockedPhone: blocked.phoneNumber,
+        createdAt: blockedUsers.createdAt,
+      })
+      .from(blockedUsers)
+      .innerJoin(blocker, eq(blockedUsers.blockerId, blocker.id))
+      .innerJoin(blocked, eq(blockedUsers.blockedUserId, blocked.id))
+      .orderBy(sql`${blockedUsers.createdAt} DESC`);
+    return rows as any[];
+  }
+
+  async adminUnblockById(id: string): Promise<void> {
+    await db.delete(blockedUsers).where(eq(blockedUsers.id, id));
   }
 
   async unblockUser(blockerId: string, blockedUserId: string): Promise<void> {
