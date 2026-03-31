@@ -490,7 +490,7 @@ export async function registerRoutes(
       const activeRegions = allRegions.filter((r) => r.isActive);
 
       if (activeRegions.length === 0) {
-        return res.json({ city: geoCity, state: geoState, phoneNumber: null, regionName: null });
+        return res.json({ city: geoCity, state: geoState, phoneNumber: null, regionName: null, regionId: null, activeCalls: 0 });
       }
 
       // If we have coordinates, find the closest region by its defaultZipCode
@@ -510,21 +510,28 @@ export async function registerRoutes(
         }
 
         if (closestRegion) {
+          const regionStats = await storage.getRegionStats(closestRegion.id);
           return res.json({
             city: geoCity,
             state: geoState,
             phoneNumber: closestRegion.phoneNumber,
             regionName: closestRegion.name,
+            regionId: closestRegion.id,
+            activeCalls: regionStats.activeCalls,
           });
         }
       }
 
       // Fallback: just return the first active region's number
+      const fallbackRegion = activeRegions[0];
+      const fallbackStats = await storage.getRegionStats(fallbackRegion.id);
       return res.json({
         city: geoCity,
         state: geoState,
-        phoneNumber: activeRegions[0].phoneNumber,
-        regionName: activeRegions[0].name,
+        phoneNumber: fallbackRegion.phoneNumber,
+        regionName: fallbackRegion.name,
+        regionId: fallbackRegion.id,
+        activeCalls: fallbackStats.activeCalls,
       });
     } catch (err) {
       console.error("[local-number] error:", err);

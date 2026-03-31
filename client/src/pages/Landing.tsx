@@ -119,6 +119,8 @@ interface LocalNumberData {
   state: string | null;
   phoneNumber: string | null;
   regionName: string | null;
+  regionId: string | null;
+  activeCalls: number;
 }
 
 function formatPhoneDisplay(raw: string | null | undefined): string {
@@ -312,9 +314,14 @@ export default function Landing() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.35)", borderRadius: "2rem", padding: "0.35rem 1rem", fontSize: "0.8rem", color: "#C4B5FD", marginBottom: "2rem", fontWeight: 500 }}
+            data-testid="badge-active-callers"
           >
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ADE80", display: "inline-block", animation: "pulse 2s infinite" }} />
-            {stats?.activeCalls ?? 0} guys on the line right now
+            {localLoading
+              ? "Finding guys near you…"
+              : localData?.regionName
+                ? `${localData.activeCalls} guys on the line in ${localData.regionName}`
+                : `${localData?.activeCalls ?? stats?.activeCalls ?? 0} guys on the line right now`}
           </motion.div>
 
           {/* Headline */}
