@@ -902,6 +902,7 @@ interface MembershipSettingsData {
   plan1Name: string; plan1Minutes: number; plan1PriceCents: number;
   plan2Name: string; plan2Minutes: number; plan2PriceCents: number;
   plan3Name: string; plan3Minutes: number; plan3PriceCents: number;
+  bonusPlanKey: string | null;
 }
 
 function MembershipsTab() {
@@ -921,6 +922,7 @@ function MembershipsTab() {
   const [plan3Name, setPlan3Name] = useState("");
   const [plan3Minutes, setPlan3Minutes] = useState("");
   const [plan3Price, setPlan3Price] = useState("");
+  const [bonusPlanKey, setBonusPlanKey] = useState<string | null>(null);
 
   const [initialized, setInitialized] = useState(false);
 
@@ -935,6 +937,7 @@ function MembershipsTab() {
     setPlan3Name(settings.plan3Name);
     setPlan3Minutes(String(settings.plan3Minutes));
     setPlan3Price(String((settings.plan3PriceCents / 100).toFixed(2)));
+    setBonusPlanKey(settings.bonusPlanKey);
     setInitialized(true);
   }
 
@@ -953,6 +956,7 @@ function MembershipsTab() {
         plan3Name: plan3Name.trim() || "Plan 3",
         plan3Minutes: toMinutes(plan3Minutes),
         plan3PriceCents: toCents(plan3Price),
+        bonusPlanKey: bonusPlanKey || "",
       });
     },
     onSuccess: () => {
@@ -968,9 +972,9 @@ function MembershipsTab() {
   const labelClass = "block text-[#4caf82] font-mono text-xs tracking-widest mb-2 uppercase";
 
   const plans = [
-    { label: "Plan 1", keyBadge: "Press 1", name: plan1Name, setName: setPlan1Name, minutes: plan1Minutes, setMinutes: setPlan1Minutes, price: plan1Price, setPrice: setPlan1Price, testPrefix: "plan1" },
-    { label: "Plan 2", keyBadge: "Press 2", name: plan2Name, setName: setPlan2Name, minutes: plan2Minutes, setMinutes: setPlan2Minutes, price: plan2Price, setPrice: setPlan2Price, testPrefix: "plan2" },
-    { label: "Plan 3", keyBadge: "Press 3", name: plan3Name, setName: setPlan3Name, minutes: plan3Minutes, setMinutes: setPlan3Minutes, price: plan3Price, setPrice: setPlan3Price, testPrefix: "plan3" },
+    { label: "Plan 1", keyBadge: "Press 1", planKey: "plan1", name: plan1Name, setName: setPlan1Name, minutes: plan1Minutes, setMinutes: setPlan1Minutes, price: plan1Price, setPrice: setPlan1Price, testPrefix: "plan1" },
+    { label: "Plan 2", keyBadge: "Press 2", planKey: "plan2", name: plan2Name, setName: setPlan2Name, minutes: plan2Minutes, setMinutes: setPlan2Minutes, price: plan2Price, setPrice: setPlan2Price, testPrefix: "plan2" },
+    { label: "Plan 3", keyBadge: "Press 3", planKey: "plan3", name: plan3Name, setName: setPlan3Name, minutes: plan3Minutes, setMinutes: setPlan3Minutes, price: plan3Price, setPrice: setPlan3Price, testPrefix: "plan3" },
   ];
 
   return (
@@ -1070,7 +1074,7 @@ function MembershipsTab() {
                       </div>
                     </div>
                   </div>
-                  <div className="pt-2 border-t border-[#4caf82]/10">
+                  <div className="pt-3 border-t border-[#4caf82]/10 space-y-3">
                     <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest">
                       {(() => {
                         const m = parseInt(plan.minutes) || 0;
@@ -1082,6 +1086,22 @@ function MembershipsTab() {
                       {" · "}
                       ${parseFloat(plan.price || "0").toFixed(2)}
                     </div>
+                    <button
+                      data-testid={`btn-bonus-${plan.testPrefix}`}
+                      type="button"
+                      onClick={() => setBonusPlanKey(bonusPlanKey === plan.planKey ? null : plan.planKey)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded border text-xs font-mono tracking-widest uppercase transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-[#f5a623]/10 text-[#f5a623]" : "border-[#4caf82]/20 bg-black/20 text-[#4caf82]/40 hover:border-[#4caf82]/40 hover:text-[#4caf82]/60"}`}
+                    >
+                      <span>First-time buyer bonus</span>
+                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-[#f5a623]" : "border-[#4caf82]/30"}`}>
+                        {bonusPlanKey === plan.planKey && <span className="w-2 h-2 rounded-full bg-black" />}
+                      </span>
+                    </button>
+                    {bonusPlanKey === plan.planKey && (
+                      <div className="text-[#f5a623]/70 font-mono text-xs">
+                        First-time buyers get double minutes — {(() => { const m = parseInt(plan.minutes) || 0; const total = m * 2; if (total < 60) return `${total} min`; const hrs = Math.floor(total / 60); const mins = total % 60; return mins === 0 ? `${hrs} hrs` : `${hrs} hr ${mins} min`; })()}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

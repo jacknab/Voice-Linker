@@ -173,6 +173,7 @@ interface PaymentSession {
   packageLabel: string;
   packagePriceCents: number;
   priceLabel: string;
+  isFirstPurchase?: boolean;
 }
 const paymentSessions = new Map<string, PaymentSession>();
 
@@ -520,9 +521,10 @@ export async function registerRoutes(
         plan1Name, plan1Minutes, plan1PriceCents,
         plan2Name, plan2Minutes, plan2PriceCents,
         plan3Name, plan3Minutes, plan3PriceCents,
+        bonusPlanKey,
       } = req.body;
 
-      const data: Record<string, number | string> = {};
+      const data: Record<string, number | string | null> = {};
       if (freeTrialMinutes !== undefined) data.freeTrialMinutes = parseInt(freeTrialMinutes);
       if (plan1Name !== undefined) data.plan1Name = String(plan1Name).trim();
       if (plan1Minutes !== undefined) data.plan1Minutes = parseInt(plan1Minutes);
@@ -533,6 +535,7 @@ export async function registerRoutes(
       if (plan3Name !== undefined) data.plan3Name = String(plan3Name).trim();
       if (plan3Minutes !== undefined) data.plan3Minutes = parseInt(plan3Minutes);
       if (plan3PriceCents !== undefined) data.plan3PriceCents = parseInt(plan3PriceCents);
+      if (bonusPlanKey !== undefined) data.bonusPlanKey = bonusPlanKey || null;
 
       const updated = await storage.updateMembershipSettings(data);
       invalidateMembershipSettingsCache();
@@ -1426,14 +1429,29 @@ export async function registerRoutes(
       return res.send(twiml.toString());
     }
 
+    // Detect first-time buyer for the bonus plan
+    const settings = await getMembershipSettingsCached();
+    let isFirstPurchase = false;
+    if (settings.bonusPlanKey === pkg.name) {
+      try {
+        const user = await getOrCreateUser(fromNumber);
+        isFirstPurchase = !user.membershipTier || user.membershipTier === "free_trial";
+      } catch {
+        isFirstPurchase = false;
+      }
+    }
+
     paymentSessions.set(callSid, {
       packageName: pkg.name,
       packageLabel: pkg.label,
       packagePriceCents: pkg.priceCents,
       priceLabel: pkg.priceLabel,
+      isFirstPurchase,
     });
 
-    if (pkg.name === "plan1") {
+    if (isFirstPurchase) {
+      playPrompt(twiml, req, "package_confirm_14day_bonus.mp3", `Great choice! You selected ${pkg.label} access for ${pkg.priceLabel}, including your free first purchase bonus — double the minutes!`);
+    } else if (pkg.name === "plan1") {
       playPrompt(twiml, req, "package_confirm_30day.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
     } else if (pkg.name === "plan2") {
       playPrompt(twiml, req, "package_confirm_14day.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
@@ -1494,17 +1512,26 @@ export async function registerRoutes(
         const user = await getOrCreateUser(fromNumber);
         const packages = await getMembershipPackages();
         const pkg = Object.values(packages).find(p => p.name === session.packageName);
-        const minutes = pkg?.minutes ?? (await getMembershipSettingsCached()).plan3Minutes;
+        const baseMinutes = pkg?.minutes ?? (await getMembershipSettingsCached()).plan3Minutes;
+        const bonusMinutes = session.isFirstPurchase ? baseMinutes : 0;
+        const totalMinutes = baseMinutes + bonusMinutes;
+
         await storage.updateUserMembership(user.id, {
           membershipTier: session.packageName,
-          remainingMinutes: minutes,
+          remainingMinutes: totalMinutes,
         });
 
+        const bonusMsg = bonusMinutes > 0
+          ? ` Plus your first purchase bonus doubles your minutes — enjoy ${totalMinutes.toLocaleString()} minutes total!`
+          : "";
         const successText =
           `Payment successful! You now have ${session.packageLabel} access. ` +
-          `Your card has been charged ${session.priceLabel}. ` +
+          `Your card has been charged ${session.priceLabel}.${bonusMsg} ` +
           "Thank you for joining. Returning to the main menu.";
-        if (session.packageName === "plan1") {
+
+        if (session.isFirstPurchase) {
+          playPrompt(twiml, req, "payment_success_14day_bonus.mp3", successText);
+        } else if (session.packageName === "plan1") {
           playPrompt(twiml, req, "payment_success_30day.mp3", successText);
         } else if (session.packageName === "plan2") {
           playPrompt(twiml, req, "payment_success_14day.mp3", successText);

@@ -110,6 +110,8 @@ export const membershipSettings = pgTable("membership_settings", {
   plan3Name: text("plan3_name").notNull().default("Basic"),
   plan3Minutes: integer("plan3_minutes").notNull().default(1440),
   plan3PriceCents: integer("plan3_price_cents").notNull().default(300),
+  // Which plan key ("plan1", "plan2", "plan3") gets a first-time buyer double-minutes bonus, or null for none
+  bonusPlanKey: text("bonus_plan_key"),
 });
 
 export const insertRegionSchema = createInsertSchema(regions).omit({ id: true, createdAt: true });
