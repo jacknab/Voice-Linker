@@ -97,6 +97,19 @@ export const activeCallsRelations = relations(activeCalls, ({ one }) => ({
   }),
 }));
 
+// Tracks blocked users — blockerId cannot live-connect with blockedUserId
+export const blockedUsers = pgTable("blocked_users", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  blockerId: uuid("blocker_id").notNull(),
+  blockedUserId: uuid("blocked_user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const blockedUsersRelations = relations(blockedUsers, ({ one }) => ({
+  blocker: one(users, { fields: [blockedUsers.blockerId], references: [users.id], relationName: "blocker" }),
+  blocked: one(users, { fields: [blockedUsers.blockedUserId], references: [users.id], relationName: "blocked" }),
+}));
+
 // Singleton settings row for membership/free-trial configuration
 export const membershipSettings = pgTable("membership_settings", {
   id: text("id").primaryKey().default("singleton"),
@@ -136,3 +149,7 @@ export type ActiveCall = typeof activeCalls.$inferSelect;
 
 export type MembershipSettings = typeof membershipSettings.$inferSelect;
 export type InsertMembershipSettings = z.infer<typeof insertMembershipSettingsSchema>;
+
+export const insertBlockedUserSchema = createInsertSchema(blockedUsers).omit({ id: true, createdAt: true });
+export type BlockedUser = typeof blockedUsers.$inferSelect;
+export type InsertBlockedUser = z.infer<typeof insertBlockedUserSchema>;

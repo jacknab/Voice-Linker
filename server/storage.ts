@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, or, notLike, isNull } from "drizzle-orm";
 
 const VIRTUAL_PREFIX = "VIRTUAL-";
@@ -19,6 +19,7 @@ export interface IStorage {
   getRegionActiveUserCount(regionId: string): Promise<number>;
 
   getUserByPhone(phoneNumber: string): Promise<User | undefined>;
+  getUserById(id: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getOrCreateUser(phoneNumber: string): Promise<User>;
 
@@ -38,7 +39,13 @@ export interface IStorage {
   getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number>;
   getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number>;
   getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]>;
+  getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined>;
   getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }>;
+
+  // Block list
+  isUserBlocked(blockerId: string, blockedUserId: string): Promise<boolean>;
+  blockUser(blockerId: string, blockedUserId: string): Promise<void>;
+  unblockUser(blockerId: string, blockedUserId: string): Promise<void>;
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingMinutes?: number }): Promise<User>;
   deductMinutes(userId: string, minutes: number): Promise<User>;
@@ -91,6 +98,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByPhone(phoneNumber: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.phoneNumber, phoneNumber));
+    return user;
+  }
+
+  async getUserById(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
@@ -257,6 +269,29 @@ export class DatabaseStorage implements IStorage {
       .orderBy(membershipPriority, profiles.createdAt);
 
     return rows.map(r => r.profile);
+  }
+
+  async getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined> {
+    const [call] = await db.select().from(activeCalls).where(eq(activeCalls.userId, userId)).limit(1);
+    return call;
+  }
+
+  async isUserBlocked(blockerId: string, blockedUserId: string): Promise<boolean> {
+    const [row] = await db.select({ id: blockedUsers.id })
+      .from(blockedUsers)
+      .where(and(eq(blockedUsers.blockerId, blockerId), eq(blockedUsers.blockedUserId, blockedUserId)))
+      .limit(1);
+    return !!row;
+  }
+
+  async blockUser(blockerId: string, blockedUserId: string): Promise<void> {
+    await db.insert(blockedUsers).values({ blockerId, blockedUserId }).onConflictDoNothing();
+  }
+
+  async unblockUser(blockerId: string, blockedUserId: string): Promise<void> {
+    await db.delete(blockedUsers).where(
+      and(eq(blockedUsers.blockerId, blockerId), eq(blockedUsers.blockedUserId, blockedUserId))
+    );
   }
 
   async getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }> {

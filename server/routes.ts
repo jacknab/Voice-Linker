@@ -198,6 +198,27 @@ const callerBrowseState = new Map<string, CallerBrowseState>();
 // Maps CallSid → regionId for the duration of a call
 const callRegion = new Map<string, string>();
 
+// ─── Live 1-on-1 Connect State ─────────────────────────────────────────────
+// Invite stored by targetUserId so the invitee can find it when they next browse
+interface LiveConnectInvite {
+  initiatorCallSid: string;
+  initiatorUserId: string;
+  initiatorNameRecordingUrl?: string | null;
+  initiatorGreetingUrl: string;
+  conferenceRoom: string;
+  createdAt: number;
+  status: "pending" | "accepted" | "declined";
+}
+const pendingLiveInvites = new Map<string, LiveConnectInvite>(); // targetUserId → invite
+
+// Track which userIds are currently bridged in a live connection
+const liveConnectionUserIds = new Set<string>();
+// callSid → userId so we can clean up on hangup
+const liveConnectionCallSidMap = new Map<string, string>();
+
+// How long (ms) an invite stays valid. Covers: disclaimer (~3s) + "Calling now" (~3s) + ringing (~15s) + buffer
+const LIVE_INVITE_TTL_MS = 30_000;
+
 // Per-call flags — track whether time announcements have been made this session
 const callTimeAnnounced = new Set<string>(); // already heard the "you have X hours/minutes" announcement
 const callWarningShown  = new Set<string>(); // already heard the < 15-minute warning
@@ -677,6 +698,21 @@ export async function registerRoutes(
       callTimeAnnounced.delete(callSid);
       callWarningShown.delete(callSid);
       callRegion.delete(callSid);
+
+      // Clean up any live connect invite that this caller initiated
+      for (const [targetUserId, invite] of pendingLiveInvites.entries()) {
+        if (invite.initiatorCallSid === callSid) {
+          pendingLiveInvites.delete(targetUserId);
+          console.log(`[live-connect] Cleaned up dangling invite for targetUserId=${targetUserId} (initiator hung up)`);
+        }
+      }
+      // Clean up live connection tracking for this callSid
+      const liveUserId = liveConnectionCallSidMap.get(callSid);
+      if (liveUserId) {
+        liveConnectionUserIds.delete(liveUserId);
+        liveConnectionCallSidMap.delete(callSid);
+        console.log(`[live-connect] Removed userId=${liveUserId} from live connections (call ended)`);
+      }
     }
 
     // Twilio expects a 2xx response; no TwiML needed for status callbacks
@@ -1084,6 +1120,26 @@ export async function registerRoutes(
       }
 
 
+      // ── Check for a pending live connect invite first (time-sensitive) ──────
+      const pendingInvite = pendingLiveInvites.get(user.id);
+      if (pendingInvite && pendingInvite.status === "pending" && Date.now() - pendingInvite.createdAt < LIVE_INVITE_TTL_MS) {
+        const inviteGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-live-invite?initiatorUserId=${pendingInvite.initiatorUserId}&room=${encodeURIComponent(pendingInvite.conferenceRoom)}`,
+          timeout: 15,
+        });
+        playPrompt(inviteGather, req, "live_connect_chime.mp3", "");
+        inviteGather.say("This caller");
+        if (pendingInvite.initiatorNameRecordingUrl) {
+          safePlayRecording(inviteGather, pendingInvite.initiatorNameRecordingUrl, req, "");
+        }
+        inviteGather.say("would like to connect live with you.");
+        playPrompt(inviteGather, req, "live_invite_options.mp3", "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3.");
+        twiml.redirect("/voice/browse-profiles");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       // Check for unread messages first
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
@@ -1143,7 +1199,7 @@ export async function registerRoutes(
             safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
           }
           safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
-          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 9 to return to main menu.");
+          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         }
       }
@@ -1256,6 +1312,94 @@ export async function registerRoutes(
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${profileUserId}` });
       } else if (digit === "2") {
         twiml.redirect("/voice/browse-profiles");
+      } else if (digit === "3") {
+        // ── Live 1-on-1 Connect ─────────────────────────────────────────────
+        const fromNumber = req.body?.From as string;
+        const callSid = req.body?.CallSid as string;
+
+        if (!fromNumber || !profileUserId || !callSid) {
+          playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to profiles.");
+          twiml.redirect("/voice/browse-profiles");
+        } else {
+          const user = await getOrCreateUser(fromNumber);
+
+          // 1. Check initiator has ≥ 5 minutes remaining
+          if ((user.remainingMinutes ?? 0) < 5) {
+            playPrompt(twiml, req, "live_connect_no_minutes.mp3",
+              "You need at least 5 minutes remaining on your membership to connect live. Please add more time and try again.");
+            twiml.redirect("/voice/browse-profiles");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+
+          // 2. Get target profile — admin-uploaded profiles cannot do live connects
+          const targetProfile = await storage.getProfile(profileUserId);
+          if (!targetProfile || targetProfile.isAdminUploaded) {
+            playPrompt(twiml, req, "live_connect_unavailable.mp3",
+              "This caller is not available for a live connection.");
+            twiml.redirect("/voice/browse-profiles");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+
+          // 3. Check target is still on the line (non-virtual active call)
+          const targetActiveCall = await storage.getActiveCallByUserId(profileUserId);
+          if (!targetActiveCall || targetActiveCall.callSid.startsWith("VIRTUAL-")) {
+            playPrompt(twiml, req, "live_connect_left_line.mp3",
+              "Sorry, that caller has left the line.");
+            twiml.redirect("/voice/browse-profiles");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+
+          // 4. Check target has ≥ 5 minutes remaining
+          const targetUser = await storage.getUserById(profileUserId);
+          if (!targetUser || (targetUser.remainingMinutes ?? 0) < 5) {
+            playPrompt(twiml, req, "live_connect_unavailable.mp3",
+              "That caller does not have enough time remaining for a live connection.");
+            twiml.redirect("/voice/browse-profiles");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+
+          // 5. Check target is not already in a live connection
+          if (liveConnectionUserIds.has(profileUserId)) {
+            playPrompt(twiml, req, "live_connect_busy.mp3",
+              "That caller is already connected with someone else. Please try again later.");
+            twiml.redirect("/voice/browse-profiles");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+
+          // 6. Check target has not blocked initiator
+          const isBlocked = await storage.isUserBlocked(profileUserId, user.id);
+          if (isBlocked) {
+            playPrompt(twiml, req, "live_connect_unavailable.mp3",
+              "That caller is not available for a live connection.");
+            twiml.redirect("/voice/browse-profiles");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+
+          // All checks passed — create the invite
+          const callerProfile = await storage.getProfile(user.id);
+          const conferenceRoom = `live-${callSid}`;
+          pendingLiveInvites.set(profileUserId, {
+            initiatorCallSid: callSid,
+            initiatorUserId: user.id,
+            initiatorNameRecordingUrl: callerProfile?.nameRecordingUrl ?? null,
+            initiatorGreetingUrl: callerProfile?.recordingUrl ?? "",
+            conferenceRoom,
+            createdAt: Date.now(),
+            status: "pending",
+          });
+          console.log(`[live-connect] Invite created: userId=${user.id} → targetUserId=${profileUserId}, room=${conferenceRoom}`);
+
+          // Play brief disclaimer then start the wait loop
+          playPrompt(twiml, req, "live_connect_disclaimer.mp3",
+            "Please be respectful and kind. You are about to request a live one on one connection.");
+          twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(profileUserId)}`);
+        }
       } else if (digit === "9") {
         twiml.redirect("/voice/main-menu");
       } else {
@@ -1267,6 +1411,231 @@ export async function registerRoutes(
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the main menu.");
       twiml.redirect("/voice/main-menu");
     }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 8a. Live Connect: Initiator Wait Loop ────────────────────────────────
+  // Caller A lands here after creating the invite. Plays "Calling [name] now…"
+  // and a 15-second ringing tone. If B accepts mid-ring the Twilio REST API
+  // redirects A's call to /voice/live-connect-join, interrupting the audio.
+  // If B hasn't accepted by the time the ring finishes, we declare timeout.
+  app.post("/voice/live-connect-wait", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const targetUserId = req.query.targetUserId as string;
+    const waited = req.query.waited as string | undefined;
+
+    try {
+      const invite = pendingLiveInvites.get(targetUserId);
+
+      if (!invite) {
+        // Invite was cleaned up (timed out or already handled)
+        playPrompt(twiml, req, "live_connect_failed.mp3",
+          "We were unable to connect your call. Returning you to the phone booth.");
+        twiml.redirect("/voice/browse-profiles");
+      } else if (invite.status === "accepted") {
+        // B accepted (possibly right as ringing finished — race condition handled here)
+        playPrompt(twiml, req, "live_connect_connecting.mp3",
+          "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
+        const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}` });
+        (dial.conference as any)(invite.conferenceRoom, {
+          startConferenceOnEnter: true,
+          endConferenceOnExit: true,
+          beep: false,
+          exitKeys: "#",
+        });
+      } else if (invite.status === "declined" || waited || Date.now() - invite.createdAt > LIVE_INVITE_TTL_MS) {
+        // Timed out or explicitly declined
+        pendingLiveInvites.delete(targetUserId);
+        playPrompt(twiml, req, "live_connect_failed.mp3",
+          "We were unable to connect your call. Returning you to the phone booth.");
+        twiml.redirect("/voice/browse-profiles");
+      } else {
+        // Still pending — first visit: announce + ring
+        const targetProfile = await storage.getProfile(targetUserId).catch(() => null);
+        twiml.say("Calling");
+        if (targetProfile?.nameRecordingUrl) {
+          safePlayRecording(twiml, targetProfile.nameRecordingUrl, req, "");
+        }
+        twiml.say("now.");
+        playPrompt(twiml, req, "live_connect_ringing.mp3", "");
+        // After ringing, check status (handles case where B accepts at the last second)
+        twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}&waited=1`);
+      }
+    } catch (error) {
+      console.error("[live-connect] live-connect-wait error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the phone booth.");
+      twiml.redirect("/voice/browse-profiles");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 8b. Live Connect: Invitee Response ───────────────────────────────────
+  // Caller B sees the invite and responds here.
+  // digit 1 → accept (REST API redirects A to conference, B joins conference)
+  // digit 2 → decline → return to browse-profiles
+  // digit 3 → hear initiator's greeting, then re-show invite menu
+  app.post("/voice/handle-live-invite", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+    const initiatorUserId = req.query.initiatorUserId as string;
+    const room = req.query.room as string;
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const invite = pendingLiveInvites.get(user.id);
+
+      // Guard: invite must still be valid
+      if (!invite || invite.status !== "pending" || Date.now() - invite.createdAt > LIVE_INVITE_TTL_MS) {
+        pendingLiveInvites.delete(user.id);
+        playPrompt(twiml, req, "live_invite_expired.mp3",
+          "That live connection invitation has expired. Returning to profiles.");
+        twiml.redirect("/voice/browse-profiles");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      if (digit === "1") {
+        // ── Accept ──────────────────────────────────────────────────────────
+        invite.status = "accepted";
+        liveConnectionUserIds.add(user.id);
+        liveConnectionUserIds.add(invite.initiatorUserId);
+        liveConnectionCallSidMap.set(callSid, user.id);
+        liveConnectionCallSidMap.set(invite.initiatorCallSid, invite.initiatorUserId);
+
+        // Redirect initiator's live call to join the conference room
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        if (accountSid && authToken) {
+          try {
+            const client = twilio(accountSid, authToken);
+            const joinUrl = `${baseUrl(req)}/voice/live-connect-join?room=${encodeURIComponent(room)}&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}`;
+            await client.calls(invite.initiatorCallSid).update({ url: joinUrl, method: "POST" });
+            console.log(`[live-connect] Redirected initiator ${invite.initiatorCallSid} to conference ${room}`);
+          } catch (err) {
+            console.error("[live-connect] Failed to redirect initiator via REST API:", err);
+            // Undo tracking on failure
+            invite.status = "declined";
+            liveConnectionUserIds.delete(user.id);
+            liveConnectionUserIds.delete(invite.initiatorUserId);
+            liveConnectionCallSidMap.delete(callSid);
+            liveConnectionCallSidMap.delete(invite.initiatorCallSid);
+            pendingLiveInvites.delete(user.id);
+            playPrompt(twiml, req, "live_connect_failed.mp3",
+              "We were unable to connect your call. Please try again later.");
+            twiml.redirect("/voice/browse-profiles");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+        }
+
+        // B joins the conference (waits briefly for A to arrive)
+        playPrompt(twiml, req, "live_connect_connecting.mp3",
+          "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
+        const dial = twiml.dial({ action: `/voice/live-connect-complete?role=invitee&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}` });
+        (dial.conference as any)(room, {
+          startConferenceOnEnter: true,
+          endConferenceOnExit: true,
+          beep: false,
+          exitKeys: "#",
+          maxParticipants: 2,
+        });
+
+      } else if (digit === "2") {
+        // ── Decline ─────────────────────────────────────────────────────────
+        invite.status = "declined";
+        pendingLiveInvites.delete(user.id);
+        console.log(`[live-connect] Invite declined by userId=${user.id}`);
+        twiml.redirect("/voice/browse-profiles");
+
+      } else if (digit === "3") {
+        // ── Hear initiator's greeting ────────────────────────────────────────
+        const initiatorProfile = await storage.getProfile(initiatorUserId);
+        const greetingGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-live-invite?initiatorUserId=${encodeURIComponent(initiatorUserId)}&room=${encodeURIComponent(room)}`,
+          timeout: 15,
+        });
+        if (initiatorProfile?.nameRecordingUrl) {
+          safePlayRecording(greetingGather, initiatorProfile.nameRecordingUrl, req, "");
+        }
+        if (initiatorProfile?.recordingUrl) {
+          safePlayRecording(greetingGather, initiatorProfile.recordingUrl, req, "This caller's greeting is not available.");
+        } else {
+          greetingGather.say("This caller's greeting is not available.");
+        }
+        playPrompt(greetingGather, req, "live_invite_options.mp3",
+          "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting again, press 3.");
+        twiml.redirect("/voice/browse-profiles");
+
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect("/voice/browse-profiles");
+      }
+    } catch (error) {
+      console.error("[live-connect] handle-live-invite error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the phone booth.");
+      twiml.redirect("/voice/browse-profiles");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 8c. Live Connect: Join Conference ────────────────────────────────────
+  // Called via Twilio REST API redirect when B accepts, sending A directly here.
+  // Also used as the endpoint that A lands on if B accepted just as ringing ended.
+  app.post("/voice/live-connect-join", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const room = req.query.room as string;
+    const targetUserId = req.query.targetUserId as string;
+    const initiatorUserId = req.query.initiatorUserId as string;
+
+    try {
+      playPrompt(twiml, req, "live_connect_connecting.mp3",
+        "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
+      const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(initiatorUserId)}` });
+      (dial.conference as any)(room, {
+        startConferenceOnEnter: true,
+        endConferenceOnExit: true,
+        beep: false,
+        exitKeys: "#",
+        maxParticipants: 2,
+      });
+    } catch (error) {
+      console.error("[live-connect] live-connect-join error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the phone booth.");
+      twiml.redirect("/voice/browse-profiles");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 8d. Live Connect: Post-Conference Cleanup ────────────────────────────
+  // Called by <Dial action="..."> after the conference ends for either participant.
+  app.post("/voice/live-connect-complete", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const targetUserId = req.query.targetUserId as string;
+    const initiatorUserId = req.query.initiatorUserId as string;
+    const callSid = req.body?.CallSid as string;
+
+    // Clean up live connection tracking
+    if (targetUserId) liveConnectionUserIds.delete(targetUserId);
+    if (initiatorUserId) liveConnectionUserIds.delete(initiatorUserId);
+    if (callSid) liveConnectionCallSidMap.delete(callSid);
+    if (targetUserId) pendingLiveInvites.delete(targetUserId);
+
+    console.log(`[live-connect] Connection ended — targetUserId=${targetUserId}, initiatorUserId=${initiatorUserId}`);
+
+    playPrompt(twiml, req, "live_connect_ended.mp3",
+      "Your live connection has ended. Returning you to the phone booth.");
+    twiml.redirect("/voice/browse-profiles");
 
     res.type("text/xml");
     res.send(twiml.toString());
