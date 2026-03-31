@@ -11,7 +11,7 @@ import fs from "fs";
 import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { generateTTS, listVoices } from "./elevenlabs";
-import { lookupZipCode } from "./zipLookup";
+import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -2164,7 +2164,15 @@ export async function registerRoutes(
           const zipEntry = targetUser?.zipCodeId
             ? await storage.getZipEntryById(targetUser.zipCodeId)
             : null;
-          const location = zipEntry?.neighborhood || zipEntry?.city || null;
+
+          // Prefer a live reverse-geocode from lat/lon; fall back to stored fields
+          let location: string | null = null;
+          if (zipEntry?.latitude != null && zipEntry?.longitude != null) {
+            location = await reverseGeocodeNeighborhood(zipEntry.latitude, zipEntry.longitude);
+          }
+          if (!location) {
+            location = zipEntry?.neighborhood || zipEntry?.city || null;
+          }
 
           const locationGather = twiml.gather({
             numDigits: 1,

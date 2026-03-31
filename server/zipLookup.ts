@@ -40,6 +40,10 @@ export async function lookupZipCode(zip: string): Promise<ZipGeoData | null> {
   }
 }
 
+export async function reverseGeocodeNeighborhood(lat: number, lon: number): Promise<string | null> {
+  return lookupNeighborhood(String(lat), String(lon));
+}
+
 async function lookupNeighborhood(lat: string, lon: string): Promise<string | null> {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`;
