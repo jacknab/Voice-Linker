@@ -742,39 +742,123 @@ export async function registerRoutes(
     }
 
     try {
-      // Clean up any stale calls (safety valve for missed status callbacks)
       await storage.removeStaleActiveCalls(90);
-
-      let user = await getOrCreateUser(fromNumber);
-
-      // Grant a free trial to brand-new callers who have no membership yet
-      if (!user.membershipTier) {
-        const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
-        user = await storage.updateUserMembership(user.id, {
-          membershipTier: "free_trial",
-          remainingMinutes: freeTrialMinutes,
-        });
-        playPrompt(twiml, req, "free_trial_welcome.mp3", `Welcome! You have a ${freeTrialMinutes}-minute free trial.`);
-        console.log(`[voice] Granted ${freeTrialMinutes}-minute free trial to userId=${user.id}`);
-      }
-
-      // Mark this caller as active on the party line
+      const user = await getOrCreateUser(fromNumber);
       await storage.registerActiveCall(callSid, user.id);
       console.log(`[voice] Registered active call ${callSid} for userId=${user.id}`);
-
-      // Register the hangup callback so we remove them when they disconnect
       registerStatusCallback(callSid, req).catch(() => {});
-
-      const profile = await storage.getProfile(user.id);
-      if (!profile) {
-        playPrompt(twiml, req, "welcome_record_name.mp3", "Welcome! Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds.");
-        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
-      } else {
-        twiml.redirect("/voice/greeting-setup");
-      }
+      twiml.redirect("/voice/entry");
     } catch (error) {
       console.error("[voice] /voice error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b. Shared Entry Flow ────────────────────────────────────────────────
+  // Reached from both /voice and /voice/:slug after the call is registered.
+  // Always plays the system greeting then branches on account state.
+  app.post("/voice/entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    try {
+      playPrompt(twiml, req, "system_greeting.mp3",
+        "Welcome to Interactive Mail. Interactive Mail assumes no responsibility for personal meetings.");
+
+      const user = await getOrCreateUser(fromNumber);
+      const remaining = user.remainingMinutes ?? 0;
+
+      if (!user.membershipTier) {
+        // Brand new — never had an account, offer the free trial
+        twiml.redirect("/voice/free-trial-offer");
+      } else if (remaining <= 0) {
+        // Access fully expired
+        playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
+        twiml.redirect("/voice/membership-purchase");
+      } else {
+        // Has minutes — announce remaining time for free trial callers here at entry
+        if (user.membershipTier === "free_trial") {
+          playTimeRemaining(twiml, req, remaining);
+          callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
+        }
+        // Route to profile setup or the main greeting screen
+        const profile = await storage.getProfile(user.id);
+        if (!profile) {
+          playPrompt(twiml, req, "welcome_record_name.mp3",
+            "Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds.");
+          twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+        } else {
+          twiml.redirect("/voice/greeting-setup");
+        }
+      }
+    } catch (error) {
+      console.error("[voice] /voice/entry error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1c. Free Trial Offer ─────────────────────────────────────────────────
+  // Shown to brand-new callers who have no account yet.
+  // They press 1 to accept the free trial; no response hangs up politely.
+  app.post("/voice/free-trial-offer", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-free-trial-offer", timeout: 15 });
+    playPrompt(gather, req, "free_trial_offer.mp3",
+      "We'd like to offer you a free trial so you can check out the system and start meeting new people. To get your free trial now, press 1.");
+    playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
+    twiml.hangup();
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1d. Handle Free Trial Offer Response ─────────────────────────────────
+  app.post("/voice/handle-free-trial-offer", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    if (digit === "1") {
+      try {
+        const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
+        const user = await getOrCreateUser(fromNumber);
+        await storage.updateUserMembership(user.id, {
+          membershipTier: "free_trial",
+          remainingMinutes: freeTrialMinutes,
+        });
+        console.log(`[voice] Free trial accepted — granted ${freeTrialMinutes} min to userId=${user.id}`);
+
+        // Announce the trial minutes, then play the terms
+        playTimeRemaining(twiml, req, freeTrialMinutes);
+        playPrompt(twiml, req, "free_trial_terms.mp3",
+          "Your free trial will expire in seven days and it must be used from this phone number.");
+        callTimeAnnounced.add(callSid);
+
+        // Route to profile setup or greeting screen
+        const profile = await storage.getProfile(user.id);
+        if (!profile) {
+          playPrompt(twiml, req, "welcome_record_name.mp3",
+            "Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds.");
+          twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+        } else {
+          twiml.redirect("/voice/greeting-setup");
+        }
+      } catch (error) {
+        console.error("[voice] handle-free-trial-offer error:", error);
+        playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+        twiml.hangup();
+      }
+    } else {
+      playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
       twiml.hangup();
     }
 
@@ -2206,18 +2290,7 @@ export async function registerRoutes(
       // Clean up any stale calls
       await storage.removeStaleActiveCalls(90);
 
-      let user = await getOrCreateUser(fromNumber);
-
-      // Grant a free trial to brand-new callers who have no membership yet
-      if (!user.membershipTier) {
-        const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
-        user = await storage.updateUserMembership(user.id, {
-          membershipTier: "free_trial",
-          remainingMinutes: freeTrialMinutes,
-        });
-        playPrompt(twiml, req, "free_trial_welcome.mp3", `Welcome! You have a ${freeTrialMinutes}-minute free trial.`);
-        console.log(`[voice] [${region.slug}] Granted ${freeTrialMinutes}-minute free trial to userId=${user.id}`);
-      }
+      const user = await getOrCreateUser(fromNumber);
 
       // Register call as active — scoped to this region
       await storage.registerActiveCall(callSid, user.id, region.id);
@@ -2225,13 +2298,8 @@ export async function registerRoutes(
 
       registerStatusCallback(callSid, req).catch(() => {});
 
-      const profile = await storage.getProfile(user.id);
-      if (!profile) {
-        playPrompt(twiml, req, "welcome_record_name.mp3", "Welcome! Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds.");
-        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
-      } else {
-        twiml.redirect("/voice/greeting-setup");
-      }
+      // Hand off to the shared entry flow (system greeting + account state detection)
+      twiml.redirect("/voice/entry");
     } catch (error) {
       console.error(`[voice] /voice/${slug} error:`, error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
