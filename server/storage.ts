@@ -155,6 +155,20 @@ export interface IStorage {
   deletePromoCode(id: string): Promise<void>;
   redeemPromoCode(code: string, userId: string): Promise<{ promoCode: PromoCode; secondsAwarded: number } | { error: string }>;
   getPromoRedemptions(promoCodeId: string): Promise<(PromoRedemption & { phoneNumber: string })[]>;
+
+  // Analytics
+  getAnalytics(): Promise<{
+    funnel: { totalCallers: number; withProfile: number; withMessage: number; withMembership: number };
+    peakByHour: { hour: number; calls: number }[];
+    peakByDay: { day: number; calls: number }[];
+    retention: { oneTime: number; occasional: number; regular: number };
+    revenue: {
+      plan1Count: number; plan2Count: number; plan3Count: number;
+      plan1Name: string; plan2Name: string; plan3Name: string;
+      plan1PriceCents: number; plan2PriceCents: number; plan3PriceCents: number;
+      estimatedMrrCents: number;
+    };
+  }>;
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -880,6 +894,126 @@ export class DatabaseStorage implements IStorage {
       .where(eq(promoRedemptions.promoCodeId, promoCodeId))
       .orderBy(promoRedemptions.redeemedAt);
     return rows;
+  }
+
+  async getAnalytics(): Promise<{
+    funnel: { totalCallers: number; withProfile: number; withMessage: number; withMembership: number };
+    peakByHour: { hour: number; calls: number }[];
+    peakByDay: { day: number; calls: number }[];
+    retention: { oneTime: number; occasional: number; regular: number };
+    revenue: {
+      plan1Count: number; plan2Count: number; plan3Count: number;
+      plan1Name: string; plan2Name: string; plan3Name: string;
+      plan1PriceCents: number; plan2PriceCents: number; plan3PriceCents: number;
+      estimatedMrrCents: number;
+    };
+  }> {
+    // Funnel
+    const [{ totalCallers }] = await db
+      .select({ totalCallers: count() })
+      .from(users)
+      .where(notLike(users.phoneNumber, `${VIRTUAL_PREFIX}%`));
+
+    const [{ withProfile }] = await db
+      .select({ withProfile: count() })
+      .from(profiles)
+      .innerJoin(users, eq(profiles.userId, users.id))
+      .where(notLike(users.phoneNumber, `${VIRTUAL_PREFIX}%`));
+
+    const [{ withMessage }] = await db
+      .select({ withMessage: sql<number>`COUNT(DISTINCT ${messages.fromUserId})` })
+      .from(messages)
+      .innerJoin(users, eq(messages.fromUserId, users.id))
+      .where(notLike(users.phoneNumber, `${VIRTUAL_PREFIX}%`));
+
+    const [{ withMembership }] = await db
+      .select({ withMembership: count() })
+      .from(users)
+      .where(and(
+        notLike(users.phoneNumber, `${VIRTUAL_PREFIX}%`),
+        sql`${users.membershipTier} IS NOT NULL`,
+      ));
+
+    // Peak usage by hour of day
+    const hourResult = await db.execute(sql`
+      SELECT EXTRACT(HOUR FROM started_at)::int AS hour, COUNT(*)::int AS calls
+      FROM call_logs
+      WHERE from_phone_number NOT LIKE ${`${VIRTUAL_PREFIX}%`}
+      GROUP BY hour ORDER BY hour
+    `);
+    const peakByHour: { hour: number; calls: number }[] = Array.from({ length: 24 }, (_, i) => ({ hour: i, calls: 0 }));
+    for (const row of hourResult.rows as { hour: number; calls: number }[]) {
+      peakByHour[row.hour].calls = Number(row.calls);
+    }
+
+    // Peak usage by day of week (0=Sun, 6=Sat)
+    const dayResult = await db.execute(sql`
+      SELECT EXTRACT(DOW FROM started_at)::int AS dow, COUNT(*)::int AS calls
+      FROM call_logs
+      WHERE from_phone_number NOT LIKE ${`${VIRTUAL_PREFIX}%`}
+      GROUP BY dow ORDER BY dow
+    `);
+    const peakByDay: { day: number; calls: number }[] = Array.from({ length: 7 }, (_, i) => ({ day: i, calls: 0 }));
+    for (const row of dayResult.rows as { dow: number; calls: number }[]) {
+      peakByDay[row.dow].calls = Number(row.calls);
+    }
+
+    // Retention — group real callers by call count
+    const retentionResult = await db.execute(sql`
+      SELECT from_phone_number, COUNT(*)::int AS cnt
+      FROM call_logs
+      WHERE from_phone_number NOT LIKE ${`${VIRTUAL_PREFIX}%`}
+      GROUP BY from_phone_number
+    `);
+    let oneTime = 0, occasional = 0, regular = 0;
+    for (const row of retentionResult.rows as { from_phone_number: string; cnt: number }[]) {
+      const n = Number(row.cnt);
+      if (n === 1) oneTime++;
+      else if (n <= 5) occasional++;
+      else regular++;
+    }
+
+    // Revenue — count by membership tier, multiply by configured price
+    const settings = await this.getMembershipSettings();
+    const membershipResult = await db.execute(sql`
+      SELECT membership_tier AS tier, COUNT(*)::int AS cnt
+      FROM users
+      WHERE membership_tier IS NOT NULL AND phone_number NOT LIKE ${`${VIRTUAL_PREFIX}%`}
+      GROUP BY membership_tier
+    `);
+    const tierCounts: Record<string, number> = {};
+    for (const row of membershipResult.rows as { tier: string; cnt: number }[]) {
+      tierCounts[row.tier] = Number(row.cnt);
+    }
+    const plan1Count = tierCounts["plan1"] || 0;
+    const plan2Count = tierCounts["plan2"] || 0;
+    const plan3Count = tierCounts["plan3"] || 0;
+    const estimatedMrrCents =
+      plan1Count * settings.plan1PriceCents +
+      plan2Count * settings.plan2PriceCents +
+      plan3Count * settings.plan3PriceCents;
+
+    return {
+      funnel: {
+        totalCallers: Number(totalCallers),
+        withProfile: Number(withProfile),
+        withMessage: Number(withMessage),
+        withMembership: Number(withMembership),
+      },
+      peakByHour,
+      peakByDay,
+      retention: { oneTime, occasional, regular },
+      revenue: {
+        plan1Count, plan2Count, plan3Count,
+        plan1Name: settings.plan1Name,
+        plan2Name: settings.plan2Name,
+        plan3Name: settings.plan3Name,
+        plan1PriceCents: settings.plan1PriceCents,
+        plan2PriceCents: settings.plan2PriceCents,
+        plan3PriceCents: settings.plan3PriceCents,
+        estimatedMrrCents,
+      },
+    };
   }
 }
 

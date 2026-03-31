@@ -10,7 +10,11 @@ import {
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
+  BarChart2, TrendingUp, RefreshCw,
 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+} from "recharts";
 
 interface ProfileWithUser {
   id: string;
@@ -38,7 +42,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics";
 
 interface FlaggedItem {
   id: string;
@@ -2704,6 +2708,229 @@ function ZipCodesTab() {
   );
 }
 
+// ── AnalyticsTab ──────────────────────────────────────────────────────────────
+interface AnalyticsData {
+  funnel: { totalCallers: number; withProfile: number; withMessage: number; withMembership: number };
+  peakByHour: { hour: number; calls: number }[];
+  peakByDay: { day: number; calls: number }[];
+  retention: { oneTime: number; occasional: number; regular: number };
+  revenue: {
+    plan1Count: number; plan2Count: number; plan3Count: number;
+    plan1Name: string; plan2Name: string; plan3Name: string;
+    plan1PriceCents: number; plan2PriceCents: number; plan3PriceCents: number;
+    estimatedMrrCents: number;
+  };
+}
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HOUR_LABELS = (h: number) => {
+  if (h === 0) return "12a";
+  if (h === 12) return "12p";
+  return h < 12 ? `${h}a` : `${h - 12}p`;
+};
+
+function FunnelBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  return (
+    <div data-testid={`funnel-${label.toLowerCase().replace(/\s+/g, "-")}`} className="space-y-1">
+      <div className="flex justify-between items-center">
+        <span className="font-mono text-xs text-gray-600 uppercase tracking-widest">{label}</span>
+        <span className="font-mono text-xs font-bold text-gray-900">{value.toLocaleString()} <span className="text-gray-400 font-normal">({pct}%)</span></span>
+      </div>
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsTab() {
+  const { data, isLoading, refetch, isFetching } = useQuery<AnalyticsData>({
+    queryKey: ["/api/admin/analytics"],
+    refetchOnWindowFocus: false,
+  });
+
+  const fmtMoney = (cents: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-48 text-gray-400 font-mono text-xs tracking-widest">
+        <Loader2 size={16} className="animate-spin mr-2" /> Loading analytics…
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const { funnel, peakByHour, peakByDay, retention, revenue } = data;
+  const retentionTotal = retention.oneTime + retention.occasional + retention.regular;
+  const retentionData = [
+    { name: "First-timers", value: retention.oneTime, color: "#94a3b8" },
+    { name: "Occasional (2–5)", value: retention.occasional, color: "#f59e0b" },
+    { name: "Regulars (6+)", value: retention.regular, color: "#10b981" },
+  ];
+
+  const peakHourData = peakByHour.map(h => ({ name: HOUR_LABELS(h.hour), calls: h.calls }));
+  const peakDayData = peakByDay.map(d => ({ name: DAY_LABELS[d.day], calls: d.calls }));
+
+  const maxHour = Math.max(...peakByHour.map(h => h.calls), 1);
+  const maxDay = Math.max(...peakByDay.map(d => d.calls), 1);
+
+  return (
+    <div className="space-y-8">
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <p className="font-mono text-xs text-gray-500 tracking-widest uppercase">System usage &amp; revenue overview</p>
+        <button
+          data-testid="btn-refresh-analytics"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded text-xs font-mono text-gray-600 hover:bg-gray-50 transition-colors"
+        >
+          <RefreshCw size={12} className={isFetching ? "animate-spin" : ""} /> Refresh
+        </button>
+      </div>
+
+      {/* ── Revenue Report ── */}
+      <section>
+        <h3 className="font-mono font-bold text-xs tracking-widest uppercase text-gray-400 mb-4 flex items-center gap-2">
+          <TrendingUp size={13} /> Revenue Report
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Estimated MRR */}
+          <div data-testid="stat-estimated-mrr" className="md:col-span-1 bg-white border border-gray-200 rounded-lg p-5 flex flex-col gap-1">
+            <p className="font-mono text-[10px] text-gray-400 uppercase tracking-widest">Est. Monthly Revenue</p>
+            <p className="font-mono font-bold text-2xl text-gray-900">{fmtMoney(revenue.estimatedMrrCents)}</p>
+            <p className="font-mono text-[10px] text-gray-400">Based on active memberships</p>
+          </div>
+          {/* Plan breakdown */}
+          {[
+            { name: revenue.plan1Name, count: revenue.plan1Count, price: revenue.plan1PriceCents, key: "plan1" },
+            { name: revenue.plan2Name, count: revenue.plan2Count, price: revenue.plan2PriceCents, key: "plan2" },
+            { name: revenue.plan3Name, count: revenue.plan3Count, price: revenue.plan3PriceCents, key: "plan3" },
+          ].map(plan => (
+            <div
+              key={plan.key}
+              data-testid={`stat-revenue-${plan.key}`}
+              className="bg-white border border-gray-200 rounded-lg p-5 flex flex-col gap-1"
+            >
+              <p className="font-mono text-[10px] text-gray-400 uppercase tracking-widest">{plan.name}</p>
+              <p className="font-mono font-bold text-2xl text-gray-900">{plan.count}</p>
+              <p className="font-mono text-[10px] text-gray-400">{fmtMoney(plan.price)}/mo · {fmtMoney(plan.count * plan.price)} est.</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Conversion Funnel ── */}
+      <section>
+        <h3 className="font-mono font-bold text-xs tracking-widest uppercase text-gray-400 mb-4 flex items-center gap-2">
+          <BarChart2 size={13} /> Conversion Funnel
+        </h3>
+        <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
+          <FunnelBar label="Total Callers"   value={funnel.totalCallers}   max={funnel.totalCallers} color="bg-blue-500" />
+          <FunnelBar label="Recorded Profile" value={funnel.withProfile}    max={funnel.totalCallers} color="bg-indigo-500" />
+          <FunnelBar label="Sent a Message"   value={funnel.withMessage}    max={funnel.totalCallers} color="bg-amber-500" />
+          <FunnelBar label="Purchased Membership" value={funnel.withMembership} max={funnel.totalCallers} color="bg-emerald-500" />
+        </div>
+      </section>
+
+      {/* ── Peak Usage ── */}
+      <section>
+        <h3 className="font-mono font-bold text-xs tracking-widest uppercase text-gray-400 mb-4 flex items-center gap-2">
+          <BarChart2 size={13} /> Peak Usage
+        </h3>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+          {/* By Hour */}
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <p className="font-mono text-xs text-gray-500 uppercase tracking-widest mb-4">Calls by Hour of Day</p>
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={peakHourData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 9, fontFamily: "monospace" }} interval={2} />
+                <YAxis tick={{ fontSize: 9, fontFamily: "monospace" }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ fontSize: 11, fontFamily: "monospace", borderRadius: 6 }}
+                  formatter={(v: number) => [v, "calls"]}
+                />
+                <Bar dataKey="calls" radius={[2, 2, 0, 0]}>
+                  {peakHourData.map((entry, i) => (
+                    <Cell key={i} fill={entry.calls === maxHour ? "#f5a623" : "#e5e7eb"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* By Day */}
+          <div className="bg-white border border-gray-200 rounded-lg p-5">
+            <p className="font-mono text-xs text-gray-500 uppercase tracking-widest mb-4">Calls by Day of Week</p>
+            <ResponsiveContainer width="100%" height={160}>
+              <BarChart data={peakDayData} margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 9, fontFamily: "monospace" }} />
+                <YAxis tick={{ fontSize: 9, fontFamily: "monospace" }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ fontSize: 11, fontFamily: "monospace", borderRadius: 6 }}
+                  formatter={(v: number) => [v, "calls"]}
+                />
+                <Bar dataKey="calls" radius={[2, 2, 0, 0]}>
+                  {peakDayData.map((entry, i) => (
+                    <Cell key={i} fill={entry.calls === maxDay ? "#f5a623" : "#e5e7eb"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Retention ── */}
+      <section>
+        <h3 className="font-mono font-bold text-xs tracking-widest uppercase text-gray-400 mb-4 flex items-center gap-2">
+          <Users size={13} /> Caller Retention
+        </h3>
+        <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {retentionData.map(seg => {
+              const pct = retentionTotal > 0 ? Math.round((seg.value / retentionTotal) * 100) : 0;
+              return (
+                <div key={seg.name} data-testid={`stat-retention-${seg.name.toLowerCase().replace(/\s+/g, "-")}`} className="text-center space-y-2">
+                  <div className="w-12 h-12 rounded-full mx-auto flex items-center justify-center" style={{ background: `${seg.color}20` }}>
+                    <span className="font-mono font-bold text-sm" style={{ color: seg.color }}>{pct}%</span>
+                  </div>
+                  <p className="font-mono font-bold text-xl text-gray-900">{seg.value.toLocaleString()}</p>
+                  <p className="font-mono text-[10px] text-gray-400 uppercase tracking-widest">{seg.name}</p>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-6 h-3 bg-gray-100 rounded-full overflow-hidden flex">
+            {retentionData.map(seg => (
+              <div
+                key={seg.name}
+                style={{
+                  width: retentionTotal > 0 ? `${(seg.value / retentionTotal) * 100}%` : "0%",
+                  background: seg.color,
+                }}
+              />
+            ))}
+          </div>
+          <div className="mt-2 flex gap-4 justify-center">
+            {retentionData.map(seg => (
+              <div key={seg.name} className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ background: seg.color }} />
+                <span className="font-mono text-[10px] text-gray-500">{seg.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+    </div>
+  );
+}
+
 // ── Tab definitions ───────────────────────────────────────────────────────────
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard",      label: "Dashboard",      icon: <LayoutDashboard size={15} /> },
@@ -2718,6 +2945,8 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "blocked",        label: "Blocked Numbers", icon: <X size={15} /> },
   { id: "promo-codes",    label: "Promo Codes",     icon: <Tag size={15} /> },
   { id: "zip-codes",      label: "Zip Codes",       icon: <MapPin size={15} /> },
+  { id: "announcements",  label: "Announcements",   icon: <Megaphone size={15} /> },
+  { id: "analytics",      label: "Analytics",       icon: <BarChart2 size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
 ];
 
@@ -2841,7 +3070,9 @@ export default function Admin() {
           {activeTab === "blocked"        && <BlockedNumbersTab />}
           {activeTab === "promo-codes"    && <PromoCodesTab />}
           {activeTab === "zip-codes"      && <ZipCodesTab />}
+          {activeTab === "announcements"  && <AnnouncementsTab />}
           {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
+          {activeTab === "analytics"      && <AnalyticsTab />}
         </div>
       </div>
     </div>

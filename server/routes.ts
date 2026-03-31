@@ -743,6 +743,16 @@ export async function registerRoutes(
   });
 
   // --- Admin: Phone number stats ---
+  app.get("/api/admin/analytics", async (_req, res) => {
+    try {
+      const data = await storage.getAnalytics();
+      res.json(data);
+    } catch (e) {
+      console.error("[admin] /api/admin/analytics error:", e);
+      res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  });
+
   app.get("/api/admin/phone-stats", async (req, res) => {
     try {
       const now = new Date();
