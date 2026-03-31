@@ -173,6 +173,9 @@ export const membershipSettings = pgTable("membership_settings", {
   plan3PriceCents: integer("plan3_price_cents").notNull().default(300),
   // Which plan key ("plan1", "plan2", "plan3") gets a first-time buyer double-minutes bonus, or null for none
   bonusPlanKey: text("bonus_plan_key"),
+  // Announcement / MOTD — played to every caller right after the system greeting
+  motdEnabled: boolean("motd_enabled").notNull().default(false),
+  motdText: text("motd_text"),
 });
 
 export const promoCodes = pgTable("promo_codes", {

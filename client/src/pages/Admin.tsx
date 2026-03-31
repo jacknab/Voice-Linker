@@ -9,7 +9,7 @@ import {
   Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2,
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
-  XCircle, AlertTriangle, Tag,
+  XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
 } from "lucide-react";
 
 interface ProfileWithUser {
@@ -38,7 +38,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements";
 
 interface FlaggedItem {
   id: string;
@@ -599,6 +599,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "payment_activation_error.mp3", label: "Payment Activation Error", text: "Your payment was received but there was an error activating your membership." },
   { filename: "region_not_active.mp3", label: "Region Not Active", text: "This phone number is not currently active. Please try again later." },
   { filename: "region_unavailable.mp3", label: "Region Unavailable", text: "This market is temporarily unavailable. Please try again later." },
+  { filename: "motd.mp3", label: "Announcement / MOTD", text: "Welcome back to Interactive Mail. We have an exciting promotion running this weekend — call in and check out the latest profiles." },
   { filename: "phrase_you_have.mp3", label: "Phrase — You Have", text: "You have" },
   { filename: "phrase_you_have_1_hour_and.mp3", label: "Phrase — You Have 1 Hour And", text: "You have 1 hour and" },
   { filename: "phrase_hours_of_pbtr.mp3", label: "Phrase — Hours Remaining", text: "hours of phone booth time remaining." },
@@ -1958,6 +1959,98 @@ function FlaggedContentTab() {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+// ── AnnouncementsTab ──────────────────────────────────────────────────────────
+function AnnouncementsTab() {
+  const { toast } = useToast();
+  const [localEnabled, setLocalEnabled] = useState<boolean | null>(null);
+  const [localText, setLocalText] = useState<string | null>(null);
+
+  const { data: settings, isLoading } = useQuery<{
+    motdEnabled: boolean;
+    motdText: string | null;
+  }>({ queryKey: ["/api/admin/membership-settings"] });
+
+  const enabled = localEnabled ?? settings?.motdEnabled ?? false;
+  const text = localText ?? settings?.motdText ?? "";
+
+  const saveMutation = useMutation({
+    mutationFn: (body: { motdEnabled: boolean; motdText: string }) =>
+      apiRequest("PUT", "/api/admin/membership-settings", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-settings"] });
+      setLocalEnabled(null);
+      setLocalText(null);
+      toast({ title: "Saved", description: "Announcement settings updated." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save.", variant: "destructive" }),
+  });
+
+  const handleSave = () => {
+    saveMutation.mutate({ motdEnabled: enabled, motdText: text });
+  };
+
+  return (
+    <div className="max-w-2xl space-y-6">
+      {/* Status card */}
+      <div className={`rounded-xl border p-5 flex items-center justify-between ${enabled ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
+        <div className="flex items-center gap-3">
+          <Megaphone size={20} className={enabled ? "text-green-600" : "text-gray-400"} />
+          <div>
+            <p className="font-mono font-bold text-sm tracking-wide text-gray-900">ANNOUNCEMENT</p>
+            <p className={`text-xs mt-0.5 ${enabled ? "text-green-700" : "text-gray-500"}`}>
+              {enabled ? "Currently playing to every caller at login" : "Currently disabled — callers will not hear anything"}
+            </p>
+          </div>
+        </div>
+        <button
+          data-testid="btn-toggle-motd"
+          onClick={() => setLocalEnabled(!enabled)}
+          className="flex items-center gap-2 transition-colors"
+        >
+          {enabled
+            ? <ToggleRight size={36} className="text-green-500" />
+            : <ToggleLeft size={36} className="text-gray-300" />}
+        </button>
+      </div>
+
+      {/* Message editor */}
+      <div className={`rounded-xl border bg-white p-5 space-y-3 ${!enabled ? "opacity-60" : ""}`}>
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="font-mono font-bold text-xs tracking-widest uppercase text-gray-700">Announcement Message</h3>
+        </div>
+        <p className="text-xs text-gray-500">
+          This text is read to every caller immediately after the system greeting. Keep it concise — 1 to 3 sentences work best.
+        </p>
+        <textarea
+          data-testid="input-motd-text"
+          value={text}
+          onChange={e => setLocalText(e.target.value)}
+          disabled={!enabled}
+          rows={4}
+          placeholder="e.g. This weekend only — all new callers receive an extended free trial. Check out the profiles and start connecting today."
+          className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#f5a623]/40 resize-none disabled:cursor-not-allowed"
+        />
+        <p className="text-xs text-gray-400">
+          Tip: For a premium voice, generate <span className="font-mono bg-gray-100 px-1 rounded">motd.mp3</span> in the Audio Gen tab. If that file exists it will be played instead of text-to-speech.
+        </p>
+      </div>
+
+      {/* Save */}
+      <div className="flex justify-end">
+        <button
+          data-testid="btn-save-motd"
+          onClick={handleSave}
+          disabled={saveMutation.isPending || isLoading}
+          className={C.btnPrimary}
+        >
+          {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          Save Announcement
+        </button>
       </div>
     </div>
   );

@@ -1220,6 +1220,12 @@ export async function registerRoutes(
       playPrompt(twiml, req, "system_greeting.mp3",
         "Welcome to Interactive Mail. Interactive Mail assumes no responsibility for personal meetings.");
 
+      // Play Announcement / MOTD if enabled
+      const motdCfg = await getMembershipSettingsCached();
+      if (motdCfg.motdEnabled && motdCfg.motdText) {
+        playPrompt(twiml, req, "motd.mp3", motdCfg.motdText);
+      }
+
       const user = await getOrCreateUser(fromNumber);
       const remainingSeconds = user.remainingSeconds ?? 0;
 
