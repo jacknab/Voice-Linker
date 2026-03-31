@@ -1703,7 +1703,7 @@ export async function registerRoutes(
           msgGather.say("You have a new message.");
         }
         safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available for playback.");
-        playPrompt(msgGather, req, "message_options.mp3", "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 4 to block this caller. Press 9 to return to the main menu.");
+        playPrompt(msgGather, req, "message_options.mp3", "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 4 to block this caller. Press 7 to flag this message for review. Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
         // Build the queue once per caller, then advance position on each visit
@@ -1772,7 +1772,7 @@ export async function registerRoutes(
                 safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
               }
               safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
-              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 9 to return to main menu.");
+              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 7 to flag this profile for review. Press 9 to return to main menu.");
               twiml.redirect("/voice/browse-profiles");
               res.type("text/xml");
               return res.send(twiml.toString());
@@ -1806,7 +1806,7 @@ export async function registerRoutes(
             safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
           }
           safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
-          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 9 to return to main menu.");
+          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 7 to flag this profile for review. Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         }
       }
@@ -1961,6 +1961,23 @@ export async function registerRoutes(
           console.log(`[voice] handle-message-menu: userId=${user.id} blocked senderId=${senderId}`);
         }
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
+        twiml.redirect("/voice/browse-profiles");
+      } else if (digit === "7") {
+        // ── Flag this message for review ─────────────────────────────────────
+        const fromNumber = req.body?.From as string;
+        if (fromNumber && msgId) {
+          const user = await getOrCreateUser(fromNumber);
+          await storage.markMessageRead(msgId);
+          await storage.createFlaggedItem({
+            contentType: "message",
+            contentId: msgId,
+            reason: "Reported by caller via IVR",
+            status: "pending",
+            reportedByUserId: user.id,
+          });
+          console.log(`[voice] handle-message-menu: userId=${user.id} flagged msgId=${msgId}`);
+        }
+        playPrompt(twiml, req, "message_flagged.mp3", "This message has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "9") {
         await storage.markMessageRead(msgId);
@@ -2124,6 +2141,22 @@ export async function registerRoutes(
           console.log(`[voice] handle-profile-menu: userId=${user.id} blocked profileUserId=${profileUserId}`);
         }
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
+        twiml.redirect("/voice/browse-profiles");
+      } else if (digit === "7") {
+        // ── Flag this profile for review ────────────────────────────────────
+        const fromNumber = req.body?.From as string;
+        if (fromNumber && profileUserId) {
+          const user = await getOrCreateUser(fromNumber);
+          await storage.createFlaggedItem({
+            contentType: "profile",
+            contentId: profileUserId,
+            reason: "Reported by caller via IVR",
+            status: "pending",
+            reportedByUserId: user.id,
+          });
+          console.log(`[voice] handle-profile-menu: userId=${user.id} flagged profileUserId=${profileUserId}`);
+        }
+        playPrompt(twiml, req, "profile_flagged.mp3", "This profile has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "9") {
         twiml.redirect("/voice/main-menu");
