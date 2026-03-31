@@ -2,6 +2,9 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Phone, Mic, MessageCircle, Star, ChevronRight, CheckCircle, Headphones, Heart, Shield, Clock, Zap, Play, MapPin, Loader2, Users, Flame } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import heroGuy1 from "@assets/hero_guy_1.png";
+import heroGuy2 from "@assets/hero_guy_2.png";
+import heroGuy3 from "@assets/hero_guy_3.png";
 
 const DEFAULT_PHONE = "1-800-555-0100";
 
@@ -302,179 +305,199 @@ export default function Landing() {
       </nav>
 
       {/* ── HERO ── */}
-      <section style={{ position: "relative", overflow: "hidden", paddingTop: "6rem", paddingBottom: "5rem" }}>
+      <section style={{ position: "relative", overflow: "hidden", paddingTop: "5rem", paddingBottom: "4rem" }}>
         {/* background orbs */}
-        <div style={{ position: "absolute", top: "-12rem", right: "-12rem", width: "42rem", height: "42rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", top: "-12rem", right: "-6rem", width: "42rem", height: "42rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.2) 0%, transparent 70%)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: "-8rem", left: "-8rem", width: "32rem", height: "32rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(109,40,217,0.12) 0%, transparent 70%)", pointerEvents: "none" }} />
 
-        <div className="max-w-6xl mx-auto px-6 text-center">
-          {/* Live badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.35)", borderRadius: "2rem", padding: "0.35rem 1rem", fontSize: "0.8rem", color: "#C4B5FD", marginBottom: "2rem", fontWeight: 500 }}
-            data-testid="badge-active-callers"
+        <div className="max-w-6xl mx-auto px-6">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4rem", alignItems: "center" }}
+            className="grid-cols-1 md:grid-cols-[1fr_1fr]"
           >
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ADE80", display: "inline-block", animation: "pulse 2s infinite" }} />
-            {localLoading
-              ? "Finding guys near you…"
-              : localData?.regionName
-                ? `${localData.activeCalls} guys on the line in ${localData.regionName}`
-                : `${localData?.activeCalls ?? stats?.activeCalls ?? 0} guys on the line right now`}
-          </motion.div>
-
-          {/* Headline */}
-          <motion.h1
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            style={{ fontSize: "clamp(2.5rem, 6vw, 4.75rem)", fontWeight: 800, lineHeight: 1.08, letterSpacing: "-0.035em", marginBottom: "1.5rem", fontFamily: "system-ui, sans-serif", textTransform: "none" }}
-          >
-            Your voice.{" "}
-            <span style={{ background: "linear-gradient(90deg, #C4B5FD, #A78BFA, #8B5CF6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              Your vibe.
-            </span>
-            <br />
-            Your crowd.
-          </motion.h1>
-
-          {/* Sub */}
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            style={{ fontSize: "1.2rem", color: "rgba(241,240,255,0.6)", maxWidth: "40rem", margin: "0 auto 2.5rem", lineHeight: 1.75, fontWeight: 400, textTransform: "none" }}
-          >
-            Phone Booth is a live phone chat line for gay men. Call in, drop your greeting, 
-            and connect with real guys in your area — no apps, no photos, no drama.
-          </motion.p>
-
-          {/* LOCAL NUMBER DISPLAY */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            style={{ marginBottom: "2rem" }}
-          >
-            <AnimatePresence mode="wait">
-              {localLoading ? (
-                <motion.div
-                  key="loading"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem" }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "rgba(241,240,255,0.4)", fontSize: "0.875rem", textTransform: "none" }}>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Finding your local number…
-                  </div>
-                  <div style={{ height: 90 }} />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="loaded"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}
-                >
-                  {cityLabel && (
-                    <div
-                      style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: "2rem", padding: "0.3rem 0.9rem", fontSize: "0.8rem", color: "#C4B5FD", fontWeight: 500 }}
-                      data-testid="text-detected-city"
-                    >
-                      <MapPin className="w-3.5 h-3.5" />
-                      Calling from {cityLabel}
-                    </div>
-                  )}
-
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
-                    <p style={{ fontSize: "0.72rem", color: "rgba(241,240,255,0.35)", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 600, margin: 0 }}>
-                      {localData?.phoneNumber ? "Your local number" : "National number"}
-                    </p>
-                    <CallLink
-                      phone={displayPhone}
-                      testId="hero-local-number"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "0.65rem",
-                        background: "linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)",
-                        color: "#fff",
-                        borderRadius: "3rem",
-                        padding: "1rem 2.75rem",
-                        fontSize: "clamp(1.1rem, 3vw, 1.4rem)",
-                        fontWeight: 800,
-                        textDecoration: "none",
-                        boxShadow: "0 8px 36px rgba(124,58,237,0.55)",
-                        letterSpacing: "0.02em",
-                      }}
-                    >
-                      <Phone className="w-5 h-5 flex-shrink-0" />
-                      {displayPhoneFormatted}
-                    </CallLink>
-                    <p style={{ fontSize: "0.78rem", color: "rgba(241,240,255,0.3)", margin: 0, textTransform: "none" }}>
-                      Free trial on your first call · Must be 18+
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => scrollTo("#how-it-works")}
-                    style={{ background: "rgba(241,240,255,0.06)", border: "1px solid rgba(241,240,255,0.12)", color: "rgba(241,240,255,0.8)", borderRadius: "3rem", padding: "0.75rem 1.75rem", fontSize: "0.95rem", fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.4rem", textTransform: "none" }}
-                    data-testid="hero-how-it-works"
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(241,240,255,0.1)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(241,240,255,0.06)")}
-                  >
-                    <Play className="w-4 h-4" /> See How It Works
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-
-          {/* Area code finder */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.5 }}
-            style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: "0.6rem", marginTop: "0.5rem" }}
-          >
-            <p style={{ fontSize: "0.78rem", color: "rgba(241,240,255,0.3)", textTransform: "none", margin: 0 }}>
-              Not seeing your area? Enter your area code:
-            </p>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "0.75rem", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: "3rem", padding: "0.4rem 0.4rem 0.4rem 1.25rem" }}>
-              <input
-                type="text"
-                placeholder="e.g. 214"
-                maxLength={3}
-                value={areaCode}
-                onChange={(e) => { setAreaCode(e.target.value.replace(/\D/g, "")); setAreaCodeResult(null); }}
-                onKeyDown={(e) => e.key === "Enter" && handleAreaCodeLookup()}
-                style={{ background: "transparent", border: "none", outline: "none", color: "#F1F0FF", fontSize: "0.9rem", width: "5rem", fontFamily: "system-ui, sans-serif" }}
-                data-testid="input-area-code"
-              />
-              <button
-                onClick={handleAreaCodeLookup}
-                disabled={areaCode.length < 3 || areaCodeLoading}
-                style={{ background: "linear-gradient(135deg, #7C3AED, #A855F7)", color: "#fff", border: "none", borderRadius: "2rem", padding: "0.55rem 1.1rem", fontSize: "0.8rem", fontWeight: 600, cursor: areaCode.length < 3 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "0.3rem", opacity: areaCode.length < 3 ? 0.6 : 1 }}
-                data-testid="button-find-number"
-              >
-                {areaCodeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><span>Find</span><ChevronRight className="w-3.5 h-3.5" /></>}
-              </button>
-            </div>
-            {areaCodeResult && (
-              <motion.p
-                initial={{ opacity: 0, y: -4 }}
+            {/* ── LEFT: copy + CTA ── */}
+            <div>
+              {/* Live badge */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                style={{ fontSize: "0.8rem", color: "#A78BFA", margin: 0, textTransform: "none" }}
-                data-testid="text-area-code-result"
+                transition={{ duration: 0.5 }}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.35)", borderRadius: "2rem", padding: "0.35rem 1rem", fontSize: "0.8rem", color: "#C4B5FD", marginBottom: "1.75rem", fontWeight: 500 }}
+                data-testid="badge-active-callers"
               >
-                Your number: {formatPhoneDisplay(areaCodeResult)}
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#4ADE80", display: "inline-block", animation: "pulse 2s infinite" }} />
+                {localLoading
+                  ? "Finding guys near you…"
+                  : localData?.regionName
+                    ? `${localData.activeCalls} guys on the line in ${localData.regionName}`
+                    : `${localData?.activeCalls ?? stats?.activeCalls ?? 0} guys on the line right now`}
+              </motion.div>
+
+              {/* Headline */}
+              <motion.h1
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.1 }}
+                style={{ fontSize: "clamp(2.4rem, 5vw, 4.25rem)", fontWeight: 800, lineHeight: 1.08, letterSpacing: "-0.035em", marginBottom: "1.25rem", fontFamily: "system-ui, sans-serif", textTransform: "none" }}
+              >
+                Your voice.{" "}
+                <span style={{ background: "linear-gradient(90deg, #C4B5FD, #A78BFA, #8B5CF6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                  Your vibe.
+                </span>
+                <br />
+                Your crowd.
+              </motion.h1>
+
+              {/* Sub */}
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                style={{ fontSize: "1.05rem", color: "rgba(241,240,255,0.6)", marginBottom: "2rem", lineHeight: 1.75, fontWeight: 400, textTransform: "none" }}
+              >
+                Phone Booth is a live phone chat line for gay men. Call in, drop your greeting, 
+                and connect with real guys in your area — no apps, no photos, no drama.
               </motion.p>
-            )}
-          </motion.div>
+
+              {/* LOCAL NUMBER */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+                style={{ marginBottom: "1.5rem" }}
+              >
+                <AnimatePresence mode="wait">
+                  {localLoading ? (
+                    <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                      style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "rgba(241,240,255,0.4)", fontSize: "0.875rem" }}
+                    >
+                      <Loader2 className="w-4 h-4 animate-spin" /> Finding your local number…
+                    </motion.div>
+                  ) : (
+                    <motion.div key="loaded" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                      style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+                    >
+                      {cityLabel && (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: "2rem", padding: "0.3rem 0.9rem", fontSize: "0.8rem", color: "#C4B5FD", fontWeight: 500, width: "fit-content" }}
+                          data-testid="text-detected-city"
+                        >
+                          <MapPin className="w-3.5 h-3.5" /> Calling from {cityLabel}
+                        </div>
+                      )}
+                      <div>
+                        <p style={{ fontSize: "0.7rem", color: "rgba(241,240,255,0.35)", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 600, margin: "0 0 0.4rem" }}>
+                          {localData?.phoneNumber ? "Your local number" : "National number"}
+                        </p>
+                        <CallLink phone={displayPhone} testId="hero-local-number" style={{ display: "inline-flex", alignItems: "center", gap: "0.65rem", background: "linear-gradient(135deg, #7C3AED 0%, #A855F7 100%)", color: "#fff", borderRadius: "3rem", padding: "0.95rem 2.25rem", fontSize: "clamp(1.05rem, 2.5vw, 1.3rem)", fontWeight: 800, textDecoration: "none", boxShadow: "0 8px 36px rgba(124,58,237,0.55)", letterSpacing: "0.02em" }}>
+                          <Phone className="w-5 h-5 flex-shrink-0" /> {displayPhoneFormatted}
+                        </CallLink>
+                        <p style={{ fontSize: "0.75rem", color: "rgba(241,240,255,0.3)", margin: "0.5rem 0 0", textTransform: "none" }}>
+                          Free trial on your first call · Must be 18+
+                        </p>
+                      </div>
+                      <div>
+                        <button onClick={() => scrollTo("#how-it-works")}
+                          style={{ background: "rgba(241,240,255,0.06)", border: "1px solid rgba(241,240,255,0.12)", color: "rgba(241,240,255,0.8)", borderRadius: "3rem", padding: "0.7rem 1.5rem", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.4rem", textTransform: "none" }}
+                          data-testid="hero-how-it-works"
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(241,240,255,0.1)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(241,240,255,0.06)")}
+                        >
+                          <Play className="w-4 h-4" /> See How It Works
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+
+              {/* Area code finder */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.5 }}
+                style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
+              >
+                <p style={{ fontSize: "0.75rem", color: "rgba(241,240,255,0.28)", textTransform: "none", margin: 0 }}>
+                  Not seeing your area? Enter your area code:
+                </p>
+                <div style={{ display: "inline-flex", alignItems: "center", gap: "0.75rem", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(124,58,237,0.25)", borderRadius: "3rem", padding: "0.4rem 0.4rem 0.4rem 1.25rem", width: "fit-content" }}>
+                  <input type="text" placeholder="e.g. 214" maxLength={3} value={areaCode}
+                    onChange={(e) => { setAreaCode(e.target.value.replace(/\D/g, "")); setAreaCodeResult(null); }}
+                    onKeyDown={(e) => e.key === "Enter" && handleAreaCodeLookup()}
+                    style={{ background: "transparent", border: "none", outline: "none", color: "#F1F0FF", fontSize: "0.9rem", width: "5rem", fontFamily: "system-ui, sans-serif" }}
+                    data-testid="input-area-code"
+                  />
+                  <button onClick={handleAreaCodeLookup} disabled={areaCode.length < 3 || areaCodeLoading}
+                    style={{ background: "linear-gradient(135deg, #7C3AED, #A855F7)", color: "#fff", border: "none", borderRadius: "2rem", padding: "0.55rem 1.1rem", fontSize: "0.8rem", fontWeight: 600, cursor: areaCode.length < 3 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "0.3rem", opacity: areaCode.length < 3 ? 0.6 : 1 }}
+                    data-testid="button-find-number"
+                  >
+                    {areaCodeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><span>Find</span><ChevronRight className="w-3.5 h-3.5" /></>}
+                  </button>
+                </div>
+                {areaCodeResult && (
+                  <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                    style={{ fontSize: "0.8rem", color: "#A78BFA", margin: 0, textTransform: "none" }}
+                    data-testid="text-area-code-result"
+                  >
+                    Your number: {formatPhoneDisplay(areaCodeResult)}
+                  </motion.p>
+                )}
+              </motion.div>
+            </div>
+
+            {/* ── RIGHT: photo collage ── */}
+            <motion.div
+              initial={{ opacity: 0, x: 40 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+              style={{ position: "relative", height: "560px", display: "none" }}
+              className="md:!block"
+              data-testid="hero-photo-collage"
+            >
+              {/* Glow behind collage */}
+              <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "20rem", height: "20rem", borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.25) 0%, transparent 70%)", pointerEvents: "none", zIndex: 0 }} />
+
+              {/* Photo 1 — large, left-center */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.35 }}
+                style={{ position: "absolute", left: 0, top: "5%", width: "52%", zIndex: 3 }}
+              >
+                <div style={{ borderRadius: "1.25rem", overflow: "hidden", border: "2px solid rgba(124,58,237,0.35)", boxShadow: "0 24px 56px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.15)" }}>
+                  <img src={heroGuy1} alt="Man on the phone" style={{ width: "100%", display: "block", objectFit: "cover", aspectRatio: "3/4" }} />
+                </div>
+              </motion.div>
+
+              {/* Photo 2 — medium, right-top */}
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.45 }}
+                style={{ position: "absolute", right: 0, top: 0, width: "44%", zIndex: 4 }}
+              >
+                <div style={{ borderRadius: "1.25rem", overflow: "hidden", border: "2px solid rgba(168,85,247,0.3)", boxShadow: "0 16px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(168,85,247,0.1)" }}>
+                  <img src={heroGuy2} alt="Man on the phone" style={{ width: "100%", display: "block", objectFit: "cover", aspectRatio: "3/4" }} />
+                </div>
+              </motion.div>
+
+              {/* Photo 3 — small, right-bottom */}
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.55 }}
+                style={{ position: "absolute", right: "6%", bottom: "2%", width: "40%", zIndex: 5 }}
+              >
+                <div style={{ borderRadius: "1.25rem", overflow: "hidden", border: "2px solid rgba(109,40,217,0.4)", boxShadow: "0 16px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(109,40,217,0.2)" }}>
+                  <img src={heroGuy3} alt="Man on the phone" style={{ width: "100%", display: "block", objectFit: "cover", aspectRatio: "3/4" }} />
+                </div>
+                {/* Live pill on photo 3 */}
+                <div style={{ position: "absolute", bottom: "0.75rem", left: "50%", transform: "translateX(-50%)", background: "rgba(10,7,20,0.85)", backdropFilter: "blur(12px)", border: "1px solid rgba(124,58,237,0.4)", borderRadius: "2rem", padding: "0.3rem 0.75rem", fontSize: "0.7rem", color: "#C4B5FD", fontWeight: 600, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ADE80", display: "inline-block" }} />
+                  Live now
+                </div>
+              </motion.div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
