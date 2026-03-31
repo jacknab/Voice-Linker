@@ -200,6 +200,19 @@ interface CallerBrowseState {
 }
 const callerBrowseState = new Map<string, CallerBrowseState>();
 
+// Remove a specific userId from the browse queue for a given call session
+function removeFromBrowseQueue(callSid: string, userId: string): void {
+  const state = callerBrowseState.get(callSid);
+  if (!state) return;
+  const removedIdx = state.queue.findIndex(p => p.userId === userId);
+  if (removedIdx === -1) return;
+  state.queue.splice(removedIdx, 1);
+  // Keep the index pointing at the next unplayed entry
+  if (state.index > removedIdx) state.index = Math.max(0, state.index - 1);
+  if (state.index >= state.queue.length) state.index = 0;
+  console.log(`[voice] removeFromBrowseQueue: removed userId=${userId} from queue for callSid=${callSid}, remaining=${state.queue.length}`);
+}
+
 // Maps CallSid → regionId for the duration of a call
 const callRegion = new Map<string, string>();
 
@@ -1663,7 +1676,7 @@ export async function registerRoutes(
           safePlayRecording(inviteGather, pendingInvite.initiatorNameRecordingUrl, req, "");
         }
         inviteGather.say("would like to connect live with you.");
-        playPrompt(inviteGather, req, "live_invite_options.mp3", "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3.");
+        playPrompt(inviteGather, req, "live_invite_options.mp3", "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4.");
         twiml.redirect("/voice/browse-profiles");
         res.type("text/xml");
         return res.send(twiml.toString());
@@ -1690,7 +1703,7 @@ export async function registerRoutes(
           msgGather.say("You have a new message.");
         }
         safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available for playback.");
-        playPrompt(msgGather, req, "message_options.mp3", "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 9 to return to the main menu.");
+        playPrompt(msgGather, req, "message_options.mp3", "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 4 to block this caller. Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
         // Build the queue once per caller, then advance position on each visit
@@ -1759,7 +1772,7 @@ export async function registerRoutes(
                 safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
               }
               safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
-              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 9 to return to main menu.");
+              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 9 to return to main menu.");
               twiml.redirect("/voice/browse-profiles");
               res.type("text/xml");
               return res.send(twiml.toString());
@@ -1793,7 +1806,7 @@ export async function registerRoutes(
             safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
           }
           safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
-          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 9 to return to main menu.");
+          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 9 to return to main menu.");
           twiml.redirect("/voice/main-menu");
         }
       }
@@ -1935,6 +1948,19 @@ export async function registerRoutes(
         twiml.redirect("/voice/main-menu");
       } else if (digit === "3") {
         await storage.markMessageRead(msgId);
+        twiml.redirect("/voice/browse-profiles");
+      } else if (digit === "4") {
+        // ── Block the message sender ─────────────────────────────────────────
+        const fromNumber = req.body?.From as string;
+        const callSid = req.body?.CallSid as string;
+        if (fromNumber && senderId) {
+          const user = await getOrCreateUser(fromNumber);
+          await storage.markMessageRead(msgId);
+          await storage.blockUser(user.id, senderId);
+          removeFromBrowseQueue(callSid, senderId);
+          console.log(`[voice] handle-message-menu: userId=${user.id} blocked senderId=${senderId}`);
+        }
+        playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "9") {
         await storage.markMessageRead(msgId);
@@ -2087,6 +2113,18 @@ export async function registerRoutes(
             "Please be respectful and kind. You are about to request a live one on one connection.");
           twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(profileUserId)}`);
         }
+      } else if (digit === "4") {
+        // ── Block this caller ───────────────────────────────────────────────
+        const fromNumber = req.body?.From as string;
+        const callSid = req.body?.CallSid as string;
+        if (fromNumber && profileUserId) {
+          const user = await getOrCreateUser(fromNumber);
+          await storage.blockUser(user.id, profileUserId);
+          removeFromBrowseQueue(callSid, profileUserId);
+          console.log(`[voice] handle-profile-menu: userId=${user.id} blocked profileUserId=${profileUserId}`);
+        }
+        playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
+        twiml.redirect("/voice/browse-profiles");
       } else if (digit === "9") {
         twiml.redirect("/voice/main-menu");
       } else {
@@ -2265,7 +2303,17 @@ export async function registerRoutes(
           greetingGather.say("This caller's greeting is not available.");
         }
         playPrompt(greetingGather, req, "live_invite_options.mp3",
-          "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting again, press 3.");
+          "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting again, press 3. To block this caller, press 4.");
+        twiml.redirect("/voice/browse-profiles");
+
+      } else if (digit === "4") {
+        // ── Block the invite initiator ───────────────────────────────────────
+        invite.status = "declined";
+        pendingLiveInvites.delete(user.id);
+        await storage.blockUser(user.id, initiatorUserId);
+        removeFromBrowseQueue(callSid, initiatorUserId);
+        console.log(`[live-connect] handle-live-invite: userId=${user.id} blocked initiatorUserId=${initiatorUserId}`);
+        playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
         twiml.redirect("/voice/browse-profiles");
 
       } else {

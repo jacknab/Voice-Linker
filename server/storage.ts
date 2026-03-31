@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, flaggedContent, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent } from "@shared/schema";
-import { eq, and, not, count, sql, inArray, or, notLike, isNull } from "drizzle-orm";
+import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 const VIRTUAL_PREFIX = "VIRTUAL-";
@@ -343,10 +343,28 @@ export class DatabaseStorage implements IStorage {
       ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
       : eq(profiles.isAdminUploaded, true);
 
+    // Collect all user IDs blocked in either direction so we can exclude them
+    const blockedByMe = await db.select({ blockedUserId: blockedUsers.blockedUserId })
+      .from(blockedUsers)
+      .where(eq(blockedUsers.blockerId, excludeUserId));
+    const blockedMe = await db.select({ blockerId: blockedUsers.blockerId })
+      .from(blockedUsers)
+      .where(eq(blockedUsers.blockedUserId, excludeUserId));
+
+    const hiddenIds = [
+      ...blockedByMe.map(r => r.blockedUserId),
+      ...blockedMe.map(r => r.blockerId),
+    ];
+
+    const baseCondition = and(conditions, not(eq(profiles.userId, excludeUserId)));
+    const finalCondition = hiddenIds.length > 0
+      ? and(baseCondition, notInArray(profiles.userId, hiddenIds))
+      : baseCondition;
+
     const rows = await db.select({ profile: profiles })
       .from(profiles)
       .leftJoin(users, eq(profiles.userId, users.id))
-      .where(and(conditions, not(eq(profiles.userId, excludeUserId))))
+      .where(finalCondition)
       .orderBy(sql`RANDOM()`);
 
     return rows.map(r => r.profile);
