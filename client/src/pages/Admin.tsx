@@ -7,7 +7,8 @@ import {
   Upload, Trash2, Play, Pause, Plus, Phone, LayoutDashboard,
   MessageSquare, PhoneCall, X, MapPin, Clock, Copy, Eye, EyeOff,
   Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2,
-  CreditCard, Save, LogOut, Settings,
+  CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ShieldOff,
+  Shield, PlusCircle, MinusCircle, ArrowUpDown,
 } from "lucide-react";
 
 interface ProfileWithUser {
@@ -36,7 +37,33 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers";
+
+interface CallerSummary {
+  id: string;
+  phoneNumber: string;
+  membershipTier: string | null;
+  remainingSeconds: number | null;
+  createdAt: string | null;
+  hasProfile: boolean;
+  callCount: number;
+  messageCount: number;
+  blockCount: number;
+}
+
+interface CallerDetail {
+  user: {
+    id: string; phoneNumber: string; membershipTier: string | null;
+    remainingSeconds: number | null; stripeCustomerId: string | null;
+    createdAt: string | null;
+  };
+  profile: { id: string; recordingUrl: string; recordingDuration: number | null; createdAt: string | null } | null;
+  callHistory: { id: string; callSid: string; durationSeconds: number | null; startedAt: string | null; completedAt: string | null; toPhoneNumber: string | null }[];
+  sentMessages: { id: string; toPhoneNumber: string; createdAt: string | null; isRead: boolean | null }[];
+  receivedMessages: { id: string; fromPhoneNumber: string; createdAt: string | null; isRead: boolean | null }[];
+  blockedByUser: { id: string; phoneNumber: string; blockedAt: string | null }[];
+  blockedByOthers: { id: string; phoneNumber: string; blockedAt: string | null }[];
+}
 
 // ── Shared class tokens for light content area ────────────────────────────────
 const C = {
@@ -57,6 +84,12 @@ const C = {
   badge: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs tracking-widest uppercase",
   statValue: "text-[#f5a623] font-mono font-bold text-3xl",
   statLabel: "text-gray-500 font-mono text-xs tracking-widest uppercase mt-1",
+  panelHeader: "bg-[#1e293b] text-white font-mono text-xs font-bold tracking-widest uppercase px-4 py-2.5",
+  panel: "border border-gray-300 rounded-md overflow-hidden mb-4",
+  panelBody: "bg-white",
+  fieldRow: "grid grid-cols-[160px_1fr] items-center border-b border-gray-100 last:border-0",
+  fieldLabel: "px-4 py-2 text-gray-500 font-mono text-xs tracking-widest uppercase bg-gray-50 border-r border-gray-100",
+  fieldValue: "px-4 py-2 text-gray-800 font-mono text-sm",
 };
 
 // ── AudioPlayer ───────────────────────────────────────────────────────────────
@@ -1147,9 +1180,424 @@ function BlockedNumbersTab() {
   );
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtSecs(secs: number | null | undefined) {
+  if (secs == null) return "—";
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+function fmtMins(secs: number | null | undefined) {
+  if (secs == null) return "—";
+  return `${Math.floor(secs / 60).toLocaleString()} min`;
+}
+
+// ── CallerDetailView ──────────────────────────────────────────────────────────
+function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; allCallers: CallerSummary[]; onBack: () => void }) {
+  const { toast } = useToast();
+  const [creditInput, setCreditInput] = useState("");
+  const [creditMode, setCreditMode] = useState<"add" | "remove">("add");
+
+  const { data: detail, isLoading, refetch } = useQuery<CallerDetail>({
+    queryKey: ["/api/admin/callers", callerId],
+    queryFn: () => fetch(`/api/admin/callers/${callerId}`).then(r => r.json()),
+  });
+
+  const creditMutation = useMutation({
+    mutationFn: async () => {
+      const mins = parseFloat(creditInput);
+      if (isNaN(mins) || mins <= 0) throw new Error("Enter a valid number of minutes");
+      const delta = Math.round(mins * 60) * (creditMode === "remove" ? -1 : 1);
+      return apiRequest("PATCH", `/api/admin/callers/${callerId}/credits`, { deltaSeconds: delta });
+    },
+    onSuccess: () => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/callers"] });
+      setCreditInput("");
+      toast({ title: `Credits ${creditMode === "add" ? "added" : "removed"}` });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const blockMutation = useMutation({
+    mutationFn: async ({ action, targetId }: { action: "block" | "unblock"; targetId: string }) => {
+      if (action === "block") return apiRequest("POST", `/api/admin/callers/${callerId}/block/${targetId}`, {});
+      return apiRequest("DELETE", `/api/admin/callers/${callerId}/block/${targetId}`);
+    },
+    onSuccess: () => { refetch(); queryClient.invalidateQueries({ queryKey: ["/api/admin/callers"] }); },
+    onError: () => toast({ title: "Action failed", variant: "destructive" }),
+  });
+
+  // Build options for adding a new block — exclude self and already-blocked users
+  const blockedIds = new Set(detail?.blockedByUser.map(b => b.phoneNumber) ?? []);
+  const blockableCallers = allCallers.filter(c => c.id !== callerId && !blockedIds.has(c.phoneNumber));
+  const [blockTarget, setBlockTarget] = useState("");
+
+  if (isLoading) return (
+    <div className="flex items-center gap-2 text-gray-400 font-mono text-xs py-16 justify-center">
+      <Loader2 size={14} className="animate-spin" /> Loading caller record…
+    </div>
+  );
+  if (!detail) return (
+    <div className="text-gray-400 font-mono text-xs py-16 text-center">Caller not found.</div>
+  );
+
+  const { user, profile, callHistory, sentMessages, receivedMessages, blockedByUser, blockedByOthers } = detail;
+
+  return (
+    <div className="space-y-0">
+      {/* Back + header */}
+      <div className="flex items-center gap-3 mb-5">
+        <button data-testid="btn-back-to-directory" onClick={onBack} className={C.btnSecondary + " !py-1.5"}>
+          <ChevronLeft size={13} /> Directory
+        </button>
+        <div>
+          <div className="text-gray-900 font-mono font-bold text-sm tracking-widest uppercase">{user.phoneNumber}</div>
+          <div className="text-gray-400 font-mono text-xs">Caller Record</div>
+        </div>
+      </div>
+
+      {/* ── Caller Information ── */}
+      <div className={C.panel}>
+        <div className={C.panelHeader}>Caller Information</div>
+        <div className={C.panelBody}>
+          <div className={C.fieldRow}><span className={C.fieldLabel}>Phone Number</span><span className={C.fieldValue} data-testid="detail-phone">{user.phoneNumber}</span></div>
+          <div className={C.fieldRow}><span className={C.fieldLabel}>Joined</span><span className={C.fieldValue}>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}</span></div>
+          <div className={C.fieldRow}><span className={C.fieldLabel}>Membership Tier</span><span className={C.fieldValue}>{user.membershipTier ?? <span className="text-gray-400">None</span>}</span></div>
+          <div className={C.fieldRow}>
+            <span className={C.fieldLabel}>Credit Balance</span>
+            <span className={C.fieldValue}>{fmtMins(user.remainingSeconds)} <span className="text-gray-400 text-xs">({user.remainingSeconds?.toLocaleString() ?? 0} sec)</span></span>
+          </div>
+          <div className={C.fieldRow}><span className={C.fieldLabel}>Stripe Customer</span><span className={C.fieldValue}>{user.stripeCustomerId ?? <span className="text-gray-400">—</span>}</span></div>
+          <div className={C.fieldRow}>
+            <span className={C.fieldLabel}>Voice Profile</span>
+            <span className={C.fieldValue}>
+              {profile ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className={`${C.badge} border-emerald-200 bg-emerald-50 text-emerald-700`}><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Active</span>
+                  <span className="text-gray-400 text-xs">{fmtSecs(profile.recordingDuration)}</span>
+                </span>
+              ) : <span className={`${C.badge} border-gray-200 bg-gray-50 text-gray-400`}>No Profile</span>}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Credit Adjustment ── */}
+      <div className={C.panel}>
+        <div className={C.panelHeader}>Credit Adjustment</div>
+        <div className={C.panelBody + " p-4"}>
+          <div className="flex items-center gap-3">
+            <div className="flex rounded overflow-hidden border border-gray-300">
+              <button
+                data-testid="btn-credit-mode-add"
+                onClick={() => setCreditMode("add")}
+                className={`px-3 py-2 font-mono text-xs tracking-widest flex items-center gap-1.5 transition-colors ${creditMode === "add" ? "bg-emerald-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+              ><PlusCircle size={12} /> Add</button>
+              <button
+                data-testid="btn-credit-mode-remove"
+                onClick={() => setCreditMode("remove")}
+                className={`px-3 py-2 font-mono text-xs tracking-widest flex items-center gap-1.5 transition-colors border-l border-gray-300 ${creditMode === "remove" ? "bg-red-600 text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+              ><MinusCircle size={12} /> Remove</button>
+            </div>
+            <input
+              data-testid="input-credit-minutes"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Minutes"
+              value={creditInput}
+              onChange={e => setCreditInput(e.target.value)}
+              className="border border-gray-300 rounded px-3 py-2 font-mono text-sm text-gray-800 w-32 focus:outline-none focus:border-[#f5a623]"
+            />
+            <button
+              data-testid="btn-apply-credits"
+              onClick={() => creditMutation.mutate()}
+              disabled={!creditInput || creditMutation.isPending}
+              className={C.btnPrimary}
+            >
+              {creditMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              Apply
+            </button>
+            {creditInput && !isNaN(parseFloat(creditInput)) && (
+              <span className={`font-mono text-xs ${creditMode === "add" ? "text-emerald-600" : "text-red-500"}`}>
+                {creditMode === "add" ? "+" : "−"}{parseFloat(creditInput).toFixed(0)} min ({Math.round(parseFloat(creditInput) * 60)} sec)
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Call History ── */}
+      <div className={C.panel}>
+        <div className={C.panelHeader}>Call History <span className="opacity-60 font-normal ml-2">({callHistory.length})</span></div>
+        <div className={C.panelBody}>
+          {callHistory.length === 0 ? (
+            <div className="px-4 py-6 text-gray-400 font-mono text-xs text-center">No calls on record.</div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Date</th>
+                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">To Number</th>
+                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Duration</th>
+                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {callHistory.map((call, i) => (
+                  <tr key={call.id} data-testid={`row-call-${i}`} className="border-b border-gray-50 last:border-0 hover:bg-amber-50/30 transition-colors">
+                    <td className="px-4 py-2 text-gray-600 font-mono text-xs">{call.startedAt ? new Date(call.startedAt).toLocaleString() : "—"}</td>
+                    <td className="px-4 py-2 text-gray-700 font-mono text-xs">{call.toPhoneNumber ?? "—"}</td>
+                    <td className="px-4 py-2 text-gray-700 font-mono text-xs">{fmtSecs(call.durationSeconds)}</td>
+                    <td className="px-4 py-2">
+                      <span className={`${C.badge} ${call.completedAt ? "border-gray-200 bg-gray-50 text-gray-500" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+                        {call.completedAt ? "Completed" : "In Progress"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* ── Messages ── */}
+      <div className={C.panel}>
+        <div className={C.panelHeader}>Messages <span className="opacity-60 font-normal ml-2">(Sent: {sentMessages.length} / Received: {receivedMessages.length})</span></div>
+        <div className={C.panelBody}>
+          {sentMessages.length === 0 && receivedMessages.length === 0 ? (
+            <div className="px-4 py-6 text-gray-400 font-mono text-xs text-center">No messages on record.</div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Direction</th>
+                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">With</th>
+                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Date</th>
+                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Read</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sentMessages.map((m, i) => (
+                  <tr key={`s-${m.id}`} data-testid={`row-msg-sent-${i}`} className="border-b border-gray-50 last:border-0 hover:bg-amber-50/30 transition-colors">
+                    <td className="px-4 py-2"><span className={`${C.badge} border-blue-200 bg-blue-50 text-blue-600`}>Sent</span></td>
+                    <td className="px-4 py-2 text-gray-700 font-mono text-xs">{m.toPhoneNumber}</td>
+                    <td className="px-4 py-2 text-gray-500 font-mono text-xs">{m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}</td>
+                    <td className="px-4 py-2 text-gray-400 font-mono text-xs">{m.isRead ? "Yes" : "No"}</td>
+                  </tr>
+                ))}
+                {receivedMessages.map((m, i) => (
+                  <tr key={`r-${m.id}`} data-testid={`row-msg-received-${i}`} className="border-b border-gray-50 last:border-0 hover:bg-amber-50/30 transition-colors">
+                    <td className="px-4 py-2"><span className={`${C.badge} border-emerald-200 bg-emerald-50 text-emerald-600`}>Received</span></td>
+                    <td className="px-4 py-2 text-gray-700 font-mono text-xs">{m.fromPhoneNumber}</td>
+                    <td className="px-4 py-2 text-gray-500 font-mono text-xs">{m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}</td>
+                    <td className="px-4 py-2 text-gray-400 font-mono text-xs">{m.isRead ? "Yes" : "No"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* ── Blocks ── */}
+      <div className={C.panel}>
+        <div className={C.panelHeader}>Block Management</div>
+        <div className={C.panelBody}>
+          {/* Blocked by this user */}
+          <div className="px-4 pt-3 pb-1">
+            <div className="text-gray-500 font-mono text-xs tracking-widest uppercase mb-2">Blocked By This Caller</div>
+            {blockedByUser.length === 0 ? (
+              <div className="text-gray-400 font-mono text-xs py-2">No blocks placed by this caller.</div>
+            ) : (
+              <div className="space-y-1">
+                {blockedByUser.map(b => (
+                  <div key={b.id} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                    <div className="flex items-center gap-2">
+                      <Shield size={12} className="text-red-400" />
+                      <span className="text-gray-700 font-mono text-xs">{b.phoneNumber}</span>
+                      <span className="text-gray-400 font-mono text-xs">{b.blockedAt ? new Date(b.blockedAt).toLocaleDateString() : ""}</span>
+                    </div>
+                    <button
+                      data-testid={`btn-unblock-by-user-${b.id}`}
+                      onClick={() => {
+                        const target = allCallers.find(c => c.phoneNumber === b.phoneNumber);
+                        if (target) blockMutation.mutate({ action: "unblock", targetId: target.id });
+                      }}
+                      disabled={blockMutation.isPending}
+                      className={C.btnDanger + " !py-1 !text-xs"}
+                    ><ShieldOff size={11} /> Unblock</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Add a block */}
+            <div className="flex items-center gap-2 pt-3">
+              <select
+                data-testid="select-block-target"
+                value={blockTarget}
+                onChange={e => setBlockTarget(e.target.value)}
+                className="border border-gray-300 rounded px-2 py-1.5 font-mono text-xs text-gray-700 focus:outline-none focus:border-[#f5a623] flex-1 max-w-xs"
+              >
+                <option value="">— Select caller to block —</option>
+                {blockableCallers.map(c => (
+                  <option key={c.id} value={c.id}>{c.phoneNumber}</option>
+                ))}
+              </select>
+              <button
+                data-testid="btn-add-block"
+                onClick={() => { if (blockTarget) { blockMutation.mutate({ action: "block", targetId: blockTarget }); setBlockTarget(""); } }}
+                disabled={!blockTarget || blockMutation.isPending}
+                className={C.btnDanger}
+              ><Shield size={11} /> Block</button>
+            </div>
+          </div>
+          {/* Blocked by others */}
+          {blockedByOthers.length > 0 && (
+            <div className="px-4 pt-3 pb-3 border-t border-gray-100 mt-2">
+              <div className="text-gray-500 font-mono text-xs tracking-widest uppercase mb-2">Blocked By Others ({blockedByOthers.length})</div>
+              <div className="space-y-1">
+                {blockedByOthers.map(b => (
+                  <div key={b.id} className="flex items-center gap-2 py-1">
+                    <Shield size={12} className="text-gray-400" />
+                    <span className="text-gray-600 font-mono text-xs">{b.phoneNumber}</span>
+                    <span className="text-gray-400 font-mono text-xs">{b.blockedAt ? new Date(b.blockedAt).toLocaleDateString() : ""}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── CallersTab ────────────────────────────────────────────────────────────────
+function CallersTab() {
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<"joined" | "phone" | "credits" | "calls">("joined");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const { data: callers, isLoading } = useQuery<CallerSummary[]>({
+    queryKey: ["/api/admin/callers"],
+    refetchInterval: 30000,
+  });
+
+  const filtered = (callers ?? [])
+    .filter(c => c.phoneNumber.includes(search.trim()))
+    .sort((a, b) => {
+      if (sort === "phone")   return a.phoneNumber.localeCompare(b.phoneNumber);
+      if (sort === "credits") return (b.remainingSeconds ?? 0) - (a.remainingSeconds ?? 0);
+      if (sort === "calls")   return b.callCount - a.callCount;
+      return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
+    });
+
+  if (selectedId) {
+    return <CallerDetailView callerId={selectedId} allCallers={callers ?? []} onBack={() => setSelectedId(null)} />;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <input
+          data-testid="input-caller-search"
+          type="text"
+          placeholder="Search phone number…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="border border-gray-200 rounded px-3 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none w-56 focus:border-[#f5a623]"
+        />
+        <div className="flex items-center gap-1.5 text-gray-400 font-mono text-xs">
+          <ArrowUpDown size={12} />
+          Sort:
+          {(["joined", "phone", "credits", "calls"] as const).map(s => (
+            <button
+              key={s}
+              data-testid={`btn-sort-${s}`}
+              onClick={() => setSort(s)}
+              className={`px-2 py-0.5 rounded font-mono text-xs tracking-widest uppercase transition-colors ${sort === s ? "bg-[#f5a623] text-black" : "text-gray-400 hover:text-gray-700"}`}
+            >{s}</button>
+          ))}
+        </div>
+        <span className="ml-auto text-gray-400 font-mono text-xs">{filtered.length} record{filtered.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      {/* Directory table */}
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className={C.th}>Phone Number</th>
+              <th className={C.th}>Joined</th>
+              <th className={C.th}>Tier</th>
+              <th className={C.th}>Credits</th>
+              <th className={C.th}>Profile</th>
+              <th className={C.th}>Calls</th>
+              <th className={C.th}>Msgs</th>
+              <th className={C.th}>Blocks</th>
+              <th className={C.th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING CALLERS…</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">
+                {search ? "NO MATCHES FOUND" : "NO CALLERS REGISTERED"}
+              </td></tr>
+            ) : (
+              filtered.map(caller => (
+                <tr key={caller.id} data-testid={`row-caller-${caller.id}`} className={C.row + " cursor-pointer"} onClick={() => setSelectedId(caller.id)}>
+                  <td className={C.td}>
+                    <div className="flex items-center gap-2">
+                      <Phone size={12} className="text-gray-400" />
+                      <span data-testid={`text-caller-phone-${caller.id}`} className="text-gray-900 font-mono text-sm">{caller.phoneNumber}</span>
+                    </div>
+                  </td>
+                  <td className={C.td + " text-gray-400 text-xs"}>{caller.createdAt ? new Date(caller.createdAt).toLocaleDateString() : "—"}</td>
+                  <td className={C.td}>
+                    {caller.membershipTier ? (
+                      <span className={`${C.badge} border-amber-200 bg-amber-50 text-amber-700`}>{caller.membershipTier}</span>
+                    ) : (
+                      <span className="text-gray-400 font-mono text-xs">—</span>
+                    )}
+                  </td>
+                  <td className={C.td + " text-gray-600 text-xs"}>{fmtMins(caller.remainingSeconds)}</td>
+                  <td className={C.td}>
+                    {caller.hasProfile ? (
+                      <span className={`${C.badge} border-emerald-200 bg-emerald-50 text-emerald-700`}><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Yes</span>
+                    ) : (
+                      <span className={`${C.badge} border-gray-200 bg-gray-50 text-gray-400`}>No</span>
+                    )}
+                  </td>
+                  <td className={C.td + " text-gray-600 text-xs text-center"}>{caller.callCount}</td>
+                  <td className={C.td + " text-gray-600 text-xs text-center"}>{caller.messageCount}</td>
+                  <td className={C.td + " text-gray-600 text-xs text-center"}>{caller.blockCount > 0 ? <span className="text-red-400">{caller.blockCount}</span> : <span className="text-gray-300">0</span>}</td>
+                  <td className={C.td}>
+                    <button
+                      data-testid={`btn-view-caller-${caller.id}`}
+                      onClick={e => { e.stopPropagation(); setSelectedId(caller.id); }}
+                      className={C.btnGhost + " !py-1"}
+                    ><Eye size={11} /> View</button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Tab definitions ───────────────────────────────────────────────────────────
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard",      label: "Dashboard",      icon: <LayoutDashboard size={15} /> },
+  { id: "callers",        label: "Callers",         icon: <Users size={15} /> },
   { id: "voice-profiles", label: "Voice Profiles",  icon: <Phone size={15} /> },
   { id: "regions",        label: "Regions",         icon: <Globe size={15} /> },
   { id: "memberships",    label: "Memberships",     icon: <CreditCard size={15} /> },
@@ -1269,6 +1717,7 @@ export default function Admin() {
           {showAddRegion && <RegionDialog onClose={() => setShowAddRegion(false)} />}
 
           {activeTab === "dashboard"      && <DashboardTab />}
+          {activeTab === "callers"        && <CallersTab />}
           {activeTab === "voice-profiles" && <VoiceProfilesTab key={String(showUpload)} />}
           {activeTab === "regions"        && <RegionsTab />}
           {activeTab === "memberships"    && <MembershipsTab />}

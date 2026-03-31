@@ -9,6 +9,28 @@ export interface ProfileWithUser extends Profile {
   phoneNumber: string;
 }
 
+export interface CallerSummary {
+  id: string;
+  phoneNumber: string;
+  membershipTier: string | null;
+  remainingSeconds: number | null;
+  createdAt: Date | null;
+  hasProfile: boolean;
+  callCount: number;
+  messageCount: number;
+  blockCount: number;
+}
+
+export interface CallerDetail {
+  user: User;
+  profile: Profile | null;
+  callHistory: { id: string; callSid: string; durationSeconds: number | null; startedAt: Date | null; completedAt: Date | null; toPhoneNumber: string | null }[];
+  sentMessages: { id: string; toPhoneNumber: string; createdAt: Date | null; isRead: boolean | null }[];
+  receivedMessages: { id: string; fromPhoneNumber: string; createdAt: Date | null; isRead: boolean | null }[];
+  blockedByUser: { id: string; phoneNumber: string; blockedAt: Date | null }[];
+  blockedByOthers: { id: string; phoneNumber: string; blockedAt: Date | null }[];
+}
+
 export interface IStorage {
   // Regions
   getAllRegions(): Promise<Region[]>;
@@ -81,6 +103,13 @@ export interface IStorage {
   }[]>;
 
   getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }>;
+
+  // Caller management (admin)
+  getAllCallersWithDetails(): Promise<CallerSummary[]>;
+  getCallerDetailById(userId: string): Promise<CallerDetail | null>;
+  adjustUserCredits(userId: string, deltaSeconds: number): Promise<User>;
+  adminBlockByUserIds(blockerId: string, blockedUserId: string): Promise<void>;
+  adminUnblockByUserIds(blockerId: string, blockedUserId: string): Promise<void>;
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -498,6 +527,121 @@ export class DatabaseStorage implements IStorage {
       ORDER BY "callCount" DESC
     `);
     return result.rows as any[];
+  }
+
+  async getAllCallersWithDetails(): Promise<CallerSummary[]> {
+    const result = await db.execute(sql`
+      SELECT
+        u.id,
+        u.phone_number      AS "phoneNumber",
+        u.membership_tier   AS "membershipTier",
+        u.remaining_seconds AS "remainingSeconds",
+        u.created_at        AS "createdAt",
+        (p.id IS NOT NULL)::boolean AS "hasProfile",
+        COALESCE(cl.call_count, 0)::int    AS "callCount",
+        COALESCE(mc.msg_count, 0)::int     AS "messageCount",
+        COALESCE(bl.block_count, 0)::int   AS "blockCount"
+      FROM users u
+      LEFT JOIN profiles p ON p.user_id = u.id
+      LEFT JOIN (
+        SELECT from_phone_number, COUNT(*)::int AS call_count
+        FROM call_logs
+        GROUP BY from_phone_number
+      ) cl ON cl.from_phone_number = u.phone_number
+      LEFT JOIN (
+        SELECT from_user_id, COUNT(*)::int AS msg_count
+        FROM messages
+        GROUP BY from_user_id
+      ) mc ON mc.from_user_id = u.id
+      LEFT JOIN (
+        SELECT blocker_id, COUNT(*)::int AS block_count
+        FROM blocked_users
+        GROUP BY blocker_id
+      ) bl ON bl.blocker_id = u.id
+      ORDER BY u.created_at DESC
+    `);
+    return result.rows as CallerSummary[];
+  }
+
+  async getCallerDetailById(userId: string): Promise<CallerDetail | null> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    if (!user) return null;
+
+    const [profile] = await db.select().from(profiles).where(eq(profiles.userId, userId));
+
+    const callHistory = await db.execute(sql`
+      SELECT id, call_sid AS "callSid", duration_seconds AS "durationSeconds",
+             started_at AS "startedAt", completed_at AS "completedAt",
+             to_phone_number AS "toPhoneNumber"
+      FROM call_logs
+      WHERE from_phone_number = ${user.phoneNumber}
+      ORDER BY started_at DESC
+      LIMIT 50
+    `);
+
+    const sentRows = await db.execute(sql`
+      SELECT m.id, u.phone_number AS "toPhoneNumber", m.created_at AS "createdAt", m.is_read AS "isRead"
+      FROM messages m
+      JOIN users u ON u.id = m.to_user_id
+      WHERE m.from_user_id = ${userId}
+      ORDER BY m.created_at DESC
+      LIMIT 50
+    `);
+
+    const receivedRows = await db.execute(sql`
+      SELECT m.id, u.phone_number AS "fromPhoneNumber", m.created_at AS "createdAt", m.is_read AS "isRead"
+      FROM messages m
+      JOIN users u ON u.id = m.from_user_id
+      WHERE m.to_user_id = ${userId}
+      ORDER BY m.created_at DESC
+      LIMIT 50
+    `);
+
+    const blockedByUserRows = await db.execute(sql`
+      SELECT bu.id, u.phone_number AS "phoneNumber", bu.created_at AS "blockedAt"
+      FROM blocked_users bu
+      JOIN users u ON u.id = bu.blocked_user_id
+      WHERE bu.blocker_id = ${userId}
+      ORDER BY bu.created_at DESC
+    `);
+
+    const blockedByOthersRows = await db.execute(sql`
+      SELECT bu.id, u.phone_number AS "phoneNumber", bu.created_at AS "blockedAt"
+      FROM blocked_users bu
+      JOIN users u ON u.id = bu.blocker_id
+      WHERE bu.blocked_user_id = ${userId}
+      ORDER BY bu.created_at DESC
+    `);
+
+    return {
+      user,
+      profile: profile ?? null,
+      callHistory: callHistory.rows as any[],
+      sentMessages: sentRows.rows as any[],
+      receivedMessages: receivedRows.rows as any[],
+      blockedByUser: blockedByUserRows.rows as any[],
+      blockedByOthers: blockedByOthersRows.rows as any[],
+    };
+  }
+
+  async adjustUserCredits(userId: string, deltaSeconds: number): Promise<User> {
+    const [user] = await db.update(users)
+      .set({
+        remainingSeconds: sql`GREATEST(0, COALESCE(${users.remainingSeconds}, 0) + ${deltaSeconds})`
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async adminBlockByUserIds(blockerId: string, blockedUserId: string): Promise<void> {
+    await db.insert(blockedUsers).values({ blockerId, blockedUserId }).onConflictDoNothing();
+  }
+
+  async adminUnblockByUserIds(blockerId: string, blockedUserId: string): Promise<void> {
+    await db.delete(blockedUsers).where(
+      and(eq(blockedUsers.blockerId, blockerId), eq(blockedUsers.blockedUserId, blockedUserId))
+    );
   }
 }
 

@@ -493,6 +493,64 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Caller directory ---
+  app.get("/api/admin/callers", async (_req, res) => {
+    try {
+      const callers = await storage.getAllCallersWithDetails();
+      res.json(callers);
+    } catch (e) {
+      console.error("[admin] /api/admin/callers GET error:", e);
+      res.status(500).json({ message: "Failed to fetch callers" });
+    }
+  });
+
+  // --- Admin: Caller detail ---
+  app.get("/api/admin/callers/:id", async (req, res) => {
+    try {
+      const detail = await storage.getCallerDetailById(req.params.id);
+      if (!detail) return res.status(404).json({ message: "Caller not found" });
+      res.json(detail);
+    } catch (e) {
+      console.error("[admin] /api/admin/callers/:id GET error:", e);
+      res.status(500).json({ message: "Failed to fetch caller detail" });
+    }
+  });
+
+  // --- Admin: Adjust caller credits ---
+  app.patch("/api/admin/callers/:id/credits", async (req, res) => {
+    try {
+      const { deltaSeconds } = req.body as { deltaSeconds: number };
+      if (typeof deltaSeconds !== "number") return res.status(400).json({ message: "deltaSeconds must be a number" });
+      const user = await storage.adjustUserCredits(req.params.id, deltaSeconds);
+      res.json(user);
+    } catch (e) {
+      console.error("[admin] /api/admin/callers/:id/credits PATCH error:", e);
+      res.status(500).json({ message: "Failed to adjust credits" });
+    }
+  });
+
+  // --- Admin: Block a user (from admin, on behalf of the system) ---
+  app.post("/api/admin/callers/:id/block/:targetId", async (req, res) => {
+    try {
+      await storage.adminBlockByUserIds(req.params.id, req.params.targetId);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] /api/admin/callers block POST error:", e);
+      res.status(500).json({ message: "Failed to create block" });
+    }
+  });
+
+  // --- Admin: Unblock a user ---
+  app.delete("/api/admin/callers/:id/block/:targetId", async (req, res) => {
+    try {
+      await storage.adminUnblockByUserIds(req.params.id, req.params.targetId);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] /api/admin/callers unblock DELETE error:", e);
+      res.status(500).json({ message: "Failed to remove block" });
+    }
+  });
+
   // --- Admin: Phone number stats ---
   app.get("/api/admin/phone-stats", async (req, res) => {
     try {

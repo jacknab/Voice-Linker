@@ -10,15 +10,7 @@
 - Blocked Numbers (view, search, and unblock all caller blocks)
 - Messages *(placeholder — no functionality yet)*
 - Phone Testing *(placeholder — no functionality yet)*
-
----
-
-## Caller Management
-
-- **User Directory** — Browse all callers with phone number, join date, membership tier, credit balance, and profile status. Searchable and sortable.
-- **Caller Detail View** — Individual caller page showing full call history, messages sent/received, payment history, and admin notes.
-- **Manual Credit Adjustment** — Add or remove credits from a caller's account directly from the admin.
-- **Block / Unblock from Profile** — One-click block or unblock a number from within the caller detail view. (Blocked users table exists in the database but has no admin UI.)
+- **Caller Management** — User directory (searchable/sortable), caller detail view (call history, messages, profile status), manual credit adjustment (add/remove minutes), block/unblock from caller detail view.
 
 ---
 
