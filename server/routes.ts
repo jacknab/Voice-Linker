@@ -1066,7 +1066,7 @@ export async function registerRoutes(
         );
         twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else if (digit === "3") {
-        // Accept — write draft to DB and proceed to main menu
+        // Accept — write draft to DB then ask optional zip code before main menu
         if (!draft) {
           playPrompt(twiml, req, "session_expired_greeting.mp3", "Your session has expired. Please re-record your greeting.");
           playPrompt(twiml, req, "welcome_record_name.mp3",
@@ -1083,7 +1083,7 @@ export async function registerRoutes(
           });
           pendingGreetingDrafts.delete(callSid);
           playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
-          twiml.redirect("/voice/main-menu");
+          twiml.redirect("/voice/zip-code-prompt");
         }
       } else {
         // 9 or anything else → repeat review menu
@@ -1095,6 +1095,46 @@ export async function registerRoutes(
       twiml.redirect("/voice/main-menu");
     }
 
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 5b. Zip Code Prompt (optional, after profile is saved) ─────────────────
+  app.post("/voice/zip-code-prompt", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 5,
+      finishOnKey: "#",
+      action: "/voice/handle-zip-code",
+      timeout: 15,
+    });
+    playPrompt(gather, req, "zip_code_prompt.mp3",
+      "Optional: enter your 5-digit zip code and we'll play callers closest to you first. Press pound to skip."
+    );
+    // If no input (timeout), redirect straight to main menu
+    twiml.redirect("/voice/main-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-zip-code", async (req, res) => {
+    const twiml = new VoiceResponse();
+    try {
+      const fromNumber = req.body?.From as string;
+      const digits = (req.body?.Digits as string) ?? "";
+
+      // Only save if exactly 5 numeric digits were entered
+      if (/^\d{5}$/.test(digits)) {
+        const user = await getOrCreateUser(fromNumber);
+        await storage.updateZipCode(user.id, digits);
+        console.log(`[voice] zip-code saved: userId=${user.id}, zip=${digits}`);
+        playPrompt(twiml, req, "zip_code_saved.mp3", "Got it. We'll use your zip code to show you nearby callers.");
+      }
+      // Anything else (empty = pressed #, partial, invalid) → silently skip
+    } catch (err) {
+      console.error("[voice] /voice/handle-zip-code error:", err);
+    }
+    twiml.redirect("/voice/main-menu");
     res.type("text/xml");
     res.send(twiml.toString());
   });

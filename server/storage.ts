@@ -49,6 +49,7 @@ export interface IStorage {
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingMinutes?: number }): Promise<User>;
   deductMinutes(userId: string, minutes: number): Promise<User>;
+  updateZipCode(userId: string, zipCode: string | null): Promise<void>;
 
   getMembershipSettings(): Promise<MembershipSettings>;
   updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
@@ -333,6 +334,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return user;
+  }
+
+  async updateZipCode(userId: string, zipCode: string | null): Promise<void> {
+    await db.update(users).set({ zipCode }).where(eq(users.id, userId));
   }
 
   async getMembershipSettings(): Promise<MembershipSettings> {

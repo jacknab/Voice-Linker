@@ -22,6 +22,7 @@ export const users = pgTable("users", {
   stripeCustomerId: text("stripe_customer_id"),
   membershipTier: text("membership_tier"),
   remainingMinutes: integer("remaining_minutes"),
+  zipCode: text("zip_code"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
