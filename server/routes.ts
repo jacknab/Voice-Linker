@@ -1129,7 +1129,7 @@ export async function registerRoutes(
         const user = await getOrCreateUser(fromNumber);
         const geoRaw = await lookupZipCode(digits);
         const geo = geoRaw
-          ? { latitude: parseFloat(geoRaw.latitude), longitude: parseFloat(geoRaw.longitude), city: geoRaw.city, state: geoRaw.state }
+          ? { latitude: parseFloat(geoRaw.latitude), longitude: parseFloat(geoRaw.longitude), city: geoRaw.city, state: geoRaw.state, neighborhood: geoRaw.neighborhood }
           : undefined;
         const zipEntry = await storage.getOrCreateZipEntry(digits, geo);
         await storage.setUserZipCode(user.id, zipEntry.id);

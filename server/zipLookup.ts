@@ -3,6 +3,7 @@ export interface ZipGeoData {
   longitude: string;
   city: string;
   state: string;
+  neighborhood: string | null;
 }
 
 export async function lookupZipCode(zip: string): Promise<ZipGeoData | null> {
@@ -23,14 +24,47 @@ export async function lookupZipCode(zip: string): Promise<ZipGeoData | null> {
     };
     const place = data.places?.[0];
     if (!place) return null;
-    return {
-      latitude: place.latitude,
-      longitude: place.longitude,
-      city: place["place name"],
-      state: place["state abbreviation"],
-    };
+
+    const latitude = place.latitude;
+    const longitude = place.longitude;
+    const city = place["place name"];
+    const state = place["state abbreviation"];
+
+    // Use Nominatim reverse geocoding to get a neighbourhood-level name
+    const neighborhood = await lookupNeighborhood(latitude, longitude);
+
+    return { latitude, longitude, city, state, neighborhood };
   } catch (err) {
     console.error(`[zipLookup] Error fetching data for zip ${zip}:`, err);
+    return null;
+  }
+}
+
+async function lookupNeighborhood(lat: string, lon: string): Promise<string | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`;
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "PhoneChatService/1.0",
+        "Accept-Language": "en",
+      },
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as {
+      address?: {
+        neighbourhood?: string;
+        suburb?: string;
+        quarter?: string;
+        hamlet?: string;
+        village?: string;
+      };
+    };
+    const addr = data.address;
+    if (!addr) return null;
+    // Prefer the most granular name available
+    return addr.neighbourhood ?? addr.suburb ?? addr.quarter ?? addr.hamlet ?? addr.village ?? null;
+  } catch (err) {
+    console.warn(`[zipLookup] Nominatim lookup failed for ${lat},${lon}:`, err);
     return null;
   }
 }

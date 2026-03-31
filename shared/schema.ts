@@ -24,6 +24,7 @@ export const zipCodes = pgTable("zip_codes", {
   longitude: doublePrecision("longitude"),
   city: text("city"),
   state: text("state"),
+  neighborhood: text("neighborhood"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
