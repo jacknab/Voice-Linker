@@ -6,7 +6,8 @@ import { Link } from "wouter";
 import {
   Upload, Trash2, Play, Pause, Plus, Phone, LayoutDashboard,
   MessageSquare, PhoneCall, X, MapPin, Clock, Copy, Eye, EyeOff,
-  Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2, CreditCard, Save,
+  Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2,
+  CreditCard, Save, LogOut, Settings,
 } from "lucide-react";
 
 interface ProfileWithUser {
@@ -37,34 +38,53 @@ interface Region {
 
 type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships";
 
+// ── Shared class tokens for light content area ────────────────────────────────
+const C = {
+  heading: "text-gray-900 font-mono font-bold tracking-widest uppercase",
+  subtext: "text-gray-500 font-mono text-xs",
+  label: "block text-gray-500 font-mono text-xs tracking-widest mb-1.5 uppercase",
+  input: "w-full bg-white border border-gray-300 rounded px-3 py-2.5 text-gray-900 font-mono text-sm placeholder-gray-400 focus:outline-none focus:border-[#f5a623] transition-colors",
+  select: "w-full bg-white border border-gray-300 rounded px-3 py-2.5 text-gray-900 font-mono text-sm focus:outline-none focus:border-[#f5a623] transition-colors appearance-none",
+  card: "border border-gray-200 rounded-lg p-5 bg-white space-y-4",
+  cardAlt: "border border-gray-200 rounded-lg p-5 bg-gray-50 space-y-4",
+  btnPrimary: "flex items-center gap-2 px-4 py-2 bg-[#f5a623] hover:bg-amber-500 text-black font-mono text-xs font-bold tracking-widest uppercase rounded transition-colors disabled:bg-[#f5a623]/40 disabled:cursor-not-allowed",
+  btnSecondary: "flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-800 font-mono text-xs tracking-widest uppercase rounded transition-colors",
+  btnDanger: "flex items-center gap-1.5 px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-mono text-xs rounded transition-colors disabled:opacity-50",
+  btnGhost: "flex items-center gap-1.5 px-3 py-1.5 border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 font-mono text-xs rounded transition-colors",
+  th: "text-left px-4 py-3 text-gray-500 font-mono text-xs tracking-widest uppercase bg-gray-50 border-b border-gray-200",
+  td: "px-4 py-3 text-gray-800 font-mono text-sm border-b border-gray-100",
+  row: "hover:bg-amber-50/40 transition-colors",
+  badge: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs tracking-widest uppercase",
+  statValue: "text-[#f5a623] font-mono font-bold text-3xl",
+  statLabel: "text-gray-500 font-mono text-xs tracking-widest uppercase mt-1",
+};
+
+// ── AudioPlayer ───────────────────────────────────────────────────────────────
 function AudioPlayer({ src }: { src: string }) {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
-
   function toggle() {
     const el = audioRef.current;
     if (!el) return;
     if (playing) { el.pause(); setPlaying(false); }
     else { el.play(); setPlaying(true); }
   }
-
   return (
     <div className="flex items-center gap-2">
       <audio ref={audioRef} src={src} onEnded={() => setPlaying(false)} preload="none" />
       <button
         data-testid={`btn-play-${src}`}
         onClick={toggle}
-        className="flex items-center justify-center w-8 h-8 rounded border border-[#f5a623]/40 bg-[#f5a623]/10 hover:bg-[#f5a623]/20 text-[#f5a623] transition-colors"
+        className="flex items-center justify-center w-8 h-8 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 transition-colors"
       >
-        {playing ? <Pause size={14} /> : <Play size={14} />}
+        {playing ? <Pause size={13} /> : <Play size={13} />}
       </button>
-      <span className="text-[#4caf82]/60 text-xs font-mono">
-        {playing ? "PLAYING_" : "READY_"}
-      </span>
+      <span className="text-gray-400 text-xs font-mono">{playing ? "PLAYING" : "READY"}</span>
     </div>
   );
 }
 
+// ── UploadDialog ──────────────────────────────────────────────────────────────
 function UploadDialog({ onClose }: { onClose: () => void }) {
   const { toast } = useToast();
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -108,53 +128,46 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="relative w-full max-w-md mx-4 bg-[#0d1117] border border-[#f5a623]/30 rounded-lg p-6 shadow-2xl">
-        <button data-testid="btn-close-dialog" onClick={onClose} className="absolute top-4 right-4 text-[#4caf82]/60 hover:text-[#f5a623] transition-colors">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="relative w-full max-w-md mx-4 bg-white rounded-xl border border-gray-200 p-6 shadow-2xl">
+        <button data-testid="btn-close-dialog" onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors">
           <X size={18} />
         </button>
-        <h2 className="text-[#f5a623] font-mono text-lg font-bold mb-1 tracking-widest uppercase">Upload Profile Greeting_</h2>
-        <p className="text-[#4caf82]/60 text-xs font-mono mb-6">MP3 file will become the caller's live profile greeting</p>
+        <h2 className="text-gray-900 font-mono text-base font-bold mb-1 tracking-widest uppercase">Upload Profile Greeting</h2>
+        <p className="text-gray-500 text-xs font-mono mb-6">MP3 file will become the caller's live profile greeting</p>
         <div className="space-y-4">
           <div>
-            <label className="block text-[#4caf82] font-mono text-xs tracking-widest mb-2 uppercase">Caller Phone Number_</label>
-            <input
-              data-testid="input-phone-number"
-              type="tel"
-              value={phoneNumber}
-              onChange={e => setPhoneNumber(e.target.value)}
-              placeholder="+1 555 000 0000"
-              className="w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors"
-            />
+            <label className={C.label}>Caller Phone Number</label>
+            <input data-testid="input-phone-number" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="+1 555 000 0000" className={C.input} />
           </div>
           <div>
-            <label className="block text-[#4caf82] font-mono text-xs tracking-widest mb-2 uppercase">MP3 Audio File_</label>
+            <label className={C.label}>MP3 Audio File</label>
             <div
               data-testid="dropzone-audio"
               onDragOver={e => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${dragOver ? "border-[#f5a623] bg-[#f5a623]/5" : file ? "border-[#4caf82]/60 bg-[#4caf82]/5" : "border-[#4caf82]/20 hover:border-[#f5a623]/40 hover:bg-[#f5a623]/5"}`}
+              className={`w-full border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${dragOver ? "border-[#f5a623] bg-amber-50" : file ? "border-gray-300 bg-gray-50" : "border-gray-200 hover:border-[#f5a623]/60 hover:bg-amber-50/30"}`}
             >
               <input ref={fileInputRef} type="file" accept=".mp3,audio/mpeg" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} data-testid="input-file-upload" />
               {file ? (
                 <div className="space-y-1">
-                  <div className="text-[#4caf82] font-mono text-sm">{file.name}</div>
-                  <div className="text-[#4caf82]/50 font-mono text-xs">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+                  <div className="text-gray-800 font-mono text-sm">{file.name}</div>
+                  <div className="text-gray-400 font-mono text-xs">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <Upload size={24} className="mx-auto text-[#4caf82]/40" />
-                  <div className="text-[#4caf82]/60 font-mono text-xs">Drop MP3 here or click to browse</div>
+                  <Upload size={22} className="mx-auto text-gray-400" />
+                  <div className="text-gray-400 font-mono text-xs">Drop MP3 here or click to browse</div>
                 </div>
               )}
             </div>
           </div>
           <div className="flex gap-3 pt-2">
-            <button data-testid="btn-cancel-upload" onClick={onClose} className="flex-1 py-2.5 border border-[#4caf82]/30 rounded font-mono text-xs text-[#4caf82]/60 hover:text-[#4caf82] hover:border-[#4caf82]/60 transition-colors tracking-widest uppercase">Cancel_</button>
-            <button data-testid="btn-submit-upload" onClick={() => uploadMutation.mutate()} disabled={!phoneNumber.trim() || !file || uploadMutation.isPending} className="flex-1 py-2.5 bg-[#f5a623] hover:bg-[#f5a623]/80 disabled:bg-[#f5a623]/30 disabled:cursor-not-allowed rounded font-mono text-xs text-black font-bold tracking-widest uppercase transition-colors">
-              {uploadMutation.isPending ? "Uploading..." : "Upload & Save_"}
+            <button data-testid="btn-cancel-upload" onClick={onClose} className={C.btnSecondary + " flex-1 justify-center py-2.5"}>Cancel</button>
+            <button data-testid="btn-submit-upload" onClick={() => uploadMutation.mutate()} disabled={!phoneNumber.trim() || !file || uploadMutation.isPending} className={C.btnPrimary + " flex-1 justify-center py-2.5"}>
+              {uploadMutation.isPending ? "Uploading..." : "Upload & Save"}
             </button>
           </div>
         </div>
@@ -163,10 +176,10 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── RegionDialog ──────────────────────────────────────────────────────────────
 function RegionDialog({ region, onClose }: { region?: Region; onClose: () => void }) {
   const { toast } = useToast();
   const isEdit = !!region;
-
   const [name, setName] = useState(region?.name ?? "");
   const [slug, setSlug] = useState(region?.slug ?? "");
   const [phoneNumber, setPhoneNumber] = useState(region?.phoneNumber ?? "");
@@ -188,11 +201,8 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
   const saveMutation = useMutation({
     mutationFn: async () => {
       const body = { name: name.trim(), slug: slug.trim(), phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive, linkedRegionId: linkedRegionId || null, defaultZipCode: defaultZipCode.trim() || null };
-      if (isEdit) {
-        return apiRequest("PUT", `/api/regions/${region.id}`, body);
-      } else {
-        return apiRequest("POST", `/api/regions`, body);
-      }
+      if (isEdit) return apiRequest("PUT", `/api/regions/${region.id}`, body);
+      return apiRequest("POST", `/api/regions`, body);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/regions"] });
@@ -204,116 +214,88 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
     },
   });
 
-  const inputClass = "w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors";
-  const selectClass = "w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm focus:outline-none focus:border-[#f5a623]/60 transition-colors appearance-none";
-  const labelClass = "block text-[#4caf82] font-mono text-xs tracking-widest mb-2 uppercase";
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="relative w-full max-w-lg mx-4 bg-[#0d1117] border border-[#f5a623]/30 rounded-lg p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-        <button data-testid="btn-close-region-dialog" onClick={onClose} className="absolute top-4 right-4 text-[#4caf82]/60 hover:text-[#f5a623] transition-colors">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="relative w-full max-w-lg mx-4 bg-white rounded-xl border border-gray-200 p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <button data-testid="btn-close-region-dialog" onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors">
           <X size={18} />
         </button>
-        <h2 className="text-[#f5a623] font-mono text-lg font-bold mb-1 tracking-widest uppercase">
-          {isEdit ? "Edit Region_" : "Add Region_"}
+        <h2 className="text-gray-900 font-mono text-base font-bold mb-1 tracking-widest uppercase">
+          {isEdit ? "Edit Region" : "Add Region"}
         </h2>
-        <p className="text-[#4caf82]/60 text-xs font-mono mb-6">
+        <p className="text-gray-500 text-xs font-mono mb-6">
           {isEdit ? "Update regional market settings" : "Create a new regional phone market"}
         </p>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Market Name_</label>
-              <input data-testid="input-region-name" type="text" value={name} onChange={e => handleNameChange(e.target.value)} placeholder="Denver" className={inputClass} />
+              <label className={C.label}>Market Name</label>
+              <input data-testid="input-region-name" type="text" value={name} onChange={e => handleNameChange(e.target.value)} placeholder="Denver" className={C.input} />
             </div>
             <div>
-              <label className={labelClass}>URL Slug_</label>
-              <input data-testid="input-region-slug" type="text" value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder="denver" className={inputClass} />
+              <label className={C.label}>URL Slug</label>
+              <input data-testid="input-region-slug" type="text" value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder="denver" className={C.input} />
             </div>
           </div>
           <div>
-            <label className={labelClass}>Phone Number_</label>
-            <input data-testid="input-region-phone" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="+1 303 555 0123" className={inputClass} />
+            <label className={C.label}>Phone Number</label>
+            <input data-testid="input-region-phone" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="+1 303 555 0123" className={C.input} />
           </div>
           <div>
-            <label className={labelClass}>Default Zip Code_</label>
-            <input
-              data-testid="input-region-default-zip"
-              type="text"
-              inputMode="numeric"
-              maxLength={5}
-              value={defaultZipCode}
-              onChange={e => setDefaultZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
-              placeholder="e.g. 80202"
-              className={inputClass}
-            />
-            <p className="text-[#4caf82]/40 font-mono text-xs mt-1.5">
-              Used for proximity sorting when a caller hasn't provided their own zip code.
-            </p>
+            <label className={C.label}>Default Zip Code</label>
+            <input data-testid="input-region-default-zip" type="text" inputMode="numeric" maxLength={5} value={defaultZipCode} onChange={e => setDefaultZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))} placeholder="e.g. 80202" className={C.input} />
+            <p className="text-gray-400 font-mono text-xs mt-1.5">Used for proximity sorting when a caller hasn't provided their own zip code.</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Timezone_</label>
-              <input data-testid="input-region-timezone" type="text" value={timezone} onChange={e => setTimezone(e.target.value)} placeholder="America/Denver" className={inputClass} />
+              <label className={C.label}>Timezone</label>
+              <input data-testid="input-region-timezone" type="text" value={timezone} onChange={e => setTimezone(e.target.value)} placeholder="America/Denver" className={C.input} />
             </div>
             <div>
-              <label className={labelClass}>Max Capacity_</label>
-              <input data-testid="input-region-capacity" type="number" value={maxCapacity} onChange={e => setMaxCapacity(e.target.value)} placeholder="1000" className={inputClass} />
+              <label className={C.label}>Max Capacity</label>
+              <input data-testid="input-region-capacity" type="number" value={maxCapacity} onChange={e => setMaxCapacity(e.target.value)} placeholder="1000" className={C.input} />
             </div>
           </div>
           <div>
-            <label className={labelClass}>Description_</label>
-            <input data-testid="input-region-description" type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Colorado Rocky Mountains region" className={inputClass} />
+            <label className={C.label}>Description</label>
+            <input data-testid="input-region-description" type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Colorado Rocky Mountains region" className={C.input} />
           </div>
-
           <div>
-            <label className={labelClass}>Linked Nearby Region_</label>
-            <select
-              data-testid="select-linked-region"
-              value={linkedRegionId}
-              onChange={e => setLinkedRegionId(e.target.value)}
-              className={selectClass}
-            >
+            <label className={C.label}>Linked Nearby Region</label>
+            <select data-testid="select-linked-region" value={linkedRegionId} onChange={e => setLinkedRegionId(e.target.value)} className={C.select}>
               <option value="">— No linked region —</option>
               {otherRegions.map(r => (
                 <option key={r.id} value={r.id}>{r.name} ({r.phoneNumber})</option>
               ))}
             </select>
-            <p className="text-[#4caf82]/40 font-mono text-xs mt-1.5">
-              When callers exhaust this region's queue, they'll be offered to hear callers from the linked region.
-            </p>
+            <p className="text-gray-400 font-mono text-xs mt-1.5">When callers exhaust this region's queue, they'll be offered to hear callers from the linked region.</p>
           </div>
-
           <div className="flex items-center gap-3">
             <button
               data-testid="toggle-region-active"
               type="button"
               onClick={() => setIsActive(v => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? "bg-[#4caf82]" : "bg-[#4caf82]/20"}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isActive ? "bg-emerald-500" : "bg-gray-200"}`}
             >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isActive ? "translate-x-6" : "translate-x-1"}`} />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isActive ? "translate-x-6" : "translate-x-1"}`} />
             </button>
-            <span className="text-[#4caf82] font-mono text-xs tracking-widest uppercase">
-              {isActive ? "Active" : "Inactive"}
-            </span>
+            <span className="text-gray-600 font-mono text-xs tracking-widest uppercase">{isActive ? "Active" : "Inactive"}</span>
           </div>
-
           {slug && (
-            <div className="bg-black/30 border border-[#4caf82]/20 rounded p-3">
-              <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase mb-1">Webhook URL_</div>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <div className="text-gray-400 font-mono text-xs tracking-widest uppercase mb-1">Webhook URL</div>
               <div className="text-[#f5a623] font-mono text-xs break-all">/voice/{slug}</div>
             </div>
           )}
-
           <div className="flex gap-3 pt-2">
-            <button data-testid="btn-cancel-region" onClick={onClose} className="flex-1 py-2.5 border border-[#4caf82]/30 rounded font-mono text-xs text-[#4caf82]/60 hover:text-[#4caf82] hover:border-[#4caf82]/60 transition-colors tracking-widest uppercase">Cancel_</button>
+            <button data-testid="btn-cancel-region" onClick={onClose} className={C.btnSecondary + " flex-1 justify-center py-2.5"}>Cancel</button>
             <button
               data-testid="btn-save-region"
               onClick={() => saveMutation.mutate()}
               disabled={!name.trim() || !slug.trim() || !phoneNumber.trim() || saveMutation.isPending}
-              className="flex-1 py-2.5 bg-[#f5a623] hover:bg-[#f5a623]/80 disabled:bg-[#f5a623]/30 disabled:cursor-not-allowed rounded font-mono text-xs text-black font-bold tracking-widest uppercase transition-colors"
+              className={C.btnPrimary + " flex-1 justify-center py-2.5"}
             >
-              {saveMutation.isPending ? "Saving..." : isEdit ? "Save Changes_" : "Create Region_"}
+              {saveMutation.isPending ? "Saving..." : isEdit ? "Save Changes" : "Create Region"}
             </button>
           </div>
         </div>
@@ -322,6 +304,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
   );
 }
 
+// ── RegionsTab ────────────────────────────────────────────────────────────────
 function RegionsTab() {
   const { toast } = useToast();
   const [dialog, setDialog] = useState<"add" | Region | null>(null);
@@ -334,10 +317,7 @@ function RegionsTab() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/regions/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/regions"] });
-      toast({ title: "Region deleted" });
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/regions"] }); toast({ title: "Region deleted" }); },
     onError: () => toast({ title: "Delete failed", variant: "destructive" }),
   });
 
@@ -347,170 +327,86 @@ function RegionsTab() {
     onError: () => toast({ title: "Failed to update region", variant: "destructive" }),
   });
 
-  function copyWebhook(slug: string) {
-    navigator.clipboard.writeText(`${origin}/voice/${slug}`);
-    toast({ title: "Webhook URL copied" });
-  }
-
-  function copyPhone(phone: string) {
-    navigator.clipboard.writeText(phone);
-    toast({ title: "Phone number copied" });
-  }
+  function copyWebhook(slug: string) { navigator.clipboard.writeText(`${origin}/voice/${slug}`); toast({ title: "Webhook URL copied" }); }
+  function copyPhone(phone: string) { navigator.clipboard.writeText(phone); toast({ title: "Phone number copied" }); }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {dialog === "add" && <RegionDialog onClose={() => setDialog(null)} />}
       {dialog && dialog !== "add" && <RegionDialog region={dialog as Region} onClose={() => setDialog(null)} />}
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-[#f5a623] font-mono text-lg font-bold tracking-widest uppercase flex items-center gap-2">
-            <Globe size={18} />
-            Regional Management_
-          </h2>
-          <p className="text-[#4caf82]/50 font-mono text-xs mt-1">
-            Manage phone numbers and regional markets for your voice dating system
-          </p>
-        </div>
-        <button
-          data-testid="btn-add-region"
-          onClick={() => setDialog("add")}
-          className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] hover:bg-[#f5a623]/80 text-black font-mono text-xs font-bold tracking-widest uppercase rounded transition-colors"
-        >
-          <Plus size={14} />
-          Add Region
-        </button>
-      </div>
-
       {isLoading ? (
-        <div className="py-20 text-center text-[#4caf82]/40 font-mono text-xs tracking-widest">
-          LOADING REGIONS...
-        </div>
+        <div className="py-20 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING REGIONS...</div>
       ) : !regions || regions.length === 0 ? (
         <div className="py-20 text-center">
-          <MapPin size={32} className="mx-auto text-[#4caf82]/20 mb-4" />
-          <div className="text-[#4caf82]/40 font-mono text-xs tracking-widest">
-            NO REGIONS CONFIGURED — ADD ONE TO BEGIN
-          </div>
+          <MapPin size={32} className="mx-auto text-gray-300 mb-4" />
+          <div className="text-gray-400 font-mono text-xs tracking-widest">NO REGIONS CONFIGURED — ADD ONE TO BEGIN</div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {regions.map(region => (
-            <div
-              key={region.id}
-              data-testid={`card-region-${region.id}`}
-              className="border border-[#f5a623]/20 rounded-lg p-5 bg-black/30 space-y-4"
-            >
+            <div key={region.id} data-testid={`card-region-${region.id}`} className={C.card}>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded border border-[#f5a623]/30 bg-[#f5a623]/10 flex items-center justify-center">
-                    <MapPin size={16} className="text-[#f5a623]" />
+                  <div className="w-9 h-9 rounded-lg border border-amber-200 bg-amber-50 flex items-center justify-center">
+                    <MapPin size={15} className="text-[#f5a623]" />
                   </div>
                   <div>
-                    <div className="text-white font-mono font-bold text-sm tracking-widest uppercase">
-                      {region.name}
-                    </div>
-                    <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">
-                      {region.slug}
-                    </div>
+                    <div className="text-gray-900 font-mono font-bold text-sm tracking-widest uppercase">{region.name}</div>
+                    <div className="text-gray-400 font-mono text-xs tracking-widest uppercase">{region.slug}</div>
                   </div>
                 </div>
-                <span className={`px-2 py-0.5 rounded border font-mono text-xs tracking-widest uppercase ${region.isActive ? "border-[#4caf82]/40 bg-[#4caf82]/10 text-[#4caf82]" : "border-[#4caf82]/20 bg-black/30 text-[#4caf82]/40"}`}>
+                <span className={`${C.badge} ${region.isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${region.isActive ? "bg-emerald-500" : "bg-gray-300"}`} />
                   {region.isActive ? "Active" : "Inactive"}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
-                <Phone size={12} className="text-[#4caf82]/50" />
-                <span data-testid={`text-phone-${region.id}`} className="text-[#4caf82] font-mono text-sm flex-1">
-                  {region.phoneNumber}
-                </span>
-                <button
-                  data-testid={`btn-copy-phone-${region.id}`}
-                  onClick={() => copyPhone(region.phoneNumber)}
-                  className="text-[#4caf82]/40 hover:text-[#f5a623] transition-colors"
-                >
-                  <Copy size={12} />
-                </button>
+                <Phone size={12} className="text-gray-400" />
+                <span data-testid={`text-phone-${region.id}`} className="text-gray-700 font-mono text-sm flex-1">{region.phoneNumber}</span>
+                <button data-testid={`btn-copy-phone-${region.id}`} onClick={() => copyPhone(region.phoneNumber)} className="text-gray-400 hover:text-[#f5a623] transition-colors"><Copy size={12} /></button>
               </div>
 
               {region.linkedRegionId && (() => {
                 const linked = regions?.find(r => r.id === region.linkedRegionId);
                 return linked ? (
-                  <div data-testid={`text-linked-region-${region.id}`} className="flex items-center gap-2 bg-[#f5a623]/5 border border-[#f5a623]/20 rounded px-3 py-1.5">
-                    <MapPin size={11} className="text-[#f5a623]/60" />
-                    <span className="text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Linked:</span>
+                  <div data-testid={`text-linked-region-${region.id}`} className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+                    <MapPin size={11} className="text-[#f5a623]/70" />
+                    <span className="text-gray-500 font-mono text-xs tracking-widest uppercase">Linked:</span>
                     <span className="text-[#f5a623] font-mono text-xs font-bold">{linked.name}</span>
                   </div>
                 ) : null;
               })()}
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <div className="text-[#f5a623] font-mono font-bold text-2xl">
-                    {String(region.activeCalls).padStart(3, "0")}
+              <div className="grid grid-cols-3 gap-3 py-1">
+                {[
+                  { val: region.activeCalls, label: "Live on Line" },
+                  { val: region.voiceProfiles, label: "Voice Profiles" },
+                  { val: region.messagesRelayed, label: "Msgs Relayed" },
+                ].map(({ val, label }) => (
+                  <div key={label}>
+                    <div className={C.statValue + " text-2xl"}>{String(val).padStart(3, "0")}</div>
+                    <div className={C.statLabel + " text-[10px]"}>{label}</div>
                   </div>
-                  <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Live on Line</div>
-                </div>
-                <div>
-                  <div className="text-[#f5a623] font-mono font-bold text-2xl">
-                    {String(region.voiceProfiles).padStart(3, "0")}
-                  </div>
-                  <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Voice Profiles</div>
-                </div>
-                <div>
-                  <div className="text-[#f5a623] font-mono font-bold text-2xl">
-                    {String(region.messagesRelayed).padStart(3, "0")}
-                  </div>
-                  <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Msgs Relayed</div>
-                </div>
+                ))}
               </div>
 
-              <div className="flex items-center gap-2 text-[#4caf82]/60 font-mono text-xs">
-                <Clock size={12} />
-                {region.timezone}
-              </div>
+              <div className="flex items-center gap-1.5 text-gray-400 font-mono text-xs"><Clock size={11} />{region.timezone}</div>
+              {region.description && <div className="text-gray-400 font-mono text-xs">{region.description}</div>}
 
-              {region.description && (
-                <div className="text-[#4caf82]/50 font-mono text-xs">{region.description}</div>
-              )}
-
-              <div className="flex items-center justify-between pt-1 border-t border-[#4caf82]/10">
+              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                 <div className="flex gap-2">
-                  <button
-                    data-testid={`btn-edit-region-${region.id}`}
-                    onClick={() => setDialog(region)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 border border-[#f5a623]/30 bg-[#f5a623]/10 hover:bg-[#f5a623]/20 text-[#f5a623] font-mono text-xs rounded transition-colors"
-                  >
-                    <Pencil size={11} />
-                    Edit
+                  <button data-testid={`btn-edit-region-${region.id}`} onClick={() => setDialog(region)} className={C.btnGhost}>
+                    <Pencil size={11} /> Edit
                   </button>
-                  <button
-                    data-testid={`btn-delete-region-${region.id}`}
-                    onClick={() => { if (confirm(`Delete region "${region.name}"?`)) deleteMutation.mutate(region.id); }}
-                    disabled={deleteMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-mono text-xs rounded transition-colors disabled:opacity-50"
-                  >
-                    <Trash2 size={11} />
-                    Delete
+                  <button data-testid={`btn-delete-region-${region.id}`} onClick={() => { if (confirm(`Delete region "${region.name}"?`)) deleteMutation.mutate(region.id); }} disabled={deleteMutation.isPending} className={C.btnDanger}>
+                    <Trash2 size={11} /> Delete
                   </button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    data-testid={`btn-copy-webhook-${region.id}`}
-                    onClick={() => copyWebhook(region.slug)}
-                    title={`Copy webhook: /voice/${region.slug}`}
-                    className="text-[#4caf82]/40 hover:text-[#f5a623] transition-colors"
-                  >
-                    <Copy size={13} />
-                  </button>
-                  <button
-                    data-testid={`btn-toggle-region-${region.id}`}
-                    onClick={() => toggleMutation.mutate(region)}
-                    disabled={toggleMutation.isPending}
-                    title={region.isActive ? "Deactivate region" : "Activate region"}
-                    className={`transition-colors ${region.isActive ? "text-[#4caf82]" : "text-[#4caf82]/30"} hover:text-[#f5a623] disabled:opacity-50`}
-                  >
+                  <button data-testid={`btn-copy-webhook-${region.id}`} onClick={() => copyWebhook(region.slug)} title={`Copy webhook: /voice/${region.slug}`} className="text-gray-400 hover:text-[#f5a623] transition-colors"><Copy size={13} /></button>
+                  <button data-testid={`btn-toggle-region-${region.id}`} onClick={() => toggleMutation.mutate(region)} disabled={toggleMutation.isPending} title={region.isActive ? "Deactivate region" : "Activate region"} className={`transition-colors ${region.isActive ? "text-emerald-500" : "text-gray-300"} hover:text-[#f5a623] disabled:opacity-50`}>
                     {region.isActive ? <Eye size={16} /> : <EyeOff size={16} />}
                   </button>
                 </div>
@@ -523,19 +419,13 @@ function RegionsTab() {
   );
 }
 
+// ── VoiceProfilesTab ──────────────────────────────────────────────────────────
 function VoiceProfilesTab() {
   const { toast } = useToast();
   const [showUpload, setShowUpload] = useState(false);
 
-  const { data: profiles, isLoading } = useQuery<ProfileWithUser[]>({
-    queryKey: ["/api/admin/profiles"],
-  });
-
-  const { data: liveData } = useQuery<{ liveUserIds: string[] }>({
-    queryKey: ["/api/admin/simulator/live"],
-    refetchInterval: 5000,
-  });
-
+  const { data: profiles, isLoading } = useQuery<ProfileWithUser[]>({ queryKey: ["/api/admin/profiles"] });
+  const { data: liveData } = useQuery<{ liveUserIds: string[] }>({ queryKey: ["/api/admin/simulator/live"], refetchInterval: 5000 });
   const liveSet = new Set(liveData?.liveUserIds ?? []);
 
   const deleteMutation = useMutation({
@@ -548,69 +438,48 @@ function VoiceProfilesTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       toast({ title: "Profile deleted" });
     },
-    onError: () => {
-      toast({ title: "Delete failed", variant: "destructive" });
-    },
+    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
   });
 
   return (
     <div className="space-y-4">
       {showUpload && <UploadDialog onClose={() => setShowUpload(false)} />}
-      <div className="flex items-center justify-between">
-        <h2 className="text-[#f5a623] font-mono text-lg font-bold tracking-widest uppercase">Voice Profiles_</h2>
-        <button
-          data-testid="btn-add-profile"
-          onClick={() => setShowUpload(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] hover:bg-[#f5a623]/80 text-black font-mono text-xs font-bold tracking-widest uppercase rounded transition-colors"
-        >
-          <Plus size={14} />
-          Add Profile
-        </button>
-      </div>
-      <div className="border border-[#f5a623]/20 rounded-lg overflow-hidden">
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-[#f5a623]/20">
-              <th className="text-left px-5 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Phone</th>
-              <th className="text-left px-5 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Audio</th>
-              <th className="text-left px-5 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Duration</th>
-              <th className="text-left px-5 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Status</th>
-              <th className="text-left px-5 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Actions</th>
+            <tr>
+              <th className={C.th}>Phone</th>
+              <th className={C.th}>Audio</th>
+              <th className={C.th}>Duration</th>
+              <th className={C.th}>Status</th>
+              <th className={C.th}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={5} className="px-5 py-10 text-center text-[#4caf82]/40 font-mono text-xs tracking-widest">LOADING PROFILES...</td></tr>
+              <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING PROFILES...</td></tr>
             ) : !profiles || profiles.length === 0 ? (
-              <tr><td colSpan={5} className="px-5 py-10 text-center text-[#4caf82]/40 font-mono text-xs tracking-widest">NO PROFILES FOUND — UPLOAD ONE TO BEGIN</td></tr>
+              <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">NO PROFILES FOUND — UPLOAD ONE TO BEGIN</td></tr>
             ) : (
               profiles.map(profile => (
-                <tr key={profile.id} data-testid={`row-profile-${profile.id}`} className="border-t border-[#4caf82]/10 hover:bg-[#4caf82]/5 transition-colors">
-                  <td className="px-5 py-4">
+                <tr key={profile.id} data-testid={`row-profile-${profile.id}`} className={C.row}>
+                  <td className={C.td}>
                     <div className="flex items-center gap-2">
-                      <Phone size={12} className="text-[#4caf82]/50" />
-                      <span data-testid={`text-phone-${profile.id}`} className="text-[#4caf82] font-mono text-sm">{profile.phoneNumber}</span>
+                      <Phone size={12} className="text-gray-400" />
+                      <span data-testid={`text-phone-${profile.id}`} className="text-gray-800 font-mono text-sm">{profile.phoneNumber}</span>
                     </div>
                   </td>
-                  <td className="px-5 py-4"><AudioPlayer src={profile.recordingUrl} /></td>
-                  <td className="px-5 py-4">
-                    <span className="text-[#4caf82]/60 font-mono text-xs">{profile.recordingDuration != null ? `${profile.recordingDuration}s` : "—"}</span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-[#4caf82]/30 bg-[#4caf82]/10 text-[#4caf82] font-mono text-xs tracking-widest uppercase">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#4caf82] animate-pulse" />
-                      Live
+                  <td className={C.td}><AudioPlayer src={profile.recordingUrl} /></td>
+                  <td className={C.td}><span className="text-gray-500 font-mono text-xs">{profile.recordingDuration != null ? `${profile.recordingDuration}s` : "—"}</span></td>
+                  <td className={C.td}>
+                    <span className={`${C.badge} ${liveSet.has(profile.userId) ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${liveSet.has(profile.userId) ? "bg-emerald-500 animate-pulse" : "bg-gray-300"}`} />
+                      {liveSet.has(profile.userId) ? "Live" : "Offline"}
                     </span>
                   </td>
-                  <td className="px-5 py-4">
-                    <button
-                      data-testid={`btn-delete-profile-${profile.id}`}
-                      onClick={() => { if (confirm(`Delete profile for ${profile.phoneNumber}?`)) deleteMutation.mutate(profile.id); }}
-                      disabled={deleteMutation.isPending}
-                      className="flex items-center gap-1.5 px-3 py-1.5 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-mono text-xs rounded transition-colors disabled:opacity-50"
-                    >
-                      <Trash2 size={12} />
-                      Delete
+                  <td className={C.td}>
+                    <button data-testid={`btn-delete-profile-${profile.id}`} onClick={() => { if (confirm(`Delete profile for ${profile.phoneNumber}?`)) deleteMutation.mutate(profile.id); }} disabled={deleteMutation.isPending} className={C.btnDanger}>
+                      <Trash2 size={12} /> Delete
                     </button>
                   </td>
                 </tr>
@@ -619,10 +488,14 @@ function VoiceProfilesTab() {
           </tbody>
         </table>
       </div>
+      {profiles && profiles.length > 0 && (
+        <div className="text-gray-400 font-mono text-xs">{profiles.length} record{profiles.length !== 1 ? "s" : ""}</div>
+      )}
     </div>
   );
 }
 
+// ── SYSTEM_PROMPTS list ───────────────────────────────────────────────────────
 const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "system_greeting.mp3", label: "System Greeting / Legal Notice", text: "Welcome to Interactive Mail. Interactive Mail assumes no responsibility for personal meetings. This service is for adults only. If you are under 18, please hang up now." },
   { filename: "free_trial_offer.mp3", label: "Free Trial Offer", text: "We would like to offer you a free trial so you can check out the system and start meeting new people. To start your free trial press the pound key." },
@@ -639,40 +512,40 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "main_menu.mp3", label: "Main Menu", text: "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership." },
   { filename: "rerecord_name.mp3", label: "Re-record Name", text: "Let's re-record your profile. First, say your first name only after the tone. You have 5 seconds." },
   { filename: "invalid_choice.mp3", label: "Invalid Choice", text: "Invalid choice." },
-  { filename: "trial_warning.mp3", label: "Trial Warning", text: "You have less than 5 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
+  { filename: "trial_warning.mp3", label: "Trial Warning", text: "You have less than 5 minutes remaining in your free trial. Stay connected by joining now." },
   { filename: "member_warning.mp3", label: "Member Warning", text: "You have less than 5 minutes remaining in your membership. To renew now press 1. To continue press pound." },
-  { filename: "greeting_setup.mp3", label: "Greeting Setup", text: "Your last greeting you recorded is still available. To use it again, press 1. To record a new greeting, press 2. To hear your greeting, press 3. To repeat these choices, press 9. To continue, press pound." },
+  { filename: "greeting_setup.mp3", label: "Greeting Setup", text: "Your last greeting you recorded is still available. To use it again, press 1. To record a new greeting, press 2. To hear your greeting, press 3." },
   { filename: "review_greeting.mp3", label: "Review Greeting", text: "To hear your greeting, press 1. To re-record, press 2. To accept and continue, press 3. To repeat these choices, press 9." },
   { filename: "no_greeting_found.mp3", label: "No Greeting Found", text: "No greeting found." },
   { filename: "session_expired_greeting.mp3", label: "Session Expired — Greeting", text: "Your session has expired. Please re-record your greeting." },
   { filename: "profile_saved.mp3", label: "Profile Saved", text: "Your greeting has been saved." },
   { filename: "no_profiles.mp3", label: "No Profiles Available", text: "There are no profiles available right now. Please call back later." },
-  { filename: "message_options.mp3", label: "Message Options", text: "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 9 to return to the main menu." },
+  { filename: "message_options.mp3", label: "Message Options", text: "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles." },
   { filename: "profile_options.mp3", label: "Profile Options", text: "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 9 to return to main menu." },
   { filename: "record_reply.mp3", label: "Record Reply", text: "Record your reply after the tone." },
   { filename: "record_message.mp3", label: "Record Message", text: "Record your message after the tone." },
   { filename: "message_sent.mp3", label: "Message Sent", text: "Your message has been sent. Returning to profiles." },
   { filename: "message_send_error.mp3", label: "Message Send Error", text: "Failed to send your message. Returning to profiles." },
   { filename: "info_menu.mp3", label: "Info Menu", text: "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu." },
-  { filename: "membership_questions.mp3", label: "Membership Questions", text: "Membership questions. Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership with a credit card. Press 9 to return to the main menu." },
-  { filename: "membership_how_it_works.mp3", label: "How Membership Works", text: "Here is how membership works. As a member, you get full access to the voice line community. Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. We offer three membership options: XX minutes, XX minutes, and XX minutes. Your remaining time is tracked in minutes. Choose the option that works best for you." },
-  { filename: "membership_pricing.mp3", label: "Membership Pricing", text: "Here are our membership prices. A XX minute membership is XX dollars. A XX minute membership is XX dollars. A XX minute membership is XX dollars. To purchase, press 3 from the membership menu." },
-  { filename: "membership_packages.mp3", label: "Membership Packages", text: "Press 1 for XX minutes at XX dollars. Press 2 for XX minutes at XX dollars. Press 3 for XX minutes at XX dollars. Press 9 to repeat. Press pound to cancel." },
+  { filename: "membership_questions.mp3", label: "Membership Questions", text: "Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership." },
+  { filename: "membership_how_it_works.mp3", label: "How Membership Works", text: "As a member, you get full access to the voice line community." },
+  { filename: "membership_pricing.mp3", label: "Membership Pricing", text: "Here are our membership prices." },
+  { filename: "membership_packages.mp3", label: "Membership Packages", text: "Press 1 for plan 1. Press 2 for plan 2. Press 3 for plan 3. Press 9 to repeat. Press pound to cancel." },
   { filename: "package_cancelled.mp3", label: "Package Cancelled", text: "Cancelled. Returning to the main menu." },
   { filename: "package_invalid.mp3", label: "Package Invalid", text: "Invalid selection." },
   { filename: "package_confirm_30day.mp3", label: "Package Confirm — Plan 1", text: "You selected XX minutes access for XX dollars." },
   { filename: "package_confirm_14day.mp3", label: "Package Confirm — Plan 2", text: "You selected XX minutes access for XX dollars." },
   { filename: "package_confirm_14day_bonus.mp3", label: "Package Confirm — Plan 2 (Bonus)", text: "Great choice! You selected XX minutes access for XX dollars, including your first purchase bonus — double the minutes!" },
   { filename: "package_confirm_24hour.mp3", label: "Package Confirm — Plan 3", text: "You selected XX minutes access for XX dollars." },
-  { filename: "payment_intro.mp3", label: "Payment Intro", text: "Please have your credit card ready. You will be asked to enter your card number, expiry date, and security code." },
+  { filename: "payment_intro.mp3", label: "Payment Intro", text: "Please have your credit card ready." },
   { filename: "payment_session_expired.mp3", label: "Payment Session Expired", text: "Your session has expired. Please try again." },
-  { filename: "payment_success_30day.mp3", label: "Payment Success — Plan 1", text: "Payment successful! You now have XX minutes access. Your card has been charged XX dollars. Thank you for joining. Returning to the main menu." },
-  { filename: "payment_success_14day.mp3", label: "Payment Success — Plan 2", text: "Payment successful! You now have XX minutes access. Your card has been charged XX dollars. Thank you for joining. Returning to the main menu." },
-  { filename: "payment_success_14day_bonus.mp3", label: "Payment Success — Plan 2 (Bonus)", text: "Payment successful! You now have XX minutes access. Your card has been charged XX dollars. Plus your bonus XX minutes have been added — enjoy XX minutes total! Thank you for joining. Returning to the main menu." },
-  { filename: "payment_success_24hour.mp3", label: "Payment Success — Plan 3", text: "Payment successful! You now have XX minutes access. Your card has been charged XX dollars. Thank you for joining. Returning to the main menu." },
+  { filename: "payment_success_30day.mp3", label: "Payment Success — Plan 1", text: "Payment successful! You now have XX minutes access." },
+  { filename: "payment_success_14day.mp3", label: "Payment Success — Plan 2", text: "Payment successful! You now have XX minutes access." },
+  { filename: "payment_success_14day_bonus.mp3", label: "Payment Success — Plan 2 (Bonus)", text: "Payment successful! Plus your bonus minutes have been added!" },
+  { filename: "payment_success_24hour.mp3", label: "Payment Success — Plan 3", text: "Payment successful! You now have XX minutes access." },
   { filename: "payment_declined.mp3", label: "Payment Declined", text: "Your card was declined. Please check your details and try again later." },
   { filename: "payment_failed.mp3", label: "Payment Failed", text: "Your payment could not be completed at this time. Please try again later." },
-  { filename: "payment_activation_error.mp3", label: "Payment Activation Error", text: "Your payment was received but there was an error activating your membership. Please contact support." },
+  { filename: "payment_activation_error.mp3", label: "Payment Activation Error", text: "Your payment was received but there was an error activating your membership." },
   { filename: "region_not_active.mp3", label: "Region Not Active", text: "This phone number is not currently active. Please try again later." },
   { filename: "region_unavailable.mp3", label: "Region Unavailable", text: "This market is temporarily unavailable. Please try again later." },
   { filename: "phrase_you_have.mp3", label: "Phrase — You Have", text: "You have" },
@@ -724,6 +597,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "num_900.mp3", label: "Number — 900", text: "nine hundred" },
 ];
 
+// ── TTSTab ────────────────────────────────────────────────────────────────────
 function TTSTab() {
   const { toast } = useToast();
   const [customText, setCustomText] = useState("");
@@ -732,38 +606,18 @@ function TTSTab() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
 
-  const { data: settings } = useQuery<{ voiceId: string }>({
-    queryKey: ["/api/admin/tts/settings"],
-  });
-
-  const { data: existingFiles, refetch: refetchFiles } = useQuery<{ filename: string; url: string; size: number }[]>({
-    queryKey: ["/api/admin/tts/prompts"],
-  });
-
+  const { data: settings } = useQuery<{ voiceId: string }>({ queryKey: ["/api/admin/tts/settings"] });
+  const { data: existingFiles, refetch: refetchFiles } = useQuery<{ filename: string; url: string; size: number }[]>({ queryKey: ["/api/admin/tts/prompts"] });
   const existingSet = new Set((existingFiles ?? []).map(f => f.filename));
 
   const generateMutation = useMutation({
     mutationFn: async ({ text, filename }: { text: string; filename: string }) => {
-      const res = await fetch("/api/admin/tts/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, filename }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Generation failed" }));
-        throw new Error(err.message);
-      }
+      const res = await fetch("/api/admin/tts/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, filename }) });
+      if (!res.ok) { const err = await res.json().catch(() => ({ message: "Generation failed" })); throw new Error(err.message); }
       return res.json() as Promise<{ filename: string; url: string }>;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
-      toast({ title: "Audio generated", description: data.filename });
-      setGenerating(null);
-    },
-    onError: (err: Error) => {
-      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
-      setGenerating(null);
-    },
+    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] }); toast({ title: "Audio generated", description: data.filename }); setGenerating(null); },
+    onError: (err: Error) => { toast({ title: "Generation failed", description: err.message, variant: "destructive" }); setGenerating(null); },
   });
 
   const deleteMutation = useMutation({
@@ -771,231 +625,166 @@ function TTSTab() {
       const res = await fetch(`/api/admin/tts/prompts/${encodeURIComponent(filename)}`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) throw new Error("Delete failed");
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
-      toast({ title: "File deleted" });
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] }); toast({ title: "File deleted" }); },
     onError: () => toast({ title: "Delete failed", variant: "destructive" }),
   });
 
-  function handleGenerate(filename: string, text: string) {
-    setGenerating(filename);
-    generateMutation.mutate({ text, filename });
-  }
-
+  function handleGenerate(filename: string, text: string) { setGenerating(filename); generateMutation.mutate({ text, filename }); }
   function handleCustomGenerate() {
     if (!customText.trim() || !customFilename.trim()) return;
     const fn = customFilename.trim().replace(/\.mp3$/i, "") + ".mp3";
     setGenerating(fn);
     generateMutation.mutate({ text: customText.trim(), filename: fn });
-    setCustomText("");
-    setCustomFilename("");
+    setCustomText(""); setCustomFilename("");
   }
 
-  const filtered = SYSTEM_PROMPTS.filter(p =>
-    !filter || p.label.toLowerCase().includes(filter.toLowerCase()) || p.filename.toLowerCase().includes(filter.toLowerCase())
-  );
-
+  const filtered = SYSTEM_PROMPTS.filter(p => !filter || p.label.toLowerCase().includes(filter.toLowerCase()) || p.filename.toLowerCase().includes(filter.toLowerCase()));
   const generatedCount = SYSTEM_PROMPTS.filter(p => existingSet.has(p.filename)).length;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-[#f5a623] font-mono text-lg font-bold tracking-widest uppercase flex items-center gap-2">
-            <Volume2 size={18} />
-            Audio Generation_
-          </h2>
-          <p className="text-[#4caf82]/50 font-mono text-xs mt-1">
-            Generate phone system audio files using ElevenLabs TTS
-          </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div className={C.cardAlt}>
+          <div className={C.label}>Current Voice ID</div>
+          <div className="text-[#f5a623] font-mono text-sm break-all">{settings?.voiceId ?? "Loading..."}</div>
+          <div className="text-gray-400 font-mono text-xs">Change via ELEVENLABS_VOICE_ID in .env</div>
         </div>
-        <div className="text-right">
-          <div className="text-[#f5a623] font-mono font-bold text-2xl">{generatedCount}/{SYSTEM_PROMPTS.length}</div>
-          <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase">Prompts Generated</div>
+        <div className={C.cardAlt}>
+          <div className={C.label}>Prompts Generated</div>
+          <div className={C.statValue}>{generatedCount}<span className="text-gray-400 text-lg">/{SYSTEM_PROMPTS.length}</span></div>
         </div>
       </div>
 
-      <div className="bg-black/30 border border-[#4caf82]/20 rounded-lg p-4 space-y-1">
-        <div className="text-[#4caf82] font-mono text-xs tracking-widest uppercase mb-2">Current Voice ID_</div>
-        <div className="text-[#f5a623] font-mono text-sm break-all">{settings?.voiceId ?? "Loading..."}</div>
-        <div className="text-[#4caf82]/40 font-mono text-xs mt-1">Change via ELEVENLABS_VOICE_ID environment variable</div>
-      </div>
-
-      <div className="border border-[#f5a623]/20 rounded-lg p-5 space-y-4">
-        <h3 className="text-[#f5a623] font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
-          <Wand2 size={14} />
-          Custom Audio File_
+      <div className={C.card}>
+        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+          <Wand2 size={14} className="text-[#f5a623]" /> Custom Audio File
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="block text-[#4caf82] font-mono text-xs tracking-widest mb-1.5 uppercase">Output Filename_</label>
-            <input
-              data-testid="input-custom-filename"
-              type="text"
-              value={customFilename}
-              onChange={e => setCustomFilename(e.target.value)}
-              placeholder="my_custom_prompt"
-              className="w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors"
-            />
-            <div className="text-[#4caf82]/30 font-mono text-xs mt-1">.mp3 appended automatically</div>
+            <label className={C.label}>Output Filename</label>
+            <input data-testid="input-custom-filename" type="text" value={customFilename} onChange={e => setCustomFilename(e.target.value)} placeholder="my_custom_prompt" className={C.input} />
+            <div className="text-gray-400 font-mono text-xs mt-1">.mp3 appended automatically</div>
           </div>
           <div>
-            <label className="block text-[#4caf82] font-mono text-xs tracking-widest mb-1.5 uppercase">Text to Speak_</label>
+            <label className={C.label}>Text to Speak</label>
             <input
               data-testid="input-custom-text"
               type="text"
               value={customText}
               onChange={e => setCustomText(e.target.value)}
-              placeholder="Enter the text to convert to speech..."
-              className="w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors"
+              onKeyDown={e => { if (e.key === "Enter") handleCustomGenerate(); }}
+              placeholder="Enter text to convert to speech..."
+              className={C.input}
             />
           </div>
         </div>
-        <button
-          data-testid="btn-generate-custom"
-          onClick={handleCustomGenerate}
-          disabled={!customText.trim() || !customFilename.trim() || generateMutation.isPending}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#f5a623] hover:bg-[#f5a623]/80 disabled:bg-[#f5a623]/30 disabled:cursor-not-allowed text-black font-mono text-xs font-bold tracking-widest uppercase rounded transition-colors"
-        >
-          {generateMutation.isPending && generating === customFilename ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
-          Generate Audio_
+        <button data-testid="btn-generate-custom" onClick={handleCustomGenerate} disabled={!customText.trim() || !customFilename.trim() || !!generating} className={C.btnPrimary}>
+          {generating === customFilename ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+          Generate
         </button>
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-[#f5a623] font-mono text-sm font-bold tracking-widest uppercase">System Prompts_</h3>
+      <div className={C.card}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">System Prompts</h3>
           <input
             data-testid="input-filter-prompts"
             type="text"
             value={filter}
             onChange={e => setFilter(e.target.value)}
             placeholder="Filter prompts..."
-            className="bg-black/40 border border-[#4caf82]/30 rounded px-3 py-1.5 text-[#4caf82] font-mono text-xs placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors w-48"
+            className="w-56 bg-white border border-gray-300 rounded px-3 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#f5a623] transition-colors"
           />
         </div>
-        <div className="border border-[#f5a623]/20 rounded-lg overflow-hidden">
-          <div className="max-h-[600px] overflow-y-auto">
-            <table className="w-full">
-              <thead className="sticky top-0 bg-[#0d1117] z-10">
-                <tr className="border-b border-[#f5a623]/20">
-                  <th className="text-left px-4 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase w-6">Status</th>
-                  <th className="text-left px-4 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Prompt</th>
-                  <th className="text-left px-4 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase hidden md:table-cell">Filename</th>
-                  <th className="text-left px-4 py-3 text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(prompt => {
-                  const exists = existingSet.has(prompt.filename);
-                  const isGen = generating === prompt.filename && generateMutation.isPending;
-                  const currentText = editingText[prompt.filename] ?? prompt.text;
-                  return (
-                    <tr key={prompt.filename} data-testid={`row-prompt-${prompt.filename}`} className="border-t border-[#4caf82]/10 hover:bg-[#4caf82]/5 transition-colors">
-                      <td className="px-4 py-3">
-                        {isGen ? (
-                          <Loader2 size={14} className="text-[#f5a623] animate-spin" />
-                        ) : exists ? (
-                          <CheckCircle size={14} className="text-[#4caf82]" />
-                        ) : (
-                          <AlertCircle size={14} className="text-[#4caf82]/30" />
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th className={C.th}>Prompt</th>
+                <th className={C.th}>Text</th>
+                <th className={C.th + " w-32"}>Status</th>
+                <th className={C.th + " w-40"}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(prompt => {
+                const exists = existingSet.has(prompt.filename);
+                const isGen = generating === prompt.filename;
+                const existingFile = (existingFiles ?? []).find(f => f.filename === prompt.filename);
+                const currentText = editingText[prompt.filename] ?? prompt.text;
+                return (
+                  <tr key={prompt.filename} data-testid={`row-prompt-${prompt.filename}`} className={C.row}>
+                    <td className={C.td + " w-52"}>
+                      <div className="text-gray-800 font-mono text-xs font-bold">{prompt.label}</div>
+                      <div className="text-gray-400 font-mono text-[10px] mt-0.5">{prompt.filename}</div>
+                    </td>
+                    <td className={C.td}>
+                      <textarea
+                        data-testid={`textarea-prompt-${prompt.filename}`}
+                        value={currentText}
+                        onChange={e => setEditingText(prev => ({ ...prev, [prompt.filename]: e.target.value }))}
+                        rows={2}
+                        className="w-full bg-gray-50 border border-gray-200 rounded px-2.5 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#f5a623] transition-colors resize-none"
+                      />
+                    </td>
+                    <td className={C.td}>
+                      <span className={`${C.badge} ${exists ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
+                        {exists ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                        {exists ? "Generated" : "Missing"}
+                      </span>
+                    </td>
+                    <td className={C.td}>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          data-testid={`btn-generate-${prompt.filename}`}
+                          onClick={() => handleGenerate(prompt.filename, currentText)}
+                          disabled={!!generating}
+                          className={C.btnGhost + " text-[10px]"}
+                        >
+                          {isGen ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                          {exists ? "Regen" : "Generate"}
+                        </button>
+                        {exists && (
+                          <>
+                            {existingFile && <AudioPlayer src={existingFile.url} />}
+                            <button data-testid={`btn-delete-prompt-${prompt.filename}`} onClick={() => deleteMutation.mutate(prompt.filename)} className={C.btnDanger + " text-[10px]"}>
+                              <Trash2 size={10} />
+                            </button>
+                          </>
                         )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-white font-mono text-xs font-semibold mb-1">{prompt.label}</div>
-                        <input
-                          data-testid={`input-text-${prompt.filename}`}
-                          type="text"
-                          value={currentText}
-                          onChange={e => setEditingText(prev => ({ ...prev, [prompt.filename]: e.target.value }))}
-                          className="w-full bg-black/30 border border-[#4caf82]/20 rounded px-2 py-1 text-[#4caf82]/80 font-mono text-xs placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/40 transition-colors"
-                        />
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <span className="text-[#4caf82]/40 font-mono text-xs">{prompt.filename}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            data-testid={`btn-generate-${prompt.filename}`}
-                            onClick={() => handleGenerate(prompt.filename, currentText)}
-                            disabled={generateMutation.isPending || !currentText.trim()}
-                            title={exists ? "Regenerate" : "Generate"}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded font-mono text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${exists ? "border border-[#f5a623]/40 bg-[#f5a623]/10 hover:bg-[#f5a623]/20 text-[#f5a623]" : "border border-[#4caf82]/30 bg-[#4caf82]/10 hover:bg-[#4caf82]/20 text-[#4caf82]"}`}
-                          >
-                            {isGen ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />}
-                            {exists ? "Regen" : "Gen"}
-                          </button>
-                          {exists && (
-                            <>
-                              <AudioPlayer src={`/uploads/${prompt.filename}`} />
-                              <button
-                                data-testid={`btn-delete-prompt-${prompt.filename}`}
-                                onClick={() => { if (confirm(`Delete ${prompt.filename}?`)) deleteMutation.mutate(prompt.filename); }}
-                                disabled={deleteMutation.isPending}
-                                className="text-red-400/50 hover:text-red-400 transition-colors disabled:opacity-30"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   );
 }
 
-interface MembershipSettingsData {
-  id: string;
-  freeTrialMinutes: number;
-  plan1Name: string; plan1Minutes: number; plan1PriceCents: number;
-  plan2Name: string; plan2Minutes: number; plan2PriceCents: number;
-  plan3Name: string; plan3Minutes: number; plan3PriceCents: number;
-  bonusPlanKey: string | null;
-}
-
+// ── MembershipsTab ────────────────────────────────────────────────────────────
 function MembershipsTab() {
   const { toast } = useToast();
+  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; }
 
-  const { data: settings, isLoading } = useQuery<MembershipSettingsData>({
-    queryKey: ["/api/admin/membership-settings"],
-  });
+  const { data: ms, isLoading } = useQuery<MembershipSettings>({ queryKey: ["/api/admin/membership-settings"] });
 
   const [freeTrialMinutes, setFreeTrialMinutes] = useState("");
-  const [plan1Name, setPlan1Name] = useState("");
-  const [plan1Minutes, setPlan1Minutes] = useState("");
-  const [plan1Price, setPlan1Price] = useState("");
-  const [plan2Name, setPlan2Name] = useState("");
-  const [plan2Minutes, setPlan2Minutes] = useState("");
-  const [plan2Price, setPlan2Price] = useState("");
-  const [plan3Name, setPlan3Name] = useState("");
-  const [plan3Minutes, setPlan3Minutes] = useState("");
-  const [plan3Price, setPlan3Price] = useState("");
+  const [plan1Name, setPlan1Name] = useState(""); const [plan1Minutes, setPlan1Minutes] = useState(""); const [plan1Price, setPlan1Price] = useState("");
+  const [plan2Name, setPlan2Name] = useState(""); const [plan2Minutes, setPlan2Minutes] = useState(""); const [plan2Price, setPlan2Price] = useState("");
+  const [plan3Name, setPlan3Name] = useState(""); const [plan3Minutes, setPlan3Minutes] = useState(""); const [plan3Price, setPlan3Price] = useState("");
   const [bonusPlanKey, setBonusPlanKey] = useState<string | null>(null);
-
   const [initialized, setInitialized] = useState(false);
 
-  if (settings && !initialized) {
-    setFreeTrialMinutes(String(settings.freeTrialMinutes));
-    setPlan1Name(settings.plan1Name);
-    setPlan1Minutes(String(settings.plan1Minutes));
-    setPlan1Price(String((settings.plan1PriceCents / 100).toFixed(2)));
-    setPlan2Name(settings.plan2Name);
-    setPlan2Minutes(String(settings.plan2Minutes));
-    setPlan2Price(String((settings.plan2PriceCents / 100).toFixed(2)));
-    setPlan3Name(settings.plan3Name);
-    setPlan3Minutes(String(settings.plan3Minutes));
-    setPlan3Price(String((settings.plan3PriceCents / 100).toFixed(2)));
-    setBonusPlanKey(settings.bonusPlanKey);
+  if (ms && !initialized) {
+    setFreeTrialMinutes(String(ms.freeTrialMinutes));
+    setPlan1Name(ms.plan1Name); setPlan1Minutes(String(ms.plan1Minutes)); setPlan1Price((ms.plan1PriceCents / 100).toFixed(2));
+    setPlan2Name(ms.plan2Name); setPlan2Minutes(String(ms.plan2Minutes)); setPlan2Price((ms.plan2PriceCents / 100).toFixed(2));
+    setPlan3Name(ms.plan3Name); setPlan3Minutes(String(ms.plan3Minutes)); setPlan3Price((ms.plan3PriceCents / 100).toFixed(2));
+    setBonusPlanKey(ms.bonusPlanKey ?? null);
     setInitialized(true);
   }
 
@@ -1005,29 +794,15 @@ function MembershipsTab() {
       const toCents = (v: string) => Math.round(parseFloat(v) * 100);
       return apiRequest("PUT", "/api/admin/membership-settings", {
         freeTrialMinutes: toMinutes(freeTrialMinutes),
-        plan1Name: plan1Name.trim() || "Plan 1",
-        plan1Minutes: toMinutes(plan1Minutes),
-        plan1PriceCents: toCents(plan1Price),
-        plan2Name: plan2Name.trim() || "Plan 2",
-        plan2Minutes: toMinutes(plan2Minutes),
-        plan2PriceCents: toCents(plan2Price),
-        plan3Name: plan3Name.trim() || "Plan 3",
-        plan3Minutes: toMinutes(plan3Minutes),
-        plan3PriceCents: toCents(plan3Price),
+        plan1Name: plan1Name.trim() || "Plan 1", plan1Minutes: toMinutes(plan1Minutes), plan1PriceCents: toCents(plan1Price),
+        plan2Name: plan2Name.trim() || "Plan 2", plan2Minutes: toMinutes(plan2Minutes), plan2PriceCents: toCents(plan2Price),
+        plan3Name: plan3Name.trim() || "Plan 3", plan3Minutes: toMinutes(plan3Minutes), plan3PriceCents: toCents(plan3Price),
         bonusPlanKey: bonusPlanKey || "",
       });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-settings"] });
-      toast({ title: "Membership settings saved" });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Failed to save settings", description: err.message, variant: "destructive" });
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-settings"] }); toast({ title: "Membership settings saved" }); },
+    onError: (err: Error) => toast({ title: "Failed to save settings", description: err.message, variant: "destructive" }),
   });
-
-  const inputClass = "w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors";
-  const labelClass = "block text-[#4caf82] font-mono text-xs tracking-widest mb-2 uppercase";
 
   const plans = [
     { label: "Plan 1", keyBadge: "Press 1", planKey: "plan1", name: plan1Name, setName: setPlan1Name, minutes: plan1Minutes, setMinutes: setPlan1Minutes, price: plan1Price, setPrice: setPlan1Price, testPrefix: "plan1" },
@@ -1035,142 +810,76 @@ function MembershipsTab() {
     { label: "Plan 3", keyBadge: "Press 3", planKey: "plan3", name: plan3Name, setName: setPlan3Name, minutes: plan3Minutes, setMinutes: setPlan3Minutes, price: plan3Price, setPrice: setPlan3Price, testPrefix: "plan3" },
   ];
 
+  if (isLoading) return <div className="py-20 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING SETTINGS...</div>;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-[#f5a623] font-mono text-lg font-bold tracking-widest uppercase flex items-center gap-2">
-            <CreditCard size={18} />
-            Membership Settings_
-          </h2>
-          <p className="text-[#4caf82]/50 font-mono text-xs mt-1">
-            Configure free trial minutes and the three membership plans
-          </p>
+      <div className={C.card}>
+        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">Free Trial</h3>
+        <p className="text-gray-400 font-mono text-xs">Minutes granted automatically to first-time callers with no membership.</p>
+        <div className="max-w-xs">
+          <label className={C.label}>Free Trial Minutes</label>
+          <input data-testid="input-free-trial-minutes" type="number" min="1" value={freeTrialMinutes} onChange={e => setFreeTrialMinutes(e.target.value)} className={C.input} placeholder="90" />
         </div>
-        <button
-          data-testid="btn-save-membership-settings"
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending || isLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-[#f5a623] hover:bg-[#f5a623]/80 disabled:bg-[#f5a623]/30 disabled:cursor-not-allowed text-black font-mono text-xs font-bold tracking-widest uppercase rounded transition-colors"
-        >
-          {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-          Save Settings_
-        </button>
       </div>
 
-      {isLoading ? (
-        <div className="py-20 text-center text-[#4caf82]/40 font-mono text-xs tracking-widest">LOADING SETTINGS...</div>
-      ) : (
-        <>
-          <div className="border border-[#f5a623]/20 rounded-lg p-5 bg-black/30 space-y-4">
-            <h3 className="text-[#f5a623] font-mono text-sm font-bold tracking-widest uppercase">Free Trial_</h3>
-            <p className="text-[#4caf82]/50 font-mono text-xs">Minutes granted automatically to first-time callers with no membership.</p>
-            <div className="max-w-xs">
-              <label className={labelClass}>Free Trial Minutes_</label>
-              <input
-                data-testid="input-free-trial-minutes"
-                type="number"
-                min="1"
-                value={freeTrialMinutes}
-                onChange={e => setFreeTrialMinutes(e.target.value)}
-                className={inputClass}
-                placeholder="90"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="text-[#f5a623] font-mono text-sm font-bold tracking-widest uppercase">Membership Plans_</h3>
-            <p className="text-[#4caf82]/50 font-mono text-xs">Three plans offered to callers when purchasing membership. Callers press 1, 2, or 3 to select a plan.</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {plans.map(plan => (
-                <div key={plan.label} className="border border-[#f5a623]/20 rounded-lg p-5 bg-black/30 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-white font-mono text-sm font-bold tracking-widest uppercase">{plan.label}_</h4>
-                    <span className="px-2 py-0.5 rounded border border-[#f5a623]/40 bg-[#f5a623]/10 text-[#f5a623] font-mono text-xs tracking-widest">
-                      {plan.keyBadge}
-                    </span>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <label className={labelClass}>Plan Name_</label>
-                      <input
-                        data-testid={`input-${plan.testPrefix}-name`}
-                        type="text"
-                        value={plan.name}
-                        onChange={e => plan.setName(e.target.value)}
-                        placeholder="e.g. Premium"
-                        className={inputClass}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Minutes_</label>
-                      <input
-                        data-testid={`input-${plan.testPrefix}-minutes`}
-                        type="number"
-                        min="1"
-                        value={plan.minutes}
-                        onChange={e => plan.setMinutes(e.target.value)}
-                        placeholder="43200"
-                        className={inputClass}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Price (USD)_</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4caf82]/50 font-mono text-sm">$</span>
-                        <input
-                          data-testid={`input-${plan.testPrefix}-price`}
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={plan.price}
-                          onChange={e => plan.setPrice(e.target.value)}
-                          placeholder="25.00"
-                          className={inputClass + " pl-7"}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-3 border-t border-[#4caf82]/10 space-y-3">
-                    <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest">
-                      {(() => {
-                        const m = parseInt(plan.minutes) || 0;
-                        if (m < 60) return `${m} min`;
-                        const hrs = Math.floor(m / 60);
-                        const mins = m % 60;
-                        return mins === 0 ? `${hrs} hr${hrs !== 1 ? "s" : ""}` : `${hrs} hr ${mins} min`;
-                      })()}
-                      {" · "}
-                      ${parseFloat(plan.price || "0").toFixed(2)}
-                    </div>
-                    <button
-                      data-testid={`btn-bonus-${plan.testPrefix}`}
-                      type="button"
-                      onClick={() => setBonusPlanKey(bonusPlanKey === plan.planKey ? null : plan.planKey)}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded border text-xs font-mono tracking-widest uppercase transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-[#f5a623]/10 text-[#f5a623]" : "border-[#4caf82]/20 bg-black/20 text-[#4caf82]/40 hover:border-[#4caf82]/40 hover:text-[#4caf82]/60"}`}
-                    >
-                      <span>First-time buyer bonus</span>
-                      <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-[#f5a623]" : "border-[#4caf82]/30"}`}>
-                        {bonusPlanKey === plan.planKey && <span className="w-2 h-2 rounded-full bg-black" />}
-                      </span>
-                    </button>
-                    {bonusPlanKey === plan.planKey && (
-                      <div className="text-[#f5a623]/70 font-mono text-xs">
-                        First-time buyers get double minutes — {(() => { const m = parseInt(plan.minutes) || 0; const total = m * 2; if (total < 60) return `${total} min`; const hrs = Math.floor(total / 60); const mins = total % 60; return mins === 0 ? `${hrs} hrs` : `${hrs} hr ${mins} min`; })()}
-                      </div>
-                    )}
+      <div className="space-y-3">
+        <h3 className="text-gray-700 font-mono text-sm font-bold tracking-widest uppercase">Membership Plans</h3>
+        <p className="text-gray-400 font-mono text-xs">Three plans offered to callers. Callers press 1, 2, or 3 to select.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {plans.map(plan => (
+            <div key={plan.label} className={C.card}>
+              <div className="flex items-center justify-between">
+                <h4 className="text-gray-900 font-mono text-sm font-bold tracking-widest uppercase">{plan.label}</h4>
+                <span className={`${C.badge} border-amber-200 bg-amber-50 text-amber-700`}>{plan.keyBadge}</span>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className={C.label}>Plan Name</label>
+                  <input data-testid={`input-${plan.testPrefix}-name`} type="text" value={plan.name} onChange={e => plan.setName(e.target.value)} placeholder="e.g. Premium" className={C.input} />
+                </div>
+                <div>
+                  <label className={C.label}>Minutes</label>
+                  <input data-testid={`input-${plan.testPrefix}-minutes`} type="number" min="1" value={plan.minutes} onChange={e => plan.setMinutes(e.target.value)} placeholder="43200" className={C.input} />
+                </div>
+                <div>
+                  <label className={C.label}>Price (USD)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-sm">$</span>
+                    <input data-testid={`input-${plan.testPrefix}-price`} type="number" min="0" step="0.01" value={plan.price} onChange={e => plan.setPrice(e.target.value)} placeholder="25.00" className={C.input + " pl-7"} />
                   </div>
                 </div>
-              ))}
+              </div>
+              <div className="pt-3 border-t border-gray-100 space-y-3">
+                <div className="text-gray-500 font-mono text-xs">
+                  {(() => { const m = parseInt(plan.minutes) || 0; if (m < 60) return `${m} min`; const hrs = Math.floor(m / 60); const mins = m % 60; return mins === 0 ? `${hrs} hr${hrs !== 1 ? "s" : ""}` : `${hrs} hr ${mins} min`; })()} · ${parseFloat(plan.price || "0").toFixed(2)}
+                </div>
+                <button
+                  data-testid={`btn-bonus-${plan.testPrefix}`}
+                  type="button"
+                  onClick={() => setBonusPlanKey(bonusPlanKey === plan.planKey ? null : plan.planKey)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded border text-xs font-mono tracking-widest uppercase transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-amber-50 text-amber-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300 hover:text-gray-500"}`}
+                >
+                  <span>First-time buyer bonus</span>
+                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-[#f5a623]" : "border-gray-300"}`}>
+                    {bonusPlanKey === plan.planKey && <span className="w-2 h-2 rounded-full bg-white" />}
+                  </span>
+                </button>
+                {bonusPlanKey === plan.planKey && (
+                  <div className="text-amber-600 font-mono text-xs">
+                    First-time buyers get double minutes — {(() => { const m = parseInt(plan.minutes) || 0; const total = m * 2; if (total < 60) return `${total} min`; const hrs = Math.floor(total / 60); const mins = total % 60; return mins === 0 ? `${hrs} hrs` : `${hrs} hr ${mins} min`; })()}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
 
+// ── DashboardTab ──────────────────────────────────────────────────────────────
 function DashboardTab() {
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
@@ -1178,20 +887,22 @@ function DashboardTab() {
   });
 
   const items = [
-    { label: "Live on the Line", value: stats?.activeCalls ?? 0, color: "text-[#4caf82]" },
-    { label: "Registered Users", value: stats?.users ?? 0, color: "text-[#f5a623]" },
-    { label: "Voice Profiles", value: stats?.profiles ?? 0, color: "text-[#4caf82]" },
-    { label: "Messages Relayed", value: stats?.messages ?? 0, color: "text-[#f5a623]" },
+    { label: "Live on the Line", value: stats?.activeCalls ?? 0, icon: <PhoneCall size={18} className="text-emerald-500" /> },
+    { label: "Registered Users", value: stats?.users ?? 0, icon: <Phone size={18} className="text-[#f5a623]" /> },
+    { label: "Voice Profiles", value: stats?.profiles ?? 0, icon: <Volume2 size={18} className="text-[#f5a623]" /> },
+    { label: "Messages Relayed", value: stats?.messages ?? 0, icon: <MessageSquare size={18} className="text-emerald-500" /> },
   ];
 
   return (
     <div className="space-y-6">
-      <h2 className="text-[#f5a623] font-mono text-lg font-bold tracking-widest uppercase">System Status_</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {items.map(item => (
-          <div key={item.label} className="border border-[#f5a623]/20 rounded-lg p-4 bg-black/30">
-            <div className={`font-mono text-3xl font-bold ${item.color}`}>{String(item.value).padStart(4, "0")}</div>
-            <div className="text-[#4caf82]/50 font-mono text-xs tracking-widest uppercase mt-1">{item.label}</div>
+          <div key={item.label} className="border border-gray-200 rounded-xl p-5 bg-white hover:border-gray-300 transition-colors">
+            <div className="flex items-center justify-between mb-3">
+              {item.icon}
+            </div>
+            <div className={C.statValue}>{String(item.value).padStart(4, "0")}</div>
+            <div className={C.statLabel}>{item.label}</div>
           </div>
         ))}
       </div>
@@ -1202,52 +913,137 @@ function DashboardTab() {
 function PlaceholderTab({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="text-[#4caf82]/30 font-mono text-xs tracking-widest uppercase">{label} — Coming Soon_</div>
+      <div className="text-gray-300 font-mono text-xs tracking-widest uppercase">{label} — Coming Soon</div>
     </div>
   );
 }
 
+// ── Tab definitions ───────────────────────────────────────────────────────────
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={14} /> },
-  { id: "voice-profiles", label: "Voice Profiles", icon: <Phone size={14} /> },
-  { id: "regions", label: "Regions", icon: <Globe size={14} /> },
-  { id: "memberships", label: "Memberships", icon: <CreditCard size={14} /> },
-  { id: "audio-gen", label: "Audio Gen", icon: <Volume2 size={14} /> },
-  { id: "messages", label: "Messages", icon: <MessageSquare size={14} /> },
-  { id: "phone-testing", label: "Phone Testing", icon: <PhoneCall size={14} /> },
+  { id: "dashboard",      label: "Dashboard",      icon: <LayoutDashboard size={15} /> },
+  { id: "voice-profiles", label: "Voice Profiles",  icon: <Phone size={15} /> },
+  { id: "regions",        label: "Regions",         icon: <Globe size={15} /> },
+  { id: "memberships",    label: "Memberships",     icon: <CreditCard size={15} /> },
+  { id: "audio-gen",      label: "Audio Gen",       icon: <Volume2 size={15} /> },
+  { id: "messages",       label: "Messages",        icon: <MessageSquare size={15} /> },
+  { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
 ];
 
+// ── Section-level action buttons ──────────────────────────────────────────────
+function SectionActions({ activeTab, onAddProfile, onAddRegion, onSaveMembership, isSavingMembership }: {
+  activeTab: Tab;
+  onAddProfile: () => void;
+  onAddRegion: () => void;
+  onSaveMembership: () => void;
+  isSavingMembership: boolean;
+}) {
+  if (activeTab === "voice-profiles") {
+    return (
+      <button data-testid="btn-add-profile" onClick={onAddProfile} className={C.btnPrimary}>
+        <Plus size={13} /> Add Profile
+      </button>
+    );
+  }
+  if (activeTab === "regions") {
+    return (
+      <button data-testid="btn-add-region" onClick={onAddRegion} className={C.btnPrimary}>
+        <Plus size={13} /> Add Region
+      </button>
+    );
+  }
+  if (activeTab === "memberships") {
+    return (
+      <button data-testid="btn-save-membership-settings" onClick={onSaveMembership} disabled={isSavingMembership} className={C.btnPrimary}>
+        {isSavingMembership ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+        Save Settings
+      </button>
+    );
+  }
+  return null;
+}
+
+// ── Admin root ────────────────────────────────────────────────────────────────
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState<Tab>("voice-profiles");
+  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [showUpload, setShowUpload] = useState(false);
+  const [showAddRegion, setShowAddRegion] = useState(false);
+  const [saveMembership, setSaveMembership] = useState(false);
+
+  const activeLabel = tabs.find(t => t.id === activeTab)?.label ?? "";
 
   return (
-    <div className="min-h-screen bg-[#0a0e14] text-[#4caf82]">
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
-        <div className="flex items-center justify-between">
-          <h1 className="font-mono text-2xl font-bold tracking-widest uppercase text-white">Admin Dashboard_</h1>
-          <Link href="/" className="text-[#4caf82]/50 hover:text-[#f5a623] font-mono text-xs tracking-widest uppercase transition-colors">← Back to Main</Link>
+    <div className="flex h-screen bg-white overflow-hidden">
+
+      {/* ── Sidebar ── */}
+      <aside className="w-52 bg-[#111827] flex flex-col flex-shrink-0">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 grid grid-cols-2 gap-0.5 opacity-80">
+              {[...Array(4)].map((_, i) => <div key={i} className="bg-[#f5a623] rounded-[1px]" />)}
+            </div>
+            <span className="text-white font-mono font-bold text-sm tracking-widest">BACK OFFICE</span>
+          </div>
+          <Link href="/">
+            <X size={14} className="text-white/40 hover:text-white/80 transition-colors cursor-pointer" />
+          </Link>
         </div>
-        <div className="flex gap-2 flex-wrap">
+
+        {/* Nav */}
+        <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
           {tabs.map(tab => (
             <button
               key={tab.id}
               data-testid={`tab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded border font-mono text-xs tracking-widest uppercase transition-colors ${activeTab === tab.id ? "border-[#f5a623] bg-[#f5a623]/10 text-[#f5a623]" : "border-[#4caf82]/20 text-[#4caf82]/60 hover:border-[#4caf82]/40 hover:text-[#4caf82]"}`}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left transition-all font-mono text-xs tracking-widest uppercase ${
+                activeTab === tab.id
+                  ? "bg-white/10 text-white border-l-2 border-[#f5a623] pl-[10px]"
+                  : "text-white/50 hover:bg-white/5 hover:text-white/80 border-l-2 border-transparent pl-[10px]"
+              }`}
             >
               {tab.icon}
               {tab.label}
             </button>
           ))}
+        </nav>
+
+        {/* Bottom */}
+        <div className="px-2 py-3 border-t border-white/10 space-y-0.5">
+          <Link href="/" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-white/40 hover:text-white/70 hover:bg-white/5 font-mono text-xs tracking-widest uppercase transition-colors border-l-2 border-transparent pl-[10px]">
+            <LogOut size={15} />
+            Exit
+          </Link>
         </div>
-        <div className="bg-[#0d1117] border border-[#f5a623]/15 rounded-xl p-6">
-          {activeTab === "dashboard" && <DashboardTab />}
-          {activeTab === "voice-profiles" && <VoiceProfilesTab />}
-          {activeTab === "regions" && <RegionsTab />}
-          {activeTab === "memberships" && <MembershipsTab />}
-          {activeTab === "audio-gen" && <TTSTab />}
-          {activeTab === "messages" && <PlaceholderTab label="Messages" />}
-          {activeTab === "phone-testing" && <PlaceholderTab label="Phone Testing" />}
+      </aside>
+
+      {/* ── Main content ── */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-gray-50">
+
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-gray-200 flex-shrink-0">
+          <h2 className="font-mono font-bold text-sm tracking-widest uppercase text-gray-900">{activeLabel}</h2>
+          <SectionActions
+            activeTab={activeTab}
+            onAddProfile={() => setShowUpload(true)}
+            onAddRegion={() => setShowAddRegion(true)}
+            onSaveMembership={() => setSaveMembership(v => !v)}
+            isSavingMembership={false}
+          />
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {showUpload && <UploadDialog onClose={() => setShowUpload(false)} />}
+          {showAddRegion && <RegionDialog onClose={() => setShowAddRegion(false)} />}
+
+          {activeTab === "dashboard"      && <DashboardTab />}
+          {activeTab === "voice-profiles" && <VoiceProfilesTab key={String(showUpload)} />}
+          {activeTab === "regions"        && <RegionsTab />}
+          {activeTab === "memberships"    && <MembershipsTab />}
+          {activeTab === "audio-gen"      && <TTSTab />}
+          {activeTab === "messages"       && <PlaceholderTab label="Messages" />}
+          {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
         </div>
       </div>
     </div>
