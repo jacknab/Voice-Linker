@@ -73,6 +73,14 @@ export interface IStorage {
   getUnreadMessage(userId: string): Promise<Message | undefined>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessageRead(messageId: string): Promise<void>;
+  getAllMessagesAdmin(): Promise<{
+    id: string;
+    fromPhone: string;
+    toPhone: string;
+    recordingUrl: string;
+    isRead: boolean | null;
+    createdAt: Date | null;
+  }[]>;
 
   // Active call tracking (real-time party line)
   registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void>;
@@ -287,6 +295,25 @@ export class DatabaseStorage implements IStorage {
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
     const [message] = await db.insert(messages).values(insertMessage).returning();
     return message;
+  }
+
+  async getAllMessagesAdmin() {
+    const sender = alias(users, "sender");
+    const recipient = alias(users, "recipient");
+    const rows = await db
+      .select({
+        id: messages.id,
+        fromPhone: sender.phoneNumber,
+        toPhone: recipient.phoneNumber,
+        recordingUrl: messages.recordingUrl,
+        isRead: messages.isRead,
+        createdAt: messages.createdAt,
+      })
+      .from(messages)
+      .innerJoin(sender, eq(messages.fromUserId, sender.id))
+      .innerJoin(recipient, eq(messages.toUserId, recipient.id))
+      .orderBy(messages.createdAt);
+    return rows;
   }
 
   async markMessageRead(messageId: string): Promise<void> {

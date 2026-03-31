@@ -1061,6 +1061,133 @@ function DashboardTab() {
   );
 }
 
+// ── Messages Tab ──────────────────────────────────────────────────────────────
+interface MessageEntry {
+  id: string;
+  fromPhone: string;
+  toPhone: string;
+  recordingUrl: string;
+  isRead: boolean | null;
+  createdAt: string | null;
+}
+
+function MessagesTab() {
+  const [search, setSearch] = useState("");
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const { data: msgs = [], isLoading } = useQuery<MessageEntry[]>({
+    queryKey: ["/api/admin/messages"],
+  });
+
+  const filtered = msgs.filter(m =>
+    m.fromPhone.includes(search) || m.toPhone.includes(search)
+  );
+
+  function fmtDate(d: string | null) {
+    if (!d) return "—";
+    return new Date(d).toLocaleString(undefined, {
+      month: "short", day: "numeric", year: "numeric",
+      hour: "numeric", minute: "2-digit",
+    });
+  }
+
+  function togglePlay(msg: MessageEntry) {
+    if (playingId === msg.id) {
+      audioRef.current?.pause();
+      setPlayingId(null);
+      return;
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    const audio = new Audio(msg.recordingUrl);
+    audio.onended = () => setPlayingId(null);
+    audio.play();
+    audioRef.current = audio;
+    setPlayingId(msg.id);
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-5">
+        <input
+          data-testid="input-messages-search"
+          type="text"
+          placeholder="Filter by phone number…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="border border-gray-200 rounded px-3 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none w-64"
+        />
+        <span className="text-gray-400 font-mono text-xs">
+          {filtered.length} message{filtered.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-gray-400 font-mono text-xs py-10 justify-center">
+          <Loader2 size={14} className="animate-spin" /> Loading…
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-gray-400 font-mono text-xs text-center py-16">
+          {search ? "No matches found." : "No messages on record yet."}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded border border-gray-100">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50 text-gray-500 uppercase tracking-widest">
+                <th className="text-left px-4 py-3">From</th>
+                <th className="text-left px-4 py-3">To</th>
+                <th className="text-left px-4 py-3">Sent</th>
+                <th className="text-left px-4 py-3">Status</th>
+                <th className="text-right px-4 py-3">Play</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((msg, i) => (
+                <tr
+                  key={msg.id}
+                  data-testid={`row-message-${i}`}
+                  className="border-b border-gray-50 last:border-0 hover:bg-amber-50 transition-colors"
+                >
+                  <td className="px-4 py-3 text-gray-600" data-testid={`text-msg-from-${i}`}>{msg.fromPhone}</td>
+                  <td className="px-4 py-3 text-gray-800 font-semibold" data-testid={`text-msg-to-${i}`}>{msg.toPhone}</td>
+                  <td className="px-4 py-3 text-gray-400">{fmtDate(msg.createdAt)}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      data-testid={`status-msg-read-${i}`}
+                      className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold ${
+                        msg.isRead
+                          ? "bg-green-50 text-green-600"
+                          : "bg-amber-50 text-amber-600"
+                      }`}
+                    >
+                      {msg.isRead ? "Read" : "Unread"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      data-testid={`btn-play-msg-${i}`}
+                      onClick={() => togglePlay(msg)}
+                      className="inline-flex items-center gap-1.5 text-xs font-mono text-amber-600 hover:text-amber-800 border border-amber-200 hover:border-amber-400 rounded px-2 py-1 transition-colors"
+                    >
+                      {playingId === msg.id
+                        ? <><Pause size={11} /> Stop</>
+                        : <><Play size={11} /> Play</>
+                      }
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlaceholderTab({ label }: { label: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -2709,7 +2836,7 @@ export default function Admin() {
           {activeTab === "regions"        && <RegionsTab />}
           {activeTab === "memberships"    && <MembershipsTab />}
           {activeTab === "audio-gen"      && <TTSTab />}
-          {activeTab === "messages"       && <PlaceholderTab label="Messages" />}
+          {activeTab === "messages"       && <MessagesTab />}
           {activeTab === "phone-numbers"  && <PhoneNumbersTab />}
           {activeTab === "blocked"        && <BlockedNumbersTab />}
           {activeTab === "promo-codes"    && <PromoCodesTab />}

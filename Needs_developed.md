@@ -23,7 +23,7 @@
 
 ## Message Monitoring
 
-- **Message Inbox** — Browse all voice messages exchanged between callers. Playable audio with sender, recipient, and timestamp. (Currently a placeholder tab with no data.)
+- **Message Inbox** — Browse all voice messages exchanged between callers. Playable audio with sender, recipient, and timestamp. ✅ COMPLETE
 
 ---
 

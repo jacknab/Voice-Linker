@@ -485,6 +485,17 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: All messages inbox ---
+  app.get("/api/admin/messages", async (_req, res) => {
+    try {
+      const msgs = await storage.getAllMessagesAdmin();
+      res.json(msgs);
+    } catch (e) {
+      console.error("[admin] /api/admin/messages GET error:", e);
+      res.status(500).json({ message: "Failed to fetch messages" });
+    }
+  });
+
   // --- Admin: Blocked numbers list ---
   app.get("/api/admin/blocked", async (_req, res) => {
     try {
