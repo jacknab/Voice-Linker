@@ -27,6 +27,7 @@ interface Region {
   maxCapacity: number;
   description: string | null;
   isActive: boolean;
+  linkedRegionId: string | null;
   createdAt: string;
   activeCalls: number;
   voiceProfiles: number;
@@ -172,6 +173,10 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
   const [maxCapacity, setMaxCapacity] = useState(String(region?.maxCapacity ?? 1000));
   const [description, setDescription] = useState(region?.description ?? "");
   const [isActive, setIsActive] = useState(region?.isActive ?? true);
+  const [linkedRegionId, setLinkedRegionId] = useState<string>(region?.linkedRegionId ?? "");
+
+  const { data: allRegions } = useQuery<Region[]>({ queryKey: ["/api/regions"] });
+  const otherRegions = (allRegions ?? []).filter(r => r.id !== region?.id);
 
   function handleNameChange(val: string) {
     setName(val);
@@ -180,7 +185,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const body = { name: name.trim(), slug: slug.trim(), phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive };
+      const body = { name: name.trim(), slug: slug.trim(), phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive, linkedRegionId: linkedRegionId || null };
       if (isEdit) {
         return apiRequest("PUT", `/api/regions/${region.id}`, body);
       } else {
@@ -198,6 +203,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
   });
 
   const inputClass = "w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm placeholder-[#4caf82]/30 focus:outline-none focus:border-[#f5a623]/60 transition-colors";
+  const selectClass = "w-full bg-black/40 border border-[#4caf82]/30 rounded px-3 py-2.5 text-[#4caf82] font-mono text-sm focus:outline-none focus:border-[#f5a623]/60 transition-colors appearance-none";
   const labelClass = "block text-[#4caf82] font-mono text-xs tracking-widest mb-2 uppercase";
 
   return (
@@ -241,6 +247,25 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
             <label className={labelClass}>Description_</label>
             <input data-testid="input-region-description" type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Colorado Rocky Mountains region" className={inputClass} />
           </div>
+
+          <div>
+            <label className={labelClass}>Linked Nearby Region_</label>
+            <select
+              data-testid="select-linked-region"
+              value={linkedRegionId}
+              onChange={e => setLinkedRegionId(e.target.value)}
+              className={selectClass}
+            >
+              <option value="">— No linked region —</option>
+              {otherRegions.map(r => (
+                <option key={r.id} value={r.id}>{r.name} ({r.phoneNumber})</option>
+              ))}
+            </select>
+            <p className="text-[#4caf82]/40 font-mono text-xs mt-1.5">
+              When callers exhaust this region's queue, they'll be offered to hear callers from the linked region.
+            </p>
+          </div>
+
           <div className="flex items-center gap-3">
             <button
               data-testid="toggle-region-active"
@@ -390,6 +415,17 @@ function RegionsTab() {
                   <Copy size={12} />
                 </button>
               </div>
+
+              {region.linkedRegionId && (() => {
+                const linked = regions?.find(r => r.id === region.linkedRegionId);
+                return linked ? (
+                  <div data-testid={`text-linked-region-${region.id}`} className="flex items-center gap-2 bg-[#f5a623]/5 border border-[#f5a623]/20 rounded px-3 py-1.5">
+                    <MapPin size={11} className="text-[#f5a623]/60" />
+                    <span className="text-[#f5a623]/70 font-mono text-xs tracking-widest uppercase">Linked:</span>
+                    <span className="text-[#f5a623] font-mono text-xs font-bold">{linked.name}</span>
+                  </div>
+                ) : null;
+              })()}
 
               <div className="grid grid-cols-3 gap-3">
                 <div>

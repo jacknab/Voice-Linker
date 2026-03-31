@@ -12,6 +12,7 @@ export const regions = pgTable("regions", {
   maxCapacity: integer("max_capacity").notNull().default(1000),
   description: text("description"),
   isActive: boolean("is_active").notNull().default(true),
+  linkedRegionId: uuid("linked_region_id"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

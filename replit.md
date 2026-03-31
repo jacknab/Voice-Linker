@@ -86,6 +86,30 @@ When browsing profiles, callers can press **3** to request a live direct connect
 - `live_connect_no_minutes.mp3` — "You need at least 5 minutes remaining..."
 - `live_invite_expired.mp3` — "That invitation has expired."
 
+## Linked Regions Feature
+
+Regions can be linked together so callers overflow into a nearby region's caller pool once they've heard everyone in their own.
+
+**How it works:**
+- Each region has an optional `linkedRegionId` (another region's UUID)
+- The caller's queue is built from their local region profiles only
+- After they hear the last profile and the queue wraps back to the beginning (`hasWrapped = true`), instead of looping the system redirects to `/voice/nearby-callers-offer`
+- The offer plays: "You've heard all the callers in your area. Press 1 to hear callers from [Linked Region Name]. Press 2 to start over."
+- **Press 1**: The linked region's currently-active profiles are fetched and replace the queue; the caller continues browsing seamlessly
+- **Press 2 / timeout**: Queue resets to index 0, local region restarts
+- Once the offer has been made (`linkedRegionLoaded = true`), it is not triggered again for the rest of the call session
+
+**Admin UI (Regions tab):**
+- Edit/create region dialog has a "Linked Nearby Region" dropdown listing all other regions with their phone numbers
+- Region cards show an amber "Linked: [Region Name]" badge when a link is configured
+
+**IVR routes:** `/voice/nearby-callers-offer`, `/voice/handle-nearby-callers`
+
+**Audio files (optional, TTS fallbacks included):**
+- `nearby_callers_offer.mp3` — "You've heard all callers in your area. Press 1 for nearby, Press 2 to restart."
+- `nearby_callers_intro.mp3` — "Now playing callers from [Region Name]. Enjoy!"
+- `nearby_callers_none.mp3` — "No callers online in that area. Starting over."
+
 ## Database Schema
 
 - `users` — phone number, stripeCustomerId, membershipTier, remainingMinutes
@@ -93,6 +117,7 @@ When browsing profiles, callers can press **3** to request a live direct connect
 - `messages` — voice messages between users
 - `active_calls` — real-time tracking of callers on the line
 - `blocked_users` — blockerId + blockedUserId pairs for live connect access control
+- `regions` — regional phone markets; includes `linkedRegionId` (nullable UUID) for cross-region overflow
 
 ## Running
 
