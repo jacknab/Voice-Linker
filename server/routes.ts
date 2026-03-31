@@ -1094,8 +1094,8 @@ export async function registerRoutes(
 
     // digit "" means the caller pressed # (finishOnKey) with no preceding digit → treat as "use existing"
     if (digit === "1" || digit === "" || !digit) {
-      // USE_EXISTING_GREETING: fast-path, no prompt, straight to main menu
-      twiml.redirect("/voice/main-menu");
+      // USE_EXISTING_GREETING: fast-path into the live system
+      twiml.redirect("/voice/go-live");
     } else if (digit === "2") {
       // CREATE_NEW_GREETING: kick off the record-name flow
       playPrompt(twiml, req, "welcome_record_name.mp3",
@@ -1219,8 +1219,8 @@ export async function registerRoutes(
     playPrompt(gather, req, "zip_code_prompt.mp3",
       "Optional: enter your 5-digit zip code and we'll play callers closest to you first. Press pound to skip."
     );
-    // If no input (timeout), redirect straight to main menu
-    twiml.redirect("/voice/main-menu");
+    // If no input (timeout), go straight into the live system
+    twiml.redirect("/voice/go-live");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -1251,7 +1251,45 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[voice] /voice/handle-zip-code error:", err);
     }
-    twiml.redirect("/voice/main-menu");
+    twiml.redirect("/voice/go-live");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 5c. Go Live ──────────────────────────────────────────────────────────
+  // Entry point into the live browsing system. Announces how many callers are
+  // on the line, notifies the caller that time is being deducted, starts the
+  // phone booth session timer, then drops them into profile browsing.
+  app.post("/voice/go-live", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const regionId = callRegion.get(callSid);
+
+      // Announce how many callers are currently on the line
+      const activeCallerCount = await storage.getActiveCallerCount(user.id, regionId);
+      playCallerCount(twiml, req, activeCallerCount);
+
+      // Notify the caller that their membership time is now running
+      playPrompt(twiml, req, "time_deduction_start.mp3",
+        "Time is now being deducted from your membership.");
+
+      // Start the phone booth session timer (only if not already running this call)
+      if (!phoneBoothSessions.has(callSid)) {
+        phoneBoothSessions.set(callSid, { enteredAt: new Date(), fromNumber });
+        console.log(`[voice] Phone booth session started for callSid=${callSid}`);
+      }
+
+      twiml.redirect("/voice/browse-profiles");
+    } catch (error) {
+      console.error("[voice] /voice/go-live error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
     res.type("text/xml");
     res.send(twiml.toString());
   });
