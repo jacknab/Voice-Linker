@@ -38,7 +38,8 @@ export interface IStorage {
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
   getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number>;
   getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number>;
-  getAllActiveProfiles(excludeUserId: string, regionId?: string, callerLat?: number | null, callerLon?: number | null): Promise<Profile[]>;
+  getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]>;
+  getNearbyProfileUserIds(excludeUserId: string, regionId: string | undefined, callerLat: number, callerLon: number, thresholdKm: number): Promise<string[]>;
   getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined>;
   getZipEntryById(id: string): Promise<ZipCode | undefined>;
   getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }>;
@@ -58,6 +59,15 @@ export interface IStorage {
   updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
 
   getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }>;
+}
+
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
 }
 
 export class DatabaseStorage implements IStorage {
@@ -243,7 +253,7 @@ export class DatabaseStorage implements IStorage {
     return result.count;
   }
 
-  async getAllActiveProfiles(excludeUserId: string, regionId?: string, callerLat?: number | null, callerLon?: number | null): Promise<Profile[]> {
+  async getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]> {
     const activeUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(
@@ -257,36 +267,37 @@ export class DatabaseStorage implements IStorage {
       ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
       : eq(profiles.isAdminUploaded, true);
 
-    const hasCallerLocation = callerLat != null && callerLon != null;
+    const rows = await db.select({ profile: profiles })
+      .from(profiles)
+      .leftJoin(users, eq(profiles.userId, users.id))
+      .where(and(conditions, not(eq(profiles.userId, excludeUserId))))
+      .orderBy(profiles.createdAt);
 
-    // Haversine distance in km — profiles with no location sort last (99999)
-    const distanceKm = hasCallerLocation
-      ? sql<number>`
-          CASE
-            WHEN ${zipCodes.latitude} IS NOT NULL AND ${zipCodes.longitude} IS NOT NULL THEN
-              2 * 6371 * asin(
-                sqrt(
-                  power(sin(radians((${zipCodes.latitude} - ${callerLat}) / 2)), 2) +
-                  cos(radians(${callerLat})) * cos(radians(${zipCodes.latitude})) *
-                  power(sin(radians((${zipCodes.longitude} - ${callerLon}) / 2)), 2)
-                )
-              )
-            ELSE 99999
-          END
-        `
-      : undefined;
+    return rows.map(r => r.profile);
+  }
 
-    const query = db.select({ profile: profiles })
+  async getNearbyProfileUserIds(excludeUserId: string, regionId: string | undefined, callerLat: number, callerLon: number, thresholdKm: number): Promise<string[]> {
+    const activeUserIds = await db.select({ userId: activeCalls.userId })
+      .from(activeCalls)
+      .where(
+        regionId
+          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId))
+          : not(eq(activeCalls.userId, excludeUserId))
+      );
+
+    const ids = activeUserIds.map(r => r.userId);
+    if (ids.length === 0) return [];
+
+    const rows = await db.select({ userId: profiles.userId, lat: zipCodes.latitude, lon: zipCodes.longitude })
       .from(profiles)
       .leftJoin(users, eq(profiles.userId, users.id))
       .leftJoin(zipCodes, eq(users.zipCodeId, zipCodes.id))
-      .where(and(conditions, not(eq(profiles.userId, excludeUserId))));
+      .where(and(inArray(profiles.userId, ids), not(eq(profiles.userId, excludeUserId))));
 
-    const rows = distanceKm
-      ? await query.orderBy(distanceKm, profiles.createdAt)
-      : await query.orderBy(profiles.createdAt);
-
-    return rows.map(r => r.profile);
+    return rows
+      .filter(r => r.lat != null && r.lon != null)
+      .filter(r => haversineKm(callerLat, callerLon, r.lat!, r.lon!) <= thresholdKm)
+      .map(r => r.userId);
   }
 
   async getZipEntryById(id: string): Promise<ZipCode | undefined> {
