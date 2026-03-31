@@ -986,8 +986,8 @@ export async function registerRoutes(
         return res.send(twiml.toString());
       }
 
-      // ── Under-15-minute warning at main menu (shown once per call) ──────
-      if (user.membershipTier && remainingSeconds < 900 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
+      // ── Under-5-minute warning at main menu (shown once per call) ──────
+      if (user.membershipTier && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
         callWarningShown.add(callSid);
         twiml.redirect("/voice/time-warning");
         res.type("text/xml");
