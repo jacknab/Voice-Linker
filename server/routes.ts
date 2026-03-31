@@ -472,6 +472,20 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Phone number stats ---
+  app.get("/api/admin/phone-stats", async (req, res) => {
+    try {
+      const now = new Date();
+      const year  = parseInt((req.query.year  as string) || String(now.getFullYear()), 10);
+      const month = parseInt((req.query.month as string) || String(now.getMonth() + 1), 10);
+      const stats = await storage.getPhoneNumberStats(year, month);
+      res.json(stats);
+    } catch (e) {
+      console.error("[admin] /api/admin/phone-stats error:", e);
+      res.status(500).json({ message: "Failed to fetch phone stats" });
+    }
+  });
+
   // --- Admin: Simulator status ---
   app.get("/api/admin/simulator/live", async (_req, res) => {
     try {
@@ -862,6 +876,12 @@ export async function registerRoutes(
       // Stop live billing if this call was in an active conference (handles unexpected hangups)
       stopLiveBillingByCallSid(callSid);
 
+      // Finalize call log with Twilio-reported duration
+      const callDuration = parseInt(req.body?.CallDuration ?? "0", 10);
+      if (!isNaN(callDuration)) {
+        storage.finalizeCallLog(callSid, callDuration).catch(() => {});
+      }
+
       try {
         await storage.removeActiveCall(callSid);
         console.log(`[status] Removed ${callSid} from active calls`);
@@ -914,6 +934,7 @@ export async function registerRoutes(
       await storage.removeStaleActiveCalls(90);
       const user = await getOrCreateUser(fromNumber);
       await storage.registerActiveCall(callSid, user.id);
+      storage.logCall(callSid, fromNumber, req.body?.To || null, null).catch(() => {});
       console.log(`[voice] Registered active call ${callSid} for userId=${user.id}`);
       registerStatusCallback(callSid, req).catch(() => {});
       twiml.redirect("/voice/entry");
@@ -2534,6 +2555,7 @@ export async function registerRoutes(
 
       // Register call as active — scoped to this region
       await storage.registerActiveCall(callSid, user.id, region.id);
+      storage.logCall(callSid, fromNumber, region.phoneNumber, region.id).catch(() => {});
       console.log(`[voice] [${region.slug}] Registered active call ${callSid} for userId=${user.id}`);
 
       registerStatusCallback(callSid, req).catch(() => {});

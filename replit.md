@@ -18,7 +18,7 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - `server/simulator.ts` — Virtual caller simulator
 - `server/stripeClient.ts` — Stripe SDK client (uses `STRIPE_SECRET_KEY`)
 - `server/webhookHandlers.ts` — Stripe webhook handler
-- `shared/schema.ts` — Drizzle ORM schema
+- `shared/schema.ts` — Drizzle ORM schema (includes `callLogs` table for per-number stats)
 - `scripts/seed-membership.ts` — Seeds Bronze/Silver/Gold products in Stripe
 - `client/src/pages/` — Admin dashboard pages
 

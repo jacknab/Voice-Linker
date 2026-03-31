@@ -66,6 +66,18 @@ export const activeCalls = pgTable("active_calls", {
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
+// Persistent log of every inbound call — used for operator phone-number stats
+export const callLogs = pgTable("call_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  callSid: text("call_sid").notNull().unique(),
+  regionId: uuid("region_id"),
+  toPhoneNumber: text("to_phone_number"),    // Twilio access number that was dialed
+  fromPhoneNumber: text("from_phone_number"), // Caller's originating number
+  durationSeconds: integer("duration_seconds"), // null until call ends
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
 // Relations
 export const regionsRelations = relations(regions, ({ many }) => ({
   activeCalls: many(activeCalls),
@@ -180,3 +192,5 @@ export type InsertMembershipSettings = z.infer<typeof insertMembershipSettingsSc
 export const insertBlockedUserSchema = createInsertSchema(blockedUsers).omit({ id: true, createdAt: true });
 export type BlockedUser = typeof blockedUsers.$inferSelect;
 export type InsertBlockedUser = z.infer<typeof insertBlockedUserSchema>;
+
+export type CallLog = typeof callLogs.$inferSelect;

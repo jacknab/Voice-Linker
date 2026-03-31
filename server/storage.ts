@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, or, notLike, isNull } from "drizzle-orm";
 
 const VIRTUAL_PREFIX = "VIRTUAL-";
@@ -57,6 +57,18 @@ export interface IStorage {
 
   getMembershipSettings(): Promise<MembershipSettings>;
   updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
+
+  // Call log tracking for phone-number stats
+  logCall(callSid: string, fromPhoneNumber: string, toPhoneNumber: string | null, regionId: string | null): Promise<void>;
+  finalizeCallLog(callSid: string, durationSeconds: number): Promise<void>;
+  getPhoneNumberStats(year: number, month: number): Promise<{
+    phoneNumber: string;
+    regionId: string | null;
+    regionName: string | null;
+    callCount: number;
+    totalSeconds: number;
+    lastCallAt: Date | null;
+  }[]>;
 
   getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }>;
 }
@@ -412,6 +424,44 @@ export class DatabaseStorage implements IStorage {
       messages: messageCount.count,
       activeCalls: activeCount.count,
     };
+  }
+
+  async logCall(callSid: string, fromPhoneNumber: string, toPhoneNumber: string | null, regionId: string | null): Promise<void> {
+    await db.insert(callLogs)
+      .values({ callSid, fromPhoneNumber, toPhoneNumber, regionId })
+      .onConflictDoNothing();
+  }
+
+  async finalizeCallLog(callSid: string, durationSeconds: number): Promise<void> {
+    await db.update(callLogs)
+      .set({ durationSeconds, completedAt: new Date() })
+      .where(eq(callLogs.callSid, callSid));
+  }
+
+  async getPhoneNumberStats(year: number, month: number): Promise<{
+    phoneNumber: string;
+    regionId: string | null;
+    regionName: string | null;
+    callCount: number;
+    totalSeconds: number;
+    lastCallAt: Date | null;
+  }[]> {
+    const result = await db.execute(sql`
+      SELECT
+        cl.to_phone_number            AS "phoneNumber",
+        r.id                          AS "regionId",
+        r.name                        AS "regionName",
+        COUNT(*)::int                 AS "callCount",
+        SUM(COALESCE(cl.duration_seconds, 0))::int AS "totalSeconds",
+        MAX(cl.started_at)            AS "lastCallAt"
+      FROM call_logs cl
+      LEFT JOIN regions r ON r.phone_number = cl.to_phone_number
+      WHERE EXTRACT(YEAR  FROM cl.started_at) = ${year}
+        AND EXTRACT(MONTH FROM cl.started_at) = ${month}
+      GROUP BY cl.to_phone_number, r.id, r.name
+      ORDER BY "callCount" DESC
+    `);
+    return result.rows as any[];
   }
 }
 

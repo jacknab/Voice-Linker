@@ -36,7 +36,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers";
 
 // ── Shared class tokens for light content area ────────────────────────────────
 const C = {
@@ -918,6 +918,136 @@ function PlaceholderTab({ label }: { label: string }) {
   );
 }
 
+// ── Phone Numbers Tab ─────────────────────────────────────────────────────────
+interface PhoneStat {
+  phoneNumber: string;
+  regionId: string | null;
+  regionName: string | null;
+  callCount: number;
+  totalSeconds: number;
+  lastCallAt: string | null;
+}
+
+function callCountDot(n: number) {
+  const color =
+    n >= 60 ? "bg-green-500" :
+    n >= 30 ? "bg-yellow-400" :
+    n >= 10 ? "bg-orange-400" :
+    n >= 1  ? "bg-red-400"    : "bg-gray-300";
+  return <span className={`inline-block w-2.5 h-2.5 rounded-full mr-2 flex-shrink-0 ${color}`} />;
+}
+
+function PhoneNumbersTab() {
+  const now = new Date();
+  const [year,  setYear]  = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+
+  const { data: stats = [], isLoading } = useQuery<PhoneStat[]>({
+    queryKey: ["/api/admin/phone-stats", year, month],
+    queryFn: () =>
+      fetch(`/api/admin/phone-stats?year=${year}&month=${month}`)
+        .then(r => r.json()),
+  });
+
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  function fmtDuration(secs: number) {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  function fmtDate(d: string | null) {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-6">
+        <select
+          data-testid="select-phone-stats-year"
+          value={year}
+          onChange={e => setYear(Number(e.target.value))}
+          className="border border-gray-200 rounded px-2 py-1 font-mono text-xs bg-white text-gray-700 focus:outline-none"
+        >
+          {Array.from({ length: 5 }, (_, i) => now.getFullYear() - i).map(y => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
+        <select
+          data-testid="select-phone-stats-month"
+          value={month}
+          onChange={e => setMonth(Number(e.target.value))}
+          className="border border-gray-200 rounded px-2 py-1 font-mono text-xs bg-white text-gray-700 focus:outline-none"
+        >
+          {months.map((m, i) => (
+            <option key={i + 1} value={i + 1}>{m}</option>
+          ))}
+        </select>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-gray-400 font-mono text-xs py-10 justify-center">
+          <Loader2 size={14} className="animate-spin" /> Loading…
+        </div>
+      ) : stats.length === 0 ? (
+        <div className="text-gray-400 font-mono text-xs text-center py-16">No call data for this period.</div>
+      ) : (
+        <div className="overflow-x-auto rounded border border-gray-100">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50 text-gray-500 uppercase tracking-widest">
+                <th className="text-left px-4 py-3">Phone Number</th>
+                <th className="text-left px-4 py-3">Region</th>
+                <th className="text-right px-4 py-3">Calls</th>
+                <th className="text-right px-4 py-3">Total Duration</th>
+                <th className="text-right px-4 py-3">Last Call</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.map((row, i) => (
+                <tr
+                  key={row.phoneNumber ?? i}
+                  data-testid={`row-phone-stat-${i}`}
+                  className="border-b border-gray-50 last:border-0 hover:bg-amber-50 transition-colors"
+                >
+                  <td className="px-4 py-3 flex items-center">
+                    {callCountDot(row.callCount)}
+                    <span data-testid={`text-phone-number-${i}`} className="text-gray-800">{row.phoneNumber ?? "—"}</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{row.regionName ?? <span className="text-gray-300">—</span>}</td>
+                  <td className="px-4 py-3 text-right text-gray-800 font-semibold">{row.callCount}</td>
+                  <td className="px-4 py-3 text-right text-gray-500">{fmtDuration(row.totalSeconds)}</td>
+                  <td className="px-4 py-3 text-right text-gray-400">{fmtDate(row.lastCallAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap gap-4 text-xs font-mono text-gray-400">
+        {[
+          { color: "bg-green-500",  label: "60+ calls" },
+          { color: "bg-yellow-400", label: "30–59 calls" },
+          { color: "bg-orange-400", label: "10–29 calls" },
+          { color: "bg-red-400",    label: "1–9 calls" },
+          { color: "bg-gray-300",   label: "0 calls" },
+        ].map(({ color, label }) => (
+          <span key={label} className="flex items-center gap-1.5">
+            <span className={`inline-block w-2.5 h-2.5 rounded-full ${color}`} />
+            {label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Tab definitions ───────────────────────────────────────────────────────────
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard",      label: "Dashboard",      icon: <LayoutDashboard size={15} /> },
@@ -926,6 +1056,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "memberships",    label: "Memberships",     icon: <CreditCard size={15} /> },
   { id: "audio-gen",      label: "Audio Gen",       icon: <Volume2 size={15} /> },
   { id: "messages",       label: "Messages",        icon: <MessageSquare size={15} /> },
+  { id: "phone-numbers",  label: "Phone Numbers",   icon: <Phone size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
 ];
 
@@ -1043,6 +1174,7 @@ export default function Admin() {
           {activeTab === "memberships"    && <MembershipsTab />}
           {activeTab === "audio-gen"      && <TTSTab />}
           {activeTab === "messages"       && <PlaceholderTab label="Messages" />}
+          {activeTab === "phone-numbers"  && <PhoneNumbersTab />}
           {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
         </div>
       </div>
