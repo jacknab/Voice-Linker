@@ -613,6 +613,55 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Zip Code Neighborhoods ---
+  app.get("/api/admin/zip-codes", async (_req, res) => {
+    try {
+      const entries = await storage.getAllZipCodes();
+      res.json(entries);
+    } catch (e) {
+      console.error("[admin] /api/admin/zip-codes GET error:", e);
+      res.status(500).json({ message: "Failed to fetch zip codes" });
+    }
+  });
+
+  app.post("/api/admin/zip-codes", async (req, res) => {
+    try {
+      const { code, neighborhood } = req.body;
+      if (!/^\d{5}$/.test(code) || !neighborhood?.trim()) {
+        return res.status(400).json({ message: "Valid 5-digit zip code and neighborhood name are required" });
+      }
+      const entry = await storage.upsertAdminZipEntry(code.trim(), neighborhood.trim());
+      res.json(entry);
+    } catch (e) {
+      console.error("[admin] /api/admin/zip-codes POST error:", e);
+      res.status(500).json({ message: "Failed to save zip code" });
+    }
+  });
+
+  app.patch("/api/admin/zip-codes/:id", async (req, res) => {
+    try {
+      const { neighborhood } = req.body;
+      if (!neighborhood?.trim()) {
+        return res.status(400).json({ message: "Neighborhood name is required" });
+      }
+      const entry = await storage.updateZipNeighborhood(req.params.id, neighborhood.trim());
+      res.json(entry);
+    } catch (e) {
+      console.error("[admin] /api/admin/zip-codes PATCH error:", e);
+      res.status(500).json({ message: "Failed to update neighborhood" });
+    }
+  });
+
+  app.delete("/api/admin/zip-codes/:id", async (req, res) => {
+    try {
+      await storage.deleteZipEntry(req.params.id);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] /api/admin/zip-codes DELETE error:", e);
+      res.status(500).json({ message: "Failed to delete zip code" });
+    }
+  });
+
   // --- Admin: Phone number stats ---
   app.get("/api/admin/phone-stats", async (req, res) => {
     try {

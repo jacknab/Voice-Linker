@@ -105,6 +105,10 @@ export interface IStorage {
   getZipEntryByCode(code: string): Promise<ZipCode | undefined>;
   getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string; neighborhood?: string | null }): Promise<ZipCode>;
   setUserZipCode(userId: string, zipCodeId: string): Promise<void>;
+  getAllZipCodes(): Promise<ZipCode[]>;
+  upsertAdminZipEntry(code: string, neighborhood: string): Promise<ZipCode>;
+  deleteZipEntry(id: string): Promise<void>;
+  updateZipNeighborhood(id: string, neighborhood: string): Promise<ZipCode>;
 
   getMembershipSettings(): Promise<MembershipSettings>;
   updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
@@ -503,6 +507,35 @@ export class DatabaseStorage implements IStorage {
 
   async setUserZipCode(userId: string, zipCodeId: string): Promise<void> {
     await db.update(users).set({ zipCodeId }).where(eq(users.id, userId));
+  }
+
+  async getAllZipCodes(): Promise<ZipCode[]> {
+    return db.select().from(zipCodes).orderBy(zipCodes.code);
+  }
+
+  async upsertAdminZipEntry(code: string, neighborhood: string): Promise<ZipCode> {
+    const [existing] = await db.select().from(zipCodes).where(eq(zipCodes.code, code));
+    if (existing) {
+      const [updated] = await db.update(zipCodes)
+        .set({ neighborhood })
+        .where(eq(zipCodes.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(zipCodes).values({ code, neighborhood }).returning();
+    return created;
+  }
+
+  async deleteZipEntry(id: string): Promise<void> {
+    await db.delete(zipCodes).where(eq(zipCodes.id, id));
+  }
+
+  async updateZipNeighborhood(id: string, neighborhood: string): Promise<ZipCode> {
+    const [updated] = await db.update(zipCodes)
+      .set({ neighborhood })
+      .where(eq(zipCodes.id, id))
+      .returning();
+    return updated;
   }
 
   async getMembershipSettings(): Promise<MembershipSettings> {

@@ -38,7 +38,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes";
 
 interface FlaggedItem {
   id: string;
@@ -1888,6 +1888,204 @@ function FlaggedContentTab() {
   );
 }
 
+// ── ZipCodesTab ───────────────────────────────────────────────────────────────
+interface ZipEntry {
+  id: string;
+  code: string;
+  city: string | null;
+  state: string | null;
+  neighborhood: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  createdAt: string;
+}
+
+function ZipCodesTab() {
+  const { toast } = useToast();
+  const [newCode, setNewCode] = useState("");
+  const [newNeighborhood, setNewNeighborhood] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+
+  const { data: entries = [], isLoading } = useQuery<ZipEntry[]>({
+    queryKey: ["/api/admin/zip-codes"],
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (body: { code: string; neighborhood: string }) =>
+      apiRequest("POST", "/api/admin/zip-codes", body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/zip-codes"] });
+      setNewCode("");
+      setNewNeighborhood("");
+      toast({ title: "Zip code saved" });
+    },
+    onError: () => toast({ title: "Failed to save", variant: "destructive" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, neighborhood }: { id: string; neighborhood: string }) =>
+      apiRequest("PATCH", `/api/admin/zip-codes/${id}`, { neighborhood }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/zip-codes"] });
+      setEditingId(null);
+      toast({ title: "Neighborhood updated" });
+    },
+    onError: () => toast({ title: "Failed to update", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/admin/zip-codes/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/zip-codes"] });
+      toast({ title: "Entry removed" });
+    },
+    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
+  });
+
+  return (
+    <div className="space-y-4">
+      {/* Add form */}
+      <div className={C.panel}>
+        <div className={C.panelHeader}>Add / Update Zip Code Neighborhood</div>
+        <div className={C.panelBody + " p-4"}>
+          <p className="text-xs text-gray-500 font-mono mb-3">
+            Enter a zip code and its neighborhood name. Used as a fallback when live geocoding is unavailable.
+            If the zip already exists in the system it will update the neighborhood name.
+          </p>
+          <div className="flex gap-2 items-end">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-mono text-gray-500 uppercase tracking-widest">Zip Code</label>
+              <input
+                data-testid="input-zip-code"
+                value={newCode}
+                onChange={e => setNewCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                placeholder="e.g. 90210"
+                maxLength={5}
+                className="border border-gray-300 rounded px-3 py-1.5 text-sm font-mono w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-xs font-mono text-gray-500 uppercase tracking-widest">Neighborhood Name</label>
+              <input
+                data-testid="input-neighborhood"
+                value={newNeighborhood}
+                onChange={e => setNewNeighborhood(e.target.value)}
+                placeholder="e.g. Beverly Hills"
+                className="border border-gray-300 rounded px-3 py-1.5 text-sm font-mono w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              data-testid="btn-save-zip"
+              onClick={() => addMutation.mutate({ code: newCode, neighborhood: newNeighborhood })}
+              disabled={newCode.length !== 5 || !newNeighborhood.trim() || addMutation.isPending}
+              className={C.btnPrimary + " self-end"}
+            >
+              {addMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className={C.panel}>
+        <div className={C.panelHeader}>
+          Zip Code Directory <span className="opacity-60 font-normal ml-2">({entries.length})</span>
+        </div>
+        <div className={C.panelBody}>
+          {isLoading ? (
+            <div className="flex justify-center py-10"><Loader2 className="animate-spin text-gray-400" size={20} /></div>
+          ) : entries.length === 0 ? (
+            <p className="text-xs text-gray-400 font-mono text-center py-8">No zip codes on file yet.</p>
+          ) : (
+            <table className="w-full text-xs font-mono">
+              <thead>
+                <tr className="border-b border-gray-200 text-left text-gray-500 uppercase tracking-widest text-[10px]">
+                  <th className="px-4 py-2.5">Zip</th>
+                  <th className="px-4 py-2.5">Neighborhood / City</th>
+                  <th className="px-4 py-2.5">Lat / Lon</th>
+                  <th className="px-4 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map(entry => (
+                  <tr key={entry.id} data-testid={`row-zip-${entry.id}`} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-4 py-2.5 font-bold">{entry.code}</td>
+                    <td className="px-4 py-2.5">
+                      {editingId === entry.id ? (
+                        <div className="flex gap-1.5 items-center">
+                          <input
+                            data-testid={`input-edit-neighborhood-${entry.id}`}
+                            value={editingValue}
+                            onChange={e => setEditingValue(e.target.value)}
+                            className="border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+                            autoFocus
+                          />
+                          <button
+                            data-testid={`btn-confirm-edit-${entry.id}`}
+                            onClick={() => updateMutation.mutate({ id: entry.id, neighborhood: editingValue })}
+                            disabled={!editingValue.trim() || updateMutation.isPending}
+                            className="text-green-600 hover:text-green-800 transition-colors"
+                          >
+                            <CheckCircle2 size={14} />
+                          </button>
+                          <button
+                            data-testid={`btn-cancel-edit-${entry.id}`}
+                            onClick={() => setEditingId(null)}
+                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className={entry.neighborhood ? "text-gray-800" : "text-gray-400 italic"}>
+                          {entry.neighborhood || entry.city || "—"}
+                          {entry.city && entry.neighborhood && entry.city !== entry.neighborhood && (
+                            <span className="text-gray-400 ml-1">({entry.city})</span>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-gray-400">
+                      {entry.latitude != null && entry.longitude != null
+                        ? `${entry.latitude.toFixed(4)}, ${entry.longitude.toFixed(4)}`
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <div className="flex gap-2 justify-end">
+                        {editingId !== entry.id && (
+                          <button
+                            data-testid={`btn-edit-zip-${entry.id}`}
+                            onClick={() => { setEditingId(entry.id); setEditingValue(entry.neighborhood ?? ""); }}
+                            className="text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Edit neighborhood"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        <button
+                          data-testid={`btn-delete-zip-${entry.id}`}
+                          onClick={() => deleteMutation.mutate(entry.id)}
+                          disabled={deleteMutation.isPending}
+                          className="text-gray-400 hover:text-red-600 transition-colors"
+                          title="Remove entry"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Tab definitions ───────────────────────────────────────────────────────────
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard",      label: "Dashboard",      icon: <LayoutDashboard size={15} /> },
@@ -1900,6 +2098,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "messages",       label: "Messages",        icon: <MessageSquare size={15} /> },
   { id: "phone-numbers",  label: "Phone Numbers",   icon: <Phone size={15} /> },
   { id: "blocked",        label: "Blocked Numbers", icon: <X size={15} /> },
+  { id: "zip-codes",      label: "Zip Codes",       icon: <MapPin size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
 ];
 
@@ -2021,6 +2220,7 @@ export default function Admin() {
           {activeTab === "messages"       && <PlaceholderTab label="Messages" />}
           {activeTab === "phone-numbers"  && <PhoneNumbersTab />}
           {activeTab === "blocked"        && <BlockedNumbersTab />}
+          {activeTab === "zip-codes"      && <ZipCodesTab />}
           {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
         </div>
       </div>
