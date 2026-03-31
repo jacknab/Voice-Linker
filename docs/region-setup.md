@@ -86,16 +86,13 @@ Controls whether this region is live and accepting callers. Setting a region to 
 
 Once a region has a Default Zip Code, the system automatically resolves its latitude and longitude using the zippopotam.us and OpenStreetMap Nominatim APIs and stores them in the zip code cache table. Subsequent callers benefit from this cached data instantly — no external API calls needed after the first time.
 
-Profiles are sorted in the following priority order for each caller:
+Profiles are sorted in the following order for each caller:
 
 | Priority | Criteria |
 |----------|----------|
-| 1st | Paid membership tier (paid members surface first) |
-| 2nd | Distance from the caller (closest first) |
-| 3rd | Profile creation date (oldest first as tiebreaker) |
-| Last | Admin-uploaded demo profiles |
-
-Callers or profiles with no location data are sorted after all located entries within their membership tier.
+| 1st | Distance from the caller (closest first) |
+| 2nd | Profile creation date (tiebreaker for equal distances) |
+| Last | Profiles with no location data (sorted after all located callers) |
 
 ---
 

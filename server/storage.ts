@@ -257,15 +257,6 @@ export class DatabaseStorage implements IStorage {
       ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
       : eq(profiles.isAdminUploaded, true);
 
-    // Priority: 0 = paid members, 1 = free trial / no membership, 2 = admin-uploaded
-    const membershipPriority = sql<number>`
-      CASE
-        WHEN ${profiles.isAdminUploaded} = true THEN 2
-        WHEN ${users.membershipTier} IS NOT NULL AND ${users.membershipTier} != 'free_trial' THEN 0
-        ELSE 1
-      END
-    `;
-
     const hasCallerLocation = callerLat != null && callerLon != null;
 
     // Haversine distance in km — profiles with no location sort last (99999)
@@ -292,8 +283,8 @@ export class DatabaseStorage implements IStorage {
       .where(and(conditions, not(eq(profiles.userId, excludeUserId))));
 
     const rows = distanceKm
-      ? await query.orderBy(membershipPriority, distanceKm, profiles.createdAt)
-      : await query.orderBy(membershipPriority, profiles.createdAt);
+      ? await query.orderBy(distanceKm, profiles.createdAt)
+      : await query.orderBy(profiles.createdAt);
 
     return rows.map(r => r.profile);
   }
