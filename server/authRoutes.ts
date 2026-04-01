@@ -15,6 +15,12 @@ declare module "express-session" {
 
 const router = Router();
 
+function saveSession(req: Request): Promise<void> {
+  return new Promise((resolve, reject) => {
+    req.session.save((err) => (err ? reject(err) : resolve()));
+  });
+}
+
 function getBaseUrl(req: Request): string {
   const proto = req.headers["x-forwarded-proto"] || req.protocol;
   const host = req.headers["x-forwarded-host"] || req.get("host");
@@ -66,13 +72,8 @@ router.post("/api/auth/register", async (req: Request, res: Response) => {
     const user = await storage.createWebUser(email, passwordHash);
 
     req.session.webUserId = user.id;
-    req.session.save((err) => {
-      if (err) {
-        console.error("[auth] session save error on register:", err);
-        return res.status(500).json({ error: "Registration failed. Please try again." });
-      }
-      return res.status(201).json({ id: user.id, email: user.email });
-    });
+    await saveSession(req);
+    return res.status(201).json({ id: user.id, email: user.email });
   } catch (err) {
     console.error("[auth] register error:", err);
     return res.status(500).json({ error: "Registration failed. Please try again." });
@@ -107,13 +108,8 @@ router.post("/api/auth/login", async (req: Request, res: Response) => {
     }
 
     req.session.webUserId = user.id;
-    req.session.save((err) => {
-      if (err) {
-        console.error("[auth] session save error on login:", err);
-        return res.status(500).json({ error: "Login failed. Please try again." });
-      }
-      return res.json({ id: user.id, email: user.email });
-    });
+    await saveSession(req);
+    return res.json({ id: user.id, email: user.email });
   } catch (err) {
     console.error("[auth] login error:", err);
     return res.status(500).json({ error: "Login failed. Please try again." });
@@ -361,13 +357,8 @@ router.post("/api/auth/reset-password", async (req: Request, res: Response) => {
     await storage.clearWebUserResetToken(user.id);
 
     req.session.webUserId = user.id;
-    req.session.save((err) => {
-      if (err) {
-        console.error("[auth] session save error on reset-password:", err);
-        return res.status(500).json({ error: "Password reset failed. Please try again." });
-      }
-      return res.json({ ok: true, id: user.id, email: user.email });
-    });
+    await saveSession(req);
+    return res.json({ ok: true, id: user.id, email: user.email });
   } catch (err) {
     console.error("[auth] reset-password error:", err);
     return res.status(500).json({ error: "Password reset failed. Please try again." });
@@ -553,13 +544,8 @@ router.post("/api/admin/login", async (req: Request, res: Response) => {
     const valid = await bcrypt.compare(password, account.passwordHash);
     if (!valid) return res.status(401).json({ error: "Invalid credentials." });
     req.session.adminAccountId = account.id;
-    req.session.save((err) => {
-      if (err) {
-        console.error("[admin-auth] session save error on login:", err);
-        return res.status(500).json({ error: "Login failed." });
-      }
-      return res.json({ ok: true });
-    });
+    await saveSession(req);
+    return res.json({ ok: true });
   } catch (err) {
     console.error("[admin-auth] login error:", err);
     return res.status(500).json({ error: "Login failed." });
