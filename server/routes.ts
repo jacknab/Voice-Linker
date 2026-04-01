@@ -1710,21 +1710,54 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // ─── 1b-i. Membership Number Entry ────────────────────────────────────────
-  // Prompts the caller to enter their 5-digit membership number.
-  // Fires immediately after the 5th digit; pound key skips or ends a shorter entry.
+  // ─── 1b-i. Membership Gateway ──────────────────────────────────────────────
+  // Asks caller if they have a membership. Press 1 to enter it, # to skip.
   app.post("/voice/membership-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+
+    const gather = twiml.gather({
+      numDigits: 1,
+      finishOnKey: "",
+      action: "/voice/handle-membership-gateway",
+      timeout: 5,
+    });
+    playPrompt(gather, req, "membership_entry_prompt.mp3",
+      "If you have a membership press 1 now. Otherwise press the pound key.");
+    // No input / timeout → skip membership and continue
+    twiml.redirect("/voice/entry-check");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b-i-a. Handle Membership Gateway Choice ──────────────────────────────
+  app.post("/voice/handle-membership-gateway", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = (req.body?.Digits as string) ?? "";
+
+    if (digit === "1") {
+      twiml.redirect("/voice/membership-number-entry");
+    } else {
+      // # or anything else → skip membership
+      twiml.redirect("/voice/entry-check");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b-i-b. Membership Number Entry ───────────────────────────────────────
+  // Collects the 5-digit membership number; auto-fires after the 5th digit.
+  app.post("/voice/membership-number-entry", async (req, res) => {
     const twiml = new VoiceResponse();
 
     const gather = twiml.gather({
       numDigits: 5,
       finishOnKey: "#",
       action: "/voice/handle-membership-entry",
-      timeout: 5,
+      timeout: 10,
     });
-    playPrompt(gather, req, "membership_entry_prompt.mp3",
-      "If you have a membership, please enter your 5-digit number now.");
-    // No input or timeout → skip membership and continue
+    gather.say("Please enter your 5-digit membership number.");
+    // No input / timeout → skip membership and continue
     twiml.redirect("/voice/entry-check");
     res.type("text/xml");
     res.send(twiml.toString());
