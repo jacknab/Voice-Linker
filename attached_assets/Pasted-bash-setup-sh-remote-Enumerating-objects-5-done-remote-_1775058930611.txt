@@ -1,0 +1,181 @@
+bash setup.sh
+remote: Enumerating objects: 5, done.
+remote: Counting objects: 100% (5/5), done.
+remote: Compressing objects: 100% (1/1), done.
+remote: Total 3 (delta 2), reused 3 (delta 2), pack-reused 0 (from 0)
+Unpacking objects: 100% (3/3), 823 bytes | 411.00 KiB/s, done.
+From https://github.com/jacknab/Voice-Linker
+   a7fc698..5e18b77  main       -> origin/main
+Updating a7fc698..5e18b77
+Fast-forward
+ setup.sh | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+Domain name [assicrentals.com]: 
+
+=================================================
+  Phone Booth – Production Setup
+  Domain   : assicrentals.com
+  Database : phonebooth_db  (user: phonebooth_user)
+  App port : 5050 (internal)
+  App dir  : /opt/booth
+=================================================
+
+Continue? [y/N] y
+
+━━━  1/9  System packages  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+W: An error occurred during the signature verification. The repository is not updated and the previous index files will be used. GPG error: https://dl.yarnpkg.com/debian stable InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 62D54FD4003F6525
+W: Failed to fetch https://dl.yarnpkg.com/debian/dists/stable/InRelease  The following signatures couldn't be verified because the public key is not available: NO_PUBKEY 62D54FD4003F6525
+W: Some index files failed to download. They have been ignored, or old ones used instead.
+[INFO]  Node.js 22 already present – skipping.
+[INFO]  PostgreSQL already present – skipping.
+[INFO]  Nginx already present – skipping.
+[INFO]  Certbot already present – skipping.
+[OK]    System packages ready.
+
+━━━  2/9  Node.js dependencies  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+up to date, audited 564 packages in 4s
+
+94 packages are looking for funding
+  run `npm fund` for details
+
+8 vulnerabilities (1 low, 3 moderate, 4 high)
+
+To address all issues, run:
+  npm audit fix
+
+Run `npm audit` for details.
+[OK]    npm install complete.
+
+━━━  3/9  PostgreSQL – user, database, permissions  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ALTER ROLE
+[WARN]  Dropping and recreating 'phonebooth_db' for a clean install...
+DROP DATABASE
+CREATE DATABASE
+GRANT
+GRANT
+[OK]    Database 'phonebooth_db' and user 'phonebooth_user' are ready (clean slate).
+
+━━━  4/9  .env file  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[INFO]  .env exists — updating DB credentials and port, preserving API keys.
+[OK]    .env updated — DATABASE_URL now points to phonebooth_db.
+
+━━━  5/9  Database schema (drizzle-kit push)  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+> rest-express@1.0.0 db:push
+> drizzle-kit push
+
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/opt/booth/drizzle.config.ts'
+[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
+
++ phone_number column will be created
+
++ stripe_customer_id column will be created
+
++ membership_tier column will be created
+
++ remaining_seconds column will be created
+
++ zip_code_id column will be created
+
++ membership_number column will be created
+
++ membership_pin column will be created
+--- all columns conflicts in users table resolved ---
+
+error: column "id" cannot be cast automatically to type uuid
+    at /opt/booth/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async Object.query (/opt/booth/node_modules/drizzle-kit/bin.cjs:80622:26)
+    at async pgPush (/opt/booth/node_modules/drizzle-kit/bin.cjs:84432:13)
+    at async Object.handler (/opt/booth/node_modules/drizzle-kit/bin.cjs:93871:9)
+    at async run (/opt/booth/node_modules/drizzle-kit/bin.cjs:93117:7) {
+  length: 169,
+  severity: 'ERROR',
+  code: '42804',
+  detail: undefined,
+  hint: 'You might need to specify "USING id::uuid".',
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'tablecmds.c',
+  line: '12535',
+  routine: 'ATPrepAlterColumnType'
+}
+[OK]    Schema pushed.
+
+━━━  6/9  Admin account  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[dotenv@17.3.1] injecting env (10) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[reset-admin] Password reset for: admin@me.com
+[OK]    Admin account ready.
+
+━━━  7/9  Build  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+> rest-express@1.0.0 build
+> tsx script/build.ts
+
+building client...
+vite v7.3.0 building client environment for production...
+transforming (1) src/main.tsxBrowserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 2646 modules transformed.
+../dist/public/index.html                                   2.01 kB │ gzip:   0.77 kB
+../dist/public/assets/hero_guy_1-EFwDHgul.png           1,489.20 kB
+../dist/public/assets/image_1775035245108-n3r1Xh97.png  1,497.84 kB
+../dist/public/assets/index-mE1Jz5n1.css                   95.60 kB │ gzip:  15.18 kB
+../dist/public/assets/index-T7n3xF6u.js                 1,052.59 kB │ gzip: 291.91 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 10.06s
+building server...
+
+  dist/index.cjs  1.7mb ⚠️
+
+⚡ Done in 200ms
+[OK]    Build complete → /opt/booth/dist/
+
+━━━  8/9  systemd service (phonebooth)  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[OK]    Service 'phonebooth' enabled and started.
+
+━━━  9/9  Nginx + SSL  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[INFO]  SSL certificate verified at /etc/letsencrypt/live/assicrentals.com-0001/
+[WARN]  Removed broken nginx symlink: /etc/nginx/sites-enabled/voice_protocol
+[WARN]  Removed broken nginx symlink: /etc/nginx/sites-enabled/voice_protocol_nginx.conf
+nginx: [warn] "ssl_stapling" ignored, no OCSP responder URL in the certificate "/etc/letsencrypt/live/assicrentals.com-0001/fullchain.pem"
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+[OK]    Nginx configured and reloaded.
+
+=================================================
+  All done!
+
+  Site       : https://assicrentals.com
+  Admin      : https://assicrentals.com/admin/login
+  Database   : phonebooth_db (user: phonebooth_user)
+  Service    : phonebooth
+
+  Useful commands:
+    Logs    : sudo journalctl -u phonebooth -f
+    Restart : sudo systemctl restart phonebooth
+    Nginx   : sudo tail -f /var/log/nginx/phonebooth_error.log
+
+  Fill in your API keys in .env then restart the service:
+    TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER
+    ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID
+    STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET
+
+    sudo systemctl restart phonebooth
+=================================================

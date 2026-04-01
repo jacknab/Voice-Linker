@@ -116,11 +116,15 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" \
     || sudo -u postgres psql -c "CREATE ROLE ${DB_USER} WITH LOGIN PASSWORD '${DB_PASSWORD}';"
 sudo -u postgres psql -c "ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';"
 
+# Stop the app service first so it releases its database connection.
+# PostgreSQL will refuse to drop a database that has active connections.
+sudo systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
+
 # Drop and recreate the database for a guaranteed clean schema.
-# This eliminates any leftover tables from previous or different app installations.
+# WITH (FORCE) terminates any remaining connections before dropping.
 warn "Dropping and recreating '${DB_NAME}' for a clean install..."
-sudo -u postgres psql -c "DROP DATABASE IF EXISTS ${DB_NAME};"
-sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS ${DB_NAME} WITH (FORCE);"
+sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
 
 # Privileges (PostgreSQL 15+ requires explicit schema grant)
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
