@@ -2077,6 +2077,16 @@ export async function registerRoutes(
       playPrompt(twiml, req, "phone_booth_welcome.mp3",
         "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
 
+      // Phone Booth MOTD
+      try {
+        const motdCfg = await getMembershipSettingsCached();
+        if (motdCfg.motdPhoneBoothEnabled && motdCfg.motdPhoneBoothText) {
+          playPrompt(twiml, req, "motd_phone_booth.mp3", motdCfg.motdPhoneBoothText);
+        }
+      } catch (err) {
+        console.error("[voice] phone-booth motd error:", err);
+      }
+
       const user = await getOrCreateUser(fromNumber);
       const profile = await storage.getProfile(user.id);
 
@@ -2205,6 +2215,16 @@ export async function registerRoutes(
       }
     } catch (err) {
       console.error("[voice] main-menu time check error:", err);
+    }
+
+    // ── Main Menu MOTD ───────────────────────────────────────────────────────
+    try {
+      const motdCfg = await getMembershipSettingsCached();
+      if (motdCfg.motdMainMenuEnabled && motdCfg.motdMainMenuText) {
+        playPrompt(twiml, req, "motd_main_menu.mp3", motdCfg.motdMainMenuText);
+      }
+    } catch (err) {
+      console.error("[voice] main-menu motd error:", err);
     }
 
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-main-menu" });
@@ -4616,6 +4636,16 @@ export async function registerRoutes(
           playPrompt(twiml, req, "payment_success_24hour.mp3", successText);
         } else {
           twiml.say(successText);
+        }
+
+        // Post-Purchase MOTD
+        try {
+          const motdCfg = await getMembershipSettingsCached();
+          if (motdCfg.motdPostPurchaseEnabled && motdCfg.motdPostPurchaseText) {
+            playPrompt(twiml, req, "motd_post_purchase.mp3", motdCfg.motdPostPurchaseText);
+          }
+        } catch (err) {
+          console.error("[voice] post-purchase motd error:", err);
         }
       } catch (err) {
         console.error("[voice] membership activation error after payment:", err);

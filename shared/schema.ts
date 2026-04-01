@@ -190,9 +190,19 @@ export const membershipSettings = pgTable("membership_settings", {
   plan3PriceCents: integer("plan3_price_cents").notNull().default(300),
   // Which plan key ("plan1", "plan2", "plan3") gets a first-time buyer double-minutes bonus, or null for none
   bonusPlanKey: text("bonus_plan_key"),
-  // Announcement / MOTD — played to every caller right after the system greeting
+  // Announcement / MOTD — 4 independent slots, each independently enabled
+  // 1. Entry: plays after greeting/disclaimer, before membership entry prompt
   motdEnabled: boolean("motd_enabled").notNull().default(false),
   motdText: text("motd_text"),
+  // 2. Main Menu: plays at the top of the main menu (after balance announcement)
+  motdMainMenuEnabled: boolean("motd_main_menu_enabled").notNull().default(false),
+  motdMainMenuText: text("motd_main_menu_text"),
+  // 3. Phone Booth: plays when a caller enters the phone booth
+  motdPhoneBoothEnabled: boolean("motd_phone_booth_enabled").notNull().default(false),
+  motdPhoneBoothText: text("motd_phone_booth_text"),
+  // 4. Post-Purchase: plays immediately after a successful membership payment
+  motdPostPurchaseEnabled: boolean("motd_post_purchase_enabled").notNull().default(false),
+  motdPostPurchaseText: text("motd_post_purchase_text"),
   // Billing mode: 'per_minute' deducts during calls; 'per_day' deducts 1 day nightly at 23:59
   billingMode: text("billing_mode").notNull().default("per_minute"),
 });

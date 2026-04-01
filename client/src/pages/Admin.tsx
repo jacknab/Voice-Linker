@@ -2593,91 +2593,139 @@ function FlaggedContentTab() {
 }
 
 // ── AnnouncementsTab ──────────────────────────────────────────────────────────
+interface MotdSettings {
+  motdEnabled: boolean; motdText: string | null;
+  motdMainMenuEnabled: boolean; motdMainMenuText: string | null;
+  motdPhoneBoothEnabled: boolean; motdPhoneBoothText: string | null;
+  motdPostPurchaseEnabled: boolean; motdPostPurchaseText: string | null;
+}
+
+const MOTD_SLOTS = [
+  {
+    key: "entry" as const,
+    label: "Entry Greeting",
+    where: "Plays right after the welcome greeting and disclaimer — before the membership number prompt. Every caller hears this on every call.",
+    audioFile: "motd.mp3",
+    enabledField: "motdEnabled" as keyof MotdSettings,
+    textField: "motdText" as keyof MotdSettings,
+  },
+  {
+    key: "mainMenu" as const,
+    label: "Main Menu",
+    where: "Plays at the top of the main menu after the balance announcement — before menu options are read out.",
+    audioFile: "motd_main_menu.mp3",
+    enabledField: "motdMainMenuEnabled" as keyof MotdSettings,
+    textField: "motdMainMenuText" as keyof MotdSettings,
+  },
+  {
+    key: "phoneBooth" as const,
+    label: "Phone Booth",
+    where: "Plays when a caller enters the phone booth (live connector), immediately after the phone booth welcome message.",
+    audioFile: "motd_phone_booth.mp3",
+    enabledField: "motdPhoneBoothEnabled" as keyof MotdSettings,
+    textField: "motdPhoneBoothText" as keyof MotdSettings,
+  },
+  {
+    key: "postPurchase" as const,
+    label: "After Purchase",
+    where: "Plays immediately after a caller successfully completes a membership payment — before returning to the main menu.",
+    audioFile: "motd_post_purchase.mp3",
+    enabledField: "motdPostPurchaseEnabled" as keyof MotdSettings,
+    textField: "motdPostPurchaseText" as keyof MotdSettings,
+  },
+];
+
 function AnnouncementsTab() {
   const { toast } = useToast();
-  const [localEnabled, setLocalEnabled] = useState<boolean | null>(null);
-  const [localText, setLocalText] = useState<string | null>(null);
+  const [localState, setLocalState] = useState<Partial<MotdSettings>>({});
 
-  const { data: settings, isLoading } = useQuery<{
-    motdEnabled: boolean;
-    motdText: string | null;
-  }>({ queryKey: ["/api/admin/membership-settings"] });
-
-  const enabled = localEnabled ?? settings?.motdEnabled ?? false;
-  const text = localText ?? settings?.motdText ?? "";
+  const { data: settings, isLoading } = useQuery<MotdSettings>({
+    queryKey: ["/api/admin/membership-settings"],
+  });
 
   const saveMutation = useMutation({
-    mutationFn: (body: { motdEnabled: boolean; motdText: string }) =>
+    mutationFn: (body: Partial<MotdSettings>) =>
       apiRequest("PUT", "/api/admin/membership-settings", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-settings"] });
-      setLocalEnabled(null);
-      setLocalText(null);
+      setLocalState({});
       toast({ title: "Saved", description: "Announcement settings updated." });
     },
     onError: () => toast({ title: "Error", description: "Failed to save.", variant: "destructive" }),
   });
 
-  const handleSave = () => {
-    saveMutation.mutate({ motdEnabled: enabled, motdText: text });
-  };
+  const merged = { ...settings, ...localState } as MotdSettings;
+  const isDirty = Object.keys(localState).length > 0;
+
+  const setField = (field: keyof MotdSettings, value: boolean | string) =>
+    setLocalState(prev => ({ ...prev, [field]: value }));
+
+  if (isLoading) return (
+    <div className="flex items-center gap-2 text-gray-400 font-mono text-xs py-16 justify-center">
+      <Loader2 size={14} className="animate-spin" /> Loading…
+    </div>
+  );
 
   return (
-    <div className="max-w-2xl space-y-6">
-      {/* Status card */}
-      <div className={`rounded-xl border p-5 flex items-center justify-between ${enabled ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-        <div className="flex items-center gap-3">
-          <Megaphone size={20} className={enabled ? "text-green-600" : "text-gray-400"} />
-          <div>
-            <p className="font-mono font-bold text-sm tracking-wide text-gray-900">ANNOUNCEMENT</p>
-            <p className={`text-xs mt-0.5 ${enabled ? "text-green-700" : "text-gray-500"}`}>
-              {enabled ? "Currently playing to every caller at login" : "Currently disabled — callers will not hear anything"}
-            </p>
-          </div>
-        </div>
-        <button
-          data-testid="btn-toggle-motd"
-          onClick={() => setLocalEnabled(!enabled)}
-          className="flex items-center gap-2 transition-colors"
-        >
-          {enabled
-            ? <ToggleRight size={36} className="text-green-500" />
-            : <ToggleLeft size={36} className="text-gray-300" />}
-        </button>
-      </div>
+    <div className="max-w-2xl space-y-5">
+      <p className="font-mono text-xs text-gray-500">
+        Each announcement slot is independent — enable or disable them individually. All disabled by default.
+      </p>
 
-      {/* Message editor */}
-      <div className={`rounded-xl border bg-white p-5 space-y-3 ${!enabled ? "opacity-60" : ""}`}>
-        <div className="flex items-center gap-2 mb-1">
-          <h3 className="font-mono font-bold text-xs tracking-widest uppercase text-gray-700">Announcement Message</h3>
-        </div>
-        <p className="text-xs text-gray-500">
-          This text is read to every caller immediately after the system greeting. Keep it concise — 1 to 3 sentences work best.
-        </p>
-        <textarea
-          data-testid="input-motd-text"
-          value={text}
-          onChange={e => setLocalText(e.target.value)}
-          disabled={!enabled}
-          rows={4}
-          placeholder="e.g. This weekend only — all new callers receive an extended free trial. Check out the profiles and start connecting today."
-          className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#f5a623]/40 resize-none disabled:cursor-not-allowed"
-        />
-        <p className="text-xs text-gray-400">
-          Tip: For a premium voice, generate <span className="font-mono bg-gray-100 px-1 rounded">motd.mp3</span> in the Audio Gen tab. If that file exists it will be played instead of text-to-speech.
-        </p>
-      </div>
+      {MOTD_SLOTS.map(slot => {
+        const enabled = (merged[slot.enabledField] as boolean) ?? false;
+        const text = (merged[slot.textField] as string) ?? "";
+        return (
+          <div key={slot.key} className={`rounded-xl border bg-white overflow-hidden transition-all ${enabled ? "border-amber-300 shadow-sm" : "border-gray-200"}`}>
+            {/* Header row */}
+            <div className={`flex items-center justify-between px-5 py-3 ${enabled ? "bg-amber-50" : "bg-gray-50"}`}>
+              <div className="flex items-center gap-3">
+                <Megaphone size={15} className={enabled ? "text-amber-600" : "text-gray-400"} />
+                <div>
+                  <p className="font-mono font-bold text-xs tracking-widest uppercase text-gray-800">{slot.label}</p>
+                  <p className={`text-xs mt-0.5 ${enabled ? "text-amber-700" : "text-gray-400"}`}>
+                    {enabled ? "Enabled — callers will hear this" : "Disabled"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setField(slot.enabledField, !enabled)}
+                className="flex items-center gap-2 transition-colors"
+              >
+                {enabled
+                  ? <ToggleRight size={34} className="text-amber-500" />
+                  : <ToggleLeft size={34} className="text-gray-300" />}
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 space-y-3">
+              <p className="text-xs text-gray-500">{slot.where}</p>
+              <textarea
+                value={text}
+                onChange={e => setField(slot.textField, e.target.value)}
+                disabled={!enabled}
+                rows={3}
+                placeholder="Type the announcement text here…"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#f5a623]/40 resize-none disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <p className="text-xs text-gray-400">
+                Tip: generate <span className="font-mono bg-gray-100 px-1 rounded">{slot.audioFile}</span> in the Audio Gen tab for a premium voice. If that file exists it plays instead of text-to-speech.
+              </p>
+            </div>
+          </div>
+        );
+      })}
 
       {/* Save */}
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-1">
         <button
-          data-testid="btn-save-motd"
-          onClick={handleSave}
-          disabled={saveMutation.isPending || isLoading}
+          onClick={() => saveMutation.mutate(localState)}
+          disabled={saveMutation.isPending || !isDirty}
           className={C.btnPrimary}
         >
           {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-          Save Announcement
+          Save Changes
         </button>
       </div>
     </div>
