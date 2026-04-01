@@ -170,7 +170,7 @@ export default function Landing() {
         <img
           src={heroImg}
           alt={heroAlt}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 25%", filter: "saturate(0.65) brightness(0.9)" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "35% 10%", filter: "saturate(0.65) brightness(0.9)", transform: "scaleX(-1)" }}
         />
         {/* Dark overlay — uniform for centered text readability */}
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.62)" }} />
