@@ -128,8 +128,9 @@ const PLAN_COLORS = ["#f59e0b", "#1d4ed8", "#6b7280"];
 const PLAN_KEYS = ["plan1", "plan2", "plan3"];
 
 // ─── Link Membership Modal ────────────────────────────────────────────────────
-// Phone-verified linking: generates a 3-digit code the user presses on the
-// phone keypad after calling the access number. Expires in 3 minutes.
+// Two-step flow:
+//   Step 1 — Enter phone number → verify it has an active membership
+//   Step 2 — Show 3-digit code → user calls the access number and enters it
 function LinkMembershipModal({
   accessNumber,
   onSuccess,
@@ -139,6 +140,15 @@ function LinkMembershipModal({
 }) {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Step 1: phone check
+  const [step, setStep] = useState<"phone" | "code">("phone");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [isChecking, setIsChecking] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
+  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
+
+  // Step 2: code
   const [code, setCode] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [timeLeft, setTimeLeft] = useState(0);
@@ -146,6 +156,52 @@ function LinkMembershipModal({
   const [genError, setGenError] = useState<string | null>(null);
   const [linked, setLinked] = useState(false);
 
+  const resetAll = () => {
+    setStep("phone");
+    setPhoneInput("");
+    setIsChecking(false);
+    setCheckError(null);
+    setVerifiedPhone(null);
+    setCode(null);
+    setExpiresAt(null);
+    setGenError(null);
+    setLinked(false);
+  };
+
+  const openModal = () => {
+    resetAll();
+    setIsOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsOpen(false);
+    resetAll();
+  };
+
+  // Step 1: check phone against system
+  const checkPhone = async () => {
+    setIsChecking(true);
+    setCheckError(null);
+    try {
+      const res = await fetch("/api/auth/check-phone", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: phoneInput }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Verification failed.");
+      setVerifiedPhone(data.phoneNumber);
+      setStep("code");
+      generateCode();
+    } catch (err: any) {
+      setCheckError(err.message || "Verification failed.");
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  // Step 2: generate link code
   const generateCode = async () => {
     setIsGenerating(true);
     setGenError(null);
@@ -166,20 +222,6 @@ function LinkMembershipModal({
     }
   };
 
-  const openModal = () => {
-    setIsOpen(true);
-    setLinked(false);
-    generateCode();
-  };
-
-  const closeModal = () => {
-    setIsOpen(false);
-    setCode(null);
-    setExpiresAt(null);
-    setGenError(null);
-    setLinked(false);
-  };
-
   // Countdown timer
   useEffect(() => {
     if (!isOpen || !expiresAt) return;
@@ -190,9 +232,9 @@ function LinkMembershipModal({
     return () => clearInterval(tick);
   }, [isOpen, expiresAt]);
 
-  // Poll for successful link every 3 seconds
+  // Poll for successful link every 3 seconds (once on code step)
   useEffect(() => {
-    if (!isOpen || !code || linked) return;
+    if (!isOpen || step !== "code" || !code || linked) return;
     const poll = setInterval(async () => {
       try {
         const res = await fetch("/api/auth/me", { credentials: "include" });
@@ -211,56 +253,47 @@ function LinkMembershipModal({
       } catch {}
     }, 3000);
     return () => clearInterval(poll);
-  }, [isOpen, code, linked]);
+  }, [isOpen, step, code, linked]);
 
   const mins = Math.floor(timeLeft / 60);
   const secs = timeLeft % 60;
   const countdownStr = `${mins}:${String(secs).padStart(2, "0")}`;
   const isExpired = timeLeft === 0 && !!expiresAt && !linked;
 
+  // Shared styles
+  const S = {
+    label: { color: "#555", fontSize: "0.7rem", fontWeight: 600 as const, textTransform: "uppercase" as const, letterSpacing: "0.08em", margin: "0 0 0.35rem" },
+    input: {
+      width: "100%", background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "8px",
+      padding: "0.75rem 1rem", color: "#fff", fontSize: "1rem", outline: "none",
+      boxSizing: "border-box" as const,
+    },
+    primaryBtn: {
+      background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px",
+      padding: "0.7rem 1.5rem", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer",
+      display: "inline-flex", alignItems: "center", gap: "0.5rem", width: "100%",
+      justifyContent: "center",
+    },
+  };
+
   return (
     <>
       {/* ── Unlinked card with Link Membership button ── */}
       <div
         data-testid="card-link-phone"
-        style={{
-          background: "#0d1a2e",
-          border: "1px solid #1e3a5f",
-          borderRadius: "14px",
-          padding: "1.75rem",
-          marginBottom: "1.5rem",
-        }}
+        style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "14px", padding: "1.75rem", marginBottom: "1.5rem" }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
           <div style={{ width: 44, height: 44, background: "#1d4ed820", border: "1px solid #1d4ed840", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "0.1rem" }}>
             <Link2 size={20} color="#60a5fa" />
           </div>
           <div style={{ flex: 1 }}>
-            <h3 style={{ color: "#fff", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.3rem" }}>
-              Link Your Membership
-            </h3>
+            <h3 style={{ color: "#fff", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.3rem" }}>Link Your Membership</h3>
             <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: "0 0 1.25rem", lineHeight: 1.6 }}>
               Connect your phone membership to this web account to view your balance, call history, and manage your subscription online.
             </p>
-            <button
-              onClick={openModal}
-              data-testid="button-link-membership"
-              style={{
-                background: "#1d4ed8",
-                color: "#fff",
-                border: "none",
-                borderRadius: "8px",
-                padding: "0.65rem 1.5rem",
-                fontWeight: 700,
-                fontSize: "0.875rem",
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.5rem",
-              }}
-            >
-              <PhoneCall size={15} />
-              Link Membership
+            <button onClick={openModal} data-testid="button-link-membership" style={{ background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px", padding: "0.65rem 1.5rem", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+              <PhoneCall size={15} /> Link Membership
             </button>
           </div>
         </div>
@@ -269,34 +302,12 @@ function LinkMembershipModal({
       {/* ── Modal overlay ── */}
       {isOpen && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.75)",
-            zIndex: 1000,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "1rem",
-          }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}
           onClick={e => { if (e.target === e.currentTarget) closeModal(); }}
         >
-          <div
-            style={{
-              background: "#0a0f1e",
-              border: "1px solid #1e3a5f",
-              borderRadius: "18px",
-              padding: "2rem",
-              width: "100%",
-              maxWidth: "420px",
-              position: "relative",
-            }}
-          >
-            {/* Close button */}
-            <button
-              onClick={closeModal}
-              style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: "pointer", color: "#555", padding: "0.25rem" }}
-            >
+          <div style={{ background: "#0a0f1e", border: "1px solid #1e3a5f", borderRadius: "18px", padding: "2rem", width: "100%", maxWidth: "420px", position: "relative" }}>
+            {/* Close */}
+            <button onClick={closeModal} style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: "pointer", color: "#555", padding: "0.25rem" }}>
               <X size={20} />
             </button>
 
@@ -311,8 +322,8 @@ function LinkMembershipModal({
               </div>
             </div>
 
+            {/* ── Success ── */}
             {linked ? (
-              /* ── Success state ── */
               <div style={{ textAlign: "center", padding: "1.5rem 0" }}>
                 <div style={{ width: 56, height: 56, background: "#14532d30", border: "1px solid #166534", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
                   <CheckCircle size={28} color="#22c55e" />
@@ -320,99 +331,146 @@ function LinkMembershipModal({
                 <p style={{ color: "#22c55e", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.35rem" }}>Membership Linked!</p>
                 <p style={{ color: "#666", fontSize: "0.82rem", margin: 0 }}>Your phone number has been connected to this account.</p>
               </div>
-            ) : isGenerating ? (
-              /* ── Generating state ── */
-              <div style={{ textAlign: "center", padding: "2rem 0" }}>
-                <Loader2 size={30} color="#1d4ed8" className="animate-spin" style={{ margin: "0 auto 1rem" }} />
-                <p style={{ color: "#666", fontSize: "0.85rem", margin: 0 }}>Generating your link code…</p>
-              </div>
-            ) : genError ? (
-              /* ── Error state ── */
-              <div style={{ textAlign: "center", padding: "1rem 0" }}>
-                <p style={{ color: "#f87171", fontSize: "0.85rem", margin: "0 0 1rem" }}>{genError}</p>
-                <button
-                  onClick={generateCode}
-                  style={{ background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px", padding: "0.6rem 1.25rem", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
-                >
-                  <RefreshCw size={14} /> Try Again
-                </button>
-              </div>
-            ) : code ? (
-              /* ── Code display state ── */
+
+            ) : step === "phone" ? (
+              /* ── Step 1: Phone number entry ── */
               <>
-                {/* Instructions */}
-                <div style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "10px", padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
-                  <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: 0, lineHeight: 1.7 }}>
-                    <strong style={{ color: "#60a5fa" }}>Step 1.</strong> Call your access number below.<br />
-                    <strong style={{ color: "#60a5fa" }}>Step 2.</strong> When the system answers, enter the 3-digit code followed by the <strong>#</strong> key.<br />
-                    <strong style={{ color: "#60a5fa" }}>Step 3.</strong> This page will update automatically once verified.
-                  </p>
-                </div>
-
-                {/* Access number */}
-                <div style={{ marginBottom: "1.25rem" }}>
-                  <p style={{ color: "#555", fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.35rem" }}>Your Access Number</p>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <Phone size={15} color="#60a5fa" />
-                    <span style={{ color: "#fff", fontSize: "1.05rem", fontWeight: 700, letterSpacing: "0.03em" }}>{accessNumber}</span>
-                  </div>
-                </div>
-
-                {/* Code display */}
-                <div style={{ marginBottom: "1.25rem" }}>
-                  <p style={{ color: "#555", fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.5rem" }}>Your Link Code</p>
-                  <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                    <div
-                      style={{
-                        background: isExpired ? "#1a1a1a" : "#0d1a2e",
-                        border: `2px solid ${isExpired ? "#333" : "#1d4ed8"}`,
-                        borderRadius: "12px",
-                        padding: "0.875rem 1.5rem",
-                        flex: 1,
-                        textAlign: "center",
-                      }}
-                    >
-                      <span
-                        style={{
-                          color: isExpired ? "#444" : "#fff",
-                          fontSize: "2.5rem",
-                          fontWeight: 800,
-                          letterSpacing: "0.35em",
-                          fontFamily: "monospace",
-                        }}
-                      >
-                        {code}
-                      </span>
+                {/* Step indicator */}
+                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
+                  {["Verify Phone", "Call & Confirm"].map((label, i) => (
+                    <div key={label} style={{ flex: 1, textAlign: "center" }}>
+                      <div style={{ height: 3, borderRadius: 2, background: i === 0 ? "#1d4ed8" : "#1e3a5f", marginBottom: "0.35rem" }} />
+                      <span style={{ fontSize: "0.68rem", color: i === 0 ? "#60a5fa" : "#2a4a7a", fontWeight: 600 }}>{label}</span>
                     </div>
-                    {isExpired && (
-                      <button
-                        onClick={generateCode}
-                        title="Generate new code"
-                        style={{ background: "#1a2a4a", border: "1px solid #1e3a5f", borderRadius: "8px", padding: "0.65rem", cursor: "pointer", color: "#60a5fa", display: "flex", alignItems: "center" }}
-                      >
-                        <RefreshCw size={16} />
-                      </button>
-                    )}
-                  </div>
+                  ))}
                 </div>
 
-                {/* Timer & status */}
-                {!isExpired ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <Timer size={14} color={timeLeft < 60 ? "#ef4444" : "#22c55e"} />
-                    <span style={{ color: timeLeft < 60 ? "#ef4444" : "#22c55e", fontSize: "0.82rem", fontWeight: 600 }}>
-                      Code expires in {countdownStr}
-                    </span>
-                    <span style={{ color: "#333", fontSize: "0.78rem", marginLeft: "auto" }}>Waiting for verification…</span>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <AlertTriangle size={14} color="#f87171" />
-                    <span style={{ color: "#f87171", fontSize: "0.82rem" }}>Code expired — click the refresh icon to get a new one.</span>
+                <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: "0 0 1.25rem", lineHeight: 1.6 }}>
+                  Enter the phone number you used to call the system and purchase your membership. We'll confirm your membership is active before proceeding.
+                </p>
+
+                <div style={{ marginBottom: "1rem" }}>
+                  <p style={S.label}>Your Membership Phone Number</p>
+                  <input
+                    data-testid="input-link-phone"
+                    type="tel"
+                    value={phoneInput}
+                    onChange={e => { setPhoneInput(e.target.value); setCheckError(null); }}
+                    onKeyDown={e => { if (e.key === "Enter" && phoneInput.replace(/\D/g, "").length >= 10) checkPhone(); }}
+                    placeholder="(555) 000-0000"
+                    style={S.input}
+                    autoFocus
+                  />
+                </div>
+
+                {checkError && (
+                  <div style={{ background: "#2d0a0a", border: "1px solid #7f1d1d", borderRadius: "8px", padding: "0.75rem 1rem", marginBottom: "1rem", display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                    <AlertTriangle size={15} color="#f87171" style={{ flexShrink: 0, marginTop: "0.1rem" }} />
+                    <p style={{ color: "#f87171", fontSize: "0.82rem", margin: 0, lineHeight: 1.5 }}>{checkError}</p>
                   </div>
                 )}
+
+                <button
+                  data-testid="button-check-phone"
+                  onClick={checkPhone}
+                  disabled={isChecking || phoneInput.replace(/\D/g, "").length < 10}
+                  style={{ ...S.primaryBtn, opacity: (isChecking || phoneInput.replace(/\D/g, "").length < 10) ? 0.6 : 1 }}
+                >
+                  {isChecking ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                  {isChecking ? "Checking…" : "Check Membership"}
+                </button>
               </>
-            ) : null}
+
+            ) : (
+              /* ── Step 2: Code display ── */
+              <>
+                {/* Step indicator */}
+                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
+                  {["Verify Phone", "Call & Confirm"].map((label, i) => (
+                    <div key={label} style={{ flex: 1, textAlign: "center" }}>
+                      <div style={{ height: 3, borderRadius: 2, background: "#1d4ed8", marginBottom: "0.35rem" }} />
+                      <span style={{ fontSize: "0.68rem", color: "#60a5fa", fontWeight: 600 }}>{label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Verified phone badge */}
+                {verifiedPhone && (
+                  <div style={{ background: "#052e16", border: "1px solid #166534", borderRadius: "8px", padding: "0.6rem 1rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <CheckCircle2 size={14} color="#22c55e" />
+                    <span style={{ color: "#22c55e", fontSize: "0.8rem", fontWeight: 600 }}>Active membership confirmed for {verifiedPhone}</span>
+                  </div>
+                )}
+
+                {isGenerating ? (
+                  <div style={{ textAlign: "center", padding: "2rem 0" }}>
+                    <Loader2 size={30} color="#1d4ed8" className="animate-spin" style={{ margin: "0 auto 1rem" }} />
+                    <p style={{ color: "#666", fontSize: "0.85rem", margin: 0 }}>Generating your link code…</p>
+                  </div>
+                ) : genError ? (
+                  <div style={{ textAlign: "center", padding: "1rem 0" }}>
+                    <p style={{ color: "#f87171", fontSize: "0.85rem", margin: "0 0 1rem" }}>{genError}</p>
+                    <button onClick={generateCode} style={{ background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px", padding: "0.6rem 1.25rem", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+                      <RefreshCw size={14} /> Try Again
+                    </button>
+                  </div>
+                ) : code ? (
+                  <>
+                    {/* Instructions */}
+                    <div style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "10px", padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
+                      <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: 0, lineHeight: 1.7 }}>
+                        <strong style={{ color: "#60a5fa" }}>Step 1.</strong> Call your access number below.<br />
+                        <strong style={{ color: "#60a5fa" }}>Step 2.</strong> When the system answers, enter the 3-digit code followed by <strong>#</strong>.<br />
+                        <strong style={{ color: "#60a5fa" }}>Step 3.</strong> This page will update automatically once verified.
+                      </p>
+                    </div>
+
+                    {/* Access number */}
+                    <div style={{ marginBottom: "1.25rem" }}>
+                      <p style={S.label}>Your Access Number</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <Phone size={15} color="#60a5fa" />
+                        <span style={{ color: "#fff", fontSize: "1.05rem", fontWeight: 700, letterSpacing: "0.03em" }}>{accessNumber}</span>
+                      </div>
+                    </div>
+
+                    {/* Code display */}
+                    <div style={{ marginBottom: "1.25rem" }}>
+                      <p style={S.label}>Your 3-Digit Link Code</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                        <div style={{ background: isExpired ? "#1a1a1a" : "#0d1a2e", border: `2px solid ${isExpired ? "#333" : "#1d4ed8"}`, borderRadius: "12px", padding: "0.875rem 1.5rem", flex: 1, textAlign: "center" }}>
+                          <span style={{ color: isExpired ? "#444" : "#fff", fontSize: "2.5rem", fontWeight: 800, letterSpacing: "0.35em", fontFamily: "monospace" }}>{code}</span>
+                        </div>
+                        {isExpired && (
+                          <button onClick={generateCode} title="Generate new code" style={{ background: "#1a2a4a", border: "1px solid #1e3a5f", borderRadius: "8px", padding: "0.65rem", cursor: "pointer", color: "#60a5fa", display: "flex", alignItems: "center" }}>
+                            <RefreshCw size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Timer */}
+                    {!isExpired ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <Timer size={14} color={timeLeft < 60 ? "#ef4444" : "#22c55e"} />
+                        <span style={{ color: timeLeft < 60 ? "#ef4444" : "#22c55e", fontSize: "0.82rem", fontWeight: 600 }}>Code expires in {countdownStr}</span>
+                        <span style={{ color: "#333", fontSize: "0.78rem", marginLeft: "auto" }}>Waiting for verification…</span>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <AlertTriangle size={14} color="#f87171" />
+                        <span style={{ color: "#f87171", fontSize: "0.82rem" }}>Code expired — click the refresh icon to get a new one.</span>
+                      </div>
+                    )}
+
+                    {/* Back link */}
+                    <button onClick={() => { setStep("phone"); setCode(null); setExpiresAt(null); setGenError(null); }} style={{ background: "none", border: "none", color: "#555", fontSize: "0.75rem", cursor: "pointer", marginTop: "1.25rem", padding: 0, textDecoration: "underline" }}>
+                      ← Use a different phone number
+                    </button>
+                  </>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
       )}

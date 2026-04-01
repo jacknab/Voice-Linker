@@ -435,6 +435,52 @@ router.delete("/api/auth/alt-phones/:id", async (req: Request, res: Response) =>
   }
 });
 
+// ─── Check Phone (pre-flight before generating link code) ────────────────────
+// Verifies that a given phone number has an active membership in the system,
+// so the dashboard can confirm eligibility before instructing the user to call.
+router.post("/api/auth/check-phone", async (req: Request, res: Response) => {
+  if (!req.session.webUserId) return res.status(401).json({ error: "Not authenticated." });
+
+  try {
+    const webUser = await storage.getWebUserById(req.session.webUserId);
+    if (!webUser) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ error: "Session expired." });
+    }
+    if (webUser.isLocked) {
+      req.session.destroy(() => {});
+      return res.status(403).json({ error: "Your account has been locked. Please contact support." });
+    }
+    if (webUser.linkedPhoneNumber) {
+      return res.status(400).json({ error: "A phone number is already linked to this account." });
+    }
+
+    const rawPhone = (req.body?.phoneNumber ?? "") as string;
+    const digits = rawPhone.replace(/\D/g, "");
+    let normalized: string;
+    if (digits.length === 10) {
+      normalized = `+1${digits}`;
+    } else if (digits.length === 11 && digits.startsWith("1")) {
+      normalized = `+${digits}`;
+    } else {
+      return res.status(400).json({ error: "Please enter a valid 10-digit US phone number." });
+    }
+
+    const phoneUser = await storage.getUserByPhone(normalized);
+    const hasActiveMembership = phoneUser && phoneUser.membershipTier !== null && phoneUser.membershipTier !== "";
+
+    if (!hasActiveMembership) {
+      return res.status(404).json({ error: "No active membership found for that phone number. Please make sure you've purchased a membership by calling the access number first." });
+    }
+
+    console.log(`[auth] check-phone: active membership confirmed for ${normalized} (webUserId=${webUser.id})`);
+    return res.json({ ok: true, phoneNumber: normalized });
+  } catch (err) {
+    console.error("[auth] check-phone error:", err);
+    return res.status(500).json({ error: "Failed to verify phone number. Please try again." });
+  }
+});
+
 // ─── Generate Phone Link Code ─────────────────────────────────────────────────
 // Generates a 3-digit time-limited code the user presses on the phone keypad
 // to verify they own that phone and link it to this web account.
