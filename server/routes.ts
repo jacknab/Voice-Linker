@@ -620,7 +620,7 @@ export async function registerRoutes(
   // --- Admin: List all profiles ---
   app.get("/api/admin/profiles", async (_req, res) => {
     try {
-      const data = await storage.getAllProfilesWithUsers();
+      const data = await storage.getAdminUploadedProfilesWithUsers();
       res.json(data);
     } catch (e) {
       console.error("[admin] Failed to list profiles:", e);

@@ -71,6 +71,7 @@ export interface IStorage {
   getProfile(userId: string): Promise<Profile | undefined>;
   upsertProfile(profile: InsertProfile): Promise<Profile>;
   getAllProfilesWithUsers(): Promise<ProfileWithUser[]>;
+  getAdminUploadedProfilesWithUsers(): Promise<ProfileWithUser[]>;
   deleteProfile(id: string): Promise<void>;
 
   getUnreadMessage(userId: string): Promise<Message | undefined>;
@@ -329,6 +330,25 @@ export class DatabaseStorage implements IStorage {
       })
       .from(profiles)
       .innerJoin(users, eq(profiles.userId, users.id))
+      .orderBy(profiles.createdAt);
+    return rows;
+  }
+
+  async getAdminUploadedProfilesWithUsers(): Promise<ProfileWithUser[]> {
+    const rows = await db
+      .select({
+        id: profiles.id,
+        userId: profiles.userId,
+        nameRecordingUrl: profiles.nameRecordingUrl,
+        recordingUrl: profiles.recordingUrl,
+        recordingDuration: profiles.recordingDuration,
+        isAdminUploaded: profiles.isAdminUploaded,
+        createdAt: profiles.createdAt,
+        phoneNumber: users.phoneNumber,
+      })
+      .from(profiles)
+      .innerJoin(users, eq(profiles.userId, users.id))
+      .where(eq(profiles.isAdminUploaded, true))
       .orderBy(profiles.createdAt);
     return rows;
   }
