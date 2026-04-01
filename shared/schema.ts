@@ -359,6 +359,7 @@ export type InsertWebUser = z.infer<typeof insertWebUserSchema>;
 export const membershipCards = pgTable("membership_cards", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   cardNumber: text("card_number").notNull().unique(),
+  pin: text("pin"),
   valueSeconds: integer("value_seconds").notNull().default(0),
   phoneNumber: text("phone_number"),
   notes: text("notes"),

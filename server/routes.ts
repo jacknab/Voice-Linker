@@ -3,7 +3,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import authRouter from "./authRoutes";
 import { api } from "@shared/routes";
-import type { MembershipSettings, SiteSettings } from "@shared/schema";
+import type { MembershipSettings, SiteSettings, MembershipCard } from "@shared/schema";
 import express from "express";
 import twilio from "twilio";
 import multer from "multer";
@@ -329,14 +329,21 @@ const pendingPinAuth = new Map<string, string>(); // callSid → membership hold
 // Pending new PIN setup: the caller is confirming a newly entered PIN
 const pendingNewPinSetup = new Map<string, string>(); // callSid → first PIN entry (4 digits)
 
-// Generate a unique random 5-digit membership card number
+// Generate a unique random 5-digit membership card number.
+// Rule: first digit is never 0 — range is 10000–99999.
 async function generateUniqueCardNumber(): Promise<string> {
   for (let attempt = 0; attempt < 100; attempt++) {
-    const num = String(Math.floor(10000 + Math.random() * 90000));
+    const num = String(Math.floor(10000 + Math.random() * 90000)); // 10000–99999
     const taken = await storage.isMembershipCardNumberTaken(num);
     if (!taken) return num;
   }
   throw new Error("Unable to generate a unique membership card number after 100 attempts");
+}
+
+// Generate a random 4-digit PIN.
+// Rule: first digit is never 0 — range is 1000–9999.
+function generateCardPin(): string {
+  return String(Math.floor(1000 + Math.random() * 9000)); // 1000–9999
 }
 
 // Build the base URL of this server from an incoming Twilio request
@@ -1053,17 +1060,42 @@ export async function registerRoutes(
 
   app.post("/api/admin/cards", async (req, res) => {
     try {
-      const { seconds, notes } = req.body as { seconds?: number; notes?: string };
-      if (!seconds || isNaN(Number(seconds)) || Number(seconds) < 1) {
-        return res.status(400).json({ message: "A membership plan (seconds) is required" });
+      const { planKey, count, notes } = req.body as { planKey?: string; count?: number; notes?: string };
+
+      // Validate planKey
+      const validKeys = ["plan1", "plan2", "plan3"];
+      if (!planKey || !validKeys.includes(planKey)) {
+        return res.status(400).json({ message: "A valid membership plan is required (plan1, plan2, or plan3)" });
       }
-      const valueSeconds = Math.floor(Number(seconds));
-      const cardNumber = await generateUniqueCardNumber();
-      const card = await storage.createMembershipCard(cardNumber, valueSeconds, notes ?? undefined);
-      res.status(201).json(card);
+
+      // Validate count (1–10)
+      const qty = Math.floor(Number(count ?? 1));
+      if (isNaN(qty) || qty < 1 || qty > 10) {
+        return res.status(400).json({ message: "Count must be between 1 and 10" });
+      }
+
+      // Look up plan minutes → seconds
+      const settings = await storage.getMembershipSettings();
+      const planMap: Record<string, number> = {
+        plan1: settings.plan1Minutes * 60,
+        plan2: settings.plan2Minutes * 60,
+        plan3: settings.plan3Minutes * 60,
+      };
+      const valueSeconds = planMap[planKey];
+
+      // Generate qty cards, each with a unique 5-digit number (no leading 0) and a 4-digit PIN (no leading 0)
+      const created: MembershipCard[] = [];
+      for (let i = 0; i < qty; i++) {
+        const cardNumber = await generateUniqueCardNumber();
+        const pin = generateCardPin();
+        const card = await storage.createMembershipCard(cardNumber, pin, valueSeconds, notes ?? undefined);
+        created.push(card);
+      }
+
+      res.status(201).json(created);
     } catch (e) {
       console.error("[admin] /api/admin/cards POST error:", e);
-      res.status(500).json({ message: "Failed to create membership card" });
+      res.status(500).json({ message: "Failed to create membership card(s)" });
     }
   });
 
@@ -4795,7 +4827,7 @@ export async function registerRoutes(
           membershipUpdate.membershipNumber = membershipNumber;
           issuedCardNumber = membershipNumber;
           // Create a card record and immediately link it to this phone
-          const card = await storage.createMembershipCard(membershipNumber, 0, "Issued on purchase");
+          const card = await storage.createMembershipCard(membershipNumber, generateCardPin(), 0, "Issued on purchase");
           await storage.linkCardToPhone(card.id, fromNumber);
           console.log(`[voice] Issued membership card ${membershipNumber} to ${fromNumber} on purchase`);
         }

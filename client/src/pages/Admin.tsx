@@ -3691,6 +3691,8 @@ function AnalyticsTab() {
 interface MembershipCard {
   id: string;
   cardNumber: string;
+  pin: string | null;
+  valueSeconds: number;
   phoneNumber: string | null;
   notes: string | null;
   createdAt: string;
@@ -3700,28 +3702,39 @@ interface MembershipCard {
 function MembershipCardsTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [customNumber, setCustomNumber] = useState("");
+  const [planKey, setPlanKey] = useState("plan1");
+  const [count, setCount] = useState(1);
   const [notes, setNotes] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState("");
   const [search, setSearch] = useState("");
 
+  interface MsSettings { plan1Name: string; plan1Minutes: number; plan2Name: string; plan2Minutes: number; plan3Name: string; plan3Minutes: number; }
+  const { data: ms } = useQuery<MsSettings>({ queryKey: ["/api/admin/membership-settings"] });
+
   const { data: cards = [], isLoading } = useQuery<MembershipCard[]>({
     queryKey: ["/api/admin/cards"],
   });
 
+  const planOptions = ms ? [
+    { key: "plan1", label: `${ms.plan1Name} — ${ms.plan1Minutes.toLocaleString()} min` },
+    { key: "plan2", label: `${ms.plan2Name} — ${ms.plan2Minutes.toLocaleString()} min` },
+    { key: "plan3", label: `${ms.plan3Name} — ${ms.plan3Minutes.toLocaleString()} min` },
+  ] : [];
+
   const createMutation = useMutation({
-    mutationFn: (body: { cardNumber?: string; notes?: string }) =>
+    mutationFn: (body: { planKey: string; count: number; notes?: string }) =>
       apiRequest("POST", "/api/admin/cards", body),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ["/api/admin/cards"] });
-      setCustomNumber("");
       setNotes("");
-      toast({ title: "Card created" });
+      setCount(1);
+      const qty = Array.isArray(data) ? data.length : 1;
+      toast({ title: `${qty} card${qty !== 1 ? "s" : ""} generated` });
     },
     onError: async (err: any) => {
       const msg = await err.response?.json().catch(() => null);
-      toast({ title: "Error", description: msg?.message ?? "Failed to create card", variant: "destructive" });
+      toast({ title: "Error", description: msg?.message ?? "Failed to generate cards", variant: "destructive" });
     },
   });
 
@@ -3751,47 +3764,97 @@ function MembershipCardsTab() {
     (c.notes ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
+  const linked = cards.filter(c => c.phoneNumber).length;
+  const unlinked = cards.length - linked;
+
   return (
     <div className="space-y-6">
-      <div className={C.card}>
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Create Membership Card</h3>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Custom 5-digit number (optional)</label>
-            <input
-              data-testid="input-card-number"
-              type="text"
-              inputMode="numeric"
-              maxLength={5}
-              value={customNumber}
-              onChange={e => setCustomNumber(e.target.value.replace(/\D/g, "").slice(0, 5))}
-              placeholder="Auto-generated"
-              className={C.input + " w-40"}
-            />
+      {/* ── Stats row ── */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Total Cards", value: cards.length },
+          { label: "Linked", value: linked },
+          { label: "Unlinked", value: unlinked },
+        ].map(s => (
+          <div key={s.label} className={C.card + " text-center"}>
+            <p className="text-2xl font-bold text-gray-800">{s.value}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{s.label}</p>
           </div>
+        ))}
+      </div>
+
+      {/* ── Generate cards ── */}
+      <div className={C.card}>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Generate Membership Cards</h3>
+        <div className="flex flex-wrap gap-3 items-end">
+
+          {/* Plan dropdown */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Membership Package</label>
+            <select
+              data-testid="select-plan"
+              value={planKey}
+              onChange={e => setPlanKey(e.target.value)}
+              className={C.input + " pr-8"}
+              disabled={!ms}
+            >
+              {ms ? planOptions.map(o => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              )) : (
+                <option value="">Loading plans…</option>
+              )}
+            </select>
+          </div>
+
+          {/* Count selector (1–10) */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Number of Cards</label>
+            <div className="flex items-center gap-1">
+              <button
+                data-testid="btn-count-dec"
+                onClick={() => setCount(c => Math.max(1, c - 1))}
+                className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-100 text-sm"
+              >−</button>
+              <span data-testid="text-count" className="w-8 text-center text-sm font-semibold text-gray-700">{count}</span>
+              <button
+                data-testid="btn-count-inc"
+                onClick={() => setCount(c => Math.min(10, c + 1))}
+                className="w-7 h-7 flex items-center justify-center rounded border border-gray-300 text-gray-600 hover:bg-gray-100 text-sm"
+              >+</button>
+            </div>
+          </div>
+
+          {/* Notes */}
           <div className="flex flex-col gap-1 flex-1 min-w-48">
-            <label className="text-xs text-gray-500">Notes (optional)</label>
+            <label className="text-xs text-gray-500">Batch Notes (optional)</label>
             <input
               data-testid="input-card-notes"
               type="text"
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="e.g. Event batch — Pride 2025"
+              placeholder="e.g. Pride Event — June 2025"
               className={C.input}
             />
           </div>
+
           <button
-            data-testid="btn-create-card"
-            onClick={() => createMutation.mutate({ cardNumber: customNumber || undefined, notes: notes || undefined })}
-            disabled={createMutation.isPending || (!!customNumber && customNumber.length !== 5)}
+            data-testid="btn-generate-cards"
+            onClick={() => createMutation.mutate({ planKey, count, notes: notes || undefined })}
+            disabled={createMutation.isPending || !ms}
             className={C.btnPrimary}
           >
             {createMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-            Create Card
+            Generate {count === 1 ? "Card" : `${count} Cards`}
           </button>
         </div>
+
+        <p className="text-xs text-gray-400 mt-3">
+          Each card receives a unique 5-digit membership number and a 4-digit passcode.
+          Neither may begin with 0.
+        </p>
       </div>
 
+      {/* ── Card list ── */}
       <div className={C.card}>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-gray-700">All Cards ({cards.length})</h3>
@@ -3810,65 +3873,87 @@ function MembershipCardsTab() {
         ) : filtered.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">No membership cards found.</p>
         ) : (
-          <table className="w-full text-xs font-mono">
-            <thead>
-              <tr className="border-b border-gray-100 text-gray-500 text-left">
-                <th className="pb-2 pr-4">Card #</th>
-                <th className="pb-2 pr-4">Phone</th>
-                <th className="pb-2 pr-4">Notes</th>
-                <th className="pb-2 pr-4">Created</th>
-                <th className="pb-2 pr-4">First Used</th>
-                <th className="pb-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(card => (
-                <tr key={card.id} data-testid={`row-card-${card.id}`} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="py-2 pr-4 font-bold text-gray-800">{card.cardNumber}</td>
-                  <td className="py-2 pr-4 text-gray-600">{card.phoneNumber ?? <span className="text-gray-300 font-sans">unlinked</span>}</td>
-                  <td className="py-2 pr-4 text-gray-600 font-sans max-w-xs">
-                    {editingId === card.id ? (
-                      <div className="flex gap-1 items-center">
-                        <input
-                          data-testid={`input-notes-${card.id}`}
-                          type="text"
-                          value={editNotes}
-                          onChange={e => setEditNotes(e.target.value)}
-                          className={C.input + " text-xs h-6 px-1"}
-                          autoFocus
-                        />
-                        <button
-                          data-testid={`btn-save-notes-${card.id}`}
-                          onClick={() => updateMutation.mutate({ id: card.id, notes: editNotes })}
-                          disabled={updateMutation.isPending}
-                          className="text-green-600 hover:text-green-800"
-                        ><CheckCircle size={13} /></button>
-                        <button
-                          data-testid={`btn-cancel-notes-${card.id}`}
-                          onClick={() => setEditingId(null)}
-                          className="text-gray-400 hover:text-gray-600"
-                        ><X size={13} /></button>
-                      </div>
-                    ) : (
-                      <span onClick={() => { setEditingId(card.id); setEditNotes(card.notes ?? ""); }} className="cursor-pointer hover:text-blue-600" title="Click to edit">
-                        {card.notes ?? <span className="text-gray-300">—</span>}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2 pr-4 text-gray-400">{new Date(card.createdAt).toLocaleDateString()}</td>
-                  <td className="py-2 pr-4 text-gray-400">{card.firstUsedAt ? new Date(card.firstUsedAt).toLocaleDateString() : <span className="text-gray-300">—</span>}</td>
-                  <td className="py-2">
-                    <button
-                      data-testid={`btn-delete-card-${card.id}`}
-                      onClick={() => { if (confirm(`Delete card ${card.cardNumber}?`)) deleteMutation.mutate(card.id); }}
-                      disabled={deleteMutation.isPending}
-                      className="text-red-400 hover:text-red-600"
-                    ><Trash2 size={13} /></button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-mono">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-500 text-left">
+                  <th className="pb-2 pr-4">Card #</th>
+                  <th className="pb-2 pr-4">PIN</th>
+                  <th className="pb-2 pr-4">Minutes</th>
+                  <th className="pb-2 pr-4">Phone</th>
+                  <th className="pb-2 pr-4">Notes</th>
+                  <th className="pb-2 pr-4">Created</th>
+                  <th className="pb-2 pr-4">First Used</th>
+                  <th className="pb-2"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map(card => (
+                  <tr key={card.id} data-testid={`row-card-${card.id}`} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-2 pr-4 font-bold text-gray-800 tracking-widest">{card.cardNumber}</td>
+                    <td className="py-2 pr-4 text-blue-700 font-bold tracking-widest">
+                      {card.pin ?? <span className="text-gray-300 font-sans font-normal">—</span>}
+                    </td>
+                    <td className="py-2 pr-4 text-gray-600 font-sans">
+                      {card.valueSeconds > 0 ? Math.round(card.valueSeconds / 60).toLocaleString() : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="py-2 pr-4 text-gray-600">
+                      {card.phoneNumber
+                        ? <span className="text-green-700">{card.phoneNumber}</span>
+                        : <span className="text-gray-300 font-sans">unlinked</span>}
+                    </td>
+                    <td className="py-2 pr-4 text-gray-600 font-sans max-w-xs">
+                      {editingId === card.id ? (
+                        <div className="flex gap-1 items-center">
+                          <input
+                            data-testid={`input-notes-${card.id}`}
+                            type="text"
+                            value={editNotes}
+                            onChange={e => setEditNotes(e.target.value)}
+                            className={C.input + " text-xs h-6 px-1"}
+                            autoFocus
+                          />
+                          <button
+                            data-testid={`btn-save-notes-${card.id}`}
+                            onClick={() => updateMutation.mutate({ id: card.id, notes: editNotes })}
+                            disabled={updateMutation.isPending}
+                            className="text-green-600 hover:text-green-800"
+                          ><CheckCircle size={13} /></button>
+                          <button
+                            data-testid={`btn-cancel-notes-${card.id}`}
+                            onClick={() => setEditingId(null)}
+                            className="text-gray-400 hover:text-gray-600"
+                          ><X size={13} /></button>
+                        </div>
+                      ) : (
+                        <span
+                          onClick={() => { setEditingId(card.id); setEditNotes(card.notes ?? ""); }}
+                          className="cursor-pointer hover:text-blue-600"
+                          title="Click to edit"
+                        >
+                          {card.notes ?? <span className="text-gray-300">—</span>}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-4 text-gray-400">{new Date(card.createdAt).toLocaleDateString()}</td>
+                    <td className="py-2 pr-4 text-gray-400">
+                      {card.firstUsedAt
+                        ? <span className="text-green-600">{new Date(card.firstUsedAt).toLocaleDateString()}</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="py-2">
+                      <button
+                        data-testid={`btn-delete-card-${card.id}`}
+                        onClick={() => { if (confirm(`Delete card ${card.cardNumber}?`)) deleteMutation.mutate(card.id); }}
+                        disabled={deleteMutation.isPending}
+                        className="text-red-400 hover:text-red-600"
+                      ><Trash2 size={13} /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
