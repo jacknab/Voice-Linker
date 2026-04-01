@@ -1724,6 +1724,16 @@ export async function registerRoutes(
   // Fires immediately after the 5th digit; pound key skips or ends a shorter entry.
   app.post("/voice/membership-entry", async (req, res) => {
     const twiml = new VoiceResponse();
+    const attempt = parseInt((req.query.attempt as string) ?? "1", 10);
+
+    if (attempt >= 2) {
+      // Second timeout — say goodbye and hang up
+      twiml.say("You seem to be having problems. Thanks for calling. Goodbye.");
+      twiml.hangup();
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
     const gather = twiml.gather({
       numDigits: 5,
       finishOnKey: "#",
@@ -1732,8 +1742,8 @@ export async function registerRoutes(
     });
     playPrompt(gather, req, "membership_entry_prompt.mp3",
       "If you have a membership, please enter it now. Otherwise press the pound key.");
-    // Timeout with no input → skip to account check
-    twiml.redirect("/voice/entry-check");
+    // Timeout with no input → replay the prompt once before giving up
+    twiml.redirect("/voice/membership-entry?attempt=2");
     res.type("text/xml");
     res.send(twiml.toString());
   });
