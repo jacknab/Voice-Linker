@@ -1550,7 +1550,7 @@ export async function registerRoutes(
       } else {
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
         callTimeAnnounced.add(callSid);
-        twiml.redirect("/voice/phone-booth");
+        twiml.redirect("/voice/main-menu");
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check-override error:", error);
@@ -1584,8 +1584,8 @@ export async function registerRoutes(
         // Has time — announce remaining time to all callers at entry
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
         callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
-        // Hand off to the phone booth (plays welcome intro, then handles profile check)
-        twiml.redirect("/voice/phone-booth");
+        // Send caller to the main menu
+        twiml.redirect("/voice/main-menu");
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check error:", error);
@@ -1635,8 +1635,8 @@ export async function registerRoutes(
           "Your free trial will expire in seven days and it must be used from this phone number.");
         callTimeAnnounced.add(callSid);
 
-        // Hand off to the phone booth (plays welcome intro, then handles profile check)
-        twiml.redirect("/voice/phone-booth");
+        // Send caller to the main menu
+        twiml.redirect("/voice/main-menu");
       } catch (error) {
         console.error("[voice] handle-free-trial-offer error:", error);
         playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
@@ -1794,8 +1794,17 @@ export async function registerRoutes(
       console.error("[voice] main-menu time check error:", err);
     }
 
-    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-main-menu" });
-    playPrompt(gather, req, "main_menu.mp3", "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership. Press 5 to enter a promotional code.");
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-main-menu" });
+    playPrompt(gather, req, "main_menu.mp3",
+      "Main menu. " +
+      "To enter the phone booth press star. " +
+      "For mailboxes and personal ads press 1. " +
+      "To add time or purchase a membership press 2. " +
+      "For information on membership prices press 4. " +
+      "To manage your membership press 8. " +
+      "For customer service press 0. " +
+      "To repeat these choices press 9."
+    );
     twiml.redirect("/voice/main-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -1806,17 +1815,162 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits;
 
-    if (digit === "1") {
-      twiml.redirect("/voice/browse-profiles");
+    if (digit === "*") {
+      // Enter the phone booth (live connector)
+      twiml.redirect("/voice/phone-booth");
+    } else if (digit === "1") {
+      // Mailboxes and personal ads
+      twiml.redirect("/voice/mailbox-menu");
     } else if (digit === "2") {
-      playPrompt(twiml, req, "rerecord_name.mp3", "Let's re-record your profile. First, say your first name only after the tone. You have 5 seconds.");
-      twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+      // Add time / purchase membership — show promo-code option first
+      twiml.redirect("/voice/purchase-pre-menu");
     } else if (digit === "4") {
+      // Information on membership prices
       twiml.redirect("/voice/info-menu");
-    } else if (digit === "5") {
-      twiml.redirect("/voice/promo-code");
+    } else if (digit === "8") {
+      // Manage membership
+      twiml.redirect("/voice/manage-membership");
+    } else if (digit === "0") {
+      // Customer service
+      twiml.redirect("/voice/customer-service");
+    } else if (digit === "9") {
+      // Repeat main menu
+      twiml.redirect("/voice/main-menu");
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a. Purchase Pre-Menu ────────────────────────────────────────────────
+  // Shown before membership packages. Lets caller enter a promo code first.
+  app.post("/voice/purchase-pre-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
+    gather.say("If you have a promotional code press 1. Otherwise, stay on the line to hear our membership packages.");
+    twiml.redirect("/voice/membership-purchase");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-purchase-pre-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+
+    if (digit === "1") {
+      twiml.redirect("/voice/promo-code");
+    } else {
+      twiml.redirect("/voice/membership-purchase");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a2. Mailbox Menu ────────────────────────────────────────────────────
+  app.post("/voice/mailbox-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-mailbox-menu" });
+    gather.say("Mailboxes and personal ads. Press 1 to check your messages. Press 2 to browse personal ads. Press 9 to return to the main menu.");
+    twiml.redirect("/voice/mailbox-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-mailbox-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+
+    if (digit === "1") {
+      // Check messages — route to browse profiles which includes message check
+      twiml.redirect("/voice/browse-profiles");
+    } else if (digit === "2") {
+      twiml.redirect("/voice/browse-profiles");
+    } else if (digit === "9") {
+      twiml.redirect("/voice/main-menu");
+    } else {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a3. Manage Membership ───────────────────────────────────────────────
+  app.post("/voice/manage-membership", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const remainingSeconds = user.remainingSeconds ?? 0;
+      const minutes = Math.floor(remainingSeconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+
+      let timeMsg = "";
+      if (hours > 0 && mins > 0) {
+        timeMsg = `You have ${hours} hour${hours !== 1 ? "s" : ""} and ${mins} minute${mins !== 1 ? "s" : ""} remaining.`;
+      } else if (hours > 0) {
+        timeMsg = `You have ${hours} hour${hours !== 1 ? "s" : ""} remaining.`;
+      } else {
+        timeMsg = `You have ${minutes} minute${minutes !== 1 ? "s" : ""} remaining.`;
+      }
+
+      const tier = user.membershipTier ?? "none";
+      const tierMsg = tier === "free_trial" ? "You are on a free trial." : tier !== "none" ? `Your membership type is ${tier}.` : "You do not have an active membership.";
+
+      const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-manage-membership" });
+      gather.say(`${tierMsg} ${timeMsg} Press 1 to add time or purchase a new membership. Press 9 to return to the main menu.`);
+      twiml.redirect("/voice/manage-membership");
+    } catch (error) {
+      console.error("[voice] /voice/manage-membership error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-manage-membership", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+
+    if (digit === "1") {
+      twiml.redirect("/voice/purchase-pre-menu");
+    } else if (digit === "9") {
+      twiml.redirect("/voice/main-menu");
+    } else {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect("/voice/manage-membership");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a4. Customer Service ────────────────────────────────────────────────
+  app.post("/voice/customer-service", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-customer-service" });
+    gather.say("Customer service. For billing or account questions, please visit our website or call us during business hours. Press 9 to return to the main menu.");
+    twiml.redirect("/voice/main-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-customer-service", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+
+    if (digit === "9") {
+      twiml.redirect("/voice/main-menu");
+    } else {
       twiml.redirect("/voice/main-menu");
     }
 
