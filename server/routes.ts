@@ -1720,11 +1720,11 @@ export async function registerRoutes(
       numDigits: 5,
       finishOnKey: "#",
       action: "/voice/handle-membership-entry",
-      timeout: 10,
+      timeout: 5,
     });
     playPrompt(gather, req, "membership_entry_prompt.mp3",
-      "If you have a membership, please enter it now. Otherwise press the pound key.");
-    // No input or # pressed alone → skip membership and continue
+      "If you have a membership, please enter your 5-digit number now.");
+    // No input or timeout → skip membership and continue
     twiml.redirect("/voice/entry-check");
     res.type("text/xml");
     res.send(twiml.toString());
