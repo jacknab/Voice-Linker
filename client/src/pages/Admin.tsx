@@ -77,6 +77,7 @@ interface CallerDetail {
   user: {
     id: string; phoneNumber: string; membershipTier: string | null;
     remainingSeconds: number | null; stripeCustomerId: string | null;
+    membershipNumber: string | null; membershipPin: string | null;
     createdAt: string | null;
   };
   mailbox: { id: string; mailboxNumber: string; createdAt: string | null } | null;
@@ -1793,6 +1794,8 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
   const [creditInput, setCreditInput] = useState("");
   const [creditMode, setCreditMode] = useState<"add" | "remove">("add");
   const [callHistoryPage, setCallHistoryPage] = useState(0);
+  const [pinInput, setPinInput] = useState("");
+  const [showPinInput, setShowPinInput] = useState(false);
 
   const { data: detail, isLoading, refetch } = useQuery<CallerDetail>({
     queryKey: ["/api/admin/callers", callerId],
@@ -1822,6 +1825,17 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
     },
     onSuccess: () => { refetch(); queryClient.invalidateQueries({ queryKey: ["/api/admin/callers"] }); },
     onError: () => toast({ title: "Action failed", variant: "destructive" }),
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: async (pin: string | null) => apiRequest("PATCH", `/api/admin/callers/${callerId}/pin`, { pin }),
+    onSuccess: () => {
+      refetch();
+      setPinInput("");
+      setShowPinInput(false);
+      toast({ title: "PIN updated" });
+    },
+    onError: () => toast({ title: "Failed to update PIN", variant: "destructive" }),
   });
 
   // Build options for adding a new block — exclude self and already-blocked users
@@ -1871,6 +1885,15 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
           <div className={C.fieldRow}>
             <span className={C.fieldLabel}>Credit Balance</span>
             <span className={C.fieldValue}>{fmtMins(user.remainingSeconds)} <span className="text-gray-400 text-xs">({user.remainingSeconds?.toLocaleString() ?? 0} sec)</span></span>
+          </div>
+          <div className={C.fieldRow}><span className={C.fieldLabel}>Membership No.</span><span className={C.fieldValue}>{user.membershipNumber ? <span className="font-mono font-bold tracking-widest">{user.membershipNumber}</span> : <span className="text-gray-400">—</span>}</span></div>
+          <div className={C.fieldRow}>
+            <span className={C.fieldLabel}>Access PIN</span>
+            <span className={C.fieldValue}>
+              {user.membershipPin
+                ? <span className="inline-flex items-center gap-2"><span className="font-mono font-bold tracking-widest">••••</span><span className="text-gray-400 text-xs">(set)</span></span>
+                : <span className="text-gray-400">Not set</span>}
+            </span>
           </div>
           <div className={C.fieldRow}><span className={C.fieldLabel}>Stripe Customer</span><span className={C.fieldValue}>{user.stripeCustomerId ?? <span className="text-gray-400">—</span>}</span></div>
           <div className={C.fieldRow}>
@@ -1950,6 +1973,63 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
               </span>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ── PIN Management ── */}
+      <div className={C.panel}>
+        <div className={C.panelHeader}>Access PIN Management</div>
+        <div className={C.panelBody + " p-4 space-y-3"}>
+          <p className="font-mono text-xs text-gray-500">
+            A 4-digit PIN lets this member call in from any phone using their membership number + PIN.
+            {user.membershipPin ? " This member currently has a PIN set." : " This member has no PIN set."}
+          </p>
+          {!showPinInput ? (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowPinInput(true)}
+                className={C.btnGhost}
+              >
+                {user.membershipPin ? "Change PIN" : "Set PIN"}
+              </button>
+              {user.membershipPin && (
+                <button
+                  onClick={() => pinMutation.mutate(null)}
+                  disabled={pinMutation.isPending}
+                  className={C.btnDanger}
+                >
+                  {pinMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
+                  Clear PIN
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="4-digit PIN"
+                value={pinInput}
+                onChange={e => setPinInput(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                className="border border-gray-300 rounded px-3 py-2 font-mono text-sm text-gray-800 w-28 focus:outline-none focus:border-[#f5a623] tracking-widest"
+              />
+              <button
+                onClick={() => pinMutation.mutate(pinInput)}
+                disabled={pinInput.length !== 4 || pinMutation.isPending}
+                className={C.btnPrimary}
+              >
+                {pinMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                Save PIN
+              </button>
+              <button
+                onClick={() => { setShowPinInput(false); setPinInput(""); }}
+                className={C.btnSecondary}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

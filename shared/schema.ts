@@ -38,6 +38,7 @@ export const users = pgTable("users", {
   remainingSeconds: integer("remaining_seconds"),
   zipCodeId: uuid("zip_code_id").references(() => zipCodes.id),
   membershipNumber: text("membership_number").unique(),
+  membershipPin: text("membership_pin"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

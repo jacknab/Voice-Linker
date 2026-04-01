@@ -130,9 +130,30 @@ Regions can be linked together so callers overflow into a nearby region's caller
 - `nearby_callers_intro.mp3` — "Now playing callers from [Region Name]. Enjoy!"
 - `nearby_callers_none.mp3` — "No callers online in that area. Starting over."
 
+## Membership PIN (Cross-Phone Access)
+
+Members can set a 4-digit PIN that allows them to call in from **any phone** by entering their membership number + PIN.
+
+**How it works:**
+- Members on their registered phone can set/change their PIN via IVR: Main Menu → Press 8 (Manage Membership) → Press 2 (Set/Change PIN)
+- The IVR asks for a new 4-digit PIN, then asks them to confirm by entering it again
+- Once set, they can call from any phone, enter their membership number (5-digit card or 10-digit number), and then their 4-digit PIN to authenticate
+- If no PIN is set, callers must use their registered phone number
+
+**Admin controls:**
+- Caller detail view shows whether a PIN is set (masked as ••••)
+- Admin can set a specific PIN or clear it using the "Access PIN Management" panel in the caller detail view
+- PIN API: `PATCH /api/admin/callers/:id/pin` with `{ pin: "1234" }` or `{ pin: null }` to clear
+
+**In-memory state (routes.ts):**
+- `pendingPinAuth` — callSid → membership holder phone (awaiting PIN entry)
+- `pendingNewPinSetup` — callSid → first PIN entry (awaiting confirmation)
+
+**IVR routes:** `/voice/membership-pin-entry`, `/voice/handle-membership-pin-entry`, `/voice/set-pin`, `/voice/handle-set-pin`, `/voice/handle-confirm-pin`
+
 ## Database Schema
 
-- `users` — phone number, stripeCustomerId, membershipTier, remainingMinutes
+- `users` — phone number, stripeCustomerId, membershipTier, remainingMinutes, membershipPin (4-digit)
 - `profiles` — voice recording URLs (Twilio or local uploads)
 - `messages` — voice messages between users
 - `active_calls` — real-time tracking of callers on the line

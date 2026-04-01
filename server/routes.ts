@@ -322,6 +322,13 @@ const callMembershipOverride = new Map<string, string>(); // callSid → members
 // Temporary store for a membership number mid-entry (between the 10-digit gather and account lookup)
 const pendingMembershipEntries = new Map<string, string>(); // callSid → membership number
 
+// Pending PIN authentication: caller entered a valid membership number from a different phone,
+// awaiting 4-digit PIN to confirm identity.
+const pendingPinAuth = new Map<string, string>(); // callSid → membership holder phone number
+
+// Pending new PIN setup: the caller is confirming a newly entered PIN
+const pendingNewPinSetup = new Map<string, string>(); // callSid → first PIN entry (4 digits)
+
 // Generate a unique random 5-digit membership card number
 async function generateUniqueCardNumber(): Promise<string> {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -848,6 +855,22 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[admin] /api/admin/callers unblock DELETE error:", e);
       res.status(500).json({ message: "Failed to remove block" });
+    }
+  });
+
+  // --- Admin: Set or clear a caller's membership PIN ---
+  app.patch("/api/admin/callers/:id/pin", async (req, res) => {
+    try {
+      const { pin } = req.body as { pin: string | null };
+      if (pin !== null && (typeof pin !== "string" || !/^\d{4}$/.test(pin))) {
+        return res.status(400).json({ message: "PIN must be exactly 4 digits or null to clear" });
+      }
+      const user = await storage.updateUserMembership(req.params.id, { membershipPin: pin ?? null });
+      logAudit(pin ? "caller_pin_set" : "caller_pin_cleared", { targetType: "caller", targetId: req.params.id, targetLabel: user.phoneNumber });
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] /api/admin/callers/:id/pin PATCH error:", e);
+      res.status(500).json({ message: "Failed to update PIN" });
     }
   });
 
@@ -1612,6 +1635,8 @@ export async function registerRoutes(
       callRegion.delete(callSid);
       callMembershipOverride.delete(callSid);
       pendingMembershipEntries.delete(callSid);
+      pendingPinAuth.delete(callSid);
+      pendingNewPinSetup.delete(callSid);
 
       // Clean up any live connect invite that this caller initiated
       for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
@@ -1779,25 +1804,46 @@ export async function registerRoutes(
           playPrompt(twiml, req, "membership_linked.mp3", "Your membership has been verified. Welcome.");
           twiml.redirect("/voice/entry-check");
         } else {
-          // Card already linked to a different phone
-          console.log(`[voice] Card ${digits} already claimed by a different number`);
-          playPrompt(twiml, req, "membership_invalid.mp3",
-            "This card is already registered to a different phone number. Please call from your registered phone.");
-          twiml.redirect("/voice/entry-check");
+          // Card already linked to a different phone — require PIN if one is set
+          let cardUser = await storage.getUserByPhone(card.phoneNumber);
+          if (cardUser?.membershipPin) {
+            console.log(`[voice] Card ${digits} on different phone — PIN required`);
+            pendingPinAuth.set(callSid, card.phoneNumber);
+            twiml.redirect("/voice/membership-pin-entry");
+          } else {
+            console.log(`[voice] Card ${digits} already claimed by a different number (no PIN set)`);
+            playPrompt(twiml, req, "membership_invalid.mp3",
+              "This card is already registered to a different phone number. To call from any phone, please set a 4-digit PIN by calling from your registered phone first.");
+            twiml.redirect("/voice/entry-check");
+          }
         }
       } catch (err) {
         console.error("[voice] Card lookup error:", err);
         twiml.redirect("/voice/entry-check");
       }
     } else if (digits.length === 10) {
-      // Legacy 10-digit membership number — look up directly (backward compat)
+      // Legacy 10-digit membership number — require PIN if calling from a different phone
       try {
         const memberUser = await storage.getUserByMembershipNumber(digits);
         if (memberUser) {
-          callMembershipOverride.set(callSid, memberUser.phoneNumber);
-          console.log(`[voice] Membership linked: callSid=${callSid} → userId=${memberUser.id} (membershipNumber=${digits})`);
-          playPrompt(twiml, req, "membership_linked.mp3", "Your membership has been verified. Welcome.");
-          twiml.redirect("/voice/entry-check-override");
+          if (memberUser.phoneNumber === fromNumber) {
+            // Calling from their own registered phone — no PIN needed
+            callMembershipOverride.set(callSid, memberUser.phoneNumber);
+            console.log(`[voice] Membership linked (own phone): callSid=${callSid} → userId=${memberUser.id}`);
+            playPrompt(twiml, req, "membership_linked.mp3", "Your membership has been verified. Welcome.");
+            twiml.redirect("/voice/entry-check-override");
+          } else if (memberUser.membershipPin) {
+            // Different phone with PIN set — redirect to PIN entry
+            console.log(`[voice] Membership ${digits} on different phone — PIN required`);
+            pendingPinAuth.set(callSid, memberUser.phoneNumber);
+            twiml.redirect("/voice/membership-pin-entry");
+          } else {
+            // Different phone, no PIN set
+            console.log(`[voice] Membership ${digits} on different phone — no PIN set`);
+            playPrompt(twiml, req, "membership_invalid.mp3",
+              "We found your membership, but you are calling from a different phone. To call from any phone, please set a 4-digit PIN by calling from your registered phone first.");
+            twiml.redirect("/voice/entry-check");
+          }
         } else {
           console.log(`[voice] Membership lookup failed: membershipNumber=${digits}`);
           playPrompt(twiml, req, "membership_invalid.mp3",
@@ -1848,6 +1894,67 @@ export async function registerRoutes(
       console.error("[voice] /voice/entry-check-override error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
       twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1c-pin. Membership PIN Entry ─────────────────────────────────────────
+  // Prompted after a caller enters a valid membership number from a different phone.
+  // They must enter their 4-digit PIN to gain access.
+  app.post("/voice/membership-pin-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    if (!pendingPinAuth.has(callSid)) {
+      twiml.redirect("/voice/entry-check");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-membership-pin-entry",
+      timeout: 10,
+    });
+    gather.say("Please enter your 4-digit PIN.");
+    twiml.redirect("/voice/entry-check");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-membership-pin-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) ?? "";
+    const callSid = req.body?.CallSid as string;
+
+    const memberPhone = pendingPinAuth.get(callSid);
+    if (!memberPhone) {
+      twiml.redirect("/voice/entry-check");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const memberUser = await storage.getUserByPhone(memberPhone);
+      if (memberUser && memberUser.membershipPin && memberUser.membershipPin === digits) {
+        pendingPinAuth.delete(callSid);
+        callMembershipOverride.set(callSid, memberPhone);
+        console.log(`[voice] PIN accepted for membership on callSid=${callSid} → phone=${memberPhone}`);
+        twiml.say("PIN accepted. Welcome.");
+        twiml.redirect("/voice/entry-check-override");
+      } else {
+        pendingPinAuth.delete(callSid);
+        console.log(`[voice] PIN rejected for callSid=${callSid}`);
+        twiml.say("Incorrect PIN. Please try again by calling from your registered phone number or entering your membership number again.");
+        twiml.redirect("/voice/entry-check");
+      }
+    } catch (err) {
+      console.error("[voice] PIN auth error:", err);
+      pendingPinAuth.delete(callSid);
+      twiml.redirect("/voice/entry-check");
     }
 
     res.type("text/xml");
@@ -2785,8 +2892,9 @@ export async function registerRoutes(
       const tier = user.membershipTier ?? "none";
       const tierMsg = tier === "free_trial" ? "You are on a free trial." : tier !== "none" ? `Your membership type is ${tier}.` : "You do not have an active membership.";
 
+      const pinStatus = user.membershipPin ? "You have a PIN set." : "You do not have a PIN set.";
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-manage-membership" });
-      gather.say(`${tierMsg} ${timeMsg} Press 1 to add time or purchase a new membership. Press 9 to return to the main menu.`);
+      gather.say(`${tierMsg} ${timeMsg} ${pinStatus} Press 1 to add time or purchase a new membership. Press 2 to set or change your access PIN. Press 9 to return to the main menu.`);
       twiml.redirect("/voice/manage-membership");
     } catch (error) {
       console.error("[voice] /voice/manage-membership error:", error);
@@ -2804,6 +2912,8 @@ export async function registerRoutes(
 
     if (digit === "1") {
       twiml.redirect("/voice/purchase-pre-menu");
+    } else if (digit === "2") {
+      twiml.redirect("/voice/set-pin");
     } else if (digit === "9") {
       twiml.redirect("/voice/main-menu");
     } else {
@@ -2811,6 +2921,88 @@ export async function registerRoutes(
       twiml.redirect("/voice/manage-membership");
     }
 
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Set / Change PIN ─────────────────────────────────────────────────────
+  // Members calling from their registered phone can set or change their 4-digit PIN.
+  app.post("/voice/set-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-set-pin",
+      timeout: 10,
+    });
+    gather.say("Please enter your new 4-digit PIN.");
+    twiml.redirect("/voice/manage-membership");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-set-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) ?? "";
+    const callSid = req.body?.CallSid as string;
+
+    if (digits.length !== 4 || !/^\d{4}$/.test(digits)) {
+      twiml.say("Invalid PIN. Please enter exactly 4 digits.");
+      twiml.redirect("/voice/set-pin");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    pendingNewPinSetup.set(callSid, digits);
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-confirm-pin",
+      timeout: 10,
+    });
+    gather.say("Please enter your PIN again to confirm.");
+    twiml.redirect("/voice/manage-membership");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-confirm-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) ?? "";
+    const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
+
+    const pendingPin = pendingNewPinSetup.get(callSid);
+    pendingNewPinSetup.delete(callSid);
+
+    if (!pendingPin) {
+      twiml.redirect("/voice/manage-membership");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    if (digits !== pendingPin) {
+      twiml.say("The PINs did not match. Please try again.");
+      twiml.redirect("/voice/set-pin");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const user = await storage.getUserByPhone(fromNumber);
+      if (user) {
+        await storage.updateUserMembership(user.id, { membershipPin: pendingPin });
+        console.log(`[voice] PIN set for userId=${user.id} phone=${fromNumber}`);
+        twiml.say("Your PIN has been set successfully. You can now use your membership number and PIN to call in from any phone.");
+      } else {
+        twiml.say("Could not find your account. Please try again.");
+      }
+    } catch (err) {
+      console.error("[voice] PIN save error:", err);
+      twiml.say("An error occurred saving your PIN. Please try again.");
+    }
+
+    twiml.redirect("/voice/manage-membership");
     res.type("text/xml");
     res.send(twiml.toString());
   });
