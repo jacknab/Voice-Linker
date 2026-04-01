@@ -7,7 +7,7 @@ import {
   Upload, Trash2, Play, Pause, Plus, Phone, LayoutDashboard,
   MessageSquare, PhoneCall, X, MapPin, Clock, Copy, Eye, EyeOff,
   Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2,
-  CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ShieldOff,
+  CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ChevronRight, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
   BarChart2, TrendingUp, RefreshCw,
@@ -1704,10 +1704,13 @@ function fmtMins(secs: number | null | undefined) {
 }
 
 // ── CallerDetailView ──────────────────────────────────────────────────────────
+const CALLS_PER_PAGE = 10;
+
 function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; allCallers: CallerSummary[]; onBack: () => void }) {
   const { toast } = useToast();
   const [creditInput, setCreditInput] = useState("");
   const [creditMode, setCreditMode] = useState<"add" | "remove">("add");
+  const [callHistoryPage, setCallHistoryPage] = useState(0);
 
   const { data: detail, isLoading, refetch } = useQuery<CallerDetail>({
     queryKey: ["/api/admin/callers", callerId],
@@ -1869,46 +1872,80 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
       </div>
 
       {/* ── Call History ── */}
-      <div className={C.panel}>
-        <div className={C.panelHeader}>Call History <span className="opacity-60 font-normal ml-2">({callHistory.length})</span></div>
-        <div className={C.panelBody}>
-          {callHistory.length === 0 ? (
-            <div className="px-4 py-6 text-gray-400 font-mono text-xs text-center">No calls on record.</div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Date</th>
-                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">To Number</th>
-                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Duration</th>
-                  <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {callHistory.map((call, i) => {
-                  const isCompleted = !!call.completedAt || call.durationSeconds !== null;
-                  const startedMs = call.startedAt ? new Date(call.startedAt).getTime() : null;
-                  const isStale = !isCompleted && startedMs !== null && (Date.now() - startedMs) > 30 * 60 * 1000;
-                  const statusLabel = isCompleted ? "Completed" : isStale ? "Ended" : "In Progress";
-                  const statusClass = (isCompleted || isStale)
-                    ? "border-gray-200 bg-gray-50 text-gray-500"
-                    : "border-amber-200 bg-amber-50 text-amber-700";
-                  return (
-                  <tr key={call.id} data-testid={`row-call-${i}`} className="border-b border-gray-50 last:border-0 hover:bg-amber-50/30 transition-colors">
-                    <td className="px-4 py-2 text-gray-600 font-mono text-xs">{call.startedAt ? new Date(call.startedAt).toLocaleString() : "—"}</td>
-                    <td className="px-4 py-2 text-gray-700 font-mono text-xs">{call.toPhoneNumber ?? "—"}</td>
-                    <td className="px-4 py-2 text-gray-700 font-mono text-xs">{fmtSecs(call.durationSeconds)}</td>
-                    <td className="px-4 py-2">
-                      <span className={`${C.badge} ${statusClass}`}>{statusLabel}</span>
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+      {(() => {
+        const totalPages = Math.max(1, Math.ceil(callHistory.length / CALLS_PER_PAGE));
+        const safePage = Math.min(callHistoryPage, totalPages - 1);
+        const pageSlice = callHistory.slice(safePage * CALLS_PER_PAGE, (safePage + 1) * CALLS_PER_PAGE);
+        return (
+          <div className={C.panel}>
+            <div className={C.panelHeader}>
+              Call History <span className="opacity-60 font-normal ml-2">({callHistory.length})</span>
+            </div>
+            <div className={C.panelBody}>
+              {callHistory.length === 0 ? (
+                <div className="px-4 py-6 text-gray-400 font-mono text-xs text-center">No calls on record.</div>
+              ) : (
+                <>
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Date</th>
+                        <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">To Number</th>
+                        <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Duration</th>
+                        <th className="text-left px-4 py-2 text-gray-400 font-mono text-xs tracking-widest uppercase bg-gray-50">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageSlice.map((call, i) => {
+                        const isCompleted = !!call.completedAt || call.durationSeconds !== null;
+                        const startedMs = call.startedAt ? new Date(call.startedAt).getTime() : null;
+                        const isStale = !isCompleted && startedMs !== null && (Date.now() - startedMs) > 30 * 60 * 1000;
+                        const statusLabel = isCompleted ? "Completed" : isStale ? "Ended" : "In Progress";
+                        const statusClass = (isCompleted || isStale)
+                          ? "border-gray-200 bg-gray-50 text-gray-500"
+                          : "border-amber-200 bg-amber-50 text-amber-700";
+                        return (
+                          <tr key={call.id} data-testid={`row-call-${i}`} className="border-b border-gray-50 last:border-0 hover:bg-amber-50/30 transition-colors">
+                            <td className="px-4 py-2 text-gray-600 font-mono text-xs">{call.startedAt ? new Date(call.startedAt).toLocaleString() : "—"}</td>
+                            <td className="px-4 py-2 text-gray-700 font-mono text-xs">{call.toPhoneNumber ?? "—"}</td>
+                            <td className="px-4 py-2 text-gray-700 font-mono text-xs">{fmtSecs(call.durationSeconds)}</td>
+                            <td className="px-4 py-2">
+                              <span className={`${C.badge} ${statusClass}`}>{statusLabel}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-4 py-2 border-t border-gray-100 bg-gray-50">
+                      <button
+                        data-testid="btn-calls-prev"
+                        onClick={() => setCallHistoryPage(p => Math.max(0, p - 1))}
+                        disabled={safePage === 0}
+                        className="flex items-center gap-1 px-2 py-1 font-mono text-xs text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronLeft size={12} /> Prev
+                      </button>
+                      <span className="font-mono text-xs text-gray-400">
+                        Page {safePage + 1} of {totalPages}
+                      </span>
+                      <button
+                        data-testid="btn-calls-next"
+                        onClick={() => setCallHistoryPage(p => Math.min(totalPages - 1, p + 1))}
+                        disabled={safePage === totalPages - 1}
+                        className="flex items-center gap-1 px-2 py-1 font-mono text-xs text-gray-500 hover:text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Next <ChevronRight size={12} />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Messages ── */}
       <div className={C.panel}>
