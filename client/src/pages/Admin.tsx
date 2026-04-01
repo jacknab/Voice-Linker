@@ -1792,9 +1792,12 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
             <span className={C.fieldLabel}>Voice Profile</span>
             <span className={C.fieldValue}>
               {profile ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className={`${C.badge} border-emerald-200 bg-emerald-50 text-emerald-700`}><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Active</span>
-                  <span className="text-gray-400 text-xs">{fmtSecs(profile.recordingDuration)}</span>
+                <span className="inline-flex flex-col gap-2">
+                  <span className="inline-flex items-center gap-2">
+                    <span className={`${C.badge} border-emerald-200 bg-emerald-50 text-emerald-700`}><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Active</span>
+                    <span className="text-gray-400 text-xs">{fmtSecs(profile.recordingDuration)}</span>
+                  </span>
+                  <AudioPlayer src={profile.recordingUrl} />
                 </span>
               ) : <span className={`${C.badge} border-gray-200 bg-gray-50 text-gray-400`}>No Profile</span>}
             </span>
@@ -1882,18 +1885,25 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
                 </tr>
               </thead>
               <tbody>
-                {callHistory.map((call, i) => (
+                {callHistory.map((call, i) => {
+                  const isCompleted = !!call.completedAt || call.durationSeconds !== null;
+                  const startedMs = call.startedAt ? new Date(call.startedAt).getTime() : null;
+                  const isStale = !isCompleted && startedMs !== null && (Date.now() - startedMs) > 30 * 60 * 1000;
+                  const statusLabel = isCompleted ? "Completed" : isStale ? "Ended" : "In Progress";
+                  const statusClass = (isCompleted || isStale)
+                    ? "border-gray-200 bg-gray-50 text-gray-500"
+                    : "border-amber-200 bg-amber-50 text-amber-700";
+                  return (
                   <tr key={call.id} data-testid={`row-call-${i}`} className="border-b border-gray-50 last:border-0 hover:bg-amber-50/30 transition-colors">
                     <td className="px-4 py-2 text-gray-600 font-mono text-xs">{call.startedAt ? new Date(call.startedAt).toLocaleString() : "—"}</td>
                     <td className="px-4 py-2 text-gray-700 font-mono text-xs">{call.toPhoneNumber ?? "—"}</td>
                     <td className="px-4 py-2 text-gray-700 font-mono text-xs">{fmtSecs(call.durationSeconds)}</td>
                     <td className="px-4 py-2">
-                      <span className={`${C.badge} ${call.completedAt ? "border-gray-200 bg-gray-50 text-gray-500" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-                        {call.completedAt ? "Completed" : "In Progress"}
-                      </span>
+                      <span className={`${C.badge} ${statusClass}`}>{statusLabel}</span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}
