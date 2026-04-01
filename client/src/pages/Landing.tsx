@@ -100,7 +100,7 @@ export default function Landing() {
 
       {/* ── NAVBAR ── */}
       <nav style={{ background: "#000", position: "sticky", top: 0, zIndex: 100, borderBottom: "1px solid #1a1a1a" }}>
-        <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "64px" }}>
+        <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "79px" }}>
 
           {/* Left: Logo + Site Name */}
           <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
