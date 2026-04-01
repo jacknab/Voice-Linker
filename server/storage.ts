@@ -579,8 +579,12 @@ export class DatabaseStorage implements IStorage {
   async getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string; neighborhood?: string | null }): Promise<ZipCode> {
     const [existing] = await db.select().from(zipCodes).where(eq(zipCodes.code, code));
     if (existing) return existing;
-    const [created] = await db.insert(zipCodes).values({ code, ...geo }).returning();
-    return created;
+    const [created] = await db.insert(zipCodes).values({ code, ...geo }).onConflictDoNothing().returning();
+    if (created) return created;
+    // Race condition: another request inserted this zip between our SELECT and INSERT — re-fetch
+    const [refetched] = await db.select().from(zipCodes).where(eq(zipCodes.code, code));
+    if (refetched) return refetched;
+    throw new Error(`[storage] getOrCreateZipEntry: failed to insert or find zip code "${code}"`);
   }
 
   async setUserZipCode(userId: string, zipCodeId: string): Promise<void> {
