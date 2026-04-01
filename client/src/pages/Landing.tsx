@@ -1,54 +1,10 @@
 import { useState } from "react";
-import { Phone, MapPin, Loader2, Menu, X, Shield, Clock, Headphones, Zap, Users, Mic, MessageCircle } from "lucide-react";
+import { Phone, Loader2, Menu, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import heroImg from "@assets/hero_guy_1.png";
 
 const DEFAULT_PHONE = "1-800-555-0100";
 
-const FEATURES = [
-  { icon: <Shield className="w-7 h-7" />, title: "Completely Private", desc: "Your phone number is never shared. Connect with full anonymity." },
-  { icon: <Clock className="w-7 h-7" />, title: "Live 24/7", desc: "Guys are on the line at any hour, day or night." },
-  { icon: <Headphones className="w-7 h-7" />, title: "Voice Over Photos", desc: "Hear someone's real energy instantly. No catfish, no games." },
-  { icon: <MapPin className="w-7 h-7" />, title: "Local Guys", desc: "Connect with men in your city and surrounding areas." },
-  { icon: <Zap className="w-7 h-7" />, title: "No Waiting", desc: "Hear a voice and connect in seconds. No inbox full of unanswered texts." },
-  { icon: <Users className="w-7 h-7" />, title: "Real Community", desc: "Gay, bi, and curious men across hundreds of cities." },
-];
-
-const STEPS = [
-  { icon: <Phone className="w-7 h-7" />, step: "1", title: "Call Your Local Number", desc: "Dial the number for your area and step right in. No app, no profile, no judgment." },
-  { icon: <Mic className="w-7 h-7" />, step: "2", title: "Record Your Greeting", desc: "Drop a quick intro that's all you — your voice, your vibe, your story." },
-  { icon: <MessageCircle className="w-7 h-7" />, step: "3", title: "Connect with Men", desc: "Browse guys nearby, leave messages, or jump into a live one-on-one call right now." },
-];
-
-const PRICING = [
-  {
-    name: "Intro",
-    minutes: "30 Minutes",
-    price: "$9.99",
-    per: "/month",
-    features: ["30 minutes of talk time", "Unlimited voice messages", "Browse local profiles", "Full caller ID privacy"],
-    cta: "Get Started",
-    highlight: false,
-  },
-  {
-    name: "Connect",
-    minutes: "90 Minutes",
-    price: "$19.99",
-    per: "/month",
-    features: ["90 minutes of talk time", "Unlimited voice messages", "Priority profile placement", "Full caller ID privacy", "Save favorite profiles"],
-    cta: "Most Popular",
-    highlight: true,
-  },
-  {
-    name: "All Night",
-    minutes: "Unlimited",
-    price: "$34.99",
-    per: "/month",
-    features: ["Unlimited talk time", "Unlimited voice messages", "Top placement in listings", "Premium caller ID privacy", "VIP member status"],
-    cta: "Go Unlimited",
-    highlight: false,
-  },
-];
 
 interface LocalNumberData {
   city: string | null;
@@ -223,98 +179,6 @@ export default function Landing() {
             <span>Real guys just like you</span>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#3b82f6", display: "inline-block", flexShrink: 0 }} />
             <span>Freedom to be yourself</span>
-          </div>
-        </div>
-      </section>
-
-      {/* ── HOW IT WORKS ── */}
-      <section id="how-it-works" style={{ padding: "5rem 1.5rem", background: "#0d0d0d" }}>
-        <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
-          <h2 style={{ textAlign: "center", fontSize: "clamp(1.4rem, 3vw, 2rem)", fontWeight: 800, letterSpacing: "0.03em", textTransform: "uppercase", marginBottom: "0.5rem", color: "#fff" }}>
-            How It Works
-          </h2>
-          <p style={{ textAlign: "center", fontSize: "0.9rem", color: "rgba(255,255,255,0.45)", marginBottom: "3rem" }}>
-            Three steps and you're in. No app, no photos, just your voice.
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "1.5rem" }}>
-            {STEPS.map(s => (
-              <div key={s.step} style={{ background: "#171717", border: "1px solid #2a2a2a", borderRadius: "10px", padding: "2rem 1.75rem" }}>
-                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(29,78,216,0.2)", border: "1px solid rgba(29,78,216,0.4)", display: "flex", alignItems: "center", justifyContent: "center", color: "#3b82f6", marginBottom: "1rem" }}>
-                  {s.icon}
-                </div>
-                <div style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#3b82f6", marginBottom: "0.35rem" }}>Step {s.step}</div>
-                <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "#fff", marginBottom: "0.4rem" }}>{s.title}</h3>
-                <p style={{ fontSize: "0.84rem", color: "rgba(255,255,255,0.45)", lineHeight: 1.65 }}>{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── FEATURES ── */}
-      <section style={{ padding: "5rem 1.5rem", background: "#111" }}>
-        <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
-          <h2 style={{ textAlign: "center", fontSize: "clamp(1.4rem, 3vw, 2rem)", fontWeight: 800, letterSpacing: "0.03em", textTransform: "uppercase", marginBottom: "0.5rem", color: "#fff" }}>
-            Why Phone Booth
-          </h2>
-          <p style={{ textAlign: "center", fontSize: "0.9rem", color: "rgba(255,255,255,0.45)", marginBottom: "3rem" }}>
-            Voice-first connection — the way it was always meant to be.
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "1.25rem" }}>
-            {FEATURES.map(f => (
-              <div key={f.title} style={{ background: "#171717", border: "1px solid #2a2a2a", borderRadius: "10px", padding: "1.5rem", display: "flex", gap: "1rem", alignItems: "flex-start" }}>
-                <div style={{ color: "#3b82f6", flexShrink: 0, marginTop: "0.1rem" }}>{f.icon}</div>
-                <div>
-                  <h4 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#fff", marginBottom: "0.3rem" }}>{f.title}</h4>
-                  <p style={{ fontSize: "0.84rem", color: "rgba(255,255,255,0.45)", lineHeight: 1.6 }}>{f.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── PRICING ── */}
-      <section id="pricing" style={{ padding: "5rem 1.5rem", background: "#0d0d0d" }}>
-        <div style={{ maxWidth: "980px", margin: "0 auto" }}>
-          <h2 style={{ textAlign: "center", fontSize: "clamp(1.4rem, 3vw, 2rem)", fontWeight: 800, letterSpacing: "0.03em", textTransform: "uppercase", marginBottom: "0.5rem", color: "#fff" }}>
-            Memberships
-          </h2>
-          <p style={{ textAlign: "center", fontSize: "0.9rem", color: "rgba(255,255,255,0.45)", marginBottom: "3rem" }}>
-            Start free — upgrade when you're ready.
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1.25rem" }}>
-            {PRICING.map(plan => (
-              <div key={plan.name}
-                style={{ background: plan.highlight ? "rgba(29,78,216,0.12)" : "#171717", border: plan.highlight ? "1.5px solid rgba(59,130,246,0.5)" : "1px solid #2a2a2a", borderRadius: "10px", padding: "2rem 1.75rem", position: "relative" }}
-                data-testid={`card-plan-${plan.name.toLowerCase()}`}
-              >
-                {plan.highlight && (
-                  <div style={{ position: "absolute", top: "-0.65rem", left: "50%", transform: "translateX(-50%)", background: "#1d4ed8", color: "#fff", borderRadius: "2rem", padding: "0.2rem 0.9rem", fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap" }}>
-                    MOST POPULAR
-                  </div>
-                )}
-                <div style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#3b82f6", marginBottom: "0.3rem" }}>{plan.minutes}</div>
-                <h3 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#fff", marginBottom: "0.25rem" }}>{plan.name}</h3>
-                <div style={{ fontSize: "2rem", fontWeight: 900, color: plan.highlight ? "#60a5fa" : "#fff", marginBottom: "0.1rem" }}>
-                  {plan.price}<span style={{ fontSize: "0.85rem", fontWeight: 400, color: "rgba(255,255,255,0.35)" }}>{plan.per}</span>
-                </div>
-                <hr style={{ border: "none", borderTop: "1px solid #2a2a2a", margin: "1.25rem 0" }} />
-                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1.5rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {plan.features.map(feat => (
-                    <li key={feat} style={{ fontSize: "0.84rem", color: "rgba(255,255,255,0.55)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#1d4ed8", flexShrink: 0, display: "inline-block" }} />
-                      {feat}
-                    </li>
-                  ))}
-                </ul>
-                <CallLink phone={displayPhone}
-                  style={{ display: "block", textAlign: "center", background: plan.highlight ? "#1d4ed8" : "rgba(255,255,255,0.07)", color: "#fff", borderRadius: "6px", padding: "0.75rem", fontSize: "0.9rem", fontWeight: 700, textDecoration: "none", border: plan.highlight ? "none" : "1px solid #333", transition: "background 0.15s" }}
-                >
-                  {plan.cta}
-                </CallLink>
-              </div>
-            ))}
           </div>
         </div>
       </section>
