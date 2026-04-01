@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, membershipLinkCodes, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount, type MembershipLinkCode } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, membershipLinkCodes, membershipCards, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount, type MembershipLinkCode, type MembershipCard } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -199,6 +199,15 @@ export interface IStorage {
   getActiveMembershipLinkCode(code: string): Promise<MembershipLinkCode | undefined>;
   getActiveCodeByWebUserId(webUserId: string): Promise<MembershipLinkCode | undefined>;
   consumeMembershipLinkCode(codeId: string): Promise<void>;
+
+  // Membership cards (5-digit pre-created cards for events/distribution)
+  createMembershipCard(cardNumber: string, notes?: string): Promise<MembershipCard>;
+  getMembershipCardByNumber(cardNumber: string): Promise<MembershipCard | undefined>;
+  getMembershipCardByPhone(phoneNumber: string): Promise<MembershipCard | undefined>;
+  linkCardToPhone(cardId: string, phoneNumber: string): Promise<void>;
+  getAllMembershipCards(): Promise<MembershipCard[]>;
+  deleteMembershipCard(id: string): Promise<void>;
+  isMembershipCardNumberTaken(cardNumber: string): Promise<boolean>;
 
   // Admin accounts
   getAdminAccountByEmail(email: string): Promise<AdminAccount | undefined>;
@@ -1346,6 +1355,39 @@ export class DatabaseStorage implements IStorage {
 
   async consumeMembershipLinkCode(codeId: string): Promise<void> {
     await db.update(membershipLinkCodes).set({ usedAt: new Date() }).where(eq(membershipLinkCodes.id, codeId));
+  }
+
+  // ── Membership Cards ──────────────────────────────────────────────────────────
+  async createMembershipCard(cardNumber: string, notes?: string): Promise<MembershipCard> {
+    const [row] = await db.insert(membershipCards).values({ cardNumber, notes: notes ?? null }).returning();
+    return row;
+  }
+
+  async getMembershipCardByNumber(cardNumber: string): Promise<MembershipCard | undefined> {
+    const [row] = await db.select().from(membershipCards).where(eq(membershipCards.cardNumber, cardNumber));
+    return row;
+  }
+
+  async getMembershipCardByPhone(phoneNumber: string): Promise<MembershipCard | undefined> {
+    const [row] = await db.select().from(membershipCards).where(eq(membershipCards.phoneNumber, phoneNumber));
+    return row;
+  }
+
+  async linkCardToPhone(cardId: string, phoneNumber: string): Promise<void> {
+    await db.update(membershipCards).set({ phoneNumber, firstUsedAt: new Date() }).where(eq(membershipCards.id, cardId));
+  }
+
+  async getAllMembershipCards(): Promise<MembershipCard[]> {
+    return db.select().from(membershipCards).orderBy(membershipCards.createdAt);
+  }
+
+  async deleteMembershipCard(id: string): Promise<void> {
+    await db.delete(membershipCards).where(eq(membershipCards.id, id));
+  }
+
+  async isMembershipCardNumberTaken(cardNumber: string): Promise<boolean> {
+    const [row] = await db.select({ id: membershipCards.id }).from(membershipCards).where(eq(membershipCards.cardNumber, cardNumber));
+    return !!row;
   }
 
   async getAdminAccountByEmail(email: string): Promise<AdminAccount | undefined> {

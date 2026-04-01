@@ -343,6 +343,19 @@ export const insertWebUserSchema = createInsertSchema(webUsers).omit({ id: true,
 export type WebUser = typeof webUsers.$inferSelect;
 export type InsertWebUser = z.infer<typeof insertWebUserSchema>;
 
+// ─── Membership Cards — pre-created 5-digit cards handed out at events ──────────
+// cardNumber is unique 5-digit string. phoneNumber is null until first IVR use.
+export const membershipCards = pgTable("membership_cards", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  cardNumber: text("card_number").notNull().unique(),
+  phoneNumber: text("phone_number"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  firstUsedAt: timestamp("first_used_at"),
+});
+
+export type MembershipCard = typeof membershipCards.$inferSelect;
+
 // ─── Membership Link Codes — short-lived codes for phone-verified web linking ──
 // A web user generates a 3-digit code, calls the phone line, and presses those
 // digits to prove they own the phone and link it to their web account.

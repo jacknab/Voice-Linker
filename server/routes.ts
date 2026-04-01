@@ -322,9 +322,14 @@ const callMembershipOverride = new Map<string, string>(); // callSid → members
 // Temporary store for a membership number mid-entry (between the 10-digit gather and account lookup)
 const pendingMembershipEntries = new Map<string, string>(); // callSid → membership number
 
-// Convert a Twilio phone number (+1XXXXXXXXXX) to a 10-digit membership number
-function phoneToMembershipNumber(phone: string): string {
-  return phone.replace(/\D/g, "").slice(-10);
+// Generate a unique random 5-digit membership card number
+async function generateUniqueCardNumber(): Promise<string> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const num = String(Math.floor(10000 + Math.random() * 90000));
+    const taken = await storage.isMembershipCardNumberTaken(num);
+    if (!taken) return num;
+  }
+  throw new Error("Unable to generate a unique membership card number after 100 attempts");
 }
 
 // Build the base URL of this server from an incoming Twilio request
@@ -1639,7 +1644,7 @@ export async function registerRoutes(
   });
 
   // ─── 1b-i. Membership Number Entry ────────────────────────────────────────
-  // Prompts the caller to enter their 10-digit membership number or press # to skip.
+  // Prompts the caller to enter their 5-digit card number or press # to skip.
   app.post("/voice/membership-entry", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({
@@ -1649,7 +1654,7 @@ export async function registerRoutes(
       timeout: 10,
     });
     playPrompt(gather, req, "membership_entry_prompt.mp3",
-      "If you have a membership, please enter your 10-digit membership number now. Otherwise, press the pound key.");
+      "If you have a membership card, please enter your 5-digit card number followed by the pound key. Otherwise, press the pound key to skip.");
     // Timeout with no input → skip to account check
     twiml.redirect("/voice/entry-check");
     res.type("text/xml");
@@ -1695,8 +1700,46 @@ export async function registerRoutes(
         console.error("[voice] Web link code error:", err);
       }
       twiml.redirect("/voice/entry-check");
+    } else if (digits.length === 5) {
+      // 5-digit membership card number
+      try {
+        const card = await storage.getMembershipCardByNumber(digits);
+        if (!card) {
+          console.log(`[voice] Card not found: ${digits}`);
+          playPrompt(twiml, req, "membership_invalid.mp3",
+            "We could not find a membership card with that number. Please check your card and try again.");
+          twiml.redirect("/voice/entry-check");
+        } else if (!card.phoneNumber) {
+          // First use — link this caller's phone to the card
+          await storage.linkCardToPhone(card.id, fromNumber);
+          // Ensure a users record exists for this phone and set the card's number as their membership
+          let phoneUser = await storage.getUserByPhone(fromNumber);
+          if (!phoneUser) {
+            phoneUser = await storage.getOrCreateUser(fromNumber);
+          }
+          await storage.updateUserMembership(phoneUser.id, { membershipNumber: card.cardNumber });
+          console.log(`[voice] Card ${digits} first use — linked to ${fromNumber}`);
+          playPrompt(twiml, req, "membership_linked.mp3",
+            "Your membership card has been activated and linked to this phone number. Welcome.");
+          twiml.redirect("/voice/entry-check");
+        } else if (card.phoneNumber === fromNumber) {
+          // Returning member using their card number
+          console.log(`[voice] Card ${digits} recognized for ${fromNumber}`);
+          playPrompt(twiml, req, "membership_linked.mp3", "Your membership has been verified. Welcome.");
+          twiml.redirect("/voice/entry-check");
+        } else {
+          // Card already linked to a different phone
+          console.log(`[voice] Card ${digits} already claimed by a different number`);
+          playPrompt(twiml, req, "membership_invalid.mp3",
+            "This card is already registered to a different phone number. Please call from your registered phone.");
+          twiml.redirect("/voice/entry-check");
+        }
+      } catch (err) {
+        console.error("[voice] Card lookup error:", err);
+        twiml.redirect("/voice/entry-check");
+      }
     } else if (digits.length === 10) {
-      // Full 10-digit membership number entered — look up directly (no PIN required)
+      // Legacy 10-digit membership number — look up directly (backward compat)
       try {
         const memberUser = await storage.getUserByMembershipNumber(digits);
         if (memberUser) {
@@ -4285,9 +4328,12 @@ export async function registerRoutes(
           remainingSeconds: totalSeconds,
         };
         if (!user.membershipNumber) {
-          const membershipNumber = phoneToMembershipNumber(fromNumber);
+          const membershipNumber = await generateUniqueCardNumber();
           membershipUpdate.membershipNumber = membershipNumber;
-          console.log(`[voice] Assigning membership number: userId=${user.id}, membershipNumber=${membershipNumber}`);
+          // Create a card record and immediately link it to this phone
+          const card = await storage.createMembershipCard(membershipNumber, "Issued on purchase");
+          await storage.linkCardToPhone(card.id, fromNumber);
+          console.log(`[voice] Issued membership card ${membershipNumber} to ${fromNumber} on purchase`);
         }
 
         await storage.updateUserMembership(user.id, membershipUpdate);
