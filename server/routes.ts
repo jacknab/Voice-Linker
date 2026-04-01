@@ -1945,7 +1945,14 @@ export async function registerRoutes(
   app.post("/voice/mailbox-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-mailbox-menu" });
-    gather.say("Mailboxes and personal ads. Press 1 to check your messages. Press 2 to browse personal ads. Press 9 to return to the main menu.");
+    playPrompt(gather, req, "mailbox_menu.mp3",
+      "To go to your mailbox press one. " +
+      "To record a new mailbox ad press two. " +
+      "To listen to ads from other guys press three. " +
+      "To repeat these choices press nine. " +
+      "For the phone booth press star. " +
+      "To go to the main menu press pound."
+    );
     twiml.redirect("/voice/mailbox-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -1953,17 +1960,260 @@ export async function registerRoutes(
 
   app.post("/voice/handle-mailbox-menu", async (req, res) => {
     const twiml = new VoiceResponse();
-    const digit = req.body?.Digits;
+    const digit = req.body?.Digits as string;
 
     if (digit === "1") {
-      // Check messages — route to browse profiles which includes message check
-      twiml.redirect("/voice/browse-profiles");
+      twiml.redirect("/voice/my-mailbox");
     } else if (digit === "2") {
+      twiml.redirect("/voice/record-mailbox-ad");
+    } else if (digit === "3") {
       twiml.redirect("/voice/browse-profiles");
     } else if (digit === "9") {
+      twiml.redirect("/voice/mailbox-menu");
+    } else if (digit === "*") {
+      twiml.redirect("/voice/phone-booth");
+    } else if (digit === "#") {
       twiml.redirect("/voice/main-menu");
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a3. My Mailbox — check unread messages ─────────────────────────────
+  app.post("/voice/my-mailbox", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const mailbox = await storage.getMailboxByUserId(user.id);
+      const unreadMessage = await storage.getUnreadMessage(user.id);
+
+      if (unreadMessage) {
+        const senderProfile = await storage.getProfile(unreadMessage.fromUserId);
+        const msgGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-mailbox-message?msgId=${unreadMessage.id}&senderId=${unreadMessage.fromUserId}`,
+          timeout: 10,
+        });
+        if (senderProfile?.nameRecordingUrl) {
+          msgGather.say("New message.");
+          safePlayRecording(msgGather, senderProfile.nameRecordingUrl, req, "");
+          msgGather.say("has sent you a message.");
+        } else {
+          msgGather.say("You have a new message.");
+        }
+        safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available.");
+        msgGather.say(
+          "Press 1 to reply. " +
+          "Press 2 to hear the sender's ad. " +
+          "Press 3 to skip this message. " +
+          "Press 9 to return to the mailbox menu."
+        );
+        twiml.redirect("/voice/my-mailbox");
+      } else {
+        const mailboxLabel = mailbox
+          ? `Mailbox number ${mailbox.mailboxNumber.split("").join(", ")}. `
+          : "";
+        playPrompt(twiml, req, "mailbox_empty.mp3",
+          `${mailboxLabel}Your mailbox is empty. No new messages.`
+        );
+        twiml.redirect("/voice/mailbox-menu");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/my-mailbox error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the mailbox menu.");
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Handle input after a mailbox message plays ───────────────────────────
+  app.post("/voice/handle-mailbox-message", async (req, res) => {
+    const twiml = new VoiceResponse();
+
+    try {
+      const digit = req.body?.Digits as string;
+      const msgId = req.query.msgId as string;
+      const senderId = req.query.senderId as string;
+
+      if (digit === "1") {
+        await storage.markMessageRead(msgId);
+        playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}&returnTo=mailbox` });
+      } else if (digit === "2") {
+        await storage.markMessageRead(msgId);
+        const senderProfile = await storage.getProfile(senderId);
+        const profileGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-mailbox-sender-menu?senderId=${senderId}`,
+          timeout: 10,
+        });
+        if (senderProfile) {
+          if (senderProfile.nameRecordingUrl) {
+            safePlayRecording(profileGather, senderProfile.nameRecordingUrl, req, "");
+          }
+          safePlayRecording(profileGather, senderProfile.recordingUrl, req, "This caller's ad is not available.");
+        } else {
+          profileGather.say("This caller no longer has a mailbox ad.");
+        }
+        profileGather.say("Press 1 to send a message. Press 9 to return to your mailbox.");
+        twiml.redirect("/voice/my-mailbox");
+      } else if (digit === "3") {
+        await storage.markMessageRead(msgId);
+        twiml.redirect("/voice/my-mailbox");
+      } else if (digit === "9") {
+        twiml.redirect("/voice/mailbox-menu");
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect("/voice/my-mailbox");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-mailbox-message error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the mailbox menu.");
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Handle input after hearing sender's ad from the mailbox ─────────────
+  app.post("/voice/handle-mailbox-sender-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+
+    try {
+      const digit = req.body?.Digits as string;
+      const senderId = req.query.senderId as string;
+
+      if (digit === "1") {
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}&returnTo=mailbox` });
+      } else {
+        twiml.redirect("/voice/my-mailbox");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-mailbox-sender-menu error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a4. Record Mailbox Ad ───────────────────────────────────────────────
+  app.post("/voice/record-mailbox-ad", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const profile = await storage.getProfile(user.id);
+
+      if (profile) {
+        const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-record-mailbox-ad" });
+        playPrompt(gather, req, "mailbox_ad_existing.mp3",
+          "You already have a mailbox ad. " +
+          "Press 1 to record a new one. " +
+          "Press 2 to hear your current ad. " +
+          "Press 9 to return to the mailbox menu."
+        );
+        twiml.redirect("/voice/record-mailbox-ad");
+      } else {
+        playPrompt(twiml, req, "mailbox_ad_record.mp3",
+          "Record your mailbox ad after the tone. Tell other guys about yourself. Press pound when finished."
+        );
+        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-ad" });
+      }
+    } catch (err) {
+      console.error("[voice] /voice/record-mailbox-ad error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the mailbox menu.");
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-record-mailbox-ad", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+
+    try {
+      if (digit === "1") {
+        playPrompt(twiml, req, "mailbox_ad_record.mp3",
+          "Record your mailbox ad after the tone. Press pound when finished."
+        );
+        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-ad" });
+      } else if (digit === "2") {
+        const user = await getOrCreateUser(fromNumber);
+        const profile = await storage.getProfile(user.id);
+        if (profile?.recordingUrl) {
+          if (profile.nameRecordingUrl) {
+            safePlayRecording(twiml, profile.nameRecordingUrl, req, "");
+          }
+          safePlayRecording(twiml, profile.recordingUrl, req, "Your ad is not available for playback.");
+        } else {
+          playPrompt(twiml, req, "no_greeting_found.mp3", "No ad found.");
+        }
+        twiml.redirect("/voice/record-mailbox-ad");
+      } else if (digit === "9") {
+        twiml.redirect("/voice/mailbox-menu");
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect("/voice/record-mailbox-ad");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-record-mailbox-ad error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred.");
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Save Mailbox Ad recording ────────────────────────────────────────────
+  app.post("/voice/save-mailbox-ad", async (req, res) => {
+    const twiml = new VoiceResponse();
+
+    try {
+      const fromNumber = req.body?.From as string;
+      const recordingUrl = req.body?.RecordingUrl as string;
+      const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
+
+      if (!recordingUrl || recordingDuration < 3) {
+        playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone.");
+        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-ad" });
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const user = await getOrCreateUser(fromNumber);
+      const existingProfile = await storage.getProfile(user.id);
+      await storage.upsertProfile({
+        userId: user.id,
+        recordingUrl,
+        recordingDuration,
+        nameRecordingUrl: existingProfile?.nameRecordingUrl ?? null,
+        isAdminUploaded: false,
+      });
+      await storage.getOrCreateMailbox(user.id);
+
+      playPrompt(twiml, req, "mailbox_ad_saved.mp3",
+        "Your mailbox ad has been saved. Other guys can now hear your ad."
+      );
+      twiml.redirect("/voice/mailbox-menu");
+    } catch (err) {
+      console.error("[voice] /voice/save-mailbox-ad error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred saving your ad. Returning to the mailbox menu.");
       twiml.redirect("/voice/mailbox-menu");
     }
 
@@ -3250,10 +3500,16 @@ export async function registerRoutes(
         throw new Error(`Missing fields: From=${fromNumber}, RecordingUrl=${recordingUrl}, toUserId=${toUserId}`);
       }
 
+      const returnTo = req.query.returnTo as string;
       const user = await getOrCreateUser(fromNumber);
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
-      playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
-      twiml.redirect("/voice/browse-profiles");
+      if (returnTo === "mailbox") {
+        playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
+        twiml.redirect("/voice/my-mailbox");
+      } else {
+        playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
+        twiml.redirect("/voice/browse-profiles");
+      }
     } catch (error) {
       console.error("[voice] /voice/save-message error:", error);
       playPrompt(twiml, req, "message_send_error.mp3", "Failed to send your message. Returning to profiles.");
