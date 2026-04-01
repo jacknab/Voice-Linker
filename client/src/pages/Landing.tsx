@@ -185,12 +185,17 @@ export default function Landing() {
               All users must be 18 years or older
             </p>
 
-            {/* Free minutes */}
-            <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "1rem", color: "#fff", whiteSpace: "nowrap" }}
-              data-testid="hero-headline"
-            >
-              90 MINUTES FREE!
-            </h1>
+            {/* Free minutes — black shadow copy behind white text */}
+            <div style={{ position: "relative", display: "inline-block", marginBottom: "1rem" }}>
+              <h1 aria-hidden="true" style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", fontSize: "clamp(2.35rem, 5.35vw, 4.28rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, color: "#000", whiteSpace: "nowrap", pointerEvents: "none", userSelect: "none" }}>
+                90 MINUTES FREE!
+              </h1>
+              <h1 style={{ position: "relative", fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, color: "#fff", whiteSpace: "nowrap", margin: 0 }}
+                data-testid="hero-headline"
+              >
+                90 MINUTES FREE!
+              </h1>
+            </div>
 
             {/* Glass pill */}
             <div style={{ display: "inline-block", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", padding: "0.35rem 0.9rem", marginBottom: "2.5rem" }}>
@@ -206,14 +211,26 @@ export default function Landing() {
               </div>
             ) : (
               <div>
-                <p style={{ fontSize: "1.3rem", color: "rgba(255,255,255,0.85)", fontWeight: 400, marginBottom: "0.3rem" }}>
-                  Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access number
-                </p>
-                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(2rem, 4.5vw, 3rem)", color: "#fff", textDecoration: "none", letterSpacing: "0.01em", lineHeight: 1.1 }}
-                  data-testid="text-local-phone"
-                >
-                  <span style={{ fontWeight: 400 }}>Call </span><span style={{ fontWeight: 900 }}>{formatPhone(displayPhone)}</span>
-                </CallLink>
+                {/* "Your local X access number" — black copy behind, offset 1px */}
+                <div style={{ position: "relative", display: "block", marginBottom: "0.3rem" }}>
+                  <p aria-hidden="true" style={{ position: "absolute", top: "1px", left: "1px", fontSize: "1.3rem", fontWeight: 400, color: "#000", margin: 0, whiteSpace: "nowrap", pointerEvents: "none", userSelect: "none" }}>
+                    Your local <strong style={{ color: "#000", fontWeight: 700 }}>{cityLabel || "area"}</strong> access number
+                  </p>
+                  <p style={{ position: "relative", fontSize: "1.3rem", color: "rgba(255,255,255,0.85)", fontWeight: 400, margin: 0 }}>
+                    Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access number
+                  </p>
+                </div>
+                {/* Phone number — black copy behind, offset 1px */}
+                <div style={{ position: "relative", display: "inline-block" }}>
+                  <span aria-hidden="true" style={{ position: "absolute", top: "1px", left: "1px", fontSize: "clamp(2.07rem, 4.66vw, 3.11rem)", color: "#000", letterSpacing: "0.01em", lineHeight: 1.1, whiteSpace: "nowrap", pointerEvents: "none", userSelect: "none" }}>
+                    <span style={{ fontWeight: 400 }}>Call </span><span style={{ fontWeight: 900 }}>{formatPhone(displayPhone)}</span>
+                  </span>
+                  <CallLink phone={displayPhone} style={{ position: "relative", display: "inline-block", fontSize: "clamp(2rem, 4.5vw, 3rem)", color: "#fff", textDecoration: "none", letterSpacing: "0.01em", lineHeight: 1.1 }}
+                    data-testid="text-local-phone"
+                  >
+                    <span style={{ fontWeight: 400 }}>Call </span><span style={{ fontWeight: 900 }}>{formatPhone(displayPhone)}</span>
+                  </CallLink>
+                </div>
               </div>
             )}
 
