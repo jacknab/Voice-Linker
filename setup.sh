@@ -137,19 +137,41 @@ sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USE
 
 success "PostgreSQL user '${DB_USER}' and database '${DB_NAME}' are ready."
 
-# ─── STEP 4 – Write .env file ─────────────────────────────────────────────────
-step "4/8  Writing .env file"
+# ─── STEP 4 – Write / update .env file ───────────────────────────────────────
+step "4/9  Configuring .env file"
 
 SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
+NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost/${DB_NAME}?sslmode=disable"
 
-# Only write if .env does not already exist (preserves existing API keys)
 if [ -f "${APP_DIR}/.env" ]; then
-    warn ".env already exists – skipping overwrite to preserve existing API keys."
-    warn "Make sure DATABASE_URL and PORT are set correctly in .env."
+    info ".env already exists — updating DATABASE_URL, PORT and NODE_ENV (API keys preserved)."
+
+    # Update DATABASE_URL if it exists, otherwise append it
+    if grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
+        sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${NEW_DB_URL}|" "${APP_DIR}/.env"
+    else
+        echo "DATABASE_URL=${NEW_DB_URL}" >> "${APP_DIR}/.env"
+    fi
+
+    # Update PORT
+    if grep -q "^PORT=" "${APP_DIR}/.env"; then
+        sed -i "s|^PORT=.*|PORT=${APP_PORT}|" "${APP_DIR}/.env"
+    else
+        echo "PORT=${APP_PORT}" >> "${APP_DIR}/.env"
+    fi
+
+    # Update NODE_ENV
+    if grep -q "^NODE_ENV=" "${APP_DIR}/.env"; then
+        sed -i "s|^NODE_ENV=.*|NODE_ENV=production|" "${APP_DIR}/.env"
+    else
+        echo "NODE_ENV=production" >> "${APP_DIR}/.env"
+    fi
+
+    success ".env updated (DATABASE_URL → ${DB_NAME}, PORT → ${APP_PORT})."
 else
     cat > "${APP_DIR}/.env" <<EOF
 # ─── Database ─────────────────────────────────────────────────────────────────
-DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@localhost/${DB_NAME}?sslmode=disable
+DATABASE_URL=${NEW_DB_URL}
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 NODE_ENV=production
