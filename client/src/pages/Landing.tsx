@@ -178,23 +178,23 @@ export default function Landing() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
         {/* Content */}
-        <div className="relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-center px-8 md:px-16 py-10 md:py-16">
+        <div className="relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-start px-8 md:px-16 pt-10 md:pt-14 pb-10">
           <div style={{ maxWidth: "560px" }}>
 
             {/* Age disclaimer */}
-            <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.55)", marginBottom: "0.6rem", fontWeight: 400, letterSpacing: "0.04em" }}>
+            <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.55)", marginBottom: "0.75rem", fontWeight: 400, letterSpacing: "0.04em" }}>
               All users must be 18 years or older
             </p>
 
             {/* Free minutes */}
-            <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "0.75rem", color: "#fff", whiteSpace: "nowrap" }}
+            <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "1rem", color: "#fff", whiteSpace: "nowrap" }}
               data-testid="hero-headline"
             >
               90 MINUTES FREE!
             </h1>
 
             {/* Glass pill */}
-            <div style={{ display: "inline-block", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", padding: "0.35rem 0.9rem", marginBottom: "2rem" }}>
+            <div style={{ display: "inline-block", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", padding: "0.35rem 0.9rem", marginBottom: "2.5rem" }}>
               <p style={{ fontSize: "0.95rem", color: "rgba(255,255,255,0.85)", fontWeight: 400, margin: 0 }}>
                 No credit card required · Click for details
               </p>
