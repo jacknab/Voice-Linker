@@ -4,6 +4,7 @@ import {
   Phone, LogOut, Loader2, User, Clock, Shield, Star, Zap,
   KeyRound, ChevronRight, Eye, EyeOff, CheckCircle2, PhoneCall,
   AlertTriangle, Link2, CheckCircle, History, PhoneIncoming, Timer, Plus, Trash2, PhoneForwarded,
+  X, RefreshCw,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -125,147 +126,296 @@ const PLAN_ICONS = [Star, Zap, Clock];
 const PLAN_COLORS = ["#f59e0b", "#1d4ed8", "#6b7280"];
 const PLAN_KEYS = ["plan1", "plan2", "plan3"];
 
-// ─── Link Phone Card ──────────────────────────────────────────────────────────
-function LinkPhoneCard({
-  attemptsUsed,
+// ─── Link Membership Modal ────────────────────────────────────────────────────
+// Phone-verified linking: generates a 3-digit code the user presses on the
+// phone keypad after calling the access number. Expires in 3 minutes.
+function LinkMembershipModal({
+  accessNumber,
   onSuccess,
-  onLocked,
 }: {
-  attemptsUsed: number;
+  accessNumber: string;
   onSuccess: () => void;
-  onLocked: () => void;
 }) {
-  const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [phone, setPhone] = useState("");
-  const [localAttemptsUsed, setLocalAttemptsUsed] = useState(attemptsUsed);
-  const remaining = MAX_LINK_ATTEMPTS - localAttemptsUsed;
+  const [isOpen, setIsOpen] = useState(false);
+  const [code, setCode] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<Date | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [linked, setLinked] = useState(false);
 
-  const linkMutation = useMutation({
-    mutationFn: (phoneNumber: string) =>
-      apiRequest("POST", "/api/auth/link-phone", { phoneNumber }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-      await queryClient.invalidateQueries({ queryKey: ["/api/auth/membership"] });
-      toast({ title: "Phone linked!", description: "Your membership has been successfully linked." });
-      onSuccess();
-    },
-    onError: async (err: any) => {
-      let message = "Failed to link phone number.";
-      let locked = false;
-      let newAttempts = localAttemptsUsed;
-      try {
-        const body = await err.response?.json?.();
-        if (body?.error) message = body.error;
-        if (body?.locked) locked = true;
-        if (typeof body?.attemptsRemaining === "number") {
-          newAttempts = MAX_LINK_ATTEMPTS - body.attemptsRemaining;
-        }
-      } catch {}
-      setLocalAttemptsUsed(newAttempts);
-      if (locked) {
-        onLocked();
-      } else {
-        toast({ title: "Not found", description: message, variant: "destructive" });
-      }
-    },
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!phone.trim()) return;
-    linkMutation.mutate(phone.trim());
+  const generateCode = async () => {
+    setIsGenerating(true);
+    setGenError(null);
+    setCode(null);
+    setExpiresAt(null);
+    try {
+      const res = await fetch("/api/auth/generate-link-code", { method: "POST", credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate code.");
+      setCode(data.code);
+      const exp = new Date(data.expiresAt);
+      setExpiresAt(exp);
+      setTimeLeft(Math.max(0, Math.floor((exp.getTime() - Date.now()) / 1000)));
+    } catch (err: any) {
+      setGenError(err.message || "Failed to generate code.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
+  const openModal = () => {
+    setIsOpen(true);
+    setLinked(false);
+    generateCode();
+  };
+
+  const closeModal = () => {
+    setIsOpen(false);
+    setCode(null);
+    setExpiresAt(null);
+    setGenError(null);
+    setLinked(false);
+  };
+
+  // Countdown timer
+  useEffect(() => {
+    if (!isOpen || !expiresAt) return;
+    const tick = setInterval(() => {
+      const left = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+      setTimeLeft(left);
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [isOpen, expiresAt]);
+
+  // Poll for successful link every 3 seconds
+  useEffect(() => {
+    if (!isOpen || !code || linked) return;
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.linkedPhoneNumber) {
+          setLinked(true);
+          clearInterval(poll);
+          await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+          await queryClient.invalidateQueries({ queryKey: ["/api/auth/membership"] });
+          setTimeout(() => {
+            closeModal();
+            onSuccess();
+          }, 1800);
+        }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(poll);
+  }, [isOpen, code, linked]);
+
+  const mins = Math.floor(timeLeft / 60);
+  const secs = timeLeft % 60;
+  const countdownStr = `${mins}:${String(secs).padStart(2, "0")}`;
+  const isExpired = timeLeft === 0 && !!expiresAt && !linked;
+
   return (
-    <div
-      data-testid="card-link-phone"
-      style={{
-        background: "#0d1a2e",
-        border: "1px solid #1e3a5f",
-        borderRadius: "14px",
-        padding: "1.75rem",
-        marginBottom: "1.5rem",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-        <div style={{ width: 44, height: 44, background: "#1d4ed820", border: "1px solid #1d4ed840", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "0.1rem" }}>
-          <Link2 size={20} color="#60a5fa" />
-        </div>
-        <div style={{ flex: 1 }}>
-          <h3 style={{ color: "#fff", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.25rem" }}>
-            Link Your Phone Membership
-          </h3>
-          <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: "0 0 1.25rem", lineHeight: 1.5 }}>
-            Enter the phone number you use to call in. This links your existing membership so you can view your balance and buy additional time from this dashboard.
-          </p>
-
-          {remaining < MAX_LINK_ATTEMPTS && remaining > 0 && (
-            <div
-              data-testid="alert-attempts-remaining"
-              style={{ background: "#1c0a00", border: "1px solid #7c2d12", borderRadius: "8px", padding: "0.65rem 0.875rem", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}
-            >
-              <AlertTriangle size={14} color="#fb923c" />
-              <span style={{ color: "#fb923c", fontSize: "0.78rem" }}>
-                {remaining} attempt{remaining === 1 ? "" : "s"} remaining before your account is locked.
-              </span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <input
-              type="tel"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="(555) 555-5555"
-              required
-              disabled={linkMutation.isPending || remaining <= 0}
-              data-testid="input-link-phone"
-              style={{
-                flex: "1 1 200px",
-                background: "#111",
-                border: "1px solid #2a3a5a",
-                borderRadius: "8px",
-                color: "#fff",
-                fontSize: "0.9rem",
-                padding: "0.65rem 0.875rem",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-              onFocus={e => (e.target.style.borderColor = "#1d4ed8")}
-              onBlur={e => (e.target.style.borderColor = "#2a3a5a")}
-            />
+    <>
+      {/* ── Unlinked card with Link Membership button ── */}
+      <div
+        data-testid="card-link-phone"
+        style={{
+          background: "#0d1a2e",
+          border: "1px solid #1e3a5f",
+          borderRadius: "14px",
+          padding: "1.75rem",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
+          <div style={{ width: 44, height: 44, background: "#1d4ed820", border: "1px solid #1d4ed840", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "0.1rem" }}>
+            <Link2 size={20} color="#60a5fa" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h3 style={{ color: "#fff", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.3rem" }}>
+              Link Your Membership
+            </h3>
+            <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: "0 0 1.25rem", lineHeight: 1.6 }}>
+              Connect your phone membership to this web account to view your balance, call history, and manage your subscription online.
+            </p>
             <button
-              type="submit"
-              disabled={linkMutation.isPending || !phone.trim() || remaining <= 0}
-              data-testid="button-link-phone"
+              onClick={openModal}
+              data-testid="button-link-membership"
               style={{
                 background: "#1d4ed8",
                 color: "#fff",
                 border: "none",
                 borderRadius: "8px",
-                padding: "0.65rem 1.25rem",
+                padding: "0.65rem 1.5rem",
                 fontWeight: 700,
-                fontSize: "0.85rem",
-                cursor: linkMutation.isPending || remaining <= 0 ? "not-allowed" : "pointer",
-                opacity: linkMutation.isPending || remaining <= 0 ? 0.6 : 1,
-                display: "flex",
+                fontSize: "0.875rem",
+                cursor: "pointer",
+                display: "inline-flex",
                 alignItems: "center",
-                gap: "0.4rem",
-                flexShrink: 0,
+                gap: "0.5rem",
               }}
             >
-              {linkMutation.isPending && <Loader2 size={14} className="animate-spin" />}
+              <PhoneCall size={15} />
               Link Membership
             </button>
-          </form>
-
-          <p style={{ color: "#4a6a8a", fontSize: "0.73rem", margin: "0.75rem 0 0" }}>
-            Only your own phone number will work — this connects to the membership on that number.
-          </p>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* ── Modal overlay ── */}
+      {isOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.75)",
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+          onClick={e => { if (e.target === e.currentTarget) closeModal(); }}
+        >
+          <div
+            style={{
+              background: "#0a0f1e",
+              border: "1px solid #1e3a5f",
+              borderRadius: "18px",
+              padding: "2rem",
+              width: "100%",
+              maxWidth: "420px",
+              position: "relative",
+            }}
+          >
+            {/* Close button */}
+            <button
+              onClick={closeModal}
+              style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: "pointer", color: "#555", padding: "0.25rem" }}
+            >
+              <X size={20} />
+            </button>
+
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem" }}>
+              <div style={{ width: 42, height: 42, background: "#1d4ed820", border: "1px solid #1d4ed840", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <PhoneCall size={20} color="#60a5fa" />
+              </div>
+              <div>
+                <h3 style={{ color: "#fff", fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Link Your Membership</h3>
+                <p style={{ color: "#555", fontSize: "0.75rem", margin: 0 }}>Phone-verified account linking</p>
+              </div>
+            </div>
+
+            {linked ? (
+              /* ── Success state ── */
+              <div style={{ textAlign: "center", padding: "1.5rem 0" }}>
+                <div style={{ width: 56, height: 56, background: "#14532d30", border: "1px solid #166534", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
+                  <CheckCircle size={28} color="#22c55e" />
+                </div>
+                <p style={{ color: "#22c55e", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.35rem" }}>Membership Linked!</p>
+                <p style={{ color: "#666", fontSize: "0.82rem", margin: 0 }}>Your phone number has been connected to this account.</p>
+              </div>
+            ) : isGenerating ? (
+              /* ── Generating state ── */
+              <div style={{ textAlign: "center", padding: "2rem 0" }}>
+                <Loader2 size={30} color="#1d4ed8" className="animate-spin" style={{ margin: "0 auto 1rem" }} />
+                <p style={{ color: "#666", fontSize: "0.85rem", margin: 0 }}>Generating your link code…</p>
+              </div>
+            ) : genError ? (
+              /* ── Error state ── */
+              <div style={{ textAlign: "center", padding: "1rem 0" }}>
+                <p style={{ color: "#f87171", fontSize: "0.85rem", margin: "0 0 1rem" }}>{genError}</p>
+                <button
+                  onClick={generateCode}
+                  style={{ background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px", padding: "0.6rem 1.25rem", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.5rem" }}
+                >
+                  <RefreshCw size={14} /> Try Again
+                </button>
+              </div>
+            ) : code ? (
+              /* ── Code display state ── */
+              <>
+                {/* Instructions */}
+                <div style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "10px", padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
+                  <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: 0, lineHeight: 1.7 }}>
+                    <strong style={{ color: "#60a5fa" }}>Step 1.</strong> Call your access number below.<br />
+                    <strong style={{ color: "#60a5fa" }}>Step 2.</strong> When the system answers, enter the 3-digit code followed by the <strong>#</strong> key.<br />
+                    <strong style={{ color: "#60a5fa" }}>Step 3.</strong> This page will update automatically once verified.
+                  </p>
+                </div>
+
+                {/* Access number */}
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <p style={{ color: "#555", fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.35rem" }}>Your Access Number</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <Phone size={15} color="#60a5fa" />
+                    <span style={{ color: "#fff", fontSize: "1.05rem", fontWeight: 700, letterSpacing: "0.03em" }}>{accessNumber}</span>
+                  </div>
+                </div>
+
+                {/* Code display */}
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <p style={{ color: "#555", fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.5rem" }}>Your Link Code</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                    <div
+                      style={{
+                        background: isExpired ? "#1a1a1a" : "#0d1a2e",
+                        border: `2px solid ${isExpired ? "#333" : "#1d4ed8"}`,
+                        borderRadius: "12px",
+                        padding: "0.875rem 1.5rem",
+                        flex: 1,
+                        textAlign: "center",
+                      }}
+                    >
+                      <span
+                        style={{
+                          color: isExpired ? "#444" : "#fff",
+                          fontSize: "2.5rem",
+                          fontWeight: 800,
+                          letterSpacing: "0.35em",
+                          fontFamily: "monospace",
+                        }}
+                      >
+                        {code}
+                      </span>
+                    </div>
+                    {isExpired && (
+                      <button
+                        onClick={generateCode}
+                        title="Generate new code"
+                        style={{ background: "#1a2a4a", border: "1px solid #1e3a5f", borderRadius: "8px", padding: "0.65rem", cursor: "pointer", color: "#60a5fa", display: "flex", alignItems: "center" }}
+                      >
+                        <RefreshCw size={16} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Timer & status */}
+                {!isExpired ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <Timer size={14} color={timeLeft < 60 ? "#ef4444" : "#22c55e"} />
+                    <span style={{ color: timeLeft < 60 ? "#ef4444" : "#22c55e", fontSize: "0.82rem", fontWeight: 600 }}>
+                      Code expires in {countdownStr}
+                    </span>
+                    <span style={{ color: "#333", fontSize: "0.78rem", marginLeft: "auto" }}>Waiting for verification…</span>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <AlertTriangle size={14} color="#f87171" />
+                    <span style={{ color: "#f87171", fontSize: "0.82rem" }}>Code expired — click the refresh icon to get a new one.</span>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -544,10 +694,9 @@ export default function Dashboard() {
           <div>
             {/* Phone linking or membership info */}
             {!me.linkedPhoneNumber ? (
-              <LinkPhoneCard
-                attemptsUsed={me.linkAttempts}
+              <LinkMembershipModal
+                accessNumber={accessNumber}
                 onSuccess={() => queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] })}
-                onLocked={() => logoutMutation.mutate()}
               />
             ) : phoneMembership ? (
               <MembershipInfoCard membership={phoneMembership} siteName={siteName} />

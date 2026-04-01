@@ -434,6 +434,46 @@ router.delete("/api/auth/alt-phones/:id", async (req: Request, res: Response) =>
   }
 });
 
+// ─── Generate Phone Link Code ─────────────────────────────────────────────────
+// Generates a 3-digit time-limited code the user presses on the phone keypad
+// to verify they own that phone and link it to this web account.
+router.post("/api/auth/generate-link-code", async (req: Request, res: Response) => {
+  if (!req.session.webUserId) return res.status(401).json({ error: "Not authenticated." });
+
+  try {
+    const webUser = await storage.getWebUserById(req.session.webUserId);
+    if (!webUser) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ error: "Session expired." });
+    }
+    if (webUser.linkedPhoneNumber) {
+      return res.status(400).json({ error: "A phone number is already linked to this account." });
+    }
+
+    // Re-use an existing active code if one was recently generated
+    const existing = await storage.getActiveCodeByWebUserId(webUser.id);
+    if (existing) {
+      return res.json({ code: existing.code, expiresAt: existing.expiresAt });
+    }
+
+    // Generate a unique 3-digit code (100–999 avoids a leading-zero display issue)
+    let code = "";
+    let attempts = 0;
+    do {
+      code = String(Math.floor(Math.random() * 900) + 100);
+      attempts++;
+    } while (attempts < 10 && !!(await storage.getActiveMembershipLinkCode(code)));
+
+    const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // expires in 3 minutes
+    const linkCode = await storage.createMembershipLinkCode(webUser.id, code, expiresAt);
+    console.log(`[auth] generate-link-code: code=${linkCode.code} for webUserId=${webUser.id}`);
+    return res.json({ code: linkCode.code, expiresAt: linkCode.expiresAt });
+  } catch (err) {
+    console.error("[auth] generate-link-code error:", err);
+    return res.status(500).json({ error: "Failed to generate link code. Please try again." });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Admin authentication
 // ═══════════════════════════════════════════════════════════════════════════════

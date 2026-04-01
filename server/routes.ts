@@ -1661,8 +1661,38 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     const digits = (req.body?.Digits as string) ?? "";
     const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
 
-    if (digits.length === 10) {
+    if (digits.length === 3) {
+      // 3-digit web account link code — verify caller's phone and link to web account
+      try {
+        const linkCode = await storage.getActiveMembershipLinkCode(digits);
+        if (linkCode) {
+          const phoneUser = await storage.getUserByPhone(fromNumber);
+          if (phoneUser) {
+            await storage.linkWebUserPhone(linkCode.webUserId, fromNumber);
+            await storage.consumeMembershipLinkCode(linkCode.id);
+            console.log(`[voice] Web link code ${digits} matched — linked ${fromNumber} to webUserId=${linkCode.webUserId}`);
+            playPrompt(twiml, req, "link_code_success.mp3",
+              "Your phone number has been linked to your web account. Welcome.");
+          } else {
+            // Phone number not in system yet — link will be set up on first full call
+            await storage.linkWebUserPhone(linkCode.webUserId, fromNumber);
+            await storage.consumeMembershipLinkCode(linkCode.id);
+            console.log(`[voice] Web link code ${digits} matched (new caller) — linked ${fromNumber} to webUserId=${linkCode.webUserId}`);
+            playPrompt(twiml, req, "link_code_success.mp3",
+              "Your phone number has been linked to your web account. Welcome.");
+          }
+        } else {
+          console.log(`[voice] Web link code ${digits} invalid or expired`);
+          playPrompt(twiml, req, "link_code_invalid.mp3",
+            "That code is invalid or has expired. Please generate a new code from your web account and try again.");
+        }
+      } catch (err) {
+        console.error("[voice] Web link code error:", err);
+      }
+      twiml.redirect("/voice/entry-check");
+    } else if (digits.length === 10) {
       // Full 10-digit membership number entered — look up directly (no PIN required)
       try {
         const memberUser = await storage.getUserByMembershipNumber(digits);

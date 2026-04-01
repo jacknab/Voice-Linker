@@ -341,3 +341,17 @@ export const insertWebUserSchema = createInsertSchema(webUsers).omit({ id: true,
 
 export type WebUser = typeof webUsers.$inferSelect;
 export type InsertWebUser = z.infer<typeof insertWebUserSchema>;
+
+// ─── Membership Link Codes — short-lived codes for phone-verified web linking ──
+// A web user generates a 3-digit code, calls the phone line, and presses those
+// digits to prove they own the phone and link it to their web account.
+export const membershipLinkCodes = pgTable("membership_link_codes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  webUserId: uuid("web_user_id").notNull().references(() => webUsers.id, { onDelete: "cascade" }),
+  code: text("code").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type MembershipLinkCode = typeof membershipLinkCodes.$inferSelect;

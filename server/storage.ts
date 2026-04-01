@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, membershipLinkCodes, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount, type MembershipLinkCode } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -193,6 +193,12 @@ export interface IStorage {
   addAltPhoneForWebUser(webUserId: string, phoneNumber: string): Promise<WebUserAltPhone>;
   removeAltPhoneForWebUser(webUserId: string, altPhoneId: string): Promise<void>;
   getPrimaryPhoneForAltNumber(phoneNumber: string): Promise<string | null>;
+
+  // Membership link codes (phone-verified web account linking)
+  createMembershipLinkCode(webUserId: string, code: string, expiresAt: Date): Promise<MembershipLinkCode>;
+  getActiveMembershipLinkCode(code: string): Promise<MembershipLinkCode | undefined>;
+  getActiveCodeByWebUserId(webUserId: string): Promise<MembershipLinkCode | undefined>;
+  consumeMembershipLinkCode(codeId: string): Promise<void>;
 
   // Admin accounts
   getAdminAccountByEmail(email: string): Promise<AdminAccount | undefined>;
@@ -1303,6 +1309,39 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(webUsers, eq(webUserAltPhones.webUserId, webUsers.id))
       .where(eq(webUserAltPhones.phoneNumber, phoneNumber));
     return row?.linkedPhoneNumber ?? null;
+  }
+
+  async createMembershipLinkCode(webUserId: string, code: string, expiresAt: Date): Promise<MembershipLinkCode> {
+    const [row] = await db.insert(membershipLinkCodes).values({ webUserId, code, expiresAt }).returning();
+    return row;
+  }
+
+  async getActiveMembershipLinkCode(code: string): Promise<MembershipLinkCode | undefined> {
+    const now = new Date();
+    const [row] = await db.select().from(membershipLinkCodes).where(
+      and(
+        eq(membershipLinkCodes.code, code),
+        isNull(membershipLinkCodes.usedAt),
+        sql`${membershipLinkCodes.expiresAt} > ${now}`,
+      )
+    ).limit(1);
+    return row;
+  }
+
+  async getActiveCodeByWebUserId(webUserId: string): Promise<MembershipLinkCode | undefined> {
+    const now = new Date();
+    const [row] = await db.select().from(membershipLinkCodes).where(
+      and(
+        eq(membershipLinkCodes.webUserId, webUserId),
+        isNull(membershipLinkCodes.usedAt),
+        sql`${membershipLinkCodes.expiresAt} > ${now}`,
+      )
+    ).orderBy(membershipLinkCodes.createdAt).limit(1);
+    return row;
+  }
+
+  async consumeMembershipLinkCode(codeId: string): Promise<void> {
+    await db.update(membershipLinkCodes).set({ usedAt: new Date() }).where(eq(membershipLinkCodes.id, codeId));
   }
 
   async getAdminAccountByEmail(email: string): Promise<AdminAccount | undefined> {
