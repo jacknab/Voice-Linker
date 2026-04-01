@@ -48,3 +48,4 @@ expertMode = true
 
 [userenv.shared]
 ELEVENLABS_VOICE_ID = "L3WdRbXf74ApISrFG9kO"
+TWILIO_PAY_CONNECTOR = "phonebooth"
