@@ -27,7 +27,7 @@ step()    { echo -e "\n${BOLD}${CYAN}━━━  $*  ━━━━━━━━━�
 APP_PORT=5050                           # internal Node.js port (nginx proxies to this)
 DB_USER="phonebooth_user"              # PostgreSQL role
 DB_NAME="phonebooth_db"                # PostgreSQL database
-DB_PASSWORD="changeme_strong_password_here"  # ← change before first run
+DB_PASSWORD="1825Logan305"
 SERVICE_NAME="phonebooth"              # systemd service name
 CERT_DIR="assicrentals.com-0001"       # Let's Encrypt cert folder (already issued)
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
