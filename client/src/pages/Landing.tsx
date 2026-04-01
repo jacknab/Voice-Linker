@@ -118,10 +118,10 @@ export default function Landing() {
         <img
           src={heroImg}
           alt="Man on the phone"
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 25%" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 25%", filter: "saturate(0.65) brightness(0.9)" }}
         />
         {/* Dark gradient overlay — strong on right for readability, fading left */}
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(270deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.82) 42%, rgba(0,0,0,0.35) 75%, rgba(0,0,0,0.1) 100%)" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(270deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.78) 42%, rgba(0,0,0,0.45) 75%, rgba(0,0,0,0.38) 100%)" }} />
         {/* Bottom fade to dark */}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
