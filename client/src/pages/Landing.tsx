@@ -3,7 +3,7 @@ import { Phone, Loader2, Menu, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import heroImg from "@assets/hero_guy_1.png";
 
-const DEFAULT_PHONE = "1-800-555-0100";
+const DEFAULT_PHONE = "720-730-2508";
 
 
 interface LocalNumberData {
@@ -173,7 +173,7 @@ export default function Landing() {
             Phone Booth is the best place to chat with local guys like you — anytime, anywhere.
           </h2>
           <p style={{ fontSize: "1rem", color: "#444", lineHeight: 1.75, marginBottom: "1.5rem" }}>
-            <strong>Phone Booth</strong> is a place where you can chat with real gay, bi, and curious men and connect with new people. The largest gay personals chat line company in North America, <strong>Phone Booth</strong> has been the go-to outlet for men since 1990.
+            <strong>Phone Booth</strong> is a place where you can chat with real gay, bi, and curious men and connect with new people. The largest gay personals chat line company in North America, <strong>Phone Booth</strong> has been the go-to outlet for men seeking men.
           </p>
           <CallLink phone={displayPhone}
             style={{ fontSize: "1.25rem", fontWeight: 800, color: "#1d6fa8", textDecoration: "none", letterSpacing: "-0.01em" }}

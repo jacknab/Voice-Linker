@@ -264,6 +264,13 @@ const callWarningShown  = new Set<string>(); // already heard the < 15-minute wa
 interface BillingCheckpoint { lastCheck: number; fromNumber: string; }
 const billingCheckpoints = new Map<string, BillingCheckpoint>(); // CallSid → checkpoint
 
+// Membership lookup override: when a caller enters a membership number from a different
+// phone, this maps callSid → the membership holder's phone number for billing purposes.
+const callMembershipOverride = new Map<string, string>(); // callSid → membership holder phone
+
+// Temporary store for a membership number mid-entry (between the 10-digit gather and pin entry)
+const pendingMembershipEntries = new Map<string, string>(); // callSid → membership number
+
 // Build the base URL of this server from an incoming Twilio request
 function baseUrl(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
@@ -1140,6 +1147,7 @@ export async function registerRoutes(
 
   // Deducts seconds elapsed since the last billing checkpoint.
   // Called before each greeting/navigation step for accurate incremental billing.
+  // When a membership override is active, deducts from the membership holder's account.
   async function syncBilling(callSid: string): Promise<void> {
     const checkpoint = billingCheckpoints.get(callSid);
     if (!checkpoint) return;
@@ -1148,9 +1156,11 @@ export async function registerRoutes(
     if (elapsedSeconds <= 0) return;
     checkpoint.lastCheck = now;
     try {
-      const user = await storage.getOrCreateUser(checkpoint.fromNumber);
+      const overridePhone = callMembershipOverride.get(callSid);
+      const billingPhone = overridePhone ?? checkpoint.fromNumber;
+      const user = await storage.getOrCreateUser(billingPhone);
       await storage.deductSeconds(user.id, elapsedSeconds);
-      console.log(`[billing] syncBilling: deducted ${elapsedSeconds}s from userId=${user.id}`);
+      console.log(`[billing] syncBilling: deducted ${elapsedSeconds}s from userId=${user.id}${overridePhone ? " (membership override)" : ""}`);
     } catch (err) {
       console.error("[billing] syncBilling error:", err);
     }
@@ -1326,7 +1336,7 @@ export async function registerRoutes(
       } catch (err) {
         console.error(`[status] Error removing active call ${callSid}:`, err);
       }
-      // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, and region mapping
+      // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, region mapping, and membership override
       callerBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
@@ -1334,6 +1344,8 @@ export async function registerRoutes(
       callTimeAnnounced.delete(callSid);
       callWarningShown.delete(callSid);
       callRegion.delete(callSid);
+      callMembershipOverride.delete(callSid);
+      pendingMembershipEntries.delete(callSid);
 
       // Clean up any live connect invite that this caller initiated
       for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
@@ -1388,15 +1400,15 @@ export async function registerRoutes(
 
   // ─── 1b. Shared Entry Flow ────────────────────────────────────────────────
   // Reached from both /voice and /voice/:slug after the call is registered.
-  // Always plays the system greeting then branches on account state.
+  // Plays the system greeting + disclaimer, then prompts for membership number entry.
   app.post("/voice/entry", async (req, res) => {
     const twiml = new VoiceResponse();
-    const fromNumber = req.body?.From as string;
-    const callSid = req.body?.CallSid as string;
 
     try {
       playPrompt(twiml, req, "system_greeting.mp3",
         "Welcome to Interactive Mail. Interactive Mail assumes no responsibility for personal meetings.");
+
+      playPrompt(twiml, req, "disclaimer.mp3", "");
 
       // Play Announcement / MOTD if enabled
       const motdCfg = await getMembershipSettingsCached();
@@ -1404,6 +1416,151 @@ export async function registerRoutes(
         playPrompt(twiml, req, "motd.mp3", motdCfg.motdText);
       }
 
+      // Prompt caller for optional membership number entry
+      twiml.redirect("/voice/membership-entry");
+    } catch (error) {
+      console.error("[voice] /voice/entry error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b-i. Membership Number Entry ────────────────────────────────────────
+  // Prompts the caller to enter their 10-digit membership number or press # to skip.
+  app.post("/voice/membership-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 10,
+      finishOnKey: "#",
+      action: "/voice/handle-membership-entry",
+      timeout: 10,
+    });
+    playPrompt(gather, req, "membership_entry_prompt.mp3",
+      "If you have a membership, please enter your 10-digit membership number now. Otherwise, press the pound key.");
+    // Timeout with no input → skip to account check
+    twiml.redirect("/voice/entry-check");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b-ii. Handle Membership Number Entry ─────────────────────────────────
+  app.post("/voice/handle-membership-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) ?? "";
+    const callSid = req.body?.CallSid as string;
+
+    if (digits.length === 10) {
+      // Full 10-digit membership number entered — store it and ask for PIN
+      pendingMembershipEntries.set(callSid, digits);
+      twiml.redirect("/voice/membership-pin");
+    } else {
+      // Pressed # (empty digits) or partial/invalid input — continue without membership
+      twiml.redirect("/voice/entry-check");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b-iii. Membership PIN Entry ──────────────────────────────────────────
+  app.post("/voice/membership-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-membership-pin",
+      timeout: 10,
+    });
+    playPrompt(gather, req, "membership_pin_prompt.mp3",
+      "Please enter your 4-digit PIN number.");
+    // Timeout with no PIN → skip to account check (pending entry is cleaned up on hangup)
+    twiml.redirect("/voice/entry-check");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b-iv. Handle Membership PIN ──────────────────────────────────────────
+  app.post("/voice/handle-membership-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const pin = (req.body?.Digits as string) ?? "";
+    const membershipNumber = pendingMembershipEntries.get(callSid);
+    pendingMembershipEntries.delete(callSid);
+
+    if (membershipNumber && pin.length === 4) {
+      try {
+        const memberUser = await storage.getUserByMembershipNumber(membershipNumber);
+        if (memberUser && memberUser.membershipPin === pin) {
+          // Valid — link this call session to the membership account for billing
+          callMembershipOverride.set(callSid, memberUser.phoneNumber);
+          console.log(`[voice] Membership linked: callSid=${callSid} → userId=${memberUser.id} (membershipNumber=${membershipNumber})`);
+          playPrompt(twiml, req, "membership_linked.mp3", "Your membership has been verified. Welcome.");
+          twiml.redirect("/voice/entry-check-override");
+        } else {
+          // Invalid membership number or PIN
+          console.log(`[voice] Membership validation failed: membershipNumber=${membershipNumber}, pinMatch=${memberUser ? (memberUser.membershipPin === pin) : "no user"}`);
+          playPrompt(twiml, req, "membership_invalid.mp3",
+            "We could not verify your membership number or PIN. Please try calling from your registered phone number.");
+          twiml.redirect("/voice/entry-check");
+        }
+      } catch (err) {
+        console.error("[voice] Membership pin validation error:", err);
+        twiml.redirect("/voice/entry-check");
+      }
+    } else {
+      twiml.redirect("/voice/entry-check");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1c-alt. Entry Check with Override ────────────────────────────────────
+  // Used after a successful membership link — checks the MEMBERSHIP account's state.
+  app.post("/voice/entry-check-override", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const overridePhone = callMembershipOverride.get(callSid);
+      const user = overridePhone
+        ? await storage.getOrCreateUser(overridePhone)
+        : await getOrCreateUser(fromNumber);
+
+      const remainingSeconds = user.remainingSeconds ?? 0;
+
+      if (!user.membershipTier) {
+        twiml.redirect("/voice/free-trial-offer");
+      } else if (remainingSeconds <= 0) {
+        playPrompt(twiml, req, "access_expired.mp3", "Your membership time has expired.");
+        twiml.redirect("/voice/membership-purchase");
+      } else {
+        playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
+        callTimeAnnounced.add(callSid);
+        twiml.redirect("/voice/phone-booth");
+      }
+    } catch (error) {
+      console.error("[voice] /voice/entry-check-override error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1c. Entry Check ──────────────────────────────────────────────────────
+  // Checks the caller's own account state and branches accordingly.
+  app.post("/voice/entry-check", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    try {
       const user = await getOrCreateUser(fromNumber);
       const remainingSeconds = user.remainingSeconds ?? 0;
 
@@ -1422,7 +1579,7 @@ export async function registerRoutes(
         twiml.redirect("/voice/phone-booth");
       }
     } catch (error) {
-      console.error("[voice] /voice/entry error:", error);
+      console.error("[voice] /voice/entry-check error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
       twiml.hangup();
     }
@@ -1943,8 +2100,9 @@ export async function registerRoutes(
       playPrompt(twiml, req, "time_deduction_start.mp3",
         "Time is now being deducted from your membership.");
 
-      // Start the billing checkpoint (only if not already running this call)
-      startBilling(callSid, fromNumber);
+      // Start the billing checkpoint — use the membership override account if linked
+      const billingPhone = callMembershipOverride.get(callSid) ?? fromNumber;
+      startBilling(callSid, billingPhone);
 
       twiml.redirect("/voice/browse-profiles");
     } catch (error) {
