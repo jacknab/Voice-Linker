@@ -3,7 +3,7 @@ import { Phone, Loader2, Menu, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import heroImgMM from "@assets/hero_guy_1.png";
-import heroImgMW from "@assets/image_1775033010141.png";
+import heroImgMW from "@assets/hero_girl_phone.png";
 
 const DEFAULT_PHONE = "800-730-2508";
 const DEFAULT_SITE_NAME = "Phone Booth";
