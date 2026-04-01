@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Upload, Trash2, Play, Pause, Plus, Phone, LayoutDashboard,
   MessageSquare, PhoneCall, X, MapPin, Clock, Copy, Eye, EyeOff,
@@ -3533,10 +3533,19 @@ function SectionActions({ activeTab, onAddProfile, onAddRegion, onSaveMembership
 
 // ── Admin root ────────────────────────────────────────────────────────────────
 export default function Admin() {
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [showUpload, setShowUpload] = useState(false);
   const [showAddRegion, setShowAddRegion] = useState(false);
   const [saveMembership, setSaveMembership] = useState(false);
+
+  const logoutMutation = useMutation({
+    mutationFn: () => fetch("/api/admin/logout", { method: "POST" }),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["/api/admin/me"] });
+      setLocation("/admin/login");
+    },
+  });
 
   const activeLabel = tabs.find(t => t.id === activeTab)?.label ?? "";
 
@@ -3579,10 +3588,15 @@ export default function Admin() {
 
         {/* Bottom */}
         <div className="px-2 py-3 border-t border-white/10 space-y-0.5">
-          <Link href="/" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-white/40 hover:text-white/70 hover:bg-white/5 font-mono text-xs tracking-widest uppercase transition-colors border-l-2 border-transparent pl-[10px]">
+          <button
+            data-testid="btn-admin-logout"
+            onClick={() => logoutMutation.mutate()}
+            disabled={logoutMutation.isPending}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-white/40 hover:text-white/70 hover:bg-white/5 font-mono text-xs tracking-widest uppercase transition-colors border-l-2 border-transparent pl-[10px]"
+          >
             <LogOut size={15} />
-            Exit
-          </Link>
+            {logoutMutation.isPending ? "Signing out…" : "Sign Out"}
+          </button>
         </div>
       </aside>
 

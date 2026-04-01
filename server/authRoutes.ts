@@ -9,6 +9,7 @@ import { z } from "zod";
 declare module "express-session" {
   interface SessionData {
     webUserId?: string;
+    adminAccountId?: string;
   }
 }
 
@@ -431,6 +432,39 @@ router.delete("/api/auth/alt-phones/:id", async (req: Request, res: Response) =>
     console.error("[auth] alt-phones DELETE error:", err);
     return res.status(500).json({ error: "Failed to remove alternate phone number." });
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Admin authentication
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// POST /api/admin/login
+router.post("/api/admin/login", async (req: Request, res: Response) => {
+  const { email, password } = req.body ?? {};
+  if (!email || !password) return res.status(400).json({ error: "Email and password are required." });
+  try {
+    const account = await storage.getAdminAccountByEmail(email);
+    if (!account) return res.status(401).json({ error: "Invalid credentials." });
+    const valid = await bcrypt.compare(password, account.passwordHash);
+    if (!valid) return res.status(401).json({ error: "Invalid credentials." });
+    req.session.adminAccountId = account.id;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[admin-auth] login error:", err);
+    return res.status(500).json({ error: "Login failed." });
+  }
+});
+
+// POST /api/admin/logout
+router.post("/api/admin/logout", (req: Request, res: Response) => {
+  req.session.adminAccountId = undefined;
+  return res.json({ ok: true });
+});
+
+// GET /api/admin/me  — returns 200 {ok:true} if logged in, 401 otherwise
+router.get("/api/admin/me", (req: Request, res: Response) => {
+  if (!req.session.adminAccountId) return res.status(401).json({ error: "Not authenticated." });
+  return res.json({ ok: true });
 });
 
 export default router;

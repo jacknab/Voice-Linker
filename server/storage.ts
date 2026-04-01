@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -193,6 +193,10 @@ export interface IStorage {
   addAltPhoneForWebUser(webUserId: string, phoneNumber: string): Promise<WebUserAltPhone>;
   removeAltPhoneForWebUser(webUserId: string, altPhoneId: string): Promise<void>;
   getPrimaryPhoneForAltNumber(phoneNumber: string): Promise<string | null>;
+
+  // Admin accounts
+  getAdminAccountByEmail(email: string): Promise<AdminAccount | undefined>;
+  createAdminAccount(email: string, passwordHash: string): Promise<AdminAccount>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -1296,6 +1300,16 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(webUsers, eq(webUserAltPhones.webUserId, webUsers.id))
       .where(eq(webUserAltPhones.phoneNumber, phoneNumber));
     return row?.linkedPhoneNumber ?? null;
+  }
+
+  async getAdminAccountByEmail(email: string): Promise<AdminAccount | undefined> {
+    const [row] = await db.select().from(adminAccounts).where(eq(adminAccounts.email, email));
+    return row;
+  }
+
+  async createAdminAccount(email: string, passwordHash: string): Promise<AdminAccount> {
+    const [row] = await db.insert(adminAccounts).values({ email, passwordHash }).returning();
+    return row;
   }
 }
 

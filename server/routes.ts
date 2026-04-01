@@ -438,6 +438,18 @@ export async function registerRoutes(
   // ── Auth routes ───────────────────────────────────────────────────────────
   app.use(authRouter);
 
+  // ── Admin auth middleware ─────────────────────────────────────────────────
+  // Protects all /api/admin/* routes except the login/logout/me endpoints
+  function requireAdmin(req: Request, res: Response, next: NextFunction) {
+    if (!req.session.adminAccountId) {
+      return res.status(401).json({ error: "Admin authentication required." });
+    }
+    next();
+  }
+
+  // login/logout/me are handled by authRouter before this middleware runs
+  app.use("/api/admin", requireAdmin);
+
   // ── Audit log helper ──────────────────────────────────────────────────────
   function logAudit(
     action: string,
