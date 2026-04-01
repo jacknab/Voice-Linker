@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -25,6 +25,7 @@ export interface CallerDetail {
   user: User;
   profile: Profile | null;
   zipCode: ZipCode | null;
+  mailbox: Mailbox | null;
   callHistory: { id: string; callSid: string; durationSeconds: number | null; startedAt: Date | null; completedAt: Date | null; toPhoneNumber: string | null }[];
   sentMessages: { id: string; toPhoneNumber: string; createdAt: Date | null; isRead: boolean | null }[];
   receivedMessages: { id: string; fromPhoneNumber: string; createdAt: Date | null; isRead: boolean | null }[];
@@ -148,6 +149,11 @@ export interface IStorage {
   adjustUserCredits(userId: string, deltaSeconds: number): Promise<User>;
   adminBlockByUserIds(blockerId: string, blockedUserId: string): Promise<void>;
   adminUnblockByUserIds(blockerId: string, blockedUserId: string): Promise<void>;
+
+  // Mailboxes
+  getMailboxByUserId(userId: string): Promise<Mailbox | null>;
+  getMailboxByNumber(mailboxNumber: string): Promise<Mailbox | null>;
+  getOrCreateMailbox(userId: string): Promise<Mailbox>;
 
   // Flagged content queue
   getAllFlaggedItems(status?: string): Promise<FlaggedItemWithDetails[]>;
@@ -832,10 +838,13 @@ export class DatabaseStorage implements IStorage {
       ? (await db.select().from(zipCodes).where(eq(zipCodes.id, user.zipCodeId)).limit(1))[0] ?? null
       : null;
 
+    const [mailbox] = await db.select().from(mailboxes).where(eq(mailboxes.userId, userId));
+
     return {
       user,
       profile: profile ?? null,
       zipCode,
+      mailbox: mailbox ?? null,
       callHistory: callHistory.rows as any[],
       sentMessages: sentRows.rows as any[],
       receivedMessages: receivedRows.rows as any[],
@@ -862,6 +871,35 @@ export class DatabaseStorage implements IStorage {
     await db.delete(blockedUsers).where(
       and(eq(blockedUsers.blockerId, blockerId), eq(blockedUsers.blockedUserId, blockedUserId))
     );
+  }
+
+  async getMailboxByUserId(userId: string): Promise<Mailbox | null> {
+    const [mailbox] = await db.select().from(mailboxes).where(eq(mailboxes.userId, userId));
+    return mailbox ?? null;
+  }
+
+  async getMailboxByNumber(mailboxNumber: string): Promise<Mailbox | null> {
+    const [mailbox] = await db.select().from(mailboxes).where(eq(mailboxes.mailboxNumber, mailboxNumber));
+    return mailbox ?? null;
+  }
+
+  async getOrCreateMailbox(userId: string): Promise<Mailbox> {
+    const existing = await this.getMailboxByUserId(userId);
+    if (existing) return existing;
+
+    // Generate a unique 5-digit mailbox number (10000–99999)
+    let mailboxNumber: string;
+    let attempts = 0;
+    do {
+      mailboxNumber = String(Math.floor(10000 + Math.random() * 90000));
+      const conflict = await this.getMailboxByNumber(mailboxNumber);
+      if (!conflict) break;
+      attempts++;
+    } while (attempts < 20);
+
+    const [mailbox] = await db.insert(mailboxes).values({ userId, mailboxNumber }).returning();
+    console.log(`[mailbox] Created mailbox ${mailboxNumber} for userId=${userId}`);
+    return mailbox;
   }
 
   async getAllFlaggedItems(status?: string): Promise<FlaggedItemWithDetails[]> {

@@ -279,6 +279,22 @@ export const insertFlaggedContentSchema = createInsertSchema(flaggedContent).omi
 export type FlaggedContent = typeof flaggedContent.$inferSelect;
 export type InsertFlaggedContent = z.infer<typeof insertFlaggedContentSchema>;
 
+// ─── Mailboxes — one per member (free trial or paid) ─────────────────────────
+export const mailboxes = pgTable("mailboxes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  mailboxNumber: text("mailbox_number").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const mailboxesRelations = relations(mailboxes, ({ one }) => ({
+  user: one(users, { fields: [mailboxes.userId], references: [users.id] }),
+}));
+
+export const insertMailboxSchema = createInsertSchema(mailboxes).omit({ id: true, createdAt: true });
+export type Mailbox = typeof mailboxes.$inferSelect;
+export type InsertMailbox = z.infer<typeof insertMailboxSchema>;
+
 // ─── Web Users (email/password auth for the website) ──────────────────────────
 export const webUsers = pgTable("web_users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

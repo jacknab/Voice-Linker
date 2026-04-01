@@ -1645,6 +1645,7 @@ export async function registerRoutes(
           membershipTier: "free_trial",
           remainingSeconds: freeTrialSeconds,
         });
+        await storage.getOrCreateMailbox(user.id);
         console.log(`[voice] Free trial accepted — granted ${freeTrialMinutes} min (${freeTrialSeconds}s) to userId=${user.id}`);
 
         // Announce the trial minutes, then play the terms
@@ -3576,6 +3577,7 @@ export async function registerRoutes(
         }
 
         await storage.updateUserMembership(user.id, membershipUpdate);
+        await storage.getOrCreateMailbox(user.id);
 
         const bonusMsg = bonusMinutes > 0
           ? ` Plus your first purchase bonus doubles your minutes — enjoy ${totalMinutes.toLocaleString()} minutes total!`

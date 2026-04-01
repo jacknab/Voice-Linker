@@ -79,6 +79,7 @@ interface CallerDetail {
     remainingSeconds: number | null; stripeCustomerId: string | null;
     createdAt: string | null;
   };
+  mailbox: { id: string; mailboxNumber: string; createdAt: string | null } | null;
   profile: { id: string; recordingUrl: string; recordingDuration: number | null; createdAt: string | null } | null;
   zipCode: { code: string; city: string | null; state: string | null; neighborhood: string | null } | null;
   callHistory: { id: string; callSid: string; durationSeconds: number | null; startedAt: string | null; completedAt: string | null; toPhoneNumber: string | null }[];
@@ -1691,6 +1692,14 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
           <div className={C.fieldRow}><span className={C.fieldLabel}>Phone Number</span><span className={C.fieldValue} data-testid="detail-phone">{user.phoneNumber}</span></div>
           <div className={C.fieldRow}><span className={C.fieldLabel}>Joined</span><span className={C.fieldValue}>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}</span></div>
           <div className={C.fieldRow}><span className={C.fieldLabel}>Membership Tier</span><span className={C.fieldValue}>{user.membershipTier ?? <span className="text-gray-400">None</span>}</span></div>
+          <div className={C.fieldRow}>
+            <span className={C.fieldLabel}>Mailbox Number</span>
+            <span className={C.fieldValue} data-testid="detail-mailbox-number">
+              {detail.mailbox
+                ? <span className="font-mono font-bold tracking-widest">{detail.mailbox.mailboxNumber}</span>
+                : <span className="text-gray-400">—</span>}
+            </span>
+          </div>
           <div className={C.fieldRow}>
             <span className={C.fieldLabel}>Credit Balance</span>
             <span className={C.fieldValue}>{fmtMins(user.remainingSeconds)} <span className="text-gray-400 text-xs">({user.remainingSeconds?.toLocaleString() ?? 0} sec)</span></span>
