@@ -71,3 +71,33 @@ id = "39NfLs2irOCgckteN_VFx"
 uri = "file://attached_assets/hero_girl_phone.png"
 type = "image"
 title = "Phone Chat Line Hero Image"
+
+[[outputs]]
+id = "GhNDoTcRVZ6JVKUHjUQLM"
+uri = "file://attached_assets/stock_images/hero_girl_chatline_1.jpg"
+type = "image"
+title = "Option 1"
+
+[[outputs]]
+id = "5r0bFclqtxRrk6ZvtV8N7"
+uri = "file://attached_assets/stock_images/hero_girl_chatline_2.jpg"
+type = "image"
+title = "Option 2"
+
+[[outputs]]
+id = "gbiMp2BGD8C8RPirI3vPV"
+uri = "file://attached_assets/stock_images/hero_girl_chatline_3.jpg"
+type = "image"
+title = "Option 3"
+
+[[outputs]]
+id = "5839Z8Z-KGBnseyp_G-rI"
+uri = "file://attached_assets/stock_images/hero_girl_chatline_4.jpg"
+type = "image"
+title = "Option 4"
+
+[[outputs]]
+id = "bn6ybRu19t9pgEhxg9oIx"
+uri = "file://attached_assets/stock_images/hero_girl_chatline_5.jpg"
+type = "image"
+title = "Option 5"
