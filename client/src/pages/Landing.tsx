@@ -126,7 +126,7 @@ export default function Landing() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
         {/* Content */}
-        <div className="relative z-10 max-w-[1200px] mx-auto px-6 py-8 md:py-14 md:pb-16 flex justify-center">
+        <div className="relative z-10 w-full min-h-[260px] md:min-h-[500px] flex items-center justify-center px-6 py-8 md:py-14 md:pb-16">
           <div style={{ maxWidth: "520px", textAlign: "center" }}>
 
             {/* Age disclaimer */}
