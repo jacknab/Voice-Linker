@@ -113,3 +113,33 @@ id = "XOvftbS8ZfQBaJMUjyiUZ"
 uri = "file://attached_assets/hero_girl_chatline_hq.png"
 type = "image"
 title = "Indoor Chat Line Hero Image"
+
+[[outputs]]
+id = "hAtvlZkEipIVsoifPF3XM"
+uri = "file://attached_assets/stock_images/chatline_woman_1.jpg"
+type = "image"
+title = "Option 1"
+
+[[outputs]]
+id = "Xcghia9NJUNXDoehE_wfC"
+uri = "file://attached_assets/stock_images/chatline_woman_2.jpg"
+type = "image"
+title = "Option 2"
+
+[[outputs]]
+id = "Ky_aSKCFmGlPXwfzumGv2"
+uri = "file://attached_assets/stock_images/chatline_woman_3.jpg"
+type = "image"
+title = "Option 3"
+
+[[outputs]]
+id = "zOHZEP79GEnMCGK_diwxr"
+uri = "file://attached_assets/stock_images/chatline_woman_4.jpg"
+type = "image"
+title = "Option 4"
+
+[[outputs]]
+id = "dto1b9eGeUdryJixhUHEA"
+uri = "file://attached_assets/stock_images/chatline_woman_5.jpg"
+type = "image"
+title = "Option 5"
