@@ -271,6 +271,14 @@ const callMembershipOverride = new Map<string, string>(); // callSid → members
 // Temporary store for a membership number mid-entry (between the 10-digit gather and pin entry)
 const pendingMembershipEntries = new Map<string, string>(); // callSid → membership number
 
+// PIN the caller is creating during a membership purchase — saved to DB on payment success
+const pendingPins = new Map<string, string>(); // callSid → chosen 4-digit PIN
+
+// Convert a Twilio phone number (+1XXXXXXXXXX) to a 10-digit membership number
+function phoneToMembershipNumber(phone: string): string {
+  return phone.replace(/\D/g, "").slice(-10);
+}
+
 // Build the base URL of this server from an incoming Twilio request
 function baseUrl(req: Request): string {
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
@@ -1346,6 +1354,7 @@ export async function registerRoutes(
       callRegion.delete(callSid);
       callMembershipOverride.delete(callSid);
       pendingMembershipEntries.delete(callSid);
+      pendingPins.delete(callSid);
 
       // Clean up any live connect invite that this caller initiated
       for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
@@ -3191,23 +3200,85 @@ export async function registerRoutes(
     } else {
       twiml.say(`You selected ${pkg.label} access for ${pkg.priceLabel}.`);
     }
+
+    // If the caller doesn't yet have a PIN, ask them to create one before payment
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      if (!user.membershipPin) {
+        twiml.redirect("/voice/create-membership-pin");
+      } else {
+        twiml.redirect("/voice/run-payment");
+      }
+    } catch {
+      twiml.redirect("/voice/run-payment");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Create Membership PIN ─────────────────────────────────────────────────
+  // Shown during first-time purchase — caller chooses a 4-digit PIN for their membership.
+  app.post("/voice/create-membership-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-create-membership-pin",
+      timeout: 15,
+    });
+    playPrompt(gather, req, "create_pin_prompt.mp3",
+      "Before we process your payment, please create a 4-digit PIN for your membership. This PIN will let you access your account from any phone. Please enter your 4-digit PIN now.");
+    // Timeout — skip PIN creation and go straight to payment
+    twiml.redirect("/voice/run-payment");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Handle Create Membership PIN ──────────────────────────────────────────
+  app.post("/voice/handle-create-membership-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const pin = (req.body?.Digits as string) ?? "";
+
+    if (pin.length === 4) {
+      pendingPins.set(callSid, pin);
+      console.log(`[voice] PIN created for callSid=${callSid}, proceeding to payment`);
+      playPrompt(twiml, req, "pin_saved_confirm.mp3",
+        "Your PIN has been set. Now let's process your payment.");
+    } else {
+      // Invalid PIN length — skip PIN and proceed to payment anyway
+      console.log(`[voice] PIN entry skipped or invalid for callSid=${callSid}`);
+    }
+    twiml.redirect("/voice/run-payment");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Run Payment ───────────────────────────────────────────────────────────
+  // Plays the payment intro and launches the Twilio <Pay> verb.
+  app.post("/voice/run-payment", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    const session = paymentSessions.get(callSid);
+    if (!session) {
+      playPrompt(twiml, req, "payment_session_expired.mp3", "Your session has expired. Please try again.");
+      twiml.redirect("/voice/membership-purchase");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
     twiml.play(`${baseUrl(req)}/uploads/payment_intro_1774066491415.mp3`);
 
-    // ── Twilio <Pay> verb: PCI-compliant card collection ────────────────────
-    // Twilio collects card number, expiry, and CVV directly in its own
-    // secure environment — raw card data never reaches this server.
-    // Requires a Pay Connector (Stripe) configured in your Twilio Console
-    // under Account › Payments › Manage Pay Connectors.
-    // Set TWILIO_PAY_CONNECTOR env var to the unique name of that connector
-    // (default: "stripe").
     const connectorName = process.env.TWILIO_PAY_CONNECTOR || "stripe";
-    const chargeAmount = (pkg.priceCents / 100).toFixed(2);
+    const chargeAmount = (session.packagePriceCents / 100).toFixed(2);
 
     twiml.pay({
       action: `${baseUrl(req)}/voice/handle-payment-complete`,
       chargeAmount,
       currency: "usd",
-      description: `${pkg.label} Membership — VOICE PROTOCOL`,
+      description: `${session.packageLabel} Membership — VOICE PROTOCOL`,
       paymentConnector: connectorName,
       postalCode: false,
       securityCode: true,
@@ -3248,10 +3319,21 @@ export async function registerRoutes(
         const totalMinutes = baseMinutes + bonusMinutes;
         const totalSeconds = totalMinutes * 60;
 
-        await storage.updateUserMembership(user.id, {
+        // Build the membership update — include credentials if this is a first-time setup
+        const pendingPin = pendingPins.get(callSid);
+        pendingPins.delete(callSid);
+        const membershipUpdate: Parameters<typeof storage.updateUserMembership>[1] = {
           membershipTier: session.packageName,
           remainingSeconds: totalSeconds,
-        });
+        };
+        if (pendingPin && !user.membershipPin) {
+          const membershipNumber = phoneToMembershipNumber(fromNumber);
+          membershipUpdate.membershipNumber = membershipNumber;
+          membershipUpdate.membershipPin = pendingPin;
+          console.log(`[voice] Saving membership credentials: userId=${user.id}, membershipNumber=${membershipNumber}`);
+        }
+
+        await storage.updateUserMembership(user.id, membershipUpdate);
 
         const bonusMsg = bonusMinutes > 0
           ? ` Plus your first purchase bonus doubles your minutes — enjoy ${totalMinutes.toLocaleString()} minutes total!`

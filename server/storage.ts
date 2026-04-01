@@ -109,7 +109,7 @@ export interface IStorage {
   }[]>;
   adminUnblockById(id: string): Promise<void>;
 
-  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number }): Promise<User>;
+  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string }): Promise<User>;
   deductSeconds(userId: string, seconds: number): Promise<User>;
   getZipEntryByCode(code: string): Promise<ZipCode | undefined>;
   getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string; neighborhood?: string | null }): Promise<ZipCode>;
@@ -549,7 +549,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number }): Promise<User> {
+  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string }): Promise<User> {
     const [user] = await db.update(users).set(data).where(eq(users.id, userId)).returning();
     return user;
   }
