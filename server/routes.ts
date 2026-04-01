@@ -4611,7 +4611,7 @@ export async function registerRoutes(
           membershipUpdate.membershipNumber = membershipNumber;
           issuedCardNumber = membershipNumber;
           // Create a card record and immediately link it to this phone
-          const card = await storage.createMembershipCard(membershipNumber, "Issued on purchase");
+          const card = await storage.createMembershipCard(membershipNumber, 0, "Issued on purchase");
           await storage.linkCardToPhone(card.id, fromNumber);
           console.log(`[voice] Issued membership card ${membershipNumber} to ${fromNumber} on purchase`);
         }

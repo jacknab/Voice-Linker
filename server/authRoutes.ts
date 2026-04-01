@@ -427,7 +427,7 @@ router.post("/api/auth/alt-phones", async (req: Request, res: Response) => {
 router.delete("/api/auth/alt-phones/:id", async (req: Request, res: Response) => {
   if (!req.session.webUserId) return res.status(401).json({ error: "Not authenticated" });
   try {
-    await storage.removeAltPhoneForWebUser(req.session.webUserId, req.params.id);
+    await storage.removeAltPhoneForWebUser(req.session.webUserId as string, req.params.id as string);
     return res.json({ ok: true });
   } catch (err) {
     console.error("[auth] alt-phones DELETE error:", err);
