@@ -172,6 +172,7 @@ function playCallerCount(
 interface PaymentSession {
   packageName: string;
   packageLabel: string;
+  packageMinutes: number;
   packagePriceCents: number;
   priceLabel: string;
   isFirstPurchase?: boolean;
@@ -1847,20 +1848,50 @@ export async function registerRoutes(
 
   // ─── 4a. Purchase Pre-Menu ────────────────────────────────────────────────
   // Plays promo code option then membership packages in one single prompt.
+  // All minutes and prices come live from admin membership settings.
   // Digit 1 → promo code; 2/3/4 → package selection; 9 → repeat; # → cancel.
   app.post("/voice/purchase-pre-menu", async (req, res) => {
     const twiml = new VoiceResponse();
-    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
-    gather.say(
-      "If you have a promotional code press 1. " +
-      "To buy 180 minutes for $20 press 2. " +
-      "For only $10 you'll get 100 minutes, and if it's your first purchase, you'll get an extra 100 minutes absolutely free — " +
-      "that's 200 minutes for only $10, so to buy press 3. " +
-      "Or if you just need a little more time to close the deal or grab some digits, our lowest price package is what you need, " +
-      "so to buy 60 minutes for $2 press 4. " +
-      "To repeat these choices press 9. " +
-      "To cancel press pound."
-    );
+
+    try {
+      const s = await getMembershipSettingsCached();
+
+      const p1Min = s.plan1Minutes;
+      const p1Price = centsToLabel(s.plan1PriceCents);
+      const p2Min = s.plan2Minutes;
+      const p2Price = centsToLabel(s.plan2PriceCents);
+      const p3Min = s.plan3Minutes;
+      const p3Price = centsToLabel(s.plan3PriceCents);
+      const bonusIsP2 = s.bonusPlanKey === "plan2";
+
+      // Build plan 2 (middle) description — include bonus text if it's the bonus plan
+      let plan2Line: string;
+      if (bonusIsP2) {
+        plan2Line =
+          `For only ${p2Price} you'll get ${p2Min} minutes, and if it's your first purchase ` +
+          `you'll get an extra ${p2Min} minutes absolutely free — ` +
+          `that's ${p2Min * 2} minutes for only ${p2Price}, so to buy press 3.`;
+      } else {
+        plan2Line = `To buy ${p2Min} minutes for ${p2Price} press 3.`;
+      }
+
+      const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
+      gather.say(
+        "If you have a promotional code press 1. " +
+        `To buy ${p1Min} minutes for ${p1Price} press 2. ` +
+        plan2Line + " " +
+        `Or if you just need a little more time to close the deal or grab some digits, ` +
+        `our lowest price package is what you need, so to buy ${p3Min} minutes for ${p3Price} press 4. ` +
+        "To repeat these choices press 9. " +
+        "To cancel press pound."
+      );
+    } catch (err) {
+      console.error("[voice] /voice/purchase-pre-menu settings error:", err);
+      // Fallback gather with no package details — just let them navigate away
+      const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
+      gather.say("We're having trouble loading package information. To return to the main menu press 9. To cancel press pound.");
+    }
+
     twiml.redirect("/voice/purchase-pre-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -3361,6 +3392,7 @@ export async function registerRoutes(
     paymentSessions.set(callSid, {
       packageName: pkg.name,
       packageLabel: pkg.label,
+      packageMinutes: pkg.minutes,
       packagePriceCents: pkg.priceCents,
       priceLabel: pkg.priceLabel,
       isFirstPurchase,
@@ -3387,9 +3419,10 @@ export async function registerRoutes(
       return res.send(twiml.toString());
     }
 
+    const mins = session.packageMinutes;
     const minutesLabel = session.isFirstPurchase
-      ? `${session.packageLabel.replace(" Minute", "")} minutes — plus ${session.packageLabel.replace(" Minute", "")} bonus minutes for your first purchase, giving you double the time`
-      : `${session.packageLabel.replace(" Minute", "")} minutes`;
+      ? `${mins} minutes — plus ${mins} bonus minutes for your first purchase, giving you ${mins * 2} minutes total`
+      : `${mins} minutes`;
 
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-confirm-package" });
     gather.say(
