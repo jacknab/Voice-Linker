@@ -24,6 +24,18 @@ uri = "file://attached_assets/hero_lady_1.png"
 type = "image"
 title = "hero lady phone portrait"
 
+[[generated]]
+id = "0AbKhRPh8oeBwFUoDFuRt"
+uri = "file://attached_assets/hero_lady_2.png"
+type = "image"
+title = "hero lady flirty pink"
+
+[[generated]]
+id = "Epiu7EUWMDrtLQdcE4Pjh"
+uri = "file://attached_assets/hero_lady_3.png"
+type = "image"
+title = "hero lady confident blue"
+
 [[outputs]]
 id = "A94LSjLMF5S8MgWI0l6Vb"
 uri = "file://SETUP.md"
