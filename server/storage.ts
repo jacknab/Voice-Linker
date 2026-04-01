@@ -154,6 +154,8 @@ export interface IStorage {
   getMailboxByUserId(userId: string): Promise<Mailbox | null>;
   getMailboxByNumber(mailboxNumber: string): Promise<Mailbox | null>;
   getOrCreateMailbox(userId: string): Promise<Mailbox>;
+  getMailboxesByCategory(category: string, excludeUserId: string): Promise<Mailbox[]>;
+  updateMailboxAd(userId: string, category: string, adRecordingUrl: string, adRecordingDuration: number): Promise<Mailbox>;
 
   // Flagged content queue
   getAllFlaggedItems(status?: string): Promise<FlaggedItemWithDetails[]>;
@@ -900,6 +902,30 @@ export class DatabaseStorage implements IStorage {
     const [mailbox] = await db.insert(mailboxes).values({ userId, mailboxNumber }).returning();
     console.log(`[mailbox] Created mailbox ${mailboxNumber} for userId=${userId}`);
     return mailbox;
+  }
+
+  async getMailboxesByCategory(category: string, excludeUserId: string): Promise<Mailbox[]> {
+    return db
+      .select()
+      .from(mailboxes)
+      .where(
+        and(
+          eq(mailboxes.category, category),
+          not(eq(mailboxes.userId, excludeUserId)),
+          sql`${mailboxes.adRecordingUrl} IS NOT NULL`
+        )
+      );
+  }
+
+  async updateMailboxAd(userId: string, category: string, adRecordingUrl: string, adRecordingDuration: number): Promise<Mailbox> {
+    const mailbox = await this.getOrCreateMailbox(userId);
+    const [updated] = await db
+      .update(mailboxes)
+      .set({ category, adRecordingUrl, adRecordingDuration })
+      .where(eq(mailboxes.userId, userId))
+      .returning();
+    console.log(`[mailbox] Updated ad for mailbox ${mailbox.mailboxNumber} — category=${category}`);
+    return updated;
   }
 
   async getAllFlaggedItems(status?: string): Promise<FlaggedItemWithDetails[]> {

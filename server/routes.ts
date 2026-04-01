@@ -219,6 +219,32 @@ function removeFromBrowseQueue(callSid: string, userId: string): void {
 // Maps CallSid → regionId for the duration of a call
 const callRegion = new Map<string, string>();
 
+// ─── Mailbox Category Browse State ─────────────────────────────────────────
+interface CategoryBrowseState {
+  category: string;
+  queue: { userId: string; mailboxNumber: string; adRecordingUrl: string }[];
+  index: number;
+}
+const categoryBrowseState = new Map<string, CategoryBrowseState>();
+
+// Category slug → human label map
+const MAILBOX_CATEGORIES: Record<string, string> = {
+  quick_hot_talk: "Quick and Hot Talk",
+  bicurious: "Bicurious",
+  kink: "Kink",
+  total_top_strictly_bottoms: "Total Top and Strictly Bottoms",
+  trans: "Trans",
+};
+
+// Digit → category slug
+const DIGIT_TO_CATEGORY: Record<string, string> = {
+  "1": "quick_hot_talk",
+  "2": "bicurious",
+  "3": "kink",
+  "4": "total_top_strictly_bottoms",
+  "5": "trans",
+};
+
 // ─── Live 1-on-1 Connect State ─────────────────────────────────────────────
 // Invite stored by targetUserId so the invitee can find it when they next browse
 interface LiveConnectInvite {
@@ -1403,6 +1429,7 @@ export async function registerRoutes(
       }
       // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, region mapping, and membership override
       callerBrowseState.delete(callSid);
+      categoryBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
       pendingGreetingDrafts.delete(callSid);
@@ -1965,9 +1992,9 @@ export async function registerRoutes(
     if (digit === "1") {
       twiml.redirect("/voice/my-mailbox");
     } else if (digit === "2") {
-      twiml.redirect("/voice/record-mailbox-ad");
+      twiml.redirect("/voice/ad-category-menu?mode=record");
     } else if (digit === "3") {
-      twiml.redirect("/voice/browse-profiles");
+      twiml.redirect("/voice/ad-category-menu?mode=listen");
     } else if (digit === "9") {
       twiml.redirect("/voice/mailbox-menu");
     } else if (digit === "*") {
@@ -2107,32 +2134,122 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // ─── 4a4. Record Mailbox Ad ───────────────────────────────────────────────
-  app.post("/voice/record-mailbox-ad", async (req, res) => {
+  // ─── 4a4. Ad Category Menu (shared for listen & record modes) ────────────
+  // mode query param: "listen" | "record"
+  app.post("/voice/ad-category-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const mode = (req.query.mode as string) || "listen";
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-ad-category?mode=${mode}` });
+    playPrompt(gather, req, "ad_category_menu.mp3",
+      "Please select the category. " +
+      "For Quick and Hot Talk press one. " +
+      "For Bicurious press two. " +
+      "For Kink press three. " +
+      "For Total Top and Strictly Bottoms press four. " +
+      "For Trans press five. " +
+      "To look up a specific mailbox press six. " +
+      "For definitions of these categories press eight. " +
+      "To return to the mailbox menu press pound."
+    );
+    twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-ad-category", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const mode = (req.query.mode as string) || "listen";
+    const category = DIGIT_TO_CATEGORY[digit];
+
+    if (category) {
+      if (mode === "record") {
+        twiml.redirect(`/voice/record-category-ad?category=${category}`);
+      } else {
+        twiml.redirect(`/voice/browse-category-ads?category=${category}`);
+      }
+    } else if (digit === "6") {
+      twiml.redirect(`/voice/mailbox-lookup?mode=${mode}`);
+    } else if (digit === "8") {
+      twiml.redirect(`/voice/ad-category-definitions?mode=${mode}`);
+    } else if (digit === "#") {
+      twiml.redirect("/voice/mailbox-menu");
+    } else {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a5. Browse Category Ads (listen mode) ───────────────────────────────
+  app.post("/voice/browse-category-ads", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+    const category = req.query.category as string;
 
     try {
       const user = await getOrCreateUser(fromNumber);
-      const profile = await storage.getProfile(user.id);
+      const categoryLabel = MAILBOX_CATEGORIES[category] || category;
 
-      if (profile) {
-        const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-record-mailbox-ad" });
-        playPrompt(gather, req, "mailbox_ad_existing.mp3",
-          "You already have a mailbox ad. " +
-          "Press 1 to record a new one. " +
-          "Press 2 to hear your current ad. " +
-          "Press 9 to return to the mailbox menu."
-        );
-        twiml.redirect("/voice/record-mailbox-ad");
-      } else {
-        playPrompt(twiml, req, "mailbox_ad_record.mp3",
-          "Record your mailbox ad after the tone. Tell other guys about yourself. Press pound when finished."
-        );
-        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-ad" });
+      // Build or reuse the queue for this call + category
+      let state = categoryBrowseState.get(callSid);
+      if (!state || state.category !== category) {
+        const ads = await storage.getMailboxesByCategory(category, user.id);
+        // Shuffle for variety
+        for (let i = ads.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [ads[i], ads[j]] = [ads[j], ads[i]];
+        }
+        state = {
+          category,
+          queue: ads.map(m => ({ userId: m.userId, mailboxNumber: m.mailboxNumber, adRecordingUrl: m.adRecordingUrl! })),
+          index: 0,
+        };
+        categoryBrowseState.set(callSid, state);
+        console.log(`[voice] browse-category-ads: category=${category}, ${state.queue.length} ads for callSid=${callSid}`);
       }
+
+      if (state.queue.length === 0) {
+        playPrompt(twiml, req, "no_ads_category.mp3",
+          `No ads available in the ${categoryLabel} category yet. Try another category.`
+        );
+        twiml.redirect("/voice/ad-category-menu?mode=listen");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      if (state.index >= state.queue.length) {
+        playPrompt(twiml, req, "ads_end_of_list.mp3",
+          `You have heard all the ads in ${categoryLabel}. Returning to categories.`
+        );
+        categoryBrowseState.delete(callSid);
+        twiml.redirect("/voice/ad-category-menu?mode=listen");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const ad = state.queue[state.index];
+      state.index++;
+
+      const adGather = twiml.gather({
+        numDigits: 1,
+        action: `/voice/handle-category-ad-menu?toUserId=${ad.userId}&mailboxNumber=${ad.mailboxNumber}&category=${category}`,
+        timeout: 10,
+      });
+      adGather.say(`Mailbox ${ad.mailboxNumber.split("").join(", ")}.`);
+      safePlayRecording(adGather, ad.adRecordingUrl, req, "This ad is not available.");
+      adGather.say(
+        "Press 1 to send a message to this guy. " +
+        "Press 2 to hear the next ad. " +
+        "Press 9 to return to the category menu. " +
+        "Press pound to return to the mailbox menu."
+      );
+      twiml.redirect(`/voice/browse-category-ads?category=${category}`);
     } catch (err) {
-      console.error("[voice] /voice/record-mailbox-ad error:", err);
+      console.error("[voice] /voice/browse-category-ads error:", err);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the mailbox menu.");
       twiml.redirect("/voice/mailbox-menu");
     }
@@ -2141,37 +2258,94 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  app.post("/voice/handle-record-mailbox-ad", async (req, res) => {
+  app.post("/voice/handle-category-ad-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
-    const fromNumber = req.body?.From as string;
+    const toUserId = req.query.toUserId as string;
+    const mailboxNumber = req.query.mailboxNumber as string;
+    const category = req.query.category as string;
 
     try {
       if (digit === "1") {
-        playPrompt(twiml, req, "mailbox_ad_record.mp3",
-          "Record your mailbox ad after the tone. Press pound when finished."
-        );
-        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-ad" });
+        playPrompt(twiml, req, "record_message.mp3", "Record your message for this guy after the tone.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${toUserId}&returnTo=category&category=${category}` });
       } else if (digit === "2") {
-        const user = await getOrCreateUser(fromNumber);
-        const profile = await storage.getProfile(user.id);
-        if (profile?.recordingUrl) {
-          if (profile.nameRecordingUrl) {
-            safePlayRecording(twiml, profile.nameRecordingUrl, req, "");
-          }
-          safePlayRecording(twiml, profile.recordingUrl, req, "Your ad is not available for playback.");
-        } else {
-          playPrompt(twiml, req, "no_greeting_found.mp3", "No ad found.");
-        }
-        twiml.redirect("/voice/record-mailbox-ad");
+        twiml.redirect(`/voice/browse-category-ads?category=${category}`);
       } else if (digit === "9") {
+        twiml.redirect("/voice/ad-category-menu?mode=listen");
+      } else if (digit === "#") {
         twiml.redirect("/voice/mailbox-menu");
       } else {
         playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
-        twiml.redirect("/voice/record-mailbox-ad");
+        twiml.redirect(`/voice/browse-category-ads?category=${category}`);
       }
     } catch (err) {
-      console.error("[voice] /voice/handle-record-mailbox-ad error:", err);
+      console.error("[voice] /voice/handle-category-ad-menu error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a6. Mailbox Lookup (look up a specific mailbox by number) ───────────
+  app.post("/voice/mailbox-lookup", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const mode = (req.query.mode as string) || "listen";
+    const gather = twiml.gather({ numDigits: 5, action: `/voice/handle-mailbox-lookup?mode=${mode}`, timeout: 15 });
+    playPrompt(gather, req, "mailbox_lookup.mp3",
+      "Enter the five digit mailbox number you'd like to look up, followed by pound."
+    );
+    twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-mailbox-lookup", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = req.body?.Digits as string;
+    const mode = (req.query.mode as string) || "listen";
+
+    try {
+      if (!digits || digits.length !== 5) {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Please enter a five digit mailbox number.");
+        twiml.redirect(`/voice/mailbox-lookup?mode=${mode}`);
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const mailbox = await storage.getMailboxByNumber(digits);
+      if (!mailbox) {
+        playPrompt(twiml, req, "mailbox_not_found.mp3", `Mailbox ${digits.split("").join(", ")} was not found.`);
+        twiml.redirect(`/voice/mailbox-lookup?mode=${mode}`);
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      if (!mailbox.adRecordingUrl) {
+        playPrompt(twiml, req, "mailbox_no_ad.mp3",
+          `Mailbox ${digits.split("").join(", ")} has not recorded an ad yet.`
+        );
+        twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const adGather = twiml.gather({
+        numDigits: 1,
+        action: `/voice/handle-mailbox-lookup-menu?toUserId=${mailbox.userId}&mailboxNumber=${digits}&mode=${mode}`,
+        timeout: 10,
+      });
+      adGather.say(`Mailbox ${digits.split("").join(", ")}.`);
+      safePlayRecording(adGather, mailbox.adRecordingUrl, req, "This ad is not available.");
+      adGather.say(
+        "Press 1 to send a message to this guy. " +
+        "Press 9 to look up another mailbox. " +
+        "Press pound to return to the mailbox menu."
+      );
+      twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+    } catch (err) {
+      console.error("[voice] /voice/handle-mailbox-lookup error:", err);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred.");
       twiml.redirect("/voice/mailbox-menu");
     }
@@ -2180,39 +2354,149 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // ─── Save Mailbox Ad recording ────────────────────────────────────────────
-  app.post("/voice/save-mailbox-ad", async (req, res) => {
+  app.post("/voice/handle-mailbox-lookup-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const toUserId = req.query.toUserId as string;
+    const mode = (req.query.mode as string) || "listen";
+
+    try {
+      if (digit === "1") {
+        playPrompt(twiml, req, "record_message.mp3", "Record your message for this guy after the tone.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${toUserId}&returnTo=mailbox` });
+      } else if (digit === "9") {
+        twiml.redirect(`/voice/mailbox-lookup?mode=${mode}`);
+      } else if (digit === "#") {
+        twiml.redirect("/voice/mailbox-menu");
+      } else {
+        twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-mailbox-lookup-menu error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a7. Category Definitions ────────────────────────────────────────────
+  app.post("/voice/ad-category-definitions", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const mode = (req.query.mode as string) || "listen";
+    playPrompt(twiml, req, "ad_category_definitions.mp3",
+      "Quick and Hot Talk: guys looking for fast, explicit, no-strings chat. " +
+      "Bicurious: men exploring attraction to other men for the first time or occasionally. " +
+      "Kink: callers into fetishes, role play, or specific kinks. " +
+      "Total Top and Strictly Bottoms: guys who define themselves by a specific role. " +
+      "Trans: trans men and women connecting with other callers. " +
+      "Returning to the category menu."
+    );
+    twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a8. Record Category Ad ─────────────────────────────────────────────
+  app.post("/voice/record-category-ad", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const category = req.query.category as string;
+    const categoryLabel = MAILBOX_CATEGORIES[category] || category;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const mailbox = await storage.getMailboxByUserId(user.id);
+
+      if (mailbox?.adRecordingUrl && mailbox.category === category) {
+        // Already has an ad in this category — offer to re-record or hear it
+        const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-record-category-ad?category=${category}` });
+        playPrompt(gather, req, "mailbox_ad_existing.mp3",
+          `You already have an ad in the ${categoryLabel} category. ` +
+          "Press 1 to record a new one. " +
+          "Press 2 to hear your current ad. " +
+          "Press 9 to return to the category menu."
+        );
+        twiml.redirect(`/voice/record-category-ad?category=${category}`);
+      } else {
+        playPrompt(twiml, req, "mailbox_ad_record.mp3",
+          `Record your ${categoryLabel} mailbox ad after the tone. Tell guys about yourself. Press pound when finished.`
+        );
+        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}` });
+      }
+    } catch (err) {
+      console.error("[voice] /voice/record-category-ad error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the mailbox menu.");
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-record-category-ad", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+    const category = req.query.category as string;
+
+    try {
+      if (digit === "1") {
+        playPrompt(twiml, req, "mailbox_ad_record.mp3",
+          "Record your mailbox ad after the tone. Press pound when finished."
+        );
+        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}` });
+      } else if (digit === "2") {
+        const user = await getOrCreateUser(fromNumber);
+        const mailbox = await storage.getMailboxByUserId(user.id);
+        if (mailbox?.adRecordingUrl) {
+          safePlayRecording(twiml, mailbox.adRecordingUrl, req, "Your ad is not available for playback.");
+        } else {
+          playPrompt(twiml, req, "no_greeting_found.mp3", "No ad found.");
+        }
+        twiml.redirect(`/voice/record-category-ad?category=${category}`);
+      } else if (digit === "9") {
+        twiml.redirect("/voice/ad-category-menu?mode=record");
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect(`/voice/record-category-ad?category=${category}`);
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-record-category-ad error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 4a9. Save Category Ad ────────────────────────────────────────────────
+  app.post("/voice/save-category-ad", async (req, res) => {
     const twiml = new VoiceResponse();
 
     try {
       const fromNumber = req.body?.From as string;
       const recordingUrl = req.body?.RecordingUrl as string;
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
+      const category = req.query.category as string;
+      const categoryLabel = MAILBOX_CATEGORIES[category] || category;
 
       if (!recordingUrl || recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-ad" });
+        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}` });
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
       const user = await getOrCreateUser(fromNumber);
-      const existingProfile = await storage.getProfile(user.id);
-      await storage.upsertProfile({
-        userId: user.id,
-        recordingUrl,
-        recordingDuration,
-        nameRecordingUrl: existingProfile?.nameRecordingUrl ?? null,
-        isAdminUploaded: false,
-      });
-      await storage.getOrCreateMailbox(user.id);
+      await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
 
       playPrompt(twiml, req, "mailbox_ad_saved.mp3",
-        "Your mailbox ad has been saved. Other guys can now hear your ad."
+        `Your ${categoryLabel} mailbox ad has been saved. Other guys can now find your ad.`
       );
       twiml.redirect("/voice/mailbox-menu");
     } catch (err) {
-      console.error("[voice] /voice/save-mailbox-ad error:", err);
+      console.error("[voice] /voice/save-category-ad error:", err);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred saving your ad. Returning to the mailbox menu.");
       twiml.redirect("/voice/mailbox-menu");
     }
@@ -3501,11 +3785,15 @@ export async function registerRoutes(
       }
 
       const returnTo = req.query.returnTo as string;
+      const category = req.query.category as string;
       const user = await getOrCreateUser(fromNumber);
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
       if (returnTo === "mailbox") {
         playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
         twiml.redirect("/voice/my-mailbox");
+      } else if (returnTo === "category" && category) {
+        playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to ads.");
+        twiml.redirect(`/voice/browse-category-ads?category=${category}`);
       } else {
         playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
         twiml.redirect("/voice/browse-profiles");

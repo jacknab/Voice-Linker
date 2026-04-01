@@ -280,10 +280,14 @@ export type FlaggedContent = typeof flaggedContent.$inferSelect;
 export type InsertFlaggedContent = z.infer<typeof insertFlaggedContentSchema>;
 
 // ─── Mailboxes — one per member (free trial or paid) ─────────────────────────
+// Categories: quick_hot_talk | bicurious | kink | total_top_strictly_bottoms | trans
 export const mailboxes = pgTable("mailboxes", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
   mailboxNumber: text("mailbox_number").notNull().unique(),
+  category: text("category"),
+  adRecordingUrl: text("ad_recording_url"),
+  adRecordingDuration: integer("ad_recording_duration"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
