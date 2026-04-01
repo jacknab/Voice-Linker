@@ -42,6 +42,12 @@ uri = "file://attached_assets/hero_girl_phone.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "r34BIodz3Atpu4q4hI-1v"
+uri = "file://attached_assets/hero_girl_chatline_hq.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "A94LSjLMF5S8MgWI0l6Vb"
 uri = "file://SETUP.md"
@@ -101,3 +107,9 @@ id = "bn6ybRu19t9pgEhxg9oIx"
 uri = "file://attached_assets/stock_images/hero_girl_chatline_5.jpg"
 type = "image"
 title = "Option 5"
+
+[[outputs]]
+id = "XOvftbS8ZfQBaJMUjyiUZ"
+uri = "file://attached_assets/hero_girl_chatline_hq.png"
+type = "image"
+title = "Phone Chat Line Hero"
