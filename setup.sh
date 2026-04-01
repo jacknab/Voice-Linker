@@ -245,6 +245,15 @@ info "SSL certificate verified at ${CERT_BASE}/"
 # Remove default site so it does not intercept requests
 [ -L /etc/nginx/sites-enabled/default ] && sudo rm -f /etc/nginx/sites-enabled/default && info "Removed default nginx site."
 
+# Remove any broken symlinks in sites-enabled (leftover from previous app installs)
+# A broken symlink causes nginx -t to fail with "No such file or directory"
+for LINK in /etc/nginx/sites-enabled/*; do
+    if [ -L "${LINK}" ] && [ ! -e "${LINK}" ]; then
+        sudo rm -f "${LINK}"
+        warn "Removed broken nginx symlink: ${LINK}"
+    fi
+done
+
 # Write nginx site config
 NGINX_SITE="/etc/nginx/sites-available/${SERVICE_NAME}"
 sudo tee "${NGINX_SITE}" > /dev/null <<NGINXEOF
