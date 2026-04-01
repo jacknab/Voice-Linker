@@ -113,7 +113,7 @@ export default function Landing() {
       </nav>
 
       {/* ── HERO ── */}
-      <section id="hero" style={{ position: "relative", minHeight: "500px", overflow: "hidden" }}>
+      <section id="hero" className="relative overflow-hidden min-h-[260px] md:min-h-[500px]">
         {/* Background image */}
         <img
           src={heroImg}
@@ -123,10 +123,10 @@ export default function Landing() {
         {/* Dark gradient overlay — strong on left for readability, fading right */}
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.82) 42%, rgba(0,0,0,0.35) 75%, rgba(0,0,0,0.1) 100%)" }} />
         {/* Bottom fade to dark */}
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "120px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
         {/* Content */}
-        <div style={{ position: "relative", zIndex: 1, maxWidth: "1200px", margin: "0 auto", padding: "3.5rem 1.5rem 4rem" }}>
+        <div className="relative z-10 max-w-[1200px] mx-auto px-6 py-8 md:py-14 md:pb-16">
           <div style={{ maxWidth: "520px" }}>
 
             {/* Age disclaimer */}
@@ -140,7 +140,7 @@ export default function Landing() {
             >
               60 MINUTES FREE!
             </h1>
-            <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", marginBottom: "2rem" }}>
+            <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", marginBottom: "1.25rem" }}>
               No credit card required · Click for details
             </p>
 
