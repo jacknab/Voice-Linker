@@ -143,3 +143,39 @@ id = "dto1b9eGeUdryJixhUHEA"
 uri = "file://attached_assets/stock_images/chatline_woman_5.jpg"
 type = "image"
 title = "Option 5"
+
+[[outputs]]
+id = "XU35rM-vv9MRnrjkDuC1Z"
+uri = "file://attached_assets/stock_images/chatline_a_1.jpg"
+type = "image"
+title = "Option 1"
+
+[[outputs]]
+id = "4LI3Zd_zB2wWL7jxzaMxu"
+uri = "file://attached_assets/stock_images/chatline_a_2.jpg"
+type = "image"
+title = "Option 2"
+
+[[outputs]]
+id = "AHZ9G-7JoHpEMazdBfUbW"
+uri = "file://attached_assets/stock_images/chatline_a_3.jpg"
+type = "image"
+title = "Option 3"
+
+[[outputs]]
+id = "y7hMvgf1eBTBTD7XnwM8y"
+uri = "file://attached_assets/stock_images/chatline_b_1.jpg"
+type = "image"
+title = "Option 4"
+
+[[outputs]]
+id = "YQNZQ3CT9U6bAVCdr1mqu"
+uri = "file://attached_assets/stock_images/chatline_b_2.jpg"
+type = "image"
+title = "Option 5"
+
+[[outputs]]
+id = "SOp6YaPSAXJoDcx_TqWSW"
+uri = "file://attached_assets/stock_images/chatline_b_3.jpg"
+type = "image"
+title = "Option 6"
