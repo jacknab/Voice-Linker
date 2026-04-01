@@ -269,11 +269,8 @@ const billingCheckpoints = new Map<string, BillingCheckpoint>(); // CallSid → 
 // phone, this maps callSid → the membership holder's phone number for billing purposes.
 const callMembershipOverride = new Map<string, string>(); // callSid → membership holder phone
 
-// Temporary store for a membership number mid-entry (between the 10-digit gather and pin entry)
+// Temporary store for a membership number mid-entry (between the 10-digit gather and account lookup)
 const pendingMembershipEntries = new Map<string, string>(); // callSid → membership number
-
-// PIN the caller is creating during a membership purchase — saved to DB on payment success
-const pendingPins = new Map<string, string>(); // callSid → chosen 4-digit PIN
 
 // Convert a Twilio phone number (+1XXXXXXXXXX) to a 10-digit membership number
 function phoneToMembershipNumber(phone: string): string {
@@ -1396,7 +1393,6 @@ export async function registerRoutes(
       callRegion.delete(callSid);
       callMembershipOverride.delete(callSid);
       pendingMembershipEntries.delete(callSid);
-      pendingPins.delete(callSid);
 
       // Clean up any live connect invite that this caller initiated
       for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
@@ -1504,64 +1500,26 @@ export async function registerRoutes(
     const callSid = req.body?.CallSid as string;
 
     if (digits.length === 10) {
-      // Full 10-digit membership number entered — store it and ask for PIN
-      pendingMembershipEntries.set(callSid, digits);
-      twiml.redirect("/voice/membership-pin");
-    } else {
-      // Pressed # (empty digits) or partial/invalid input — continue without membership
-      twiml.redirect("/voice/entry-check");
-    }
-
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  // ─── 1b-iii. Membership PIN Entry ──────────────────────────────────────────
-  app.post("/voice/membership-pin", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const gather = twiml.gather({
-      numDigits: 4,
-      finishOnKey: "",
-      action: "/voice/handle-membership-pin",
-      timeout: 10,
-    });
-    playPrompt(gather, req, "membership_pin_prompt.mp3",
-      "Please enter your 4-digit PIN number.");
-    // Timeout with no PIN → skip to account check (pending entry is cleaned up on hangup)
-    twiml.redirect("/voice/entry-check");
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  // ─── 1b-iv. Handle Membership PIN ──────────────────────────────────────────
-  app.post("/voice/handle-membership-pin", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const callSid = req.body?.CallSid as string;
-    const pin = (req.body?.Digits as string) ?? "";
-    const membershipNumber = pendingMembershipEntries.get(callSid);
-    pendingMembershipEntries.delete(callSid);
-
-    if (membershipNumber && pin.length === 4) {
+      // Full 10-digit membership number entered — look up directly (no PIN required)
       try {
-        const memberUser = await storage.getUserByMembershipNumber(membershipNumber);
-        if (memberUser && memberUser.membershipPin === pin) {
-          // Valid — link this call session to the membership account for billing
+        const memberUser = await storage.getUserByMembershipNumber(digits);
+        if (memberUser) {
           callMembershipOverride.set(callSid, memberUser.phoneNumber);
-          console.log(`[voice] Membership linked: callSid=${callSid} → userId=${memberUser.id} (membershipNumber=${membershipNumber})`);
+          console.log(`[voice] Membership linked: callSid=${callSid} → userId=${memberUser.id} (membershipNumber=${digits})`);
           playPrompt(twiml, req, "membership_linked.mp3", "Your membership has been verified. Welcome.");
           twiml.redirect("/voice/entry-check-override");
         } else {
-          // Invalid membership number or PIN
-          console.log(`[voice] Membership validation failed: membershipNumber=${membershipNumber}, pinMatch=${memberUser ? (memberUser.membershipPin === pin) : "no user"}`);
+          console.log(`[voice] Membership lookup failed: membershipNumber=${digits}`);
           playPrompt(twiml, req, "membership_invalid.mp3",
-            "We could not verify your membership number or PIN. Please try calling from your registered phone number.");
+            "We could not find a membership with that number. Please try calling from your registered phone number.");
           twiml.redirect("/voice/entry-check");
         }
       } catch (err) {
-        console.error("[voice] Membership pin validation error:", err);
+        console.error("[voice] Membership lookup error:", err);
         twiml.redirect("/voice/entry-check");
       }
     } else {
+      // Pressed # (empty digits) or partial/invalid input — continue without membership
       twiml.redirect("/voice/entry-check");
     }
 
@@ -3483,17 +3441,8 @@ export async function registerRoutes(
     const fromNumber = req.body?.From as string;
 
     if (digit === "1") {
-      // Confirmed — check for PIN then show payment disclaimer
-      try {
-        const user = await getOrCreateUser(fromNumber);
-        if (!user.membershipPin) {
-          twiml.redirect("/voice/create-membership-pin");
-        } else {
-          twiml.redirect("/voice/payment-intro");
-        }
-      } catch {
-        twiml.redirect("/voice/payment-intro");
-      }
+      // Confirmed — go straight to payment disclaimer
+      twiml.redirect("/voice/payment-intro");
     } else if (digit === "2") {
       // Go back and pick a different package
       paymentSessions.delete(callSid);
@@ -3531,44 +3480,6 @@ export async function registerRoutes(
       twiml.redirect("/voice/payment-intro");
     }
 
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  // ─── Create Membership PIN ─────────────────────────────────────────────────
-  // Shown during first-time purchase — caller chooses a 4-digit PIN for their membership.
-  app.post("/voice/create-membership-pin", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const gather = twiml.gather({
-      numDigits: 4,
-      finishOnKey: "",
-      action: "/voice/handle-create-membership-pin",
-      timeout: 15,
-    });
-    playPrompt(gather, req, "create_pin_prompt.mp3",
-      "Before we process your payment, please create a 4-digit PIN for your membership. This PIN will let you access your account from any phone. Please enter your 4-digit PIN now.");
-    // Timeout — skip PIN creation and go to payment intro
-    twiml.redirect("/voice/payment-intro");
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  // ─── Handle Create Membership PIN ──────────────────────────────────────────
-  app.post("/voice/handle-create-membership-pin", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const callSid = req.body?.CallSid as string;
-    const pin = (req.body?.Digits as string) ?? "";
-
-    if (pin.length === 4) {
-      pendingPins.set(callSid, pin);
-      console.log(`[voice] PIN created for callSid=${callSid}, proceeding to payment intro`);
-      playPrompt(twiml, req, "pin_saved_confirm.mp3",
-        "Your PIN has been set.");
-    } else {
-      // Invalid PIN length — skip PIN and proceed to payment intro anyway
-      console.log(`[voice] PIN entry skipped or invalid for callSid=${callSid}`);
-    }
-    twiml.redirect("/voice/payment-intro");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -3635,18 +3546,15 @@ export async function registerRoutes(
         const totalMinutes = baseMinutes + bonusMinutes;
         const totalSeconds = totalMinutes * 60;
 
-        // Build the membership update — include credentials if this is a first-time setup
-        const pendingPin = pendingPins.get(callSid);
-        pendingPins.delete(callSid);
+        // Build the membership update — assign membership number on first purchase
         const membershipUpdate: Parameters<typeof storage.updateUserMembership>[1] = {
           membershipTier: session.packageName,
           remainingSeconds: totalSeconds,
         };
-        if (pendingPin && !user.membershipPin) {
+        if (!user.membershipNumber) {
           const membershipNumber = phoneToMembershipNumber(fromNumber);
           membershipUpdate.membershipNumber = membershipNumber;
-          membershipUpdate.membershipPin = pendingPin;
-          console.log(`[voice] Saving membership credentials: userId=${user.id}, membershipNumber=${membershipNumber}`);
+          console.log(`[voice] Assigning membership number: userId=${user.id}, membershipNumber=${membershipNumber}`);
         }
 
         await storage.updateUserMembership(user.id, membershipUpdate);
