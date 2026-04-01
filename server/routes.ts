@@ -2010,12 +2010,12 @@ export async function registerRoutes(
 
   // ─── 1c. Free Trial Offer ─────────────────────────────────────────────────
   // Shown to brand-new callers who have no account yet.
-  // They press # to accept the free trial; no response hangs up politely.
+  // Press 1 = activate trial now. Press # = save for later (routed to main menu). Anything else = hangup.
   app.post("/voice/free-trial-offer", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-free-trial-offer", timeout: 15 });
     playPrompt(gather, req, "free_trial_offer.mp3",
-      "We would like to offer you a free trial so you can check out the system and start meeting new people. To start your free trial press the pound key.");
+      "We would like to offer you a free trial. To get your free trial now press 1. To get your free trial later press the pound key.");
     playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
     twiml.hangup();
     res.type("text/xml");
@@ -2029,7 +2029,8 @@ export async function registerRoutes(
     const fromNumber = req.body?.From as string;
     const callSid = req.body?.CallSid as string;
 
-    if (digit === "#") {
+    if (digit === "1") {
+      // Accept — activate free trial now
       try {
         const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
         const freeTrialSeconds = freeTrialMinutes * 60;
@@ -2055,6 +2056,9 @@ export async function registerRoutes(
         playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
         twiml.hangup();
       }
+    } else if (digit === "#") {
+      // Save for later — let them browse without activating the trial
+      twiml.redirect("/voice/main-menu");
     } else {
       playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
       twiml.hangup();
