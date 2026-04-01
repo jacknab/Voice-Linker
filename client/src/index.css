@@ -65,6 +65,17 @@
   }
 }
 
+[data-landing] h1,
+[data-landing] h2,
+[data-landing] h3,
+[data-landing] h4,
+[data-landing] h5,
+[data-landing] h6 {
+  font-family: 'Inter', system-ui, sans-serif;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 @layer utilities {
   .glow-text {
     text-shadow: 0 0 10px hsla(var(--primary) / 0.5), 0 0 20px hsla(var(--primary) / 0.3);
