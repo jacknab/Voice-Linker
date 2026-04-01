@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Phone, MapPin, Loader2, Menu, X, Globe, Shield, Clock, Headphones, Zap, Users, Mic, MessageCircle } from "lucide-react";
+import { Phone, MapPin, Loader2, Menu, X, Shield, Clock, Headphones, Zap, Users, Mic, MessageCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import heroImg from "@assets/hero_guy_1.png";
 
@@ -114,30 +114,11 @@ export default function Landing() {
               </div>
               <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>Phone Booth</span>
             </div>
-            {/* Local number in nav */}
-            <div style={{ borderLeft: "1px solid #2a2a2a", paddingLeft: "1.25rem" }} className="hidden md:block">
-              {localLoading ? (
-                <div style={{ fontSize: "0.75rem", color: "#666" }}>Loading…</div>
-              ) : (
-                <>
-                  <div style={{ fontSize: "0.7rem", color: "#888", lineHeight: 1.3 }}>
-                    Your local {cityLabel ? <strong style={{ color: "#ccc" }}>{cityLabel}</strong> : "area"} access number
-                  </div>
-                  <CallLink phone={displayPhone} style={{ fontSize: "1.1rem", fontWeight: 800, color: "#fff", textDecoration: "none", letterSpacing: "0.01em" }}
-                    data-testid="nav-phone-number"
-                  >
-                    {formatPhone(displayPhone)}
-                  </CallLink>
-                </>
-              )}
-            </div>
           </div>
 
           {/* Right: Nav links */}
           <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.85rem", fontWeight: 500 }}>
             {[
-              { label: "Free Trial", href: "#hero" },
-              { label: "FAQ", href: "#how-it-works" },
               { label: "Buy Time", href: "#pricing" },
               { label: "My Account", href: "#account" },
             ].map(l => (
@@ -150,9 +131,6 @@ export default function Landing() {
                 {l.label}
               </button>
             ))}
-            <button style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem", fontSize: "0.85rem", fontWeight: 500, padding: 0 }}>
-              <Globe className="w-3.5 h-3.5" /> Español
-            </button>
             <button onClick={() => setMobileOpen(v => !v)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", padding: "0.25rem" }}>
               <Menu className="w-5 h-5" />
             </button>
@@ -168,14 +146,8 @@ export default function Landing() {
         {/* Mobile menu */}
         {mobileOpen && (
           <div style={{ background: "#111", borderTop: "1px solid #222", padding: "1rem 1.5rem 1.5rem" }}>
-            <div style={{ marginBottom: "1rem" }}>
-              <div style={{ fontSize: "0.7rem", color: "#888" }}>Your local {cityLabel || "area"} access number</div>
-              <CallLink phone={displayPhone} style={{ fontSize: "1.2rem", fontWeight: 800, color: "#fff", textDecoration: "none" }}>
-                {formatPhone(displayPhone)}
-              </CallLink>
-            </div>
-            {["Free Trial", "FAQ", "Buy Time", "My Account"].map(l => (
-              <button key={l} onClick={() => scrollTo("#how-it-works")}
+            {["Buy Time", "My Account"].map(l => (
+              <button key={l} onClick={() => scrollTo("#pricing")}
                 style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
                 {l}
               </button>
