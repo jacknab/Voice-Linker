@@ -204,7 +204,7 @@ export default function Landing() {
           <h2 style={{ fontSize: "clamp(1.5rem, 3.5vw, 2.2rem)", fontWeight: 900, letterSpacing: "-0.01em", marginBottom: "0.75rem", color: "#fff", textTransform: "uppercase" }}>
             Ready to connect?
           </h2>
-          <p style={{ fontSize: "0.95rem", color: "rgba(255,255,255,0.45)", marginBottom: "2rem", lineHeight: 1.65 }}>
+          <p style={{ fontSize: "0.95rem", color: "#fff", marginBottom: "2rem", lineHeight: 1.65 }}>
             Your first call is free. Just dial and step right in — no sign-up, no photos.
           </p>
           <CallLink phone={displayPhone}
@@ -212,7 +212,7 @@ export default function Landing() {
           >
             <Phone className="w-5 h-5" /> {formatPhone(displayPhone)}
           </CallLink>
-          <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.2)", marginTop: "0.75rem" }}>
+          <p style={{ fontSize: "0.72rem", color: "#fff", marginTop: "0.75rem" }}>
             Free trial on your first call · Must be 18+
           </p>
         </div>
