@@ -103,6 +103,8 @@ success "System packages ready."
 step "2/9  Node.js dependencies"
 # ═══════════════════════════════════════════════════════════════════════════════
 cd "${APP_DIR}"
+info "Cleaning node_modules for a fresh install..."
+rm -rf node_modules
 npm install
 success "npm install complete."
 
@@ -116,43 +118,55 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" \
     || sudo -u postgres psql -c "CREATE ROLE ${DB_USER} WITH LOGIN PASSWORD '${DB_PASSWORD}';"
 sudo -u postgres psql -c "ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';"
 
-# Stop the app service first so it releases its database connection.
-# PostgreSQL will refuse to drop a database that has active connections.
-sudo systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
+# Create database only if it does not already exist — never drop on re-runs
+DB_EXISTS=$(sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" | tr -d '[:space:]')
+if [ "${DB_EXISTS}" = "1" ]; then
+    info "Database '${DB_NAME}' already exists — keeping existing data."
+else
+    info "Creating database '${DB_NAME}'..."
+    sudo systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
+fi
 
-# Drop and recreate the database for a guaranteed clean schema.
-# WITH (FORCE) terminates any remaining connections before dropping.
-warn "Dropping and recreating '${DB_NAME}' for a clean install..."
-sudo -u postgres psql -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS ${DB_NAME} WITH (FORCE);"
-sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
-
-# Privileges (PostgreSQL 15+ requires explicit schema grant)
+# Always ensure correct privileges (safe to run multiple times)
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
 sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};"
 
-success "Database '${DB_NAME}' and user '${DB_USER}' are ready (clean slate)."
+success "Database '${DB_NAME}' and user '${DB_USER}' are ready."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 step "4/9  .env file"
 # ═══════════════════════════════════════════════════════════════════════════════
 NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost/${DB_NAME}?sslmode=disable"
 
+# Use Python for reliable key=value upsert — avoids sed special-character issues
+upsert_env() {
+    local key="$1"
+    local val="$2"
+    local file="${APP_DIR}/.env"
+    python3 - <<PYEOF
+import re, sys
+key = """${key}"""
+val = """${val}"""
+path = """${file}"""
+with open(path, "r") as f:
+    content = f.read()
+pattern = re.compile(r"^" + re.escape(key) + r"=.*$", re.MULTILINE)
+new_line = key + "=" + val
+if pattern.search(content):
+    content = pattern.sub(new_line, content)
+else:
+    content = content.rstrip("\n") + "\n" + new_line + "\n"
+with open(path, "w") as f:
+    f.write(content)
+PYEOF
+}
+
 if [ -f "${APP_DIR}/.env" ]; then
     info ".env exists — updating DB credentials and port, preserving API keys."
-
-    _upsert_env() {
-        local key="$1" val="$2" file="${APP_DIR}/.env"
-        if grep -q "^${key}=" "${file}"; then
-            sed -i "s|^${key}=.*|${key}=${val}|" "${file}"
-        else
-            echo "${key}=${val}" >> "${file}"
-        fi
-    }
-
-    _upsert_env "DATABASE_URL" "${NEW_DB_URL}"
-    _upsert_env "PORT"         "${APP_PORT}"
-    _upsert_env "NODE_ENV"     "production"
-
+    upsert_env "DATABASE_URL" "${NEW_DB_URL}"
+    upsert_env "PORT"         "${APP_PORT}"
+    upsert_env "NODE_ENV"     "production"
     success ".env updated — DATABASE_URL now points to ${DB_NAME}."
 else
     SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
@@ -250,7 +264,6 @@ info "SSL certificate verified at ${CERT_BASE}/"
 [ -L /etc/nginx/sites-enabled/default ] && sudo rm -f /etc/nginx/sites-enabled/default && info "Removed default nginx site."
 
 # Remove any broken symlinks in sites-enabled (leftover from previous app installs)
-# A broken symlink causes nginx -t to fail with "No such file or directory"
 for LINK in /etc/nginx/sites-enabled/*; do
     if [ -L "${LINK}" ] && [ ! -e "${LINK}" ]; then
         sudo rm -f "${LINK}"
@@ -317,6 +330,8 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 30s;
         proxy_connect_timeout 5s;
+        proxy_buffering off;
+        proxy_pass_header Set-Cookie;
     }
 
     # Audio uploads (cached)
