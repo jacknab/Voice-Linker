@@ -3931,7 +3931,11 @@ function SectionActions({ activeTab, onAddProfile, onAddRegion, onSaveMembership
 }
 
 // ── Admin root ────────────────────────────────────────────────────────────────
-export default function Admin() {
+interface AdminProps {
+  onLogout?: () => void;
+}
+
+export default function Admin({ onLogout }: AdminProps) {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [showUpload, setShowUpload] = useState(false);
@@ -3942,7 +3946,11 @@ export default function Admin() {
     mutationFn: () => fetch("/api/admin/logout", { method: "POST" }),
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: ["/api/admin/me"] });
-      setLocation("/admin/login");
+      if (onLogout) {
+        onLogout();
+      } else {
+        setLocation("/admin/login");
+      }
     },
   });
 

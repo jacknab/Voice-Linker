@@ -8,7 +8,9 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:init": "tsx scripts/init-database.ts",
+    "setup": "npm run db:init && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

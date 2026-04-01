@@ -452,16 +452,7 @@ export async function registerRoutes(
   app.use(authRouter);
 
   // ── Admin auth middleware ─────────────────────────────────────────────────
-  // Protects all /api/admin/* routes except the login/logout/me endpoints
-  function requireAdmin(req: Request, res: Response, next: NextFunction) {
-    if (!req.session.adminAccountId) {
-      return res.status(401).json({ error: "Admin authentication required." });
-    }
-    next();
-  }
-
-  // login/logout/me are handled by authRouter before this middleware runs
-  app.use("/api/admin", requireAdmin);
+  // REMOVED: No authentication required for admin access
 
   // ── Audit log helper ──────────────────────────────────────────────────────
   function logAudit(
@@ -1697,7 +1688,7 @@ export async function registerRoutes(
 
     try {
       playPrompt(twiml, req, "system_greeting.mp3",
-        "Welcome to Interactive Mail. Interactive Mail assumes no responsibility for personal meetings.");
+        "Welcome to the Phone Booth. this service assumes no responsibility for personal meetings.");
 
       playPrompt(twiml, req, "disclaimer.mp3", "");
 
