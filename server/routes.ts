@@ -3,7 +3,7 @@ import { type Server } from "http";
 import { storage } from "./storage";
 import authRouter from "./authRoutes";
 import { api } from "@shared/routes";
-import type { MembershipSettings } from "@shared/schema";
+import type { MembershipSettings, SiteSettings } from "@shared/schema";
 import express from "express";
 import twilio from "twilio";
 import multer from "multer";
@@ -14,10 +14,14 @@ import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./
 import { generateTTS, listVoices } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 
-// Ensure uploads directory exists
+// Ensure uploads directory and category subdirectories exist
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+for (const cat of ["mm", "mw"]) {
+  const catDir = path.join(UPLOADS_DIR, cat);
+  if (!fs.existsSync(catDir)) fs.mkdirSync(catDir, { recursive: true });
 }
 
 const upload = multer({
@@ -58,6 +62,24 @@ async function getMembershipSettingsCached(): Promise<MembershipSettings> {
 function invalidateMembershipSettingsCache(): void {
   _cachedSettings = null;
   _cacheExpiresAt = 0;
+}
+
+// ─── Site Settings Cache ───────────────────────────────────────────────────
+// Mirrors the membership settings cache pattern, used by playPrompt and IVR routes.
+
+let _cachedSiteSettings: SiteSettings | null = null;
+let _siteSettingsCacheExpiresAt = 0;
+
+async function getSiteSettingsCached(): Promise<SiteSettings> {
+  if (_cachedSiteSettings && Date.now() < _siteSettingsCacheExpiresAt) return _cachedSiteSettings;
+  _cachedSiteSettings = await storage.getSiteSettings();
+  _siteSettingsCacheExpiresAt = Date.now() + 60_000;
+  return _cachedSiteSettings;
+}
+
+function invalidateSiteSettingsCache(): void {
+  _cachedSiteSettings = null;
+  _siteSettingsCacheExpiresAt = 0;
 }
 
 function centsToLabel(cents: number): string {
@@ -318,13 +340,23 @@ function getRecordingSid(url: string): string | null {
 }
 
 // Play a pre-recorded prompt from uploads/ if the file exists, otherwise fall back to TTS.
-// This lets you drop a clean-named .mp3 into uploads/ and it will be picked up instantly.
+// Automatically checks the site category subfolder (uploads/mm/ or uploads/mw/) first,
+// then falls back to the shared uploads/ root, then falls back to TTS.
 function playPrompt(
   node: { say: (text: string) => void; play: (url: string) => void },
   req: Request,
   filename: string,
   fallbackText: string
 ): void {
+  // Check the active site category subfolder first
+  const category = _cachedSiteSettings?.siteCategory?.toLowerCase();
+  if (category) {
+    const catPath = path.join(UPLOADS_DIR, category, filename);
+    if (fs.existsSync(catPath)) {
+      node.play(`${baseUrl(req)}/uploads/${category}/${filename}`);
+      return;
+    }
+  }
   const filePath = path.join(UPLOADS_DIR, filename);
   if (fs.existsSync(filePath)) {
     node.play(`${baseUrl(req)}/uploads/${filename}`);
@@ -399,6 +431,9 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   app.use(express.urlencoded({ extended: true }));
+
+  // Prime the site settings cache so playPrompt can use category-specific audio on first call
+  getSiteSettingsCached().catch(() => {});
 
   // ── Auth routes ───────────────────────────────────────────────────────────
   app.use(authRouter);
@@ -976,46 +1011,80 @@ export async function registerRoutes(
   // List all prompt files currently in uploads/ with their TTS-friendly name
   app.get("/api/admin/tts/prompts", (_req, res) => {
     try {
-      const files = fs.readdirSync(UPLOADS_DIR)
-        .filter(f => f.endsWith(".mp3"))
-        .map(f => ({
-          filename: f,
-          url: `/uploads/${f}`,
-          size: fs.statSync(path.join(UPLOADS_DIR, f)).size,
-        }));
+      const files: { filename: string; url: string; size: number; folder: string }[] = [];
+
+      // Shared files (root uploads/)
+      for (const f of fs.readdirSync(UPLOADS_DIR)) {
+        const full = path.join(UPLOADS_DIR, f);
+        if (f.endsWith(".mp3") && fs.statSync(full).isFile()) {
+          files.push({ filename: f, url: `/uploads/${f}`, size: fs.statSync(full).size, folder: "shared" });
+        }
+      }
+
+      // Category subfolders (mm/ and mw/)
+      for (const cat of ["mm", "mw"]) {
+        const catDir = path.join(UPLOADS_DIR, cat);
+        if (fs.existsSync(catDir) && fs.statSync(catDir).isDirectory()) {
+          for (const f of fs.readdirSync(catDir)) {
+            const full = path.join(catDir, f);
+            if (f.endsWith(".mp3") && fs.statSync(full).isFile()) {
+              files.push({ filename: f, url: `/uploads/${cat}/${f}`, size: fs.statSync(full).size, folder: cat });
+            }
+          }
+        }
+      }
+
       res.json(files);
     } catch (e) {
       res.status(500).json({ message: "Failed to list prompts" });
     }
   });
 
-  // Generate a TTS audio file via ElevenLabs and save it to uploads/
+  // Generate a TTS audio file via ElevenLabs — supports optional 'folder' param (mm/mw/undefined=shared)
   app.post("/api/admin/tts/generate", async (req, res) => {
     try {
-      const { text, filename } = req.body as { text?: string; filename?: string };
+      const { text, filename, folder } = req.body as { text?: string; filename?: string; folder?: string };
       if (!text?.trim()) return res.status(400).json({ message: "text is required" });
       if (!filename?.trim()) return res.status(400).json({ message: "filename is required" });
 
+      const validFolders = ["mm", "mw"];
+      const targetFolder = folder && validFolders.includes(folder.toLowerCase()) ? folder.toLowerCase() : null;
+
       // Enforce .mp3 extension and sanitize
       const safe = filename.replace(/[^a-zA-Z0-9_\-]/g, "_").replace(/\.mp3$/i, "") + ".mp3";
-      await generateTTS(text.trim(), safe);
-      logAudit("audio_generated", { targetType: "audio", targetLabel: safe });
-      res.json({ filename: safe, url: `/uploads/${safe}` });
+      await generateTTS(text.trim(), safe, targetFolder ?? undefined);
+      const fileLabel = targetFolder ? `${targetFolder}/${safe}` : safe;
+      logAudit("audio_generated", { targetType: "audio", targetLabel: fileLabel });
+      res.json({
+        filename: safe,
+        url: targetFolder ? `/uploads/${targetFolder}/${safe}` : `/uploads/${safe}`,
+        folder: targetFolder ?? "shared",
+      });
     } catch (e: any) {
       console.error("[admin/tts] generation failed:", e);
       res.status(500).json({ message: e?.message ?? "TTS generation failed" });
     }
   });
 
-  // Delete a prompt file from uploads/
+  // Delete a prompt file from uploads/ — supports ?folder=mm or ?folder=mw for category files
   app.delete("/api/admin/tts/prompts/:filename", (req, res) => {
     try {
       const { filename } = req.params;
+      const folder = req.query.folder as string | undefined;
+
       if (!filename.endsWith(".mp3")) return res.status(400).json({ message: "Invalid filename" });
-      const filePath = path.join(UPLOADS_DIR, filename);
+
+      const validFolders = ["mm", "mw"];
+      const targetFolder = folder && validFolders.includes(folder.toLowerCase()) ? folder.toLowerCase() : null;
+
+      const filePath = targetFolder
+        ? path.join(UPLOADS_DIR, targetFolder, filename)
+        : path.join(UPLOADS_DIR, filename);
+
       if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found" });
       fs.unlinkSync(filePath);
-      logAudit("audio_deleted", { targetType: "audio", targetLabel: filename });
+      const fileLabel = targetFolder ? `${targetFolder}/${filename}` : filename;
+      logAudit("audio_deleted", { targetType: "audio", targetLabel: fileLabel });
       res.status(204).send();
     } catch (e) {
       res.status(500).json({ message: "Failed to delete file" });
@@ -1071,6 +1140,7 @@ export async function registerRoutes(
       if (customerServicePhone !== undefined) data.customerServicePhone = customerServicePhone ? String(customerServicePhone).trim() : null;
       if (siteCategory !== undefined) data.siteCategory = siteCategory === "MW" ? "MW" : "MM";
       const updated = await storage.updateSiteSettings(data);
+      invalidateSiteSettingsCache();
       logAudit("site_settings_updated", { targetType: "settings", detail: data as Record<string, unknown> });
       res.json(updated);
     } catch (e) {
@@ -1596,7 +1666,9 @@ export async function registerRoutes(
       } else {
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
         callTimeAnnounced.add(callSid);
-        twiml.redirect("/voice/main-menu");
+        // MW systems bypass the main menu and go straight into the phone booth
+        const siteConf = await getSiteSettingsCached();
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/phone-booth" : "/voice/main-menu");
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check-override error:", error);
@@ -1630,8 +1702,9 @@ export async function registerRoutes(
         // Has time — announce remaining time to all callers at entry
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
         callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
-        // Send caller to the main menu
-        twiml.redirect("/voice/main-menu");
+        // MW systems bypass the main menu and go straight into the phone booth
+        const siteConf = await getSiteSettingsCached();
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/phone-booth" : "/voice/main-menu");
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check error:", error);
@@ -1682,8 +1755,9 @@ export async function registerRoutes(
           "Your free trial will expire in seven days and it must be used from this phone number.");
         callTimeAnnounced.add(callSid);
 
-        // Send caller to the main menu
-        twiml.redirect("/voice/main-menu");
+        // MW systems bypass the main menu and go straight into the phone booth
+        const siteConf = await getSiteSettingsCached();
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/phone-booth" : "/voice/main-menu");
       } catch (error) {
         console.error("[voice] handle-free-trial-offer error:", error);
         playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");

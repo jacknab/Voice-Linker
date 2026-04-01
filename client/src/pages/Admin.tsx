@@ -663,43 +663,69 @@ function TTSTab() {
   const [editingText, setEditingText] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [categoryFolder, setCategoryFolder] = useState<"shared" | "mm" | "mw">("shared");
 
   const { data: settings } = useQuery<{ voiceId: string }>({ queryKey: ["/api/admin/tts/settings"] });
-  const { data: existingFiles, refetch: refetchFiles } = useQuery<{ filename: string; url: string; size: number }[]>({ queryKey: ["/api/admin/tts/prompts"] });
-  const existingSet = new Set((existingFiles ?? []).map(f => f.filename));
+  const { data: existingFiles } = useQuery<{ filename: string; url: string; size: number; folder: string }[]>({ queryKey: ["/api/admin/tts/prompts"] });
   const { data: zipEntries = [] } = useQuery<ZipEntry[]>({ queryKey: ["/api/admin/zip-codes"] });
   const neighborhoodEntries = zipEntries.filter(e => e.audioFile && e.neighborhood);
 
+  const existingMap = new Map<string, { filename: string; url: string; size: number; folder: string }>(
+    (existingFiles ?? []).map(f => [`${f.folder}:${f.filename}`, f])
+  );
+  function fileExistsIn(folder: string, filename: string): boolean {
+    return existingMap.has(`${folder}:${filename}`);
+  }
+  function getFileIn(folder: string, filename: string) {
+    return existingMap.get(`${folder}:${filename}`);
+  }
+
   const generateMutation = useMutation({
-    mutationFn: async ({ text, filename }: { text: string; filename: string }) => {
-      const res = await fetch("/api/admin/tts/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, filename }) });
+    mutationFn: async ({ text, filename, folder }: { text: string; filename: string; folder?: string }) => {
+      const res = await fetch("/api/admin/tts/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, filename, folder: folder && folder !== "shared" ? folder : undefined }),
+      });
       if (!res.ok) { const err = await res.json().catch(() => ({ message: "Generation failed" })); throw new Error(err.message); }
-      return res.json() as Promise<{ filename: string; url: string }>;
+      return res.json() as Promise<{ filename: string; url: string; folder: string }>;
     },
-    onSuccess: (data) => { queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] }); toast({ title: "Audio generated", description: data.filename }); setGenerating(null); },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
+      toast({ title: "Audio generated", description: data.filename });
+      setGenerating(null);
+    },
     onError: (err: Error) => { toast({ title: "Generation failed", description: err.message, variant: "destructive" }); setGenerating(null); },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (filename: string) => {
-      const res = await fetch(`/api/admin/tts/prompts/${encodeURIComponent(filename)}`, { method: "DELETE" });
+    mutationFn: async ({ filename, folder }: { filename: string; folder: string }) => {
+      const folderParam = folder && folder !== "shared" ? `?folder=${encodeURIComponent(folder)}` : "";
+      const res = await fetch(`/api/admin/tts/prompts/${encodeURIComponent(filename)}${folderParam}`, { method: "DELETE" });
       if (!res.ok && res.status !== 204) throw new Error("Delete failed");
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] }); toast({ title: "File deleted" }); },
     onError: () => toast({ title: "Delete failed", variant: "destructive" }),
   });
 
-  function handleGenerate(filename: string, text: string) { setGenerating(filename); generateMutation.mutate({ text, filename }); }
+  function handleGenerate(filename: string, text: string, folder?: string) {
+    const key = `${folder ?? "shared"}:${filename}`;
+    setGenerating(key);
+    generateMutation.mutate({ text, filename, folder });
+  }
   function handleCustomGenerate() {
     if (!customText.trim() || !customFilename.trim()) return;
     const fn = customFilename.trim().replace(/\.mp3$/i, "") + ".mp3";
-    setGenerating(fn);
-    generateMutation.mutate({ text: customText.trim(), filename: fn });
+    const key = `${categoryFolder}:${fn}`;
+    setGenerating(key);
+    generateMutation.mutate({ text: customText.trim(), filename: fn, folder: categoryFolder });
     setCustomText(""); setCustomFilename("");
   }
 
   const filtered = SYSTEM_PROMPTS.filter(p => !filter || p.label.toLowerCase().includes(filter.toLowerCase()) || p.filename.toLowerCase().includes(filter.toLowerCase()));
-  const generatedCount = SYSTEM_PROMPTS.filter(p => existingSet.has(p.filename)).length;
+  const generatedCount = SYSTEM_PROMPTS.filter(p =>
+    fileExistsIn("shared", p.filename) || fileExistsIn("mm", p.filename) || fileExistsIn("mw", p.filename)
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -717,7 +743,40 @@ function TTSTab() {
 
       <div className={C.card}>
         <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+          <Settings size={14} className="text-[#f5a623]" /> Audio Category Folder
+        </h3>
+        <p className="text-gray-400 font-mono text-xs -mt-1">
+          Select which folder to generate audio into. MM and MW each have their own set of prompts that override the shared (default) files. The phone system automatically plays the correct version based on the Site Category setting.
+        </p>
+        <div className="flex gap-2 mt-1">
+          {([
+            { id: "shared", label: "Shared", hint: "Used by both MM & MW if no category override exists" },
+            { id: "mm",     label: "MM",     hint: "Men seeking Men — overrides shared prompts" },
+            { id: "mw",     label: "MW",     hint: "Men seeking Women — overrides shared prompts" },
+          ] as const).map(opt => (
+            <button
+              key={opt.id}
+              data-testid={`btn-category-${opt.id}`}
+              onClick={() => setCategoryFolder(opt.id)}
+              title={opt.hint}
+              className={`px-3 py-1.5 rounded text-xs font-mono font-bold border transition-colors ${
+                categoryFolder === opt.id
+                  ? "bg-[#f5a623] border-[#f5a623] text-white"
+                  : "bg-white border-gray-300 text-gray-500 hover:border-[#f5a623] hover:text-[#f5a623]"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={C.card}>
+        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
           <Wand2 size={14} className="text-[#f5a623]" /> Custom Audio File
+          <span className="ml-auto text-[10px] font-normal normal-case text-gray-400 border border-gray-200 rounded px-2 py-0.5">
+            → {categoryFolder === "shared" ? "Shared" : categoryFolder.toUpperCase()} folder
+          </span>
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
@@ -739,7 +798,7 @@ function TTSTab() {
           </div>
         </div>
         <button data-testid="btn-generate-custom" onClick={handleCustomGenerate} disabled={!customText.trim() || !customFilename.trim() || !!generating} className={C.btnPrimary}>
-          {generating === customFilename ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+          {generating === `${categoryFolder}:${customFilename.trim().replace(/\.mp3$/i, "") + ".mp3"}` ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
           Generate
         </button>
       </div>
@@ -765,9 +824,9 @@ function TTSTab() {
               <tbody>
                 {neighborhoodEntries.map(entry => {
                   const filename = entry.audioFile!;
-                  const exists = existingSet.has(filename);
-                  const isGen = generating === filename;
-                  const existingFile = (existingFiles ?? []).find(f => f.filename === filename);
+                  const exists = fileExistsIn("shared", filename);
+                  const isGen = generating === `shared:${filename}`;
+                  const existingFile = getFileIn("shared", filename);
                   return (
                     <tr key={entry.id} data-testid={`row-neighborhood-audio-${entry.id}`} className={C.row}>
                       <td className={C.td + " w-48"}>
@@ -787,7 +846,7 @@ function TTSTab() {
                         <div className="flex items-center gap-1.5">
                           <button
                             data-testid={`btn-generate-neighborhood-${entry.id}`}
-                            onClick={() => handleGenerate(filename, entry.neighborhood!)}
+                            onClick={() => handleGenerate(filename, entry.neighborhood!, "shared")}
                             disabled={!!generating}
                             className={C.btnGhost + " text-[10px]"}
                           >
@@ -799,7 +858,7 @@ function TTSTab() {
                               {existingFile && <AudioPlayer src={existingFile.url} />}
                               <button
                                 data-testid={`btn-delete-neighborhood-${entry.id}`}
-                                onClick={() => deleteMutation.mutate(filename)}
+                                onClick={() => deleteMutation.mutate({ filename, folder: "shared" })}
                                 className={C.btnDanger + " text-[10px]"}
                               >
                                 <Trash2 size={10} />
@@ -819,7 +878,12 @@ function TTSTab() {
 
       <div className={C.card}>
         <div className="flex items-center justify-between">
-          <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">System Prompts</h3>
+          <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">
+            System Prompts
+            <span className="ml-2 text-[10px] font-normal normal-case text-gray-400 border border-gray-200 rounded px-2 py-0.5">
+              Folder: {categoryFolder === "shared" ? "Shared" : categoryFolder.toUpperCase()}
+            </span>
+          </h3>
           <input
             data-testid="input-filter-prompts"
             type="text"
@@ -841,9 +905,9 @@ function TTSTab() {
             </thead>
             <tbody>
               {filtered.map(prompt => {
-                const exists = existingSet.has(prompt.filename);
-                const isGen = generating === prompt.filename;
-                const existingFile = (existingFiles ?? []).find(f => f.filename === prompt.filename);
+                const exists = fileExistsIn(categoryFolder, prompt.filename);
+                const isGen = generating === `${categoryFolder}:${prompt.filename}`;
+                const existingFile = getFileIn(categoryFolder, prompt.filename);
                 const currentText = editingText[prompt.filename] ?? prompt.text;
                 return (
                   <tr key={prompt.filename} data-testid={`row-prompt-${prompt.filename}`} className={C.row}>
@@ -870,7 +934,7 @@ function TTSTab() {
                       <div className="flex items-center gap-1.5">
                         <button
                           data-testid={`btn-generate-${prompt.filename}`}
-                          onClick={() => handleGenerate(prompt.filename, currentText)}
+                          onClick={() => handleGenerate(prompt.filename, currentText, categoryFolder)}
                           disabled={!!generating}
                           className={C.btnGhost + " text-[10px]"}
                         >
@@ -880,7 +944,7 @@ function TTSTab() {
                         {exists && (
                           <>
                             {existingFile && <AudioPlayer src={existingFile.url} />}
-                            <button data-testid={`btn-delete-prompt-${prompt.filename}`} onClick={() => deleteMutation.mutate(prompt.filename)} className={C.btnDanger + " text-[10px]"}>
+                            <button data-testid={`btn-delete-prompt-${prompt.filename}`} onClick={() => deleteMutation.mutate({ filename: prompt.filename, folder: categoryFolder })} className={C.btnDanger + " text-[10px]"}>
                               <Trash2 size={10} />
                             </button>
                           </>
