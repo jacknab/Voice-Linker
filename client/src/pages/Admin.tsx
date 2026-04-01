@@ -2511,32 +2511,38 @@ function ZipCodesTab() {
   const { toast } = useToast();
   const [newCode, setNewCode] = useState("");
   const [newNeighborhood, setNewNeighborhood] = useState("");
+  const [newLat, setNewLat] = useState("");
+  const [newLon, setNewLon] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+  const [editingLat, setEditingLat] = useState("");
+  const [editingLon, setEditingLon] = useState("");
 
   const { data: entries = [], isLoading } = useQuery<ZipEntry[]>({
     queryKey: ["/api/admin/zip-codes"],
   });
 
   const addMutation = useMutation({
-    mutationFn: (body: { code: string; neighborhood: string }) =>
+    mutationFn: (body: { code: string; neighborhood: string; latitude?: string; longitude?: string }) =>
       apiRequest("POST", "/api/admin/zip-codes", body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/zip-codes"] });
       setNewCode("");
       setNewNeighborhood("");
+      setNewLat("");
+      setNewLon("");
       toast({ title: "Zip code saved" });
     },
     onError: () => toast({ title: "Failed to save", variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, neighborhood }: { id: string; neighborhood: string }) =>
-      apiRequest("PATCH", `/api/admin/zip-codes/${id}`, { neighborhood }),
+    mutationFn: ({ id, neighborhood, latitude, longitude }: { id: string; neighborhood: string; latitude?: string; longitude?: string }) =>
+      apiRequest("PATCH", `/api/admin/zip-codes/${id}`, { neighborhood, latitude, longitude }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/zip-codes"] });
       setEditingId(null);
-      toast({ title: "Neighborhood updated" });
+      toast({ title: "Zip code updated" });
     },
     onError: () => toast({ title: "Failed to update", variant: "destructive" }),
   });
@@ -2554,13 +2560,13 @@ function ZipCodesTab() {
     <div className="space-y-4">
       {/* Add form */}
       <div className={C.panel}>
-        <div className={C.panelHeader}>Add / Update Zip Code Neighborhood</div>
+        <div className={C.panelHeader}>Add / Update Zip Code</div>
         <div className={C.panelBody + " p-4"}>
           <p className="text-xs text-gray-500 font-mono mb-3">
-            Enter a zip code and its neighborhood name. Used as a fallback when live geocoding is unavailable.
-            If the zip already exists in the system it will update the neighborhood name.
+            Enter a zip code, neighborhood name, and optional coordinates. Coordinates are used for proximity sorting.
+            If the zip already exists it will be updated.
           </p>
-          <div className="flex gap-2 items-end">
+          <div className="flex flex-wrap gap-2 items-end">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-mono text-gray-500 uppercase tracking-widest">Zip Code</label>
               <input
@@ -2569,10 +2575,10 @@ function ZipCodesTab() {
                 onChange={e => setNewCode(e.target.value.replace(/\D/g, "").slice(0, 5))}
                 placeholder="e.g. 90210"
                 maxLength={5}
-                className="border border-gray-300 rounded px-3 py-1.5 text-sm font-mono w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="border border-gray-300 rounded px-3 py-1.5 text-sm font-mono w-28 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <div className="flex flex-col gap-1 flex-1">
+            <div className="flex flex-col gap-1 flex-1 min-w-[150px]">
               <label className="text-xs font-mono text-gray-500 uppercase tracking-widest">Neighborhood Name</label>
               <input
                 data-testid="input-neighborhood"
@@ -2582,9 +2588,29 @@ function ZipCodesTab() {
                 className="border border-gray-300 rounded px-3 py-1.5 text-sm font-mono w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-mono text-gray-500 uppercase tracking-widest">Latitude</label>
+              <input
+                data-testid="input-latitude"
+                value={newLat}
+                onChange={e => setNewLat(e.target.value)}
+                placeholder="e.g. 34.0901"
+                className="border border-gray-300 rounded px-3 py-1.5 text-sm font-mono w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-mono text-gray-500 uppercase tracking-widest">Longitude</label>
+              <input
+                data-testid="input-longitude"
+                value={newLon}
+                onChange={e => setNewLon(e.target.value)}
+                placeholder="e.g. -118.4065"
+                className="border border-gray-300 rounded px-3 py-1.5 text-sm font-mono w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
             <button
               data-testid="btn-save-zip"
-              onClick={() => addMutation.mutate({ code: newCode, neighborhood: newNeighborhood })}
+              onClick={() => addMutation.mutate({ code: newCode, neighborhood: newNeighborhood, latitude: newLat || undefined, longitude: newLon || undefined })}
               disabled={newCode.length !== 5 || !newNeighborhood.trim() || addMutation.isPending}
               className={C.btnPrimary + " self-end"}
             >
@@ -2622,30 +2648,13 @@ function ZipCodesTab() {
                     <td className="px-4 py-2.5 font-bold">{entry.code}</td>
                     <td className="px-4 py-2.5">
                       {editingId === entry.id ? (
-                        <div className="flex gap-1.5 items-center">
-                          <input
-                            data-testid={`input-edit-neighborhood-${entry.id}`}
-                            value={editingValue}
-                            onChange={e => setEditingValue(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
-                            autoFocus
-                          />
-                          <button
-                            data-testid={`btn-confirm-edit-${entry.id}`}
-                            onClick={() => updateMutation.mutate({ id: entry.id, neighborhood: editingValue })}
-                            disabled={!editingValue.trim() || updateMutation.isPending}
-                            className="text-green-600 hover:text-green-800 transition-colors"
-                          >
-                            <CheckCircle2 size={14} />
-                          </button>
-                          <button
-                            data-testid={`btn-cancel-edit-${entry.id}`}
-                            onClick={() => setEditingId(null)}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
+                        <input
+                          data-testid={`input-edit-neighborhood-${entry.id}`}
+                          value={editingValue}
+                          onChange={e => setEditingValue(e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
+                          autoFocus
+                        />
                       ) : (
                         <span className={entry.neighborhood ? "text-gray-800" : "text-gray-400 italic"}>
                           {entry.neighborhood || entry.city || "—"}
@@ -2670,18 +2679,62 @@ function ZipCodesTab() {
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-gray-400">
-                      {entry.latitude != null && entry.longitude != null
-                        ? `${entry.latitude.toFixed(4)}, ${entry.longitude.toFixed(4)}`
-                        : "—"}
+                      {editingId === entry.id ? (
+                        <div className="flex gap-1.5 items-center">
+                          <input
+                            data-testid={`input-edit-lat-${entry.id}`}
+                            value={editingLat}
+                            onChange={e => setEditingLat(e.target.value)}
+                            placeholder="Lat"
+                            className="border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 w-24"
+                          />
+                          <input
+                            data-testid={`input-edit-lon-${entry.id}`}
+                            value={editingLon}
+                            onChange={e => setEditingLon(e.target.value)}
+                            placeholder="Lon"
+                            className="border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 w-24"
+                          />
+                        </div>
+                      ) : (
+                        entry.latitude != null && entry.longitude != null
+                          ? `${entry.latitude.toFixed(4)}, ${entry.longitude.toFixed(4)}`
+                          : "—"
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right">
                       <div className="flex gap-2 justify-end">
-                        {editingId !== entry.id && (
+                        {editingId === entry.id ? (
+                          <>
+                            <button
+                              data-testid={`btn-confirm-edit-${entry.id}`}
+                              onClick={() => updateMutation.mutate({ id: entry.id, neighborhood: editingValue, latitude: editingLat || undefined, longitude: editingLon || undefined })}
+                              disabled={!editingValue.trim() || updateMutation.isPending}
+                              className="text-green-600 hover:text-green-800 transition-colors"
+                              title="Save changes"
+                            >
+                              <CheckCircle2 size={14} />
+                            </button>
+                            <button
+                              data-testid={`btn-cancel-edit-${entry.id}`}
+                              onClick={() => setEditingId(null)}
+                              className="text-gray-400 hover:text-gray-600 transition-colors"
+                              title="Cancel"
+                            >
+                              <X size={14} />
+                            </button>
+                          </>
+                        ) : (
                           <button
                             data-testid={`btn-edit-zip-${entry.id}`}
-                            onClick={() => { setEditingId(entry.id); setEditingValue(entry.neighborhood ?? ""); }}
+                            onClick={() => {
+                              setEditingId(entry.id);
+                              setEditingValue(entry.neighborhood ?? "");
+                              setEditingLat(entry.latitude != null ? String(entry.latitude) : "");
+                              setEditingLon(entry.longitude != null ? String(entry.longitude) : "");
+                            }}
                             className="text-gray-400 hover:text-blue-600 transition-colors"
-                            title="Edit neighborhood"
+                            title="Edit entry"
                           >
                             <Pencil size={13} />
                           </button>

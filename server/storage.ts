@@ -114,9 +114,10 @@ export interface IStorage {
   getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string; neighborhood?: string | null }): Promise<ZipCode>;
   setUserZipCode(userId: string, zipCodeId: string): Promise<void>;
   getAllZipCodes(): Promise<ZipCode[]>;
-  upsertAdminZipEntry(code: string, neighborhood: string): Promise<ZipCode>;
+  upsertAdminZipEntry(code: string, neighborhood: string, latitude?: number, longitude?: number): Promise<ZipCode>;
   deleteZipEntry(id: string): Promise<void>;
   updateZipNeighborhood(id: string, neighborhood: string): Promise<ZipCode>;
+  updateZipEntry(id: string, neighborhood: string, latitude?: number, longitude?: number): Promise<ZipCode>;
 
   getMembershipSettings(): Promise<MembershipSettings>;
   updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
@@ -575,17 +576,23 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(zipCodes).orderBy(zipCodes.code);
   }
 
-  async upsertAdminZipEntry(code: string, neighborhood: string): Promise<ZipCode> {
+  async upsertAdminZipEntry(code: string, neighborhood: string, latitude?: number, longitude?: number): Promise<ZipCode> {
     const audioFile = neighborhoodToAudioFile(neighborhood);
     const [existing] = await db.select().from(zipCodes).where(eq(zipCodes.code, code));
     if (existing) {
+      const updateData: Record<string, unknown> = { neighborhood, audioFile };
+      if (latitude !== undefined && !isNaN(latitude)) updateData.latitude = latitude;
+      if (longitude !== undefined && !isNaN(longitude)) updateData.longitude = longitude;
       const [updated] = await db.update(zipCodes)
-        .set({ neighborhood, audioFile })
+        .set(updateData)
         .where(eq(zipCodes.id, existing.id))
         .returning();
       return updated;
     }
-    const [created] = await db.insert(zipCodes).values({ code, neighborhood, audioFile }).returning();
+    const insertData: Record<string, unknown> = { code, neighborhood, audioFile };
+    if (latitude !== undefined && !isNaN(latitude)) insertData.latitude = latitude;
+    if (longitude !== undefined && !isNaN(longitude)) insertData.longitude = longitude;
+    const [created] = await db.insert(zipCodes).values(insertData as any).returning();
     return created;
   }
 
@@ -597,6 +604,18 @@ export class DatabaseStorage implements IStorage {
     const audioFile = neighborhoodToAudioFile(neighborhood);
     const [updated] = await db.update(zipCodes)
       .set({ neighborhood, audioFile })
+      .where(eq(zipCodes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateZipEntry(id: string, neighborhood: string, latitude?: number, longitude?: number): Promise<ZipCode> {
+    const audioFile = neighborhoodToAudioFile(neighborhood);
+    const updateData: Record<string, unknown> = { neighborhood, audioFile };
+    if (latitude !== undefined && !isNaN(latitude)) updateData.latitude = latitude;
+    if (longitude !== undefined && !isNaN(longitude)) updateData.longitude = longitude;
+    const [updated] = await db.update(zipCodes)
+      .set(updateData)
       .where(eq(zipCodes.id, id))
       .returning();
     return updated;
