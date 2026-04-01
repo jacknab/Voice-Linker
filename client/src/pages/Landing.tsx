@@ -219,9 +219,9 @@ export default function Landing() {
               </p>
             </div>
             {[
-              { heading: "Account", links: ["My Account", "Buy Time", "Free Trial", "Memberships", "Payment Options"] },
+              { heading: "Account", links: ["Buy Time", "Free Trial", "Memberships"] },
               { heading: "Help", links: ["Customer Support", "FAQ", "Keypad Tips", "Cities Coverage", "Safety Tips"] },
-              { heading: "Company", links: ["About Us", "Affiliates", "Privacy Policy", "Terms of Use"] },
+              { heading: "Company", links: ["About Us", "Privacy Policy", "Terms of Use"] },
             ].map(col => (
               <div key={col.heading}>
                 <h4 style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", marginBottom: "0.75rem" }}>
