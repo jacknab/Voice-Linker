@@ -284,10 +284,11 @@ function MembershipInfoCard({ membership, siteName }: { membership: PhoneMembers
 
         {membership.membershipNumber && (
           <div>
-            <p style={{ color: "#555", fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 0.3rem" }}>Member #</p>
-            <p style={{ color: "#888", fontSize: "0.8rem", fontFamily: "monospace", margin: 0 }} data-testid="text-membership-number">
+            <p style={{ color: "#555", fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 0.3rem" }}>Member ID</p>
+            <p style={{ color: "#888", fontSize: "0.8rem", fontFamily: "monospace", letterSpacing: "0.05em", margin: 0 }} data-testid="text-membership-number">
               {membership.membershipNumber}
             </p>
+            <p style={{ color: "#444", fontSize: "0.68rem", margin: "0.2rem 0 0" }}>10-digit member identifier</p>
           </div>
         )}
       </div>

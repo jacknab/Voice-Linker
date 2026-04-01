@@ -182,7 +182,10 @@ router.post("/api/auth/link-phone", async (req: Request, res: Response) => {
 
     const phoneUser = await storage.getUserByPhone(normalized);
 
-    if (!phoneUser) {
+    // Fail if no user found OR if the user has no active membership tier
+    const hasActiveMembership = phoneUser && phoneUser.membershipTier !== null;
+
+    if (!hasActiveMembership) {
       const attempts = await storage.incrementWebUserLinkAttempts(webUser.id);
       const remaining = Math.max(0, 3 - attempts);
 
@@ -196,9 +199,9 @@ router.post("/api/auth/link-phone", async (req: Request, res: Response) => {
         });
       }
 
-      console.log(`[auth] link-phone: failed attempt ${attempts}/3 for web user ${webUser.id}`);
+      console.log(`[auth] link-phone: failed attempt ${attempts}/3 for web user ${webUser.id} (phone=${normalized}, found=${!!phoneUser}, hasTier=${!!phoneUser?.membershipTier})`);
       return res.status(404).json({
-        error: `No membership found for that phone number. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+        error: `No active membership found for that phone number. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
         attemptsRemaining: remaining,
       });
     }
