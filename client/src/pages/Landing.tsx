@@ -5,7 +5,7 @@ import { Link } from "wouter";
 import heroImgMM from "@assets/hero_guy_1.png";
 import heroImgMW from "@assets/image_1775035245108.png";
 
-const DEFAULT_PHONE = "800-730-2508";
+const DEFAULT_PHONE = "000-000-0000";
 const DEFAULT_SITE_NAME = "Phone Booth";
 
 interface SiteSettings {

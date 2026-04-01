@@ -1025,6 +1025,65 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Admin: Membership Cards ──────────────────────────────────────────────
+
+  app.get("/api/admin/cards", async (_req, res) => {
+    try {
+      const cards = await storage.getAllMembershipCards();
+      res.json(cards);
+    } catch (e) {
+      console.error("[admin] /api/admin/cards GET error:", e);
+      res.status(500).json({ message: "Failed to fetch membership cards" });
+    }
+  });
+
+  app.post("/api/admin/cards", async (req, res) => {
+    try {
+      const { cardNumber: requestedNumber, notes } = req.body as { cardNumber?: string; notes?: string };
+      let cardNumber: string;
+      if (requestedNumber) {
+        if (!/^\d{5}$/.test(requestedNumber)) {
+          return res.status(400).json({ message: "Card number must be exactly 5 digits" });
+        }
+        const taken = await storage.isMembershipCardNumberTaken(requestedNumber);
+        if (taken) {
+          return res.status(409).json({ message: "That card number is already in use" });
+        }
+        cardNumber = requestedNumber;
+      } else {
+        cardNumber = await generateUniqueCardNumber();
+      }
+      const card = await storage.createMembershipCard(cardNumber, notes ?? undefined);
+      res.status(201).json(card);
+    } catch (e) {
+      console.error("[admin] /api/admin/cards POST error:", e);
+      res.status(500).json({ message: "Failed to create membership card" });
+    }
+  });
+
+  app.patch("/api/admin/cards/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { notes } = req.body as { notes?: string };
+      await storage.updateMembershipCardNotes(id, notes ?? "");
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] /api/admin/cards PATCH error:", e);
+      res.status(500).json({ message: "Failed to update membership card" });
+    }
+  });
+
+  app.delete("/api/admin/cards/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteMembershipCard(id);
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] /api/admin/cards DELETE error:", e);
+      res.status(500).json({ message: "Failed to delete membership card" });
+    }
+  });
+
   // --- Admin: Simulator status ---
   app.get("/api/admin/simulator/live", async (_req, res) => {
     try {
@@ -4327,9 +4386,11 @@ export async function registerRoutes(
           membershipTier: session.packageName,
           remainingSeconds: totalSeconds,
         };
+        let issuedCardNumber: string | null = null;
         if (!user.membershipNumber) {
           const membershipNumber = await generateUniqueCardNumber();
           membershipUpdate.membershipNumber = membershipNumber;
+          issuedCardNumber = membershipNumber;
           // Create a card record and immediately link it to this phone
           const card = await storage.createMembershipCard(membershipNumber, "Issued on purchase");
           await storage.linkCardToPhone(card.id, fromNumber);
@@ -4342,9 +4403,12 @@ export async function registerRoutes(
         const bonusMsg = bonusMinutes > 0
           ? ` Plus your first purchase bonus doubles your minutes — enjoy ${totalMinutes.toLocaleString()} minutes total!`
           : "";
+        const cardMsg = issuedCardNumber
+          ? ` Your new membership card number is: ${issuedCardNumber.split("").join(", ")}. Please save this number — you can use it to access your membership from any phone.`
+          : "";
         const successText =
           `Payment successful! You now have ${session.packageLabel} access. ` +
-          `Your card has been charged ${session.priceLabel}.${bonusMsg} ` +
+          `Your card has been charged ${session.priceLabel}.${bonusMsg}${cardMsg} ` +
           "Thank you for joining. Returning to the main menu.";
 
         if (session.isFirstPurchase) {

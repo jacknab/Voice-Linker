@@ -42,7 +42,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings";
 
 interface FlaggedItem {
   id: string;
@@ -3557,6 +3557,194 @@ function AnalyticsTab() {
   );
 }
 
+// ── Membership Cards Tab ───────────────────────────────────────────────────────
+interface MembershipCard {
+  id: string;
+  cardNumber: string;
+  phoneNumber: string | null;
+  notes: string | null;
+  createdAt: string;
+  firstUsedAt: string | null;
+}
+
+function MembershipCardsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [customNumber, setCustomNumber] = useState("");
+  const [notes, setNotes] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [search, setSearch] = useState("");
+
+  const { data: cards = [], isLoading } = useQuery<MembershipCard[]>({
+    queryKey: ["/api/admin/cards"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (body: { cardNumber?: string; notes?: string }) =>
+      apiRequest("POST", "/api/admin/cards", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/cards"] });
+      setCustomNumber("");
+      setNotes("");
+      toast({ title: "Card created" });
+    },
+    onError: async (err: any) => {
+      const msg = await err.response?.json().catch(() => null);
+      toast({ title: "Error", description: msg?.message ?? "Failed to create card", variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, notes }: { id: string; notes: string }) =>
+      apiRequest("PATCH", `/api/admin/cards/${id}`, { notes }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/cards"] });
+      setEditingId(null);
+      toast({ title: "Notes updated" });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update notes", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/admin/cards/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/cards"] });
+      toast({ title: "Card deleted" });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to delete card", variant: "destructive" }),
+  });
+
+  const filtered = cards.filter(c =>
+    c.cardNumber.includes(search) ||
+    (c.phoneNumber ?? "").includes(search) ||
+    (c.notes ?? "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className={C.card}>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Create Membership Card</h3>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500">Custom 5-digit number (optional)</label>
+            <input
+              data-testid="input-card-number"
+              type="text"
+              inputMode="numeric"
+              maxLength={5}
+              value={customNumber}
+              onChange={e => setCustomNumber(e.target.value.replace(/\D/g, "").slice(0, 5))}
+              placeholder="Auto-generated"
+              className={C.input + " w-40"}
+            />
+          </div>
+          <div className="flex flex-col gap-1 flex-1 min-w-48">
+            <label className="text-xs text-gray-500">Notes (optional)</label>
+            <input
+              data-testid="input-card-notes"
+              type="text"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="e.g. Event batch — Pride 2025"
+              className={C.input}
+            />
+          </div>
+          <button
+            data-testid="btn-create-card"
+            onClick={() => createMutation.mutate({ cardNumber: customNumber || undefined, notes: notes || undefined })}
+            disabled={createMutation.isPending || (!!customNumber && customNumber.length !== 5)}
+            className={C.btnPrimary}
+          >
+            {createMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+            Create Card
+          </button>
+        </div>
+      </div>
+
+      <div className={C.card}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-700">All Cards ({cards.length})</h3>
+          <input
+            data-testid="input-cards-search"
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search cards…"
+            className={C.input + " w-48"}
+          />
+        </div>
+
+        {isLoading ? (
+          <div className="flex justify-center py-8"><Loader2 size={20} className="animate-spin text-gray-400" /></div>
+        ) : filtered.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">No membership cards found.</p>
+        ) : (
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-gray-100 text-gray-500 text-left">
+                <th className="pb-2 pr-4">Card #</th>
+                <th className="pb-2 pr-4">Phone</th>
+                <th className="pb-2 pr-4">Notes</th>
+                <th className="pb-2 pr-4">Created</th>
+                <th className="pb-2 pr-4">First Used</th>
+                <th className="pb-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(card => (
+                <tr key={card.id} data-testid={`row-card-${card.id}`} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="py-2 pr-4 font-bold text-gray-800">{card.cardNumber}</td>
+                  <td className="py-2 pr-4 text-gray-600">{card.phoneNumber ?? <span className="text-gray-300 font-sans">unlinked</span>}</td>
+                  <td className="py-2 pr-4 text-gray-600 font-sans max-w-xs">
+                    {editingId === card.id ? (
+                      <div className="flex gap-1 items-center">
+                        <input
+                          data-testid={`input-notes-${card.id}`}
+                          type="text"
+                          value={editNotes}
+                          onChange={e => setEditNotes(e.target.value)}
+                          className={C.input + " text-xs h-6 px-1"}
+                          autoFocus
+                        />
+                        <button
+                          data-testid={`btn-save-notes-${card.id}`}
+                          onClick={() => updateMutation.mutate({ id: card.id, notes: editNotes })}
+                          disabled={updateMutation.isPending}
+                          className="text-green-600 hover:text-green-800"
+                        ><CheckCircle size={13} /></button>
+                        <button
+                          data-testid={`btn-cancel-notes-${card.id}`}
+                          onClick={() => setEditingId(null)}
+                          className="text-gray-400 hover:text-gray-600"
+                        ><X size={13} /></button>
+                      </div>
+                    ) : (
+                      <span onClick={() => { setEditingId(card.id); setEditNotes(card.notes ?? ""); }} className="cursor-pointer hover:text-blue-600" title="Click to edit">
+                        {card.notes ?? <span className="text-gray-300">—</span>}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4 text-gray-400">{new Date(card.createdAt).toLocaleDateString()}</td>
+                  <td className="py-2 pr-4 text-gray-400">{card.firstUsedAt ? new Date(card.firstUsedAt).toLocaleDateString() : <span className="text-gray-300">—</span>}</td>
+                  <td className="py-2">
+                    <button
+                      data-testid={`btn-delete-card-${card.id}`}
+                      onClick={() => { if (confirm(`Delete card ${card.cardNumber}?`)) deleteMutation.mutate(card.id); }}
+                      disabled={deleteMutation.isPending}
+                      className="text-red-400 hover:text-red-600"
+                    ><Trash2 size={13} /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Tab definitions ───────────────────────────────────────────────────────────
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "dashboard",      label: "Dashboard",      icon: <LayoutDashboard size={15} /> },
@@ -3565,6 +3753,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "voice-profiles", label: "Voice Profiles",  icon: <Phone size={15} /> },
   { id: "regions",        label: "Regions",         icon: <Globe size={15} /> },
   { id: "memberships",    label: "Memberships",     icon: <CreditCard size={15} /> },
+  { id: "cards",          label: "Member Cards",    icon: <CreditCard size={15} /> },
   { id: "audio-gen",      label: "Audio Gen",       icon: <Volume2 size={15} /> },
   { id: "messages",       label: "Messages",        icon: <MessageSquare size={15} /> },
   { id: "phone-numbers",  label: "Phone Numbers",   icon: <Phone size={15} /> },
@@ -3706,6 +3895,7 @@ export default function Admin() {
           {activeTab === "voice-profiles" && <VoiceProfilesTab key={String(showUpload)} />}
           {activeTab === "regions"        && <RegionsTab />}
           {activeTab === "memberships"    && <MembershipsTab />}
+          {activeTab === "cards"          && <MembershipCardsTab />}
           {activeTab === "audio-gen"      && <TTSTab />}
           {activeTab === "messages"       && <MessagesTab />}
           {activeTab === "phone-numbers"  && <PhoneNumbersTab />}

@@ -207,6 +207,7 @@ export interface IStorage {
   linkCardToPhone(cardId: string, phoneNumber: string): Promise<void>;
   getAllMembershipCards(): Promise<MembershipCard[]>;
   deleteMembershipCard(id: string): Promise<void>;
+  updateMembershipCardNotes(id: string, notes: string): Promise<void>;
   isMembershipCardNumberTaken(cardNumber: string): Promise<boolean>;
 
   // Admin accounts
@@ -1383,6 +1384,10 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMembershipCard(id: string): Promise<void> {
     await db.delete(membershipCards).where(eq(membershipCards.id, id));
+  }
+
+  async updateMembershipCardNotes(id: string, notes: string): Promise<void> {
+    await db.update(membershipCards).set({ notes: notes || null }).where(eq(membershipCards.id, id));
   }
 
   async isMembershipCardNumberTaken(cardNumber: string): Promise<boolean> {
