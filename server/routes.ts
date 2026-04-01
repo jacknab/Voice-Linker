@@ -1052,6 +1052,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/membership-settings", async (_req, res) => {
+    try {
+      const settings = await storage.getMembershipSettings();
+      res.json(settings);
+    } catch (e) {
+      console.error("[membership-settings] Failed:", e);
+      res.status(500).json({ message: "Failed to fetch membership settings" });
+    }
+  });
+
   app.get("/api/admin/membership-settings", async (_req, res) => {
     try {
       const settings = await storage.getMembershipSettings();

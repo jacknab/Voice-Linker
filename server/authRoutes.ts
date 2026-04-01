@@ -122,9 +122,42 @@ router.get("/api/auth/me", async (req: Request, res: Response) => {
       req.session.destroy(() => {});
       return res.status(401).json({ error: "Session expired." });
     }
-    return res.json({ id: user.id, email: user.email });
+    return res.json({ id: user.id, email: user.email, createdAt: user.createdAt });
   } catch (err) {
     return res.status(500).json({ error: "Failed to fetch session." });
+  }
+});
+
+// ─── Change Password ──────────────────────────────────────────────────────────
+router.post("/api/auth/change-password", async (req: Request, res: Response) => {
+  if (!req.session.webUserId) {
+    return res.status(401).json({ error: "Not authenticated." });
+  }
+  const schema = z.object({
+    currentPassword: z.string().min(1),
+    newPassword: z.string().min(8, "Password must be at least 8 characters"),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0].message });
+  }
+  const { currentPassword, newPassword } = parsed.data;
+
+  try {
+    const user = await storage.getWebUserById(req.session.webUserId);
+    if (!user) {
+      return res.status(401).json({ error: "Session expired." });
+    }
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!match) {
+      return res.status(400).json({ error: "Current password is incorrect." });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await storage.updateWebUserPassword(user.id, passwordHash);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[auth] change-password error:", err);
+    return res.status(500).json({ error: "Failed to change password. Please try again." });
   }
 });
 
