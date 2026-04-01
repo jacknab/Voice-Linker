@@ -69,9 +69,9 @@ type MembershipPackage = { name: string; label: string; minutes: number; priceCe
 async function getMembershipPackages(): Promise<Record<string, MembershipPackage>> {
   const s = await getMembershipSettingsCached();
   return {
-    "1": { name: "plan1", label: `${s.plan1Minutes.toLocaleString()} Minute`, minutes: s.plan1Minutes, priceCents: s.plan1PriceCents, priceLabel: centsToLabel(s.plan1PriceCents) },
-    "2": { name: "plan2", label: `${s.plan2Minutes.toLocaleString()} Minute`, minutes: s.plan2Minutes, priceCents: s.plan2PriceCents, priceLabel: centsToLabel(s.plan2PriceCents) },
-    "3": { name: "plan3", label: `${s.plan3Minutes.toLocaleString()} Minute`, minutes: s.plan3Minutes, priceCents: s.plan3PriceCents, priceLabel: centsToLabel(s.plan3PriceCents) },
+    "2": { name: "plan1", label: `${s.plan1Minutes.toLocaleString()} Minute`, minutes: s.plan1Minutes, priceCents: s.plan1PriceCents, priceLabel: centsToLabel(s.plan1PriceCents) },
+    "3": { name: "plan2", label: `${s.plan2Minutes.toLocaleString()} Minute`, minutes: s.plan2Minutes, priceCents: s.plan2PriceCents, priceLabel: centsToLabel(s.plan2PriceCents) },
+    "4": { name: "plan3", label: `${s.plan3Minutes.toLocaleString()} Minute`, minutes: s.plan3Minutes, priceCents: s.plan3PriceCents, priceLabel: centsToLabel(s.plan3PriceCents) },
   };
 }
 
@@ -1847,13 +1847,20 @@ export async function registerRoutes(
 
   // ─── 4a. Purchase Pre-Menu ────────────────────────────────────────────────
   // Plays promo code option then membership packages in one single prompt.
-  // Digit 1 → promo code entry; any other digit → package selection.
+  // Digit 1 → promo code; 2/3/4 → package selection; 9 → repeat; # → cancel.
   app.post("/voice/purchase-pre-menu", async (req, res) => {
     const twiml = new VoiceResponse();
-    const audioUrl = `${baseUrl(req)}/uploads/membership_packages_1774058642428.mp3`;
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
-    gather.say("If you have a promotional code press 1.");
-    gather.play(audioUrl);
+    gather.say(
+      "If you have a promotional code press 1. " +
+      "To buy 180 minutes for $20 press 2. " +
+      "For only $10 you'll get 100 minutes, and if it's your first purchase, you'll get an extra 100 minutes absolutely free — " +
+      "that's 200 minutes for only $10, so to buy press 3. " +
+      "Or if you just need a little more time to close the deal or grab some digits, our lowest price package is what you need, " +
+      "so to buy 60 minutes for $2 press 4. " +
+      "To repeat these choices press 9. " +
+      "To cancel press pound."
+    );
     twiml.redirect("/voice/purchase-pre-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -1861,15 +1868,24 @@ export async function registerRoutes(
 
   app.post("/voice/handle-purchase-pre-menu", async (req, res) => {
     const twiml = new VoiceResponse();
-    const digit = req.body?.Digits;
+    const digit = req.body?.Digits as string;
 
     if (digit === "1") {
       // Caller has a promo code
       twiml.redirect("/voice/promo-code");
+    } else if (digit === "9") {
+      // Repeat the menu
+      twiml.redirect("/voice/purchase-pre-menu");
+    } else if (digit === "#") {
+      // Cancel — return to main menu
+      playPrompt(twiml, req, "package_cancelled.mp3", "Cancelled. Returning to the main menu.");
+      twiml.redirect("/voice/main-menu");
+    } else if (["2", "3", "4"].includes(digit)) {
+      // Package selection — pass digit via query string (redirect won't carry Digits body)
+      twiml.redirect(`/voice/handle-package-selection?Digits=${encodeURIComponent(digit)}`);
     } else {
-      // Treat the digit as a package selection — pass it via query string
-      // since a redirect won't carry the original Digits body field
-      twiml.redirect(`/voice/handle-package-selection?Digits=${encodeURIComponent(digit ?? "")}`);
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect("/voice/purchase-pre-menu");
     }
 
     res.type("text/xml");
@@ -3314,9 +3330,9 @@ export async function registerRoutes(
       return res.send(twiml.toString());
     }
 
-    // Press 9 to repeat
+    // Press 9 to repeat the package menu
     if (digit === "9") {
-      twiml.redirect("/voice/membership-purchase");
+      twiml.redirect("/voice/purchase-pre-menu");
       res.type("text/xml");
       return res.send(twiml.toString());
     }
@@ -3325,7 +3341,7 @@ export async function registerRoutes(
     const pkg = packages[digit];
     if (!pkg) {
       playPrompt(twiml, req, "package_invalid.mp3", "Invalid selection.");
-      twiml.redirect("/voice/membership-purchase");
+      twiml.redirect("/voice/purchase-pre-menu");
       res.type("text/xml");
       return res.send(twiml.toString());
     }
@@ -3350,28 +3366,95 @@ export async function registerRoutes(
       isFirstPurchase,
     });
 
-    if (isFirstPurchase) {
-      playPrompt(twiml, req, "package_confirm_14day_bonus.mp3", `Great choice! You selected ${pkg.label} access for ${pkg.priceLabel}, including your free first purchase bonus — double the minutes!`);
-    } else if (pkg.name === "plan1") {
-      playPrompt(twiml, req, "package_confirm_30day.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
-    } else if (pkg.name === "plan2") {
-      playPrompt(twiml, req, "package_confirm_14day.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
-    } else if (pkg.name === "plan3") {
-      playPrompt(twiml, req, "package_confirm_24hour.mp3", `You selected ${pkg.label} access for ${pkg.priceLabel}.`);
-    } else {
-      twiml.say(`You selected ${pkg.label} access for ${pkg.priceLabel}.`);
+    // Route to confirmation step — caller must confirm before PIN / payment
+    twiml.redirect("/voice/confirm-package");
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Confirm Package Selection ─────────────────────────────────────────────
+  // Reads back the selected package and asks the caller to confirm.
+  app.post("/voice/confirm-package", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const session = paymentSessions.get(callSid);
+
+    if (!session) {
+      playPrompt(twiml, req, "payment_session_expired.mp3", "Your session has expired. Please start again.");
+      twiml.redirect("/voice/purchase-pre-menu");
+      res.type("text/xml");
+      return res.send(twiml.toString());
     }
 
-    // If the caller doesn't yet have a PIN, ask them to create one before payment
-    try {
-      const user = await getOrCreateUser(fromNumber);
-      if (!user.membershipPin) {
-        twiml.redirect("/voice/create-membership-pin");
-      } else {
-        twiml.redirect("/voice/run-payment");
+    const minutesLabel = session.isFirstPurchase
+      ? `${session.packageLabel.replace(" Minute", "")} minutes — plus ${session.packageLabel.replace(" Minute", "")} bonus minutes for your first purchase, giving you double the time`
+      : `${session.packageLabel.replace(" Minute", "")} minutes`;
+
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-confirm-package" });
+    gather.say(
+      `You selected ${minutesLabel} for ${session.priceLabel}. ` +
+      `If this is correct press 1. ` +
+      `To select a different package press 2.`
+    );
+    twiml.redirect("/voice/confirm-package");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-confirm-package", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
+
+    if (digit === "1") {
+      // Confirmed — check for PIN then show payment disclaimer
+      try {
+        const user = await getOrCreateUser(fromNumber);
+        if (!user.membershipPin) {
+          twiml.redirect("/voice/create-membership-pin");
+        } else {
+          twiml.redirect("/voice/payment-intro");
+        }
+      } catch {
+        twiml.redirect("/voice/payment-intro");
       }
-    } catch {
+    } else if (digit === "2") {
+      // Go back and pick a different package
+      paymentSessions.delete(callSid);
+      twiml.redirect("/voice/purchase-pre-menu");
+    } else {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect("/voice/confirm-package");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Payment Intro ─────────────────────────────────────────────────────────
+  // Plays the billing disclosure then asks caller to press 1 to begin card entry.
+  app.post("/voice/payment-intro", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-payment-intro" });
+    gather.say(
+      "Your purchase, plus any applicable fees and taxes, will appear on your credit card statement as Toby Media. " +
+      "If you're ready to enter your credit card information press 1."
+    );
+    twiml.redirect("/voice/payment-intro");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-payment-intro", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+
+    if (digit === "1") {
       twiml.redirect("/voice/run-payment");
+    } else {
+      twiml.redirect("/voice/payment-intro");
     }
 
     res.type("text/xml");
@@ -3390,8 +3473,8 @@ export async function registerRoutes(
     });
     playPrompt(gather, req, "create_pin_prompt.mp3",
       "Before we process your payment, please create a 4-digit PIN for your membership. This PIN will let you access your account from any phone. Please enter your 4-digit PIN now.");
-    // Timeout — skip PIN creation and go straight to payment
-    twiml.redirect("/voice/run-payment");
+    // Timeout — skip PIN creation and go to payment intro
+    twiml.redirect("/voice/payment-intro");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -3404,14 +3487,14 @@ export async function registerRoutes(
 
     if (pin.length === 4) {
       pendingPins.set(callSid, pin);
-      console.log(`[voice] PIN created for callSid=${callSid}, proceeding to payment`);
+      console.log(`[voice] PIN created for callSid=${callSid}, proceeding to payment intro`);
       playPrompt(twiml, req, "pin_saved_confirm.mp3",
-        "Your PIN has been set. Now let's process your payment.");
+        "Your PIN has been set.");
     } else {
-      // Invalid PIN length — skip PIN and proceed to payment anyway
+      // Invalid PIN length — skip PIN and proceed to payment intro anyway
       console.log(`[voice] PIN entry skipped or invalid for callSid=${callSid}`);
     }
-    twiml.redirect("/voice/run-payment");
+    twiml.redirect("/voice/payment-intro");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -3424,13 +3507,11 @@ export async function registerRoutes(
 
     const session = paymentSessions.get(callSid);
     if (!session) {
-      playPrompt(twiml, req, "payment_session_expired.mp3", "Your session has expired. Please try again.");
-      twiml.redirect("/voice/membership-purchase");
+      playPrompt(twiml, req, "payment_session_expired.mp3", "Your session has expired. Please start again.");
+      twiml.redirect("/voice/purchase-pre-menu");
       res.type("text/xml");
       return res.send(twiml.toString());
     }
-
-    twiml.play(`${baseUrl(req)}/uploads/payment_intro_1774066491415.mp3`);
 
     const connectorName = process.env.TWILIO_PAY_CONNECTOR || "stripe";
     const chargeAmount = (session.packagePriceCents / 100).toFixed(2);
