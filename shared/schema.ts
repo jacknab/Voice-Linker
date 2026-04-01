@@ -286,6 +286,9 @@ export const webUsers = pgTable("web_users", {
   passwordHash: text("password_hash").notNull(),
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
+  linkedPhoneNumber: text("linked_phone_number"),
+  linkAttempts: integer("link_attempts").notNull().default(0),
+  isLocked: boolean("is_locked").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

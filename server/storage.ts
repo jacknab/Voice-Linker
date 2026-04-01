@@ -175,6 +175,9 @@ export interface IStorage {
   getWebUserByResetToken(token: string): Promise<WebUser | undefined>;
   updateWebUserPassword(id: string, passwordHash: string): Promise<void>;
   clearWebUserResetToken(id: string): Promise<void>;
+  linkWebUserPhone(id: string, phoneNumber: string): Promise<void>;
+  incrementWebUserLinkAttempts(id: string): Promise<number>;
+  lockWebUser(id: string): Promise<void>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -1137,6 +1140,23 @@ export class DatabaseStorage implements IStorage {
 
   async clearWebUserResetToken(id: string): Promise<void> {
     await db.update(webUsers).set({ resetToken: null, resetTokenExpiry: null }).where(eq(webUsers.id, id));
+  }
+
+  async linkWebUserPhone(id: string, phoneNumber: string): Promise<void> {
+    await db.update(webUsers).set({ linkedPhoneNumber: phoneNumber, linkAttempts: 0 }).where(eq(webUsers.id, id));
+  }
+
+  async incrementWebUserLinkAttempts(id: string): Promise<number> {
+    const [updated] = await db
+      .update(webUsers)
+      .set({ linkAttempts: sql`${webUsers.linkAttempts} + 1` })
+      .where(eq(webUsers.id, id))
+      .returning({ linkAttempts: webUsers.linkAttempts });
+    return updated?.linkAttempts ?? 0;
+  }
+
+  async lockWebUser(id: string): Promise<void> {
+    await db.update(webUsers).set({ isLocked: true }).where(eq(webUsers.id, id));
   }
 }
 
