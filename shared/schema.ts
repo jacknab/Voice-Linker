@@ -278,3 +278,21 @@ export type CallLog = typeof callLogs.$inferSelect;
 export const insertFlaggedContentSchema = createInsertSchema(flaggedContent).omit({ id: true, createdAt: true, reviewedAt: true });
 export type FlaggedContent = typeof flaggedContent.$inferSelect;
 export type InsertFlaggedContent = z.infer<typeof insertFlaggedContentSchema>;
+
+// ─── Web Users (email/password auth for the website) ──────────────────────────
+export const webUsers = pgTable("web_users", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  resetToken: text("reset_token"),
+  resetTokenExpiry: timestamp("reset_token_expiry"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertWebUserSchema = createInsertSchema(webUsers).omit({ id: true, passwordHash: true, resetToken: true, resetTokenExpiry: true, createdAt: true }).extend({
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  email: z.string().email("Invalid email address"),
+});
+
+export type WebUser = typeof webUsers.$inferSelect;
+export type InsertWebUser = z.infer<typeof insertWebUserSchema>;

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Phone, Loader2, Menu, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import heroImg from "@assets/hero_guy_1.png";
 
 const DEFAULT_PHONE = "800-730-2508";
@@ -105,6 +106,21 @@ export default function Landing() {
                 {l.label}
               </button>
             ))}
+            <div style={{ width: "1px", height: "18px", background: "#222" }} />
+            <Link href="/login"
+              style={{ color: "#ccc", textDecoration: "none", fontSize: "0.85rem", fontWeight: 500, transition: "color 0.15s" }}
+              onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
+              onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
+              data-testid="nav-sign-in">
+              Sign in
+            </Link>
+            <Link href="/register"
+              style={{ background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.82rem", fontWeight: 700, padding: "0.4rem 0.875rem", borderRadius: "7px", transition: "background 0.15s" }}
+              onMouseEnter={(e: any) => (e.currentTarget.style.background = "#1e40af")}
+              onMouseLeave={(e: any) => (e.currentTarget.style.background = "#1d4ed8")}
+              data-testid="nav-register">
+              Register
+            </Link>
           </div>
 
           {/* Mobile hamburger */}

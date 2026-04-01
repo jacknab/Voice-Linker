@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -166,6 +166,15 @@ export interface IStorage {
   // Audit log
   logAuditEvent(action: string, opts?: { targetType?: string; targetId?: string; targetLabel?: string; detail?: Record<string, unknown> }): Promise<void>;
   getAuditLogs(limit?: number): Promise<AuditLog[]>;
+
+  // Web Users (email/password auth)
+  getWebUserByEmail(email: string): Promise<WebUser | undefined>;
+  getWebUserById(id: string): Promise<WebUser | undefined>;
+  createWebUser(email: string, passwordHash: string): Promise<WebUser>;
+  setWebUserResetToken(email: string, token: string, expiry: Date): Promise<void>;
+  getWebUserByResetToken(token: string): Promise<WebUser | undefined>;
+  updateWebUserPassword(id: string, passwordHash: string): Promise<void>;
+  clearWebUserResetToken(id: string): Promise<void>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -1095,6 +1104,39 @@ export class DatabaseStorage implements IStorage {
         estimatedMrrCents,
       },
     };
+  }
+
+  // ─── Web Users ─────────────────────────────────────────────────────────────
+  async getWebUserByEmail(email: string): Promise<WebUser | undefined> {
+    const [user] = await db.select().from(webUsers).where(eq(webUsers.email, email.toLowerCase()));
+    return user;
+  }
+
+  async getWebUserById(id: string): Promise<WebUser | undefined> {
+    const [user] = await db.select().from(webUsers).where(eq(webUsers.id, id));
+    return user;
+  }
+
+  async createWebUser(email: string, passwordHash: string): Promise<WebUser> {
+    const [user] = await db.insert(webUsers).values({ email: email.toLowerCase(), passwordHash }).returning();
+    return user;
+  }
+
+  async setWebUserResetToken(email: string, token: string, expiry: Date): Promise<void> {
+    await db.update(webUsers).set({ resetToken: token, resetTokenExpiry: expiry }).where(eq(webUsers.email, email.toLowerCase()));
+  }
+
+  async getWebUserByResetToken(token: string): Promise<WebUser | undefined> {
+    const [user] = await db.select().from(webUsers).where(eq(webUsers.resetToken, token));
+    return user;
+  }
+
+  async updateWebUserPassword(id: string, passwordHash: string): Promise<void> {
+    await db.update(webUsers).set({ passwordHash }).where(eq(webUsers.id, id));
+  }
+
+  async clearWebUserResetToken(id: string): Promise<void> {
+    await db.update(webUsers).set({ resetToken: null, resetTokenExpiry: null }).where(eq(webUsers.id, id));
   }
 }
 

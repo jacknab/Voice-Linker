@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { type Server } from "http";
 import { storage } from "./storage";
+import authRouter from "./authRoutes";
 import { api } from "@shared/routes";
 import type { MembershipSettings } from "@shared/schema";
 import express from "express";
@@ -372,6 +373,9 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   app.use(express.urlencoded({ extended: true }));
+
+  // ── Auth routes ───────────────────────────────────────────────────────────
+  app.use(authRouter);
 
   // ── Audit log helper ──────────────────────────────────────────────────────
   function logAudit(
