@@ -444,6 +444,56 @@ router.delete("/api/auth/alt-phones/:id", async (req: Request, res: Response) =>
   }
 });
 
+// ─── Link Membership Card ─────────────────────────────────────────────────────
+// Validates a physical membership card (5-digit number + 4-digit PIN) and links
+// the card's phone record to this web account.
+router.post("/api/auth/link-card", async (req: Request, res: Response) => {
+  if (!req.session.webUserId) return res.status(401).json({ error: "Not authenticated." });
+
+  try {
+    const webUser = await storage.getWebUserById(req.session.webUserId);
+    if (!webUser) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ error: "Session expired." });
+    }
+    if (webUser.isLocked) {
+      req.session.destroy(() => {});
+      return res.status(403).json({ error: "Your account has been locked. Please contact support." });
+    }
+    if (webUser.linkedPhoneNumber) {
+      return res.status(400).json({ error: "A phone number is already linked to this account." });
+    }
+
+    const cardNumber = String(req.body?.cardNumber ?? "").trim();
+    const pin = String(req.body?.pin ?? "").trim();
+
+    if (!/^\d{5}$/.test(cardNumber)) {
+      return res.status(400).json({ error: "Please enter a valid 5-digit card number." });
+    }
+    if (!/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ error: "Please enter a valid 4-digit PIN." });
+    }
+
+    const card = await storage.getMembershipCardByNumber(cardNumber);
+    if (!card) {
+      return res.status(404).json({ error: "Card not found. Please check the number and try again." });
+    }
+    if (!card.pin || card.pin !== pin) {
+      return res.status(401).json({ error: "Incorrect PIN. Please try again." });
+    }
+    if (!card.phoneNumber) {
+      return res.status(400).json({ error: "This card has not been activated yet. Please call the access number first to activate it." });
+    }
+
+    await storage.linkWebUserPhone(webUser.id, card.phoneNumber, card.cardNumber);
+    console.log(`[auth] link-card: webUserId=${webUser.id} linked to phone=${card.phoneNumber} via card=${card.cardNumber}`);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[auth] link-card error:", err);
+    return res.status(500).json({ error: "Failed to link card. Please try again." });
+  }
+});
+
 // ─── Check Phone (pre-flight before generating link code) ────────────────────
 // Verifies that a given phone number has an active membership in the system,
 // so the dashboard can confirm eligibility before instructing the user to call.

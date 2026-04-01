@@ -4,7 +4,6 @@ import {
   Phone, LogOut, Loader2, User, Clock, Shield, Star, Zap,
   KeyRound, ChevronRight, Eye, EyeOff, CheckCircle2, PhoneCall,
   AlertTriangle, Link2, CheckCircle, History, PhoneIncoming, Timer, Plus, Trash2, PhoneForwarded,
-  X, RefreshCw,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -127,341 +126,146 @@ const PLAN_ICONS = [Star, Zap, Clock];
 const PLAN_COLORS = ["#f59e0b", "#1d4ed8", "#6b7280"];
 const PLAN_KEYS = ["plan1", "plan2", "plan3"];
 
-// ─── Link Membership Modal ────────────────────────────────────────────────────
-// Two-step flow:
-//   Step 1 — Enter phone number → verify it has an active membership
-//   Step 2 — Show 3-digit code → user calls the access number and enters it
+// ─── Link Membership Card ─────────────────────────────────────────────────────
+// Inline form — enter the 5-digit card number and 4-digit PIN printed on the
+// physical membership card to connect the phone account to this web account.
 function LinkMembershipModal({
-  accessNumber,
   onSuccess,
 }: {
   accessNumber: string;
   onSuccess: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [isOpen, setIsOpen] = useState(false);
-
-  // Step 1: phone check
-  const [step, setStep] = useState<"phone" | "code">("phone");
-  const [phoneInput, setPhoneInput] = useState("");
-  const [isChecking, setIsChecking] = useState(false);
-  const [checkError, setCheckError] = useState<string | null>(null);
-  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
-
-  // Step 2: code
-  const [code, setCode] = useState<string | null>(null);
-  const [expiresAt, setExpiresAt] = useState<Date | null>(null);
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [genError, setGenError] = useState<string | null>(null);
+  const [cardNumber, setCardNumber] = useState("");
+  const [pin, setPin] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [linked, setLinked] = useState(false);
 
-  const resetAll = () => {
-    setStep("phone");
-    setPhoneInput("");
-    setIsChecking(false);
-    setCheckError(null);
-    setVerifiedPhone(null);
-    setCode(null);
-    setExpiresAt(null);
-    setGenError(null);
-    setLinked(false);
-  };
+  const canSubmit = /^\d{5}$/.test(cardNumber) && /^\d{4}$/.test(pin);
 
-  const openModal = () => {
-    resetAll();
-    setIsOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsOpen(false);
-    resetAll();
-  };
-
-  // Step 1: check phone against system
-  const checkPhone = async () => {
-    setIsChecking(true);
-    setCheckError(null);
+  const handleSubmit = async () => {
+    if (!canSubmit || isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
     try {
-      const res = await fetch("/api/auth/check-phone", {
+      const res = await fetch("/api/auth/link-card", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber: phoneInput }),
+        body: JSON.stringify({ cardNumber, pin }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Verification failed.");
-      setVerifiedPhone(data.phoneNumber);
-      setStep("code");
-      generateCode();
+      if (!res.ok) throw new Error(data.error || "Failed to link card.");
+      setLinked(true);
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/membership"] });
+      setTimeout(() => onSuccess(), 1800);
     } catch (err: any) {
-      setCheckError(err.message || "Verification failed.");
+      setError(err.message || "Failed to link card.");
     } finally {
-      setIsChecking(false);
+      setIsSubmitting(false);
     }
   };
 
-  // Step 2: generate link code
-  const generateCode = async () => {
-    setIsGenerating(true);
-    setGenError(null);
-    setCode(null);
-    setExpiresAt(null);
-    try {
-      const res = await fetch("/api/auth/generate-link-code", { method: "POST", credentials: "include" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate code.");
-      setCode(data.code);
-      const exp = new Date(data.expiresAt);
-      setExpiresAt(exp);
-      setTimeLeft(Math.max(0, Math.floor((exp.getTime() - Date.now()) / 1000)));
-    } catch (err: any) {
-      setGenError(err.message || "Failed to generate code.");
-    } finally {
-      setIsGenerating(false);
-    }
+  const inputStyle = {
+    width: "100%", background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "8px",
+    padding: "0.75rem 1rem", color: "#fff", fontSize: "1.05rem", outline: "none",
+    boxSizing: "border-box" as const, letterSpacing: "0.12em", fontFamily: "monospace",
   };
-
-  // Countdown timer
-  useEffect(() => {
-    if (!isOpen || !expiresAt) return;
-    const tick = setInterval(() => {
-      const left = Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
-      setTimeLeft(left);
-    }, 1000);
-    return () => clearInterval(tick);
-  }, [isOpen, expiresAt]);
-
-  // Poll for successful link every 3 seconds (once on code step)
-  useEffect(() => {
-    if (!isOpen || step !== "code" || !code || linked) return;
-    const poll = setInterval(async () => {
-      try {
-        const res = await fetch("/api/auth/me", { credentials: "include" });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.linkedPhoneNumber) {
-          setLinked(true);
-          clearInterval(poll);
-          await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
-          await queryClient.invalidateQueries({ queryKey: ["/api/auth/membership"] });
-          setTimeout(() => {
-            closeModal();
-            onSuccess();
-          }, 1800);
-        }
-      } catch {}
-    }, 3000);
-    return () => clearInterval(poll);
-  }, [isOpen, step, code, linked]);
-
-  const mins = Math.floor(timeLeft / 60);
-  const secs = timeLeft % 60;
-  const countdownStr = `${mins}:${String(secs).padStart(2, "0")}`;
-  const isExpired = timeLeft === 0 && !!expiresAt && !linked;
-
-  // Shared styles
-  const S = {
-    label: { color: "#555", fontSize: "0.7rem", fontWeight: 600 as const, textTransform: "uppercase" as const, letterSpacing: "0.08em", margin: "0 0 0.35rem" },
-    input: {
-      width: "100%", background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "8px",
-      padding: "0.75rem 1rem", color: "#fff", fontSize: "1rem", outline: "none",
-      boxSizing: "border-box" as const,
-    },
-    primaryBtn: {
-      background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px",
-      padding: "0.7rem 1.5rem", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer",
-      display: "inline-flex", alignItems: "center", gap: "0.5rem", width: "100%",
-      justifyContent: "center",
-    },
+  const labelStyle = {
+    color: "#555", fontSize: "0.7rem", fontWeight: 600 as const, textTransform: "uppercase" as const,
+    letterSpacing: "0.08em", margin: "0 0 0.35rem", display: "block",
   };
 
   return (
-    <>
-      {/* ── Unlinked card with Link Membership button ── */}
-      <div
-        data-testid="card-link-phone"
-        style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "14px", padding: "1.75rem", marginBottom: "1.5rem" }}
-      >
-        <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem" }}>
-          <div style={{ width: 44, height: 44, background: "#1d4ed820", border: "1px solid #1d4ed840", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "0.1rem" }}>
-            <Link2 size={20} color="#60a5fa" />
+    <div
+      data-testid="card-link-phone"
+      style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "14px", padding: "1.75rem", marginBottom: "1.5rem" }}
+    >
+      {linked ? (
+        /* ── Success state ── */
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "0.75rem 0", gap: "0.75rem" }}>
+          <div style={{ width: 52, height: 52, background: "#14532d30", border: "1px solid #166534", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <CheckCircle size={26} color="#22c55e" />
           </div>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ color: "#fff", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.3rem" }}>Link Your Membership</h3>
-            <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: "0 0 1.25rem", lineHeight: 1.6 }}>
-              Connect your phone membership to this web account to view your balance, call history, and manage your subscription online.
-            </p>
-            <button onClick={openModal} data-testid="button-link-membership" style={{ background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px", padding: "0.65rem 1.5rem", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-              <PhoneCall size={15} /> Link Membership
-            </button>
-          </div>
+          <p style={{ color: "#22c55e", fontSize: "1rem", fontWeight: 700, margin: 0 }}>Membership Linked!</p>
+          <p style={{ color: "#666", fontSize: "0.82rem", margin: 0 }}>Your membership has been connected to this account.</p>
         </div>
-      </div>
-
-      {/* ── Modal overlay ── */}
-      {isOpen && (
-        <div
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}
-          onClick={e => { if (e.target === e.currentTarget) closeModal(); }}
-        >
-          <div style={{ background: "#0a0f1e", border: "1px solid #1e3a5f", borderRadius: "18px", padding: "2rem", width: "100%", maxWidth: "420px", position: "relative" }}>
-            {/* Close */}
-            <button onClick={closeModal} style={{ position: "absolute", top: "1rem", right: "1rem", background: "none", border: "none", cursor: "pointer", color: "#555", padding: "0.25rem" }}>
-              <X size={20} />
-            </button>
-
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.5rem" }}>
-              <div style={{ width: 42, height: 42, background: "#1d4ed820", border: "1px solid #1d4ed840", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <PhoneCall size={20} color="#60a5fa" />
-              </div>
-              <div>
-                <h3 style={{ color: "#fff", fontSize: "1.05rem", fontWeight: 700, margin: 0 }}>Link Your Membership</h3>
-                <p style={{ color: "#555", fontSize: "0.75rem", margin: 0 }}>Phone-verified account linking</p>
-              </div>
+      ) : (
+        /* ── Form state ── */
+        <>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", marginBottom: "1.25rem" }}>
+            <div style={{ width: 44, height: 44, background: "#1d4ed820", border: "1px solid #1d4ed840", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "0.1rem" }}>
+              <Link2 size={20} color="#60a5fa" />
             </div>
-
-            {/* ── Success ── */}
-            {linked ? (
-              <div style={{ textAlign: "center", padding: "1.5rem 0" }}>
-                <div style={{ width: 56, height: 56, background: "#14532d30", border: "1px solid #166534", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
-                  <CheckCircle size={28} color="#22c55e" />
-                </div>
-                <p style={{ color: "#22c55e", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.35rem" }}>Membership Linked!</p>
-                <p style={{ color: "#666", fontSize: "0.82rem", margin: 0 }}>Your phone number has been connected to this account.</p>
-              </div>
-
-            ) : step === "phone" ? (
-              /* ── Step 1: Phone number entry ── */
-              <>
-                {/* Step indicator */}
-                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
-                  {["Verify Phone", "Call & Confirm"].map((label, i) => (
-                    <div key={label} style={{ flex: 1, textAlign: "center" }}>
-                      <div style={{ height: 3, borderRadius: 2, background: i === 0 ? "#1d4ed8" : "#1e3a5f", marginBottom: "0.35rem" }} />
-                      <span style={{ fontSize: "0.68rem", color: i === 0 ? "#60a5fa" : "#2a4a7a", fontWeight: 600 }}>{label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: "0 0 1.25rem", lineHeight: 1.6 }}>
-                  Enter the phone number you used to call the system and purchase your membership. We'll confirm your membership is active before proceeding.
-                </p>
-
-                <div style={{ marginBottom: "1rem" }}>
-                  <p style={S.label}>Your Membership Phone Number</p>
-                  <input
-                    data-testid="input-link-phone"
-                    type="tel"
-                    value={phoneInput}
-                    onChange={e => { setPhoneInput(e.target.value); setCheckError(null); }}
-                    onKeyDown={e => { if (e.key === "Enter" && phoneInput.replace(/\D/g, "").length >= 10) checkPhone(); }}
-                    placeholder="(555) 000-0000"
-                    style={S.input}
-                    autoFocus
-                  />
-                </div>
-
-                {checkError && (
-                  <div style={{ background: "#2d0a0a", border: "1px solid #7f1d1d", borderRadius: "8px", padding: "0.75rem 1rem", marginBottom: "1rem", display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
-                    <AlertTriangle size={15} color="#f87171" style={{ flexShrink: 0, marginTop: "0.1rem" }} />
-                    <p style={{ color: "#f87171", fontSize: "0.82rem", margin: 0, lineHeight: 1.5 }}>{checkError}</p>
-                  </div>
-                )}
-
-                <button
-                  data-testid="button-check-phone"
-                  onClick={checkPhone}
-                  disabled={isChecking || phoneInput.replace(/\D/g, "").length < 10}
-                  style={{ ...S.primaryBtn, opacity: (isChecking || phoneInput.replace(/\D/g, "").length < 10) ? 0.6 : 1 }}
-                >
-                  {isChecking ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                  {isChecking ? "Checking…" : "Check Membership"}
-                </button>
-              </>
-
-            ) : (
-              /* ── Step 2: Code display ── */
-              <>
-                {/* Step indicator */}
-                <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
-                  {["Verify Phone", "Call & Confirm"].map((label, i) => (
-                    <div key={label} style={{ flex: 1, textAlign: "center" }}>
-                      <div style={{ height: 3, borderRadius: 2, background: "#1d4ed8", marginBottom: "0.35rem" }} />
-                      <span style={{ fontSize: "0.68rem", color: "#60a5fa", fontWeight: 600 }}>{label}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {isGenerating ? (
-                  <div style={{ textAlign: "center", padding: "2rem 0" }}>
-                    <Loader2 size={30} color="#1d4ed8" className="animate-spin" style={{ margin: "0 auto 1rem" }} />
-                    <p style={{ color: "#666", fontSize: "0.85rem", margin: 0 }}>Generating your link code…</p>
-                  </div>
-                ) : genError ? (
-                  <div style={{ textAlign: "center", padding: "1rem 0" }}>
-                    <p style={{ color: "#f87171", fontSize: "0.85rem", margin: "0 0 1rem" }}>{genError}</p>
-                    <button onClick={generateCode} style={{ background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px", padding: "0.6rem 1.25rem", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
-                      <RefreshCw size={14} /> Try Again
-                    </button>
-                  </div>
-                ) : code ? (
-                  <>
-                    {/* Access number — prominent at top */}
-                    <div style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "10px", padding: "0.9rem 1.25rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                      <Phone size={18} color="#60a5fa" style={{ flexShrink: 0 }} />
-                      <div>
-                        <p style={{ color: "#555", fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.2rem" }}>Call This Number</p>
-                        <span style={{ color: "#fff", fontSize: "1.1rem", fontWeight: 800, letterSpacing: "0.04em" }}>{accessNumber}</span>
-                      </div>
-                    </div>
-
-                    {/* Code display */}
-                    <div style={{ marginBottom: "1rem" }}>
-                      <p style={S.label}>Enter This Code on Your Dialpad</p>
-                      <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                        <div style={{ background: isExpired ? "#1a1a1a" : "#0d1a2e", border: `2px solid ${isExpired ? "#333" : "#1d4ed8"}`, borderRadius: "12px", padding: "0.875rem 1.5rem", flex: 1, textAlign: "center" }}>
-                          <span style={{ color: isExpired ? "#444" : "#fff", fontSize: "2.5rem", fontWeight: 800, letterSpacing: "0.35em", fontFamily: "monospace" }}>{code}</span>
-                        </div>
-                        {isExpired && (
-                          <button onClick={generateCode} title="Generate new code" style={{ background: "#1a2a4a", border: "1px solid #1e3a5f", borderRadius: "8px", padding: "0.65rem", cursor: "pointer", color: "#60a5fa", display: "flex", alignItems: "center" }}>
-                            <RefreshCw size={16} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Instructions */}
-                    <p style={{ color: "#6b82a0", fontSize: "0.8rem", margin: "0 0 1rem", lineHeight: 1.65 }}>
-                      When the system answers, enter the 3-digit code on your dialpad followed by <strong style={{ color: "#93c5fd" }}>#</strong>. Please remain on the line — verification may take a moment. This window will close automatically once your membership is linked.
-                    </p>
-
-                    {/* Timer */}
-                    {!isExpired ? (
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <Timer size={14} color={timeLeft < 60 ? "#ef4444" : "#22c55e"} />
-                        <span style={{ color: timeLeft < 60 ? "#ef4444" : "#22c55e", fontSize: "0.82rem", fontWeight: 600 }}>Code expires in {countdownStr}</span>
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <AlertTriangle size={14} color="#f87171" />
-                        <span style={{ color: "#f87171", fontSize: "0.82rem" }}>Code expired — click the refresh icon to get a new one.</span>
-                      </div>
-                    )}
-
-                    {/* Back link */}
-                    <button onClick={() => { setStep("phone"); setCode(null); setExpiresAt(null); setGenError(null); }} style={{ background: "none", border: "none", color: "#444", fontSize: "0.75rem", cursor: "pointer", marginTop: "1.25rem", padding: 0, textDecoration: "underline" }}>
-                      ← Use a different phone number
-                    </button>
-                  </>
-                ) : null}
-              </>
-            )}
+            <div>
+              <h3 style={{ color: "#fff", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.3rem" }}>Link Your Membership Card</h3>
+              <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: 0, lineHeight: 1.6 }}>
+                Enter the card number and PIN printed on your membership card to connect your account.
+              </p>
+            </div>
           </div>
-        </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1rem" }}>
+            <div>
+              <label style={labelStyle}>Card Number</label>
+              <input
+                data-testid="input-card-number"
+                type="text"
+                inputMode="numeric"
+                maxLength={5}
+                value={cardNumber}
+                onChange={e => { setCardNumber(e.target.value.replace(/\D/g, "").slice(0, 5)); setError(null); }}
+                onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
+                placeholder="12345"
+                style={inputStyle}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>
+                <KeyRound size={11} style={{ display: "inline", marginRight: "0.3rem", verticalAlign: "middle" }} />
+                PIN
+              </label>
+              <input
+                data-testid="input-card-pin"
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pin}
+                onChange={e => { setPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setError(null); }}
+                onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
+                placeholder="••••"
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ background: "#2d0a0a", border: "1px solid #7f1d1d", borderRadius: "8px", padding: "0.65rem 1rem", marginBottom: "1rem", display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+              <AlertTriangle size={14} color="#f87171" style={{ flexShrink: 0, marginTop: "0.15rem" }} />
+              <p style={{ color: "#f87171", fontSize: "0.82rem", margin: 0, lineHeight: 1.5 }}>{error}</p>
+            </div>
+          )}
+
+          <button
+            data-testid="button-link-membership"
+            onClick={handleSubmit}
+            disabled={!canSubmit || isSubmitting}
+            style={{
+              background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px",
+              padding: "0.7rem 1.5rem", fontWeight: 700, fontSize: "0.875rem", cursor: canSubmit && !isSubmitting ? "pointer" : "not-allowed",
+              display: "inline-flex", alignItems: "center", gap: "0.5rem",
+              opacity: (!canSubmit || isSubmitting) ? 0.55 : 1,
+            }}
+          >
+            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
+            {isSubmitting ? "Linking…" : "Link Membership"}
+          </button>
+        </>
       )}
-    </>
+    </div>
   );
 }
 
