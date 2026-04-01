@@ -4082,10 +4082,27 @@ export async function registerRoutes(
       } else if (digit === "6") {
         // ── Hear this caller's location ─────────────────────────────────────
         if (profileUserId) {
-          const targetUser = await storage.getUserById(profileUserId);
-          const zipEntry = targetUser?.zipCodeId
+          const callSid = req.body?.CallSid as string;
+          const [targetUser, targetProfile] = await Promise.all([
+            storage.getUserById(profileUserId),
+            storage.getProfile(profileUserId),
+          ]);
+
+          let zipEntry = targetUser?.zipCodeId
             ? await storage.getZipEntryById(targetUser.zipCodeId)
             : null;
+
+          // For seeded (admin-uploaded) profiles, fall back to the caller's
+          // region default zip code so the location sounds local.
+          if (!zipEntry && targetProfile?.isAdminUploaded && callSid) {
+            const regionId = callRegion.get(callSid);
+            if (regionId) {
+              const region = await storage.getRegionById(regionId);
+              if (region?.defaultZipCode) {
+                zipEntry = await storage.getZipEntryByCode(region.defaultZipCode) ?? null;
+              }
+            }
+          }
 
           // Prefer a live reverse-geocode from lat/lon; fall back to stored fields
           let location: string | null = null;
