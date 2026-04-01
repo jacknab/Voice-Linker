@@ -48,6 +48,7 @@ interface PhoneMembership {
   membershipTier: string | null;
   remainingSeconds: number | null;
   membershipNumber: string | null;
+  mailboxNumber: string | null;
 }
 
 interface CallHistoryEntry {
@@ -327,6 +328,16 @@ function MembershipInfoCard({ membership, siteName }: { membership: PhoneMembers
               {membership.membershipNumber}
             </p>
             <p style={{ color: "#444", fontSize: "0.68rem", margin: "0.2rem 0 0" }}>10-digit member identifier</p>
+          </div>
+        )}
+
+        {membership.mailboxNumber && (
+          <div>
+            <p style={{ color: "#555", fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 0.3rem" }}>Mailbox Number</p>
+            <p style={{ color: "#f5a623", fontSize: "1.25rem", fontFamily: "monospace", fontWeight: 800, letterSpacing: "0.15em", margin: 0 }} data-testid="text-mailbox-number">
+              {membership.mailboxNumber}
+            </p>
+            <p style={{ color: "#444", fontSize: "0.68rem", margin: "0.2rem 0 0" }}>Your personal mailbox</p>
           </div>
         )}
       </div>

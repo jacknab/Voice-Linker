@@ -229,11 +229,13 @@ router.get("/api/auth/membership", async (req: Request, res: Response) => {
     if (!phoneUser) {
       return res.status(404).json({ error: "Linked phone number not found." });
     }
+    const mailbox = await storage.getMailboxByUserId(phoneUser.id);
     return res.json({
       phoneNumber: phoneUser.phoneNumber,
       membershipTier: phoneUser.membershipTier,
       remainingSeconds: phoneUser.remainingSeconds,
       membershipNumber: phoneUser.membershipNumber,
+      mailboxNumber: mailbox?.mailboxNumber ?? null,
     });
   } catch (err) {
     console.error("[auth] membership error:", err);
