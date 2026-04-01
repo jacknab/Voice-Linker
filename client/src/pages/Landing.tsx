@@ -81,9 +81,6 @@ function CallLink({ phone, children, className, style }: {
 }
 
 export default function Landing() {
-  const [areaCode, setAreaCode] = useState("");
-  const [areaCodeResult, setAreaCodeResult] = useState<string | null>(null);
-  const [areaCodeLoading, setAreaCodeLoading] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const { data: localData, isLoading: localLoading } = useQuery<LocalNumberData>({
@@ -92,24 +89,10 @@ export default function Landing() {
     retry: 1,
   });
 
-  const displayPhone = areaCodeResult || localData?.phoneNumber || DEFAULT_PHONE;
+  const displayPhone = localData?.phoneNumber || DEFAULT_PHONE;
   const cityLabel = localData?.city || localData?.regionName || null;
   const stateLabel = localData?.state || null;
   const cityFull = cityLabel && stateLabel ? `${cityLabel}, ${stateLabel}` : cityLabel;
-
-  async function handleAreaCodeLookup() {
-    if (areaCode.length < 3) return;
-    setAreaCodeLoading(true);
-    try {
-      const res = await fetch(`/api/local-number?areacode=${encodeURIComponent(areaCode)}`);
-      const data: LocalNumberData = await res.json();
-      setAreaCodeResult(data.phoneNumber);
-    } catch {
-      setAreaCodeResult(null);
-    } finally {
-      setAreaCodeLoading(false);
-    }
-  }
 
   const scrollTo = (id: string) => {
     document.querySelector(id)?.scrollIntoView({ behavior: "smooth" });
@@ -250,42 +233,6 @@ export default function Landing() {
                 </CallLink>
               </div>
             )}
-
-            {/* Area code finder */}
-            <div style={{ marginBottom: "1rem" }}>
-              <p style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.55)", marginBottom: "0.6rem" }}>
-                Not in your area? Enter your area code to get your number
-              </p>
-              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                <input
-                  type="text"
-                  placeholder="Area code"
-                  maxLength={3}
-                  value={areaCode}
-                  onChange={e => { setAreaCode(e.target.value.replace(/\D/g, "")); setAreaCodeResult(null); }}
-                  onKeyDown={e => e.key === "Enter" && handleAreaCodeLookup()}
-                  style={{ background: "#fff", color: "#000", border: "none", borderRadius: "4px", padding: "0.6rem 0.9rem", fontSize: "0.95rem", width: "90px", outline: "none", fontFamily: "system-ui, sans-serif" }}
-                  data-testid="input-area-code"
-                />
-                <button
-                  onClick={handleAreaCodeLookup}
-                  disabled={areaCode.length < 3 || areaCodeLoading}
-                  style={{ background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "4px", padding: "0.6rem 1.4rem", fontSize: "0.85rem", fontWeight: 700, cursor: areaCode.length < 3 ? "not-allowed" : "pointer", letterSpacing: "0.05em", textTransform: "uppercase", display: "flex", alignItems: "center", gap: "0.4rem", opacity: areaCode.length < 3 ? 0.6 : 1, transition: "background 0.15s" }}
-                  onMouseEnter={e => { if (areaCode.length >= 3) e.currentTarget.style.background = "#1e40af"; }}
-                  onMouseLeave={e => (e.currentTarget.style.background = "#1d4ed8")}
-                  data-testid="button-find-number"
-                >
-                  {areaCodeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Find My Number"}
-                </button>
-              </div>
-              {areaCodeResult && (
-                <p style={{ fontSize: "0.82rem", color: "#60a5fa", marginTop: "0.5rem", fontWeight: 600 }}
-                  data-testid="text-area-code-result"
-                >
-                  Your number: {formatPhone(areaCodeResult)}
-                </p>
-              )}
-            </div>
 
           </div>
         </div>
