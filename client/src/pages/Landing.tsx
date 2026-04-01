@@ -165,7 +165,7 @@ export default function Landing() {
       </nav>
 
       {/* ── HERO ── */}
-      <section id="hero" className="relative overflow-hidden min-h-[260px] md:min-h-[550px]">
+      <section id="hero" className="relative overflow-hidden min-h-[260px] md:min-h-[480px]">
         {/* Background image */}
         <img
           src={heroImg}
@@ -178,35 +178,35 @@ export default function Landing() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
         {/* Content */}
-        <div className="relative z-10 w-full min-h-[260px] md:min-h-[550px] flex items-center justify-center px-6 py-8 md:py-14 md:pb-16">
-          <div style={{ maxWidth: "520px", textAlign: "center" }}>
+        <div className="relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-center px-8 md:px-16 py-10 md:py-16">
+          <div style={{ maxWidth: "560px" }}>
 
             {/* Age disclaimer */}
-            <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.65)", marginBottom: "1.25rem", fontWeight: 400 }}>
+            <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.6)", marginBottom: "1rem", fontWeight: 400, letterSpacing: "0.03em", textTransform: "uppercase" }}>
               All users must be 18 years or older
             </p>
 
             {/* Free minutes */}
-            <h1 style={{ fontSize: "clamp(1.8rem, 5vw, 3.5rem)", fontWeight: 900, letterSpacing: "-0.02em", lineHeight: 1.05, marginBottom: "0.5rem", color: "#fff", whiteSpace: "nowrap" }}
+            <h1 style={{ fontSize: "clamp(2rem, 5vw, 3.75rem)", fontWeight: 900, letterSpacing: "-0.02em", lineHeight: 1, marginBottom: "0.6rem", color: "#fff" }}
               data-testid="hero-headline"
             >
               90 MINUTES FREE!
             </h1>
-            <p style={{ fontSize: "1.15rem", color: "rgba(255,255,255,0.7)", marginBottom: "1.25rem" }}>
+            <p style={{ fontSize: "1.05rem", color: "rgba(255,255,255,0.65)", marginBottom: "2rem", fontWeight: 400 }}>
               No credit card required · Click for details
             </p>
 
             {/* Local number */}
             {localLoading ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "rgba(255,255,255,0.4)", fontSize: "1.1rem", marginBottom: "1.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "rgba(255,255,255,0.4)", fontSize: "1.1rem" }}>
                 <Loader2 className="w-4 h-4 animate-spin" /> Finding your local number…
               </div>
             ) : (
-              <div style={{ marginBottom: "1.75rem" }}>
-                <p style={{ fontSize: "1.35rem", color: "#fff", fontWeight: 400, marginBottom: "0.35rem" }}>
-                  Your local <strong>{cityLabel || "area"}</strong> access number
+              <div>
+                <p style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.8)", fontWeight: 400, marginBottom: "0.4rem" }}>
+                  Your local <strong style={{ color: "#fff" }}>{cityLabel || "area"}</strong> access number
                 </p>
-                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(2rem, 5vw, 3rem)", fontWeight: 900, color: "#fff", textDecoration: "none", letterSpacing: "0.02em" }}
+                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(2rem, 4.5vw, 3rem)", fontWeight: 900, color: "#fff", textDecoration: "none", letterSpacing: "0.02em", lineHeight: 1.1 }}
                   data-testid="text-local-phone"
                 >
                   Call {formatPhone(displayPhone)}
