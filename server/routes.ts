@@ -1663,8 +1663,10 @@ export async function registerRoutes(
     }
 
     try {
-      await storage.removeStaleActiveCalls(90);
+      await storage.removeStaleActiveCalls(20);
       const user = await getOrCreateUser(fromNumber);
+      // Remove any lingering active call rows for this user (e.g. status callback was missed)
+      await storage.removeActiveCallsByUser(user.id);
       await storage.registerActiveCall(callSid, user.id);
       storage.logCall(callSid, fromNumber, req.body?.To || null, null).catch(() => {});
       console.log(`[voice] Registered active call ${callSid} for userId=${user.id}`);
@@ -4723,9 +4725,12 @@ export async function registerRoutes(
       callRegion.set(callSid, region.id);
 
       // Clean up any stale calls
-      await storage.removeStaleActiveCalls(90);
+      await storage.removeStaleActiveCalls(20);
 
       const user = await getOrCreateUser(fromNumber);
+
+      // Remove any lingering active call rows for this user (e.g. status callback was missed)
+      await storage.removeActiveCallsByUser(user.id);
 
       // Register call as active — scoped to this region
       await storage.registerActiveCall(callSid, user.id, region.id);

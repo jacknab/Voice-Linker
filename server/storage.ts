@@ -89,6 +89,7 @@ export interface IStorage {
   // Active call tracking (real-time party line)
   registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void>;
   removeActiveCall(callSid: string): Promise<void>;
+  removeActiveCallsByUser(userId: string): Promise<void>;
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
   getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number>;
   getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number>;
@@ -434,6 +435,10 @@ export class DatabaseStorage implements IStorage {
 
   async removeActiveCall(callSid: string): Promise<void> {
     await db.delete(activeCalls).where(eq(activeCalls.callSid, callSid));
+  }
+
+  async removeActiveCallsByUser(userId: string): Promise<void> {
+    await db.delete(activeCalls).where(eq(activeCalls.userId, userId));
   }
 
   async removeStaleActiveCalls(olderThanMinutes: number): Promise<void> {

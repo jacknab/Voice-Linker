@@ -108,16 +108,16 @@ app.use((req, res, next) => {
   // Start the virtual caller simulator after a short delay to let the DB settle
   setTimeout(() => startSimulator().catch(err => console.error("[simulator] startup error:", err)), 3000);
 
-  // Periodically purge any active_calls rows that are more than 90 minutes old.
+  // Periodically purge any active_calls rows that are more than 20 minutes old.
   // This catches calls where Twilio's status callback never fired (e.g. network issues).
   const { storage } = await import("./storage");
   setInterval(async () => {
     try {
-      await storage.removeStaleActiveCalls(90);
+      await storage.removeStaleActiveCalls(20);
     } catch (err) {
       console.error("[cleanup] stale active-call purge failed:", err);
     }
-  }, 5 * 60 * 1000); // every 5 minutes
+  }, 60 * 1000); // every 1 minute
 
   // Nightly per-day billing deduction — fires at 23:59 server time.
   // Only runs when billingMode is set to 'per_day' in membership settings.
