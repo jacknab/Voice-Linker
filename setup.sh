@@ -179,10 +179,10 @@ step "5/9  Pushing database schema"
 npm run db:push
 success "Database schema is up to date."
 
-# ─── STEP 6 – Seed admin account ──────────────────────────────────────────────
-step "6/9  Seeding admin account"
-npx tsx scripts/seed-admin.ts
-success "Admin account ready."
+# ─── STEP 6 – Seed/reset admin account ───────────────────────────────────────
+step "6/9  Setting up admin account"
+npx tsx scripts/reset-admin.ts
+success "Admin account ready (password synced)."
 
 # ─── STEP 7 – Build the application ──────────────────────────────────────────
 step "7/9  Building the application"
