@@ -1039,21 +1039,13 @@ export async function registerRoutes(
 
   app.post("/api/admin/cards", async (req, res) => {
     try {
-      const { cardNumber: requestedNumber, notes } = req.body as { cardNumber?: string; notes?: string };
-      let cardNumber: string;
-      if (requestedNumber) {
-        if (!/^\d{5}$/.test(requestedNumber)) {
-          return res.status(400).json({ message: "Card number must be exactly 5 digits" });
-        }
-        const taken = await storage.isMembershipCardNumberTaken(requestedNumber);
-        if (taken) {
-          return res.status(409).json({ message: "That card number is already in use" });
-        }
-        cardNumber = requestedNumber;
-      } else {
-        cardNumber = await generateUniqueCardNumber();
+      const { seconds, notes } = req.body as { seconds?: number; notes?: string };
+      if (!seconds || isNaN(Number(seconds)) || Number(seconds) < 1) {
+        return res.status(400).json({ message: "A membership plan (seconds) is required" });
       }
-      const card = await storage.createMembershipCard(cardNumber, notes ?? undefined);
+      const valueSeconds = Math.floor(Number(seconds));
+      const cardNumber = await generateUniqueCardNumber();
+      const card = await storage.createMembershipCard(cardNumber, valueSeconds, notes ?? undefined);
       res.status(201).json(card);
     } catch (e) {
       console.error("[admin] /api/admin/cards POST error:", e);

@@ -201,7 +201,7 @@ export interface IStorage {
   consumeMembershipLinkCode(codeId: string): Promise<void>;
 
   // Membership cards (5-digit pre-created cards for events/distribution)
-  createMembershipCard(cardNumber: string, notes?: string): Promise<MembershipCard>;
+  createMembershipCard(cardNumber: string, valueSeconds: number, notes?: string): Promise<MembershipCard>;
   getMembershipCardByNumber(cardNumber: string): Promise<MembershipCard | undefined>;
   getMembershipCardByPhone(phoneNumber: string): Promise<MembershipCard | undefined>;
   linkCardToPhone(cardId: string, phoneNumber: string): Promise<void>;
@@ -1359,8 +1359,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ── Membership Cards ──────────────────────────────────────────────────────────
-  async createMembershipCard(cardNumber: string, notes?: string): Promise<MembershipCard> {
-    const [row] = await db.insert(membershipCards).values({ cardNumber, notes: notes ?? null }).returning();
+  async createMembershipCard(cardNumber: string, valueSeconds: number, notes?: string): Promise<MembershipCard> {
+    const [row] = await db.insert(membershipCards).values({ cardNumber, valueSeconds, notes: notes ?? null }).returning();
     return row;
   }
 
