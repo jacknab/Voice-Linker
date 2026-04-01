@@ -177,7 +177,7 @@ export default function Landing() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
         {/* Content */}
-        <div className="relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-start px-8 md:px-16 pt-10 md:pt-14 pb-10">
+        <div className={`relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-start px-8 md:px-16 pt-10 md:pt-14 pb-10 ${isMM ? "justify-end" : "justify-start"}`}>
           <div style={{ maxWidth: "560px" }}>
 
             {/* Age disclaimer */}
