@@ -11,6 +11,11 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+// Trust the first proxy (nginx) so Express reads X-Forwarded-Proto correctly.
+// Without this, secure cookies are never sent back through the proxy and
+// every request after login comes back as 401.
+app.set("trust proxy", 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

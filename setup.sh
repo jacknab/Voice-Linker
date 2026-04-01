@@ -175,17 +175,22 @@ EOF
 fi
 
 # ─── STEP 5 – Push DB schema ──────────────────────────────────────────────────
-step "5/8  Pushing database schema"
+step "5/9  Pushing database schema"
 npm run db:push
 success "Database schema is up to date."
 
-# ─── STEP 6 – Build the application ──────────────────────────────────────────
-step "6/8  Building the application"
+# ─── STEP 6 – Seed admin account ──────────────────────────────────────────────
+step "6/9  Seeding admin account"
+npx tsx scripts/seed-admin.ts
+success "Admin account ready."
+
+# ─── STEP 7 – Build the application ──────────────────────────────────────────
+step "7/9  Building the application"
 npm run build
 success "Build complete. Output: ${APP_DIR}/dist/"
 
-# ─── STEP 7 – systemd service ─────────────────────────────────────────────────
-step "7/8  Creating systemd service (${SERVICE_NAME})"
+# ─── STEP 8 – systemd service ─────────────────────────────────────────────────
+step "8/9  Creating systemd service (${SERVICE_NAME})"
 
 RUN_AS_USER="$(whoami)"
 
@@ -218,8 +223,8 @@ success "Service '${SERVICE_NAME}' enabled and started."
 info  "  Status : sudo systemctl status ${SERVICE_NAME}"
 info  "  Logs   : sudo journalctl -u ${SERVICE_NAME} -f"
 
-# ─── STEP 8 – Nginx config + SSL ─────────────────────────────────────────────
-step "8/8  Configuring Nginx with SSL"
+# ─── STEP 9 – Nginx config + SSL ─────────────────────────────────────────────
+step "9/9  Configuring Nginx with SSL"
 
 # SSL certificate already issued by Certbot — use the known path
 CERT_DIR="assicrentals.com-0001"
