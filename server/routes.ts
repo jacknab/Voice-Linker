@@ -311,7 +311,8 @@ const callWarningShown  = new Set<string>(); // already heard the < 15-minute wa
 
 // Billing checkpoint: tracks the last sync time so seconds are deducted incrementally
 // during IVR navigation (syncBilling), not just at call end.
-interface BillingCheckpoint { lastCheck: number; fromNumber: string; }
+// accumulatedSeconds holds sub-minute remainder so billing rounds up per minute only at finalize.
+interface BillingCheckpoint { lastCheck: number; fromNumber: string; accumulatedSeconds: number; }
 const billingCheckpoints = new Map<string, BillingCheckpoint>(); // CallSid → checkpoint
 
 // Membership lookup override: when a caller enters a membership number from a different
@@ -1325,13 +1326,14 @@ export async function registerRoutes(
   // Starts billing for a call. Safe to call multiple times — only initialises once.
   function startBilling(callSid: string, fromNumber: string): void {
     if (!billingCheckpoints.has(callSid)) {
-      billingCheckpoints.set(callSid, { lastCheck: Date.now(), fromNumber });
+      billingCheckpoints.set(callSid, { lastCheck: Date.now(), fromNumber, accumulatedSeconds: 0 });
       console.log(`[billing] Started for callSid=${callSid}`);
     }
   }
 
-  // Deducts seconds elapsed since the last billing checkpoint.
-  // Called before each greeting/navigation step for accurate incremental billing.
+  // Accumulates elapsed seconds since the last checkpoint and deducts whole minutes.
+  // Billing is per-minute: partial minutes are held in the accumulator and only
+  // charged as full minutes — the leftover is rounded up at finalizeCallBilling.
   // When a membership override is active, deducts from the membership holder's account.
   async function syncBilling(callSid: string): Promise<void> {
     const checkpoint = billingCheckpoints.get(callSid);
@@ -1340,20 +1342,42 @@ export async function registerRoutes(
     const elapsedSeconds = Math.floor((now - checkpoint.lastCheck) / 1000);
     if (elapsedSeconds <= 0) return;
     checkpoint.lastCheck = now;
+    checkpoint.accumulatedSeconds += elapsedSeconds;
+
+    // Deduct only whole minutes — keep the remainder in the accumulator
+    const minutesToDeduct = Math.floor(checkpoint.accumulatedSeconds / 60);
+    if (minutesToDeduct <= 0) return;
+    const secondsToDeduct = minutesToDeduct * 60;
+    checkpoint.accumulatedSeconds -= secondsToDeduct;
+
     try {
       const overridePhone = callMembershipOverride.get(callSid);
       const billingPhone = overridePhone ?? checkpoint.fromNumber;
       const user = await storage.getOrCreateUser(billingPhone);
-      await storage.deductSeconds(user.id, elapsedSeconds);
-      console.log(`[billing] syncBilling: deducted ${elapsedSeconds}s from userId=${user.id}${overridePhone ? " (membership override)" : ""}`);
+      await storage.deductSeconds(user.id, secondsToDeduct);
+      console.log(`[billing] syncBilling: deducted ${secondsToDeduct}s (${minutesToDeduct} min) from userId=${user.id}${overridePhone ? " (membership override)" : ""}`);
     } catch (err) {
       console.error("[billing] syncBilling error:", err);
     }
   }
 
-  // Runs a final sync and clears the billing checkpoint when a call ends.
+  // Runs a final sync, then rounds up any remaining partial minute to a full minute.
+  // This ensures that even a 20-second call costs 1 full minute (per-minute billing).
   async function finalizeCallBilling(callSid: string): Promise<void> {
     await syncBilling(callSid);
+    const checkpoint = billingCheckpoints.get(callSid);
+    if (checkpoint && checkpoint.accumulatedSeconds > 0) {
+      // Partial minute remaining — charge a full minute (round up)
+      try {
+        const overridePhone = callMembershipOverride.get(callSid);
+        const billingPhone = overridePhone ?? checkpoint.fromNumber;
+        const user = await storage.getOrCreateUser(billingPhone);
+        await storage.deductSeconds(user.id, 60);
+        console.log(`[billing] finalizeCallBilling: rounded up ${checkpoint.accumulatedSeconds}s remainder to 1 min for userId=${user.id}`);
+      } catch (err) {
+        console.error("[billing] finalizeCallBilling roundup error:", err);
+      }
+    }
     billingCheckpoints.delete(callSid);
   }
 
@@ -2112,6 +2136,7 @@ export async function registerRoutes(
   app.post("/voice/my-mailbox", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     try {
       const user = await getOrCreateUser(fromNumber);
@@ -2119,6 +2144,8 @@ export async function registerRoutes(
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
       if (unreadMessage) {
+        // Time is deducted when listening to mailbox responses — start billing now
+        startBilling(callSid, fromNumber);
         const senderProfile = await storage.getProfile(unreadMessage.fromUserId);
         const msgGather = twiml.gather({
           numDigits: 1,
@@ -2164,6 +2191,10 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
 
     try {
+      const callSid = req.body?.CallSid as string;
+      // Sync billing for the time spent listening to the mailbox message
+      await syncBilling(callSid);
+
       const digit = req.body?.Digits as string;
       const msgId = req.query.msgId as string;
       const senderId = req.query.senderId as string;
@@ -3875,6 +3906,7 @@ export async function registerRoutes(
 
     try {
       const fromNumber = req.body?.From;
+      const callSid = req.body?.CallSid as string;
       const recordingUrl = req.body?.RecordingUrl;
       const toUserId = req.query.toUserId as string;
 
@@ -3885,6 +3917,13 @@ export async function registerRoutes(
       const returnTo = req.query.returnTo as string;
       const category = req.query.category as string;
       const user = await getOrCreateUser(fromNumber);
+
+      // Mailbox reply: billing is per-minute on the recording time.
+      // syncBilling captures the time elapsed during the recording (reply to ad).
+      if (returnTo === "mailbox" || returnTo === "category") {
+        await syncBilling(callSid);
+      }
+
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
       if (returnTo === "mailbox") {
         playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
