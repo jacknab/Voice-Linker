@@ -120,14 +120,14 @@ export default function Landing() {
           alt="Man on the phone"
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 25%" }}
         />
-        {/* Dark gradient overlay — strong on left for readability, fading right */}
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.82) 42%, rgba(0,0,0,0.35) 75%, rgba(0,0,0,0.1) 100%)" }} />
+        {/* Dark gradient overlay — strong on right for readability, fading left */}
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(270deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.82) 42%, rgba(0,0,0,0.35) 75%, rgba(0,0,0,0.1) 100%)" }} />
         {/* Bottom fade to dark */}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
         {/* Content */}
-        <div className="relative z-10 max-w-[1200px] mx-auto px-6 py-8 md:py-14 md:pb-16">
-          <div style={{ maxWidth: "520px" }}>
+        <div className="relative z-10 max-w-[1200px] mx-auto px-6 py-8 md:py-14 md:pb-16 flex justify-end">
+          <div style={{ maxWidth: "520px", textAlign: "left" }}>
 
             {/* Age disclaimer */}
             <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.65)", marginBottom: "1.25rem", fontWeight: 400 }}>
