@@ -111,6 +111,7 @@ export interface IStorage {
 
   updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string }): Promise<User>;
   deductSeconds(userId: string, seconds: number): Promise<User>;
+  deductOneDayFromAllActiveMembers(): Promise<number>;
   getZipEntryByCode(code: string): Promise<ZipCode | undefined>;
   getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string; neighborhood?: string | null }): Promise<ZipCode>;
   setUserZipCode(userId: string, zipCodeId: string): Promise<void>;
@@ -560,6 +561,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return user;
+  }
+
+  async deductOneDayFromAllActiveMembers(): Promise<number> {
+    const ONE_DAY_SECONDS = 86400;
+    const result = await db.update(users)
+      .set({ remainingSeconds: sql`GREATEST(0, COALESCE(${users.remainingSeconds}, 0) - ${ONE_DAY_SECONDS})` })
+      .where(sql`COALESCE(${users.remainingSeconds}, 0) > 0 AND ${users.membershipTier} IS NOT NULL`);
+    return (result as any).rowCount ?? 0;
   }
 
   async getZipEntryByCode(code: string): Promise<ZipCode | undefined> {

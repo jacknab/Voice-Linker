@@ -101,6 +101,37 @@ app.use((req, res, next) => {
     }
   }, 5 * 60 * 1000); // every 5 minutes
 
+  // Nightly per-day billing deduction — fires at 23:59 server time.
+  // Only runs when billingMode is set to 'per_day' in membership settings.
+  async function runNightlyDayDeduction() {
+    try {
+      const settings = await storage.getMembershipSettings();
+      if (settings.billingMode !== "per_day") {
+        log("Nightly billing: skipped (mode is per_minute)", "billing");
+        return;
+      }
+      const affected = await storage.deductOneDayFromAllActiveMembers();
+      log(`Nightly billing: deducted 1 day from ${affected} active member(s)`, "billing");
+    } catch (err) {
+      console.error("[billing] Nightly deduction error:", err);
+    }
+  }
+
+  function scheduleNightlyDeduction() {
+    const now = new Date();
+    const next = new Date();
+    next.setHours(23, 59, 0, 0);
+    if (now >= next) next.setDate(next.getDate() + 1); // already past 23:59, push to tomorrow
+    const delay = next.getTime() - now.getTime();
+    log(`Nightly billing scheduler: next run in ${Math.round(delay / 60000)} min`, "billing");
+    setTimeout(async () => {
+      await runNightlyDayDeduction();
+      scheduleNightlyDeduction(); // re-schedule for the following night
+    }, delay);
+  }
+
+  scheduleNightlyDeduction();
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

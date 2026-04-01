@@ -178,6 +178,8 @@ export const membershipSettings = pgTable("membership_settings", {
   // Announcement / MOTD — played to every caller right after the system greeting
   motdEnabled: boolean("motd_enabled").notNull().default(false),
   motdText: text("motd_text"),
+  // Billing mode: 'per_minute' deducts during calls; 'per_day' deducts 1 day nightly at 23:59
+  billingMode: text("billing_mode").notNull().default("per_minute"),
 });
 
 export const promoCodes = pgTable("promo_codes", {

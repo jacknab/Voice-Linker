@@ -1030,6 +1030,7 @@ export async function registerRoutes(
         plan2Name, plan2Minutes, plan2PriceCents,
         plan3Name, plan3Minutes, plan3PriceCents,
         bonusPlanKey,
+        billingMode,
       } = req.body;
 
       const data: Record<string, number | string | null> = {};
@@ -1044,6 +1045,7 @@ export async function registerRoutes(
       if (plan3Minutes !== undefined) data.plan3Minutes = parseInt(plan3Minutes);
       if (plan3PriceCents !== undefined) data.plan3PriceCents = parseInt(plan3PriceCents);
       if (bonusPlanKey !== undefined) data.bonusPlanKey = bonusPlanKey || null;
+      if (billingMode !== undefined) data.billingMode = billingMode === "per_day" ? "per_day" : "per_minute";
 
       const updated = await storage.updateMembershipSettings(data);
       invalidateMembershipSettingsCache();

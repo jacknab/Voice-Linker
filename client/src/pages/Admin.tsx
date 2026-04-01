@@ -899,7 +899,7 @@ function TTSTab() {
 // ── MembershipsTab ────────────────────────────────────────────────────────────
 function MembershipsTab() {
   const { toast } = useToast();
-  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; }
+  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; }
 
   const { data: ms, isLoading } = useQuery<MembershipSettings>({ queryKey: ["/api/admin/membership-settings"] });
 
@@ -908,6 +908,7 @@ function MembershipsTab() {
   const [plan2Name, setPlan2Name] = useState(""); const [plan2Minutes, setPlan2Minutes] = useState(""); const [plan2Price, setPlan2Price] = useState("");
   const [plan3Name, setPlan3Name] = useState(""); const [plan3Minutes, setPlan3Minutes] = useState(""); const [plan3Price, setPlan3Price] = useState("");
   const [bonusPlanKey, setBonusPlanKey] = useState<string | null>(null);
+  const [billingMode, setBillingMode] = useState<"per_minute" | "per_day">("per_minute");
   const [initialized, setInitialized] = useState(false);
 
   if (ms && !initialized) {
@@ -916,6 +917,7 @@ function MembershipsTab() {
     setPlan2Name(ms.plan2Name); setPlan2Minutes(String(ms.plan2Minutes)); setPlan2Price((ms.plan2PriceCents / 100).toFixed(2));
     setPlan3Name(ms.plan3Name); setPlan3Minutes(String(ms.plan3Minutes)); setPlan3Price((ms.plan3PriceCents / 100).toFixed(2));
     setBonusPlanKey(ms.bonusPlanKey ?? null);
+    setBillingMode((ms.billingMode ?? "per_minute") as "per_minute" | "per_day");
     setInitialized(true);
   }
 
@@ -929,6 +931,7 @@ function MembershipsTab() {
         plan2Name: plan2Name.trim() || "Plan 2", plan2Minutes: toMinutes(plan2Minutes), plan2PriceCents: toCents(plan2Price),
         plan3Name: plan3Name.trim() || "Plan 3", plan3Minutes: toMinutes(plan3Minutes), plan3PriceCents: toCents(plan3Price),
         bonusPlanKey: bonusPlanKey || "",
+        billingMode,
       });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-settings"] }); toast({ title: "Membership settings saved" }); },
@@ -964,6 +967,46 @@ function MembershipsTab() {
             />
           </div>
         </div>
+      </div>
+
+      <div className={C.card}>
+        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">Billing Mode</h3>
+        <p className="text-gray-400 font-mono text-xs">Choose how membership time is consumed. Per-minute deducts time during active calls. Per-day deducts one full day from every active member each night at 11:59 PM server time.</p>
+        <div className="flex gap-3 mt-3">
+          <button
+            data-testid="btn-billing-mode-per-minute"
+            type="button"
+            onClick={() => setBillingMode("per_minute")}
+            className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-mono tracking-widest uppercase transition-colors ${billingMode === "per_minute" ? "border-[#f5a623] bg-amber-50 text-amber-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300 hover:text-gray-500"}`}
+          >
+            <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${billingMode === "per_minute" ? "border-[#f5a623] bg-[#f5a623]" : "border-gray-300"}`}>
+              {billingMode === "per_minute" && <span className="w-2 h-2 rounded-full bg-white" />}
+            </span>
+            <div className="text-left">
+              <div className="font-bold">Per Minute</div>
+              <div className="text-xs font-normal normal-case tracking-normal text-gray-400 mt-0.5">Deducts time during calls</div>
+            </div>
+          </button>
+          <button
+            data-testid="btn-billing-mode-per-day"
+            type="button"
+            onClick={() => setBillingMode("per_day")}
+            className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-mono tracking-widest uppercase transition-colors ${billingMode === "per_day" ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300 hover:text-gray-500"}`}
+          >
+            <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${billingMode === "per_day" ? "border-blue-400 bg-blue-400" : "border-gray-300"}`}>
+              {billingMode === "per_day" && <span className="w-2 h-2 rounded-full bg-white" />}
+            </span>
+            <div className="text-left">
+              <div className="font-bold">Per Day</div>
+              <div className="text-xs font-normal normal-case tracking-normal text-gray-400 mt-0.5">Deducts 1 day nightly at 11:59 PM</div>
+            </div>
+          </button>
+        </div>
+        {billingMode === "per_day" && (
+          <div className="mt-3 px-3 py-2 rounded bg-blue-50 border border-blue-100 text-blue-700 font-mono text-xs">
+            Per-day mode active — one day will be deducted from every member's remaining time at 11:59 PM each night. Call-time usage is not tracked.
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
