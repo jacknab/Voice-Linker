@@ -66,7 +66,13 @@ router.post("/api/auth/register", async (req: Request, res: Response) => {
     const user = await storage.createWebUser(email, passwordHash);
 
     req.session.webUserId = user.id;
-    return res.status(201).json({ id: user.id, email: user.email });
+    req.session.save((err) => {
+      if (err) {
+        console.error("[auth] session save error on register:", err);
+        return res.status(500).json({ error: "Registration failed. Please try again." });
+      }
+      return res.status(201).json({ id: user.id, email: user.email });
+    });
   } catch (err) {
     console.error("[auth] register error:", err);
     return res.status(500).json({ error: "Registration failed. Please try again." });
@@ -101,7 +107,13 @@ router.post("/api/auth/login", async (req: Request, res: Response) => {
     }
 
     req.session.webUserId = user.id;
-    return res.json({ id: user.id, email: user.email });
+    req.session.save((err) => {
+      if (err) {
+        console.error("[auth] session save error on login:", err);
+        return res.status(500).json({ error: "Login failed. Please try again." });
+      }
+      return res.json({ id: user.id, email: user.email });
+    });
   } catch (err) {
     console.error("[auth] login error:", err);
     return res.status(500).json({ error: "Login failed. Please try again." });
@@ -349,7 +361,13 @@ router.post("/api/auth/reset-password", async (req: Request, res: Response) => {
     await storage.clearWebUserResetToken(user.id);
 
     req.session.webUserId = user.id;
-    return res.json({ ok: true, id: user.id, email: user.email });
+    req.session.save((err) => {
+      if (err) {
+        console.error("[auth] session save error on reset-password:", err);
+        return res.status(500).json({ error: "Password reset failed. Please try again." });
+      }
+      return res.json({ ok: true, id: user.id, email: user.email });
+    });
   } catch (err) {
     console.error("[auth] reset-password error:", err);
     return res.status(500).json({ error: "Password reset failed. Please try again." });
@@ -535,7 +553,13 @@ router.post("/api/admin/login", async (req: Request, res: Response) => {
     const valid = await bcrypt.compare(password, account.passwordHash);
     if (!valid) return res.status(401).json({ error: "Invalid credentials." });
     req.session.adminAccountId = account.id;
-    return res.json({ ok: true });
+    req.session.save((err) => {
+      if (err) {
+        console.error("[admin-auth] session save error on login:", err);
+        return res.status(500).json({ error: "Login failed." });
+      }
+      return res.json({ ok: true });
+    });
   } catch (err) {
     console.error("[admin-auth] login error:", err);
     return res.status(500).json({ error: "Login failed." });
