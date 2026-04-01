@@ -1063,12 +1063,13 @@ export async function registerRoutes(
 
   app.put("/api/admin/site-settings", async (req, res) => {
     try {
-      const { siteName, fallbackPhoneNumber, customerServiceEmail, customerServicePhone } = req.body;
+      const { siteName, fallbackPhoneNumber, customerServiceEmail, customerServicePhone, siteCategory } = req.body;
       const data: Record<string, string | null> = {};
       if (siteName !== undefined) data.siteName = String(siteName).trim() || "Phone Booth";
       if (fallbackPhoneNumber !== undefined) data.fallbackPhoneNumber = String(fallbackPhoneNumber).trim() || "800-730-2508";
       if (customerServiceEmail !== undefined) data.customerServiceEmail = customerServiceEmail ? String(customerServiceEmail).trim() : null;
       if (customerServicePhone !== undefined) data.customerServicePhone = customerServicePhone ? String(customerServicePhone).trim() : null;
+      if (siteCategory !== undefined) data.siteCategory = siteCategory === "MW" ? "MW" : "MM";
       const updated = await storage.updateSiteSettings(data);
       logAudit("site_settings_updated", { targetType: "settings", detail: data as Record<string, unknown> });
       res.json(updated);

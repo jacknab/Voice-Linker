@@ -166,6 +166,8 @@ export const siteSettings = pgTable("site_settings", {
   fallbackPhoneNumber: text("fallback_phone_number").notNull().default("800-730-2508"),
   customerServiceEmail: text("customer_service_email"),
   customerServicePhone: text("customer_service_phone"),
+  // Site category: 'MM' = Men seeking Men (gay), 'MW' = Men seeking Women (straight)
+  siteCategory: text("site_category").notNull().default("MM"),
 });
 
 export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({ id: true });

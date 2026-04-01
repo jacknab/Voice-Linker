@@ -1243,6 +1243,7 @@ interface SiteSettingsData {
   fallbackPhoneNumber: string;
   customerServiceEmail: string | null;
   customerServicePhone: string | null;
+  siteCategory: string;
 }
 
 function WebsiteSettingsTab() {
@@ -1257,6 +1258,7 @@ function WebsiteSettingsTab() {
   const [fallbackPhone, setFallbackPhone] = useState("");
   const [csEmail, setCsEmail] = useState("");
   const [csPhone, setCsPhone] = useState("");
+  const [siteCategory, setSiteCategory] = useState("MM");
   const [initialized, setInitialized] = useState(false);
 
   if (!initialized && data) {
@@ -1264,6 +1266,7 @@ function WebsiteSettingsTab() {
     setFallbackPhone(data.fallbackPhoneNumber);
     setCsEmail(data.customerServiceEmail ?? "");
     setCsPhone(data.customerServicePhone ?? "");
+    setSiteCategory(data.siteCategory ?? "MM");
     setInitialized(true);
   }
 
@@ -1274,6 +1277,7 @@ function WebsiteSettingsTab() {
         fallbackPhoneNumber: fallbackPhone,
         customerServiceEmail: csEmail || null,
         customerServicePhone: csPhone || null,
+        siteCategory,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/site-settings"] });
@@ -1352,6 +1356,21 @@ function WebsiteSettingsTab() {
               data-testid="input-cs-phone"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
+          </LabelRow>
+
+          <LabelRow
+            label="Site Category"
+            hint="Sets the audience type for this system. MM = Men seeking Men (gay). MW = Men seeking Women (straight). Controls hero images and on-site language."
+          >
+            <select
+              value={siteCategory}
+              onChange={e => setSiteCategory(e.target.value)}
+              data-testid="select-site-category"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+            >
+              <option value="MM">MM — Men seeking Men (gay / bi)</option>
+              <option value="MW">MW — Men seeking Women (straight)</option>
+            </select>
           </LabelRow>
         </div>
       </div>

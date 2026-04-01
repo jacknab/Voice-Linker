@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Phone, Loader2, Menu, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import heroImg from "@assets/hero_guy_1.png";
+import heroImgMM from "@assets/hero_guy_1.png";
+import heroImgMW from "@assets/hero_guy_2.png";
 
 const DEFAULT_PHONE = "800-730-2508";
 const DEFAULT_SITE_NAME = "Phone Booth";
@@ -12,6 +13,7 @@ interface SiteSettings {
   fallbackPhoneNumber: string;
   customerServiceEmail: string | null;
   customerServicePhone: string | null;
+  siteCategory: string;
 }
 
 interface LocalNumberData {
@@ -63,6 +65,25 @@ export default function Landing() {
   const fallbackPhone = siteData?.fallbackPhoneNumber || DEFAULT_PHONE;
   const csEmail = siteData?.customerServiceEmail || null;
   const csPhone = siteData?.customerServicePhone || null;
+  const isMM = (siteData?.siteCategory ?? "MM") === "MM";
+
+  const heroImg = isMM ? heroImgMM : heroImgMW;
+  const heroAlt = isMM ? "Man on the phone" : "Man and woman on the phone";
+  const introHeadline = isMM
+    ? `${siteName} is the best place to chat with local guys like you — anytime, anywhere.`
+    : `${siteName} is the best place to meet local women near you — anytime, anywhere.`;
+  const introBody = isMM
+    ? `${siteName} is a place where you can chat with real men looking to meet men. The Connection booth is where the action is with real guys who are on the line right now. ${siteName} is the go-to outlet for men seeking men.`
+    : `${siteName} is a place where you can chat with real local men looking to meet women. The Connection booth is where the action is with real people who are on the line right now. ${siteName} is the go-to outlet for men seeking women.`;
+  const taglineHeadline = isMM
+    ? "The most popular gay, bi and curious live chatline in"
+    : "The most popular men-seeking-women live chatline in";
+  const taglineSubtags = isMM
+    ? ["Real guys just like you", "Freedom to be yourself"]
+    : ["Real men, real women", "Connect with someone near you"];
+  const footerBlurb = isMM
+    ? "The most popular gay, bi & curious live chat line. Real guys, real voices."
+    : "The most popular men-seeking-women live chat line. Real conversations, real connections.";
 
   const displayPhone = localData?.phoneNumber || fallbackPhone;
   const cityLabel = localData?.city || localData?.regionName || null;
@@ -148,7 +169,7 @@ export default function Landing() {
         {/* Background image */}
         <img
           src={heroImg}
-          alt="Man on the phone"
+          alt={heroAlt}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 25%", filter: "saturate(0.65) brightness(0.9)" }}
         />
         {/* Dark overlay — uniform for centered text readability */}
@@ -201,10 +222,10 @@ export default function Landing() {
       <section style={{ background: "#f4f4f4", padding: "3.5rem 1.5rem", textAlign: "center" }}>
         <div style={{ maxWidth: "760px", margin: "0 auto" }}>
           <h2 style={{ fontSize: "clamp(1.4rem, 3vw, 2rem)", fontWeight: 800, color: "#111", lineHeight: 1.35, marginBottom: "1.25rem" }}>
-            {siteName} is the best place to chat with local guys like you — anytime, anywhere.
+            {introHeadline}
           </h2>
           <p style={{ fontSize: "1rem", color: "#444", lineHeight: 1.75, marginBottom: "1.5rem" }}>
-            <strong>{siteName}</strong> is a place where you can chat with real men looking to meet men. The Connection booth is where the action is with real guys who are on the line right now <strong>{siteName}</strong> is the go-to outlet for men seeking men.
+            {introBody}
           </p>
           <CallLink phone={displayPhone}
             style={{ fontSize: "1.25rem", fontWeight: 800, color: "#1d6fa8", textDecoration: "none", letterSpacing: "-0.01em" }}
@@ -219,15 +240,15 @@ export default function Landing() {
       <section style={{ background: "#1a1a1a", padding: "1.75rem 1.5rem", textAlign: "center", borderTop: "1px solid #2a2a2a", borderBottom: "1px solid #2a2a2a" }}>
         <div style={{ maxWidth: "900px", margin: "0 auto" }}>
           <h2 style={{ fontSize: "clamp(1rem, 2.5vw, 1.4rem)", fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase", color: "#fff", marginBottom: "0.4rem", lineHeight: 1.3 }}>
-            The most popular gay, bi and curious live chatline in{" "}
+            {taglineHeadline}{" "}
             <span style={{ color: "#3b82f6" }} data-testid="text-city-tagline">
               {cityFull || "your area"}
             </span>
           </h2>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "1.5rem", fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", marginTop: "0.5rem", flexWrap: "wrap" }}>
-            <span>Real guys just like you</span>
+            <span>{taglineSubtags[0]}</span>
             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#3b82f6", display: "inline-block", flexShrink: 0 }} />
-            <span>Freedom to be yourself</span>
+            <span>{taglineSubtags[1]}</span>
           </div>
         </div>
       </section>
@@ -286,7 +307,7 @@ export default function Landing() {
                 <span style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff" }}>{siteName}</span>
               </div>
               <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.3)", lineHeight: 1.65 }}>
-                The most popular gay, bi &amp; curious live chat line. Real guys, real voices.
+                {footerBlurb}
               </p>
             </div>
             {[
