@@ -116,16 +116,17 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" \
     || sudo -u postgres psql -c "CREATE ROLE ${DB_USER} WITH LOGIN PASSWORD '${DB_PASSWORD}';"
 sudo -u postgres psql -c "ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';"
 
-# Create database if missing
-sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" \
-    | grep -q 1 \
-    || sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
+# Drop and recreate the database for a guaranteed clean schema.
+# This eliminates any leftover tables from previous or different app installations.
+warn "Dropping and recreating '${DB_NAME}' for a clean install..."
+sudo -u postgres psql -c "DROP DATABASE IF EXISTS ${DB_NAME};"
+sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
 
 # Privileges (PostgreSQL 15+ requires explicit schema grant)
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
 sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};"
 
-success "Database '${DB_NAME}' and user '${DB_USER}' are ready."
+success "Database '${DB_NAME}' and user '${DB_USER}' are ready (clean slate)."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 step "4/9  .env file"
