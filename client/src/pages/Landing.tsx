@@ -166,6 +166,24 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── INTRO BLURB ── */}
+      <section style={{ background: "#f4f4f4", padding: "3.5rem 1.5rem", textAlign: "center" }}>
+        <div style={{ maxWidth: "760px", margin: "0 auto" }}>
+          <h2 style={{ fontSize: "clamp(1.4rem, 3vw, 2rem)", fontWeight: 800, color: "#111", lineHeight: 1.35, marginBottom: "1.25rem" }}>
+            Phone Booth is the best place to chat with local guys like you — anytime, anywhere.
+          </h2>
+          <p style={{ fontSize: "1rem", color: "#444", lineHeight: 1.75, marginBottom: "1.5rem" }}>
+            <strong>Phone Booth</strong> is a place where you can chat with real gay, bi, and curious men and connect with new people. The largest gay personals chat line company in North America, <strong>Phone Booth</strong> has been the go-to outlet for men since 1990.
+          </p>
+          <CallLink phone={displayPhone}
+            style={{ fontSize: "1.25rem", fontWeight: 800, color: "#1d6fa8", textDecoration: "none", letterSpacing: "-0.01em" }}
+            data-testid="link-try-free"
+          >
+            Try it FOR FREE!
+          </CallLink>
+        </div>
+      </section>
+
       {/* ── TAGLINE BAR ── */}
       <section style={{ background: "#1a1a1a", padding: "1.75rem 1.5rem", textAlign: "center", borderTop: "1px solid #2a2a2a", borderBottom: "1px solid #2a2a2a" }}>
         <div style={{ maxWidth: "900px", margin: "0 auto" }}>
