@@ -114,6 +114,7 @@ app.use((req, res, next) => {
   setInterval(async () => {
     try {
       await storage.removeStaleActiveCalls(20);
+      await storage.finalizeOrphanedCallLogs(5);
     } catch (err) {
       console.error("[cleanup] stale active-call purge failed:", err);
     }

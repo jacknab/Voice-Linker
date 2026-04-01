@@ -91,6 +91,7 @@ export interface IStorage {
   removeActiveCall(callSid: string): Promise<void>;
   removeActiveCallsByUser(userId: string): Promise<void>;
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
+  finalizeOrphanedCallLogs(olderThanMinutes: number): Promise<void>;
   getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number>;
   getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number>;
   getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]>;
@@ -434,14 +435,56 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removeActiveCall(callSid: string): Promise<void> {
+    // Finalize the call log (calculate duration from startedAt) before removing
+    await db.execute(sql`
+      UPDATE call_logs
+      SET duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (now() - started_at))::integer),
+          completed_at = now()
+      WHERE call_sid = ${callSid} AND completed_at IS NULL
+    `);
     await db.delete(activeCalls).where(eq(activeCalls.callSid, callSid));
   }
 
   async removeActiveCallsByUser(userId: string): Promise<void> {
+    // Find call SIDs for this user, finalize their logs, then remove
+    const rows = await db.select({ callSid: activeCalls.callSid }).from(activeCalls).where(eq(activeCalls.userId, userId));
+    for (const { callSid } of rows) {
+      await db.execute(sql`
+        UPDATE call_logs
+        SET duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (now() - started_at))::integer),
+            completed_at = now()
+        WHERE call_sid = ${callSid} AND completed_at IS NULL
+      `);
+    }
     await db.delete(activeCalls).where(eq(activeCalls.userId, userId));
   }
 
+  // Finalize call logs that have no completedAt and no matching active_calls entry.
+  // Catches cases where the active call was already purged but the log was never finalized.
+  async finalizeOrphanedCallLogs(olderThanMinutes: number): Promise<void> {
+    await db.execute(sql`
+      UPDATE call_logs
+      SET duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (now() - started_at))::integer),
+          completed_at = now()
+      WHERE completed_at IS NULL
+        AND started_at < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'
+        AND call_sid NOT IN (SELECT call_sid FROM active_calls)
+        AND call_sid NOT LIKE '${sql.raw(VIRTUAL_PREFIX)}%'
+    `);
+  }
+
   async removeStaleActiveCalls(olderThanMinutes: number): Promise<void> {
+    // Finalize call logs for stale calls before removing them
+    await db.execute(sql`
+      UPDATE call_logs
+      SET duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (now() - started_at))::integer),
+          completed_at = now()
+      WHERE call_sid IN (
+        SELECT call_sid FROM active_calls
+        WHERE joined_at < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'
+          AND call_sid NOT LIKE '${sql.raw(VIRTUAL_PREFIX)}%'
+      ) AND completed_at IS NULL
+    `);
     await db.delete(activeCalls)
       .where(
         and(
