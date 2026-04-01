@@ -3,7 +3,7 @@ import { Phone, Loader2, Menu, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import heroImgMM from "@assets/hero_guy_1.png";
-import heroImgMW from "@assets/hero_girl_phone.png";
+import heroImgMW from "@assets/image_1775034559566.png";
 
 const DEFAULT_PHONE = "800-730-2508";
 const DEFAULT_SITE_NAME = "Phone Booth";
@@ -170,7 +170,7 @@ export default function Landing() {
         <img
           src={heroImg}
           alt={heroAlt}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "35% 10%", filter: "saturate(0.65) brightness(0.9)", transform: "scaleX(-1)" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "60% 20%", filter: "saturate(0.7) brightness(0.75)" }}
         />
         {/* Dark overlay — uniform for centered text readability */}
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.62)" }} />
