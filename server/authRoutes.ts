@@ -511,7 +511,7 @@ router.post("/api/auth/generate-link-code", async (req: Request, res: Response) 
       attempts++;
     } while (attempts < 10 && !!(await storage.getActiveMembershipLinkCode(code)));
 
-    const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // expires in 3 minutes
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // expires in 5 minutes
     const linkCode = await storage.createMembershipLinkCode(webUser.id, code, expiresAt);
     console.log(`[auth] generate-link-code: code=${linkCode.code} for webUserId=${webUser.id}`);
     return res.json({ code: linkCode.code, expiresAt: linkCode.expiresAt });

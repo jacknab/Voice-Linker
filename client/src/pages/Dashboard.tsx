@@ -394,14 +394,6 @@ function LinkMembershipModal({
                   ))}
                 </div>
 
-                {/* Verified phone badge */}
-                {verifiedPhone && (
-                  <div style={{ background: "#052e16", border: "1px solid #166534", borderRadius: "8px", padding: "0.6rem 1rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                    <CheckCircle2 size={14} color="#22c55e" />
-                    <span style={{ color: "#22c55e", fontSize: "0.8rem", fontWeight: 600 }}>Active membership confirmed for {verifiedPhone}</span>
-                  </div>
-                )}
-
                 {isGenerating ? (
                   <div style={{ textAlign: "center", padding: "2rem 0" }}>
                     <Loader2 size={30} color="#1d4ed8" className="animate-spin" style={{ margin: "0 auto 1rem" }} />
@@ -416,27 +408,18 @@ function LinkMembershipModal({
                   </div>
                 ) : code ? (
                   <>
-                    {/* Instructions */}
-                    <div style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "10px", padding: "1rem 1.25rem", marginBottom: "1.5rem" }}>
-                      <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: 0, lineHeight: 1.7 }}>
-                        <strong style={{ color: "#60a5fa" }}>Step 1.</strong> Call your access number below.<br />
-                        <strong style={{ color: "#60a5fa" }}>Step 2.</strong> When the system answers, enter the 3-digit code followed by <strong>#</strong>.<br />
-                        <strong style={{ color: "#60a5fa" }}>Step 3.</strong> This page will update automatically once verified.
-                      </p>
-                    </div>
-
-                    {/* Access number */}
-                    <div style={{ marginBottom: "1.25rem" }}>
-                      <p style={S.label}>Your Access Number</p>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <Phone size={15} color="#60a5fa" />
-                        <span style={{ color: "#fff", fontSize: "1.05rem", fontWeight: 700, letterSpacing: "0.03em" }}>{accessNumber}</span>
+                    {/* Access number — prominent at top */}
+                    <div style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "10px", padding: "0.9rem 1.25rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <Phone size={18} color="#60a5fa" style={{ flexShrink: 0 }} />
+                      <div>
+                        <p style={{ color: "#555", fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.2rem" }}>Call This Number</p>
+                        <span style={{ color: "#fff", fontSize: "1.1rem", fontWeight: 800, letterSpacing: "0.04em" }}>{accessNumber}</span>
                       </div>
                     </div>
 
                     {/* Code display */}
-                    <div style={{ marginBottom: "1.25rem" }}>
-                      <p style={S.label}>Your 3-Digit Link Code</p>
+                    <div style={{ marginBottom: "1rem" }}>
+                      <p style={S.label}>Enter This Code on Your Dialpad</p>
                       <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
                         <div style={{ background: isExpired ? "#1a1a1a" : "#0d1a2e", border: `2px solid ${isExpired ? "#333" : "#1d4ed8"}`, borderRadius: "12px", padding: "0.875rem 1.5rem", flex: 1, textAlign: "center" }}>
                           <span style={{ color: isExpired ? "#444" : "#fff", fontSize: "2.5rem", fontWeight: 800, letterSpacing: "0.35em", fontFamily: "monospace" }}>{code}</span>
@@ -449,12 +432,16 @@ function LinkMembershipModal({
                       </div>
                     </div>
 
+                    {/* Instructions */}
+                    <p style={{ color: "#6b82a0", fontSize: "0.8rem", margin: "0 0 1rem", lineHeight: 1.65 }}>
+                      When the system answers, enter the 3-digit code on your dialpad followed by <strong style={{ color: "#93c5fd" }}>#</strong>. Please remain on the line — verification may take a moment. This window will close automatically once your membership is linked.
+                    </p>
+
                     {/* Timer */}
                     {!isExpired ? (
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                         <Timer size={14} color={timeLeft < 60 ? "#ef4444" : "#22c55e"} />
                         <span style={{ color: timeLeft < 60 ? "#ef4444" : "#22c55e", fontSize: "0.82rem", fontWeight: 600 }}>Code expires in {countdownStr}</span>
-                        <span style={{ color: "#333", fontSize: "0.78rem", marginLeft: "auto" }}>Waiting for verification…</span>
                       </div>
                     ) : (
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -464,7 +451,7 @@ function LinkMembershipModal({
                     )}
 
                     {/* Back link */}
-                    <button onClick={() => { setStep("phone"); setCode(null); setExpiresAt(null); setGenError(null); }} style={{ background: "none", border: "none", color: "#555", fontSize: "0.75rem", cursor: "pointer", marginTop: "1.25rem", padding: 0, textDecoration: "underline" }}>
+                    <button onClick={() => { setStep("phone"); setCode(null); setExpiresAt(null); setGenError(null); }} style={{ background: "none", border: "none", color: "#444", fontSize: "0.75rem", cursor: "pointer", marginTop: "1.25rem", padding: 0, textDecoration: "underline" }}>
                       ← Use a different phone number
                     </button>
                   </>
