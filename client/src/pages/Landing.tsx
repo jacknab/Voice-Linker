@@ -19,7 +19,7 @@ function formatPhone(raw: string | null | undefined): string {
   if (!raw) return DEFAULT_PHONE;
   const d = raw.replace(/\D/g, "");
   if (d.length === 10) return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
-  if (d.length === 11 && d[0] === "1") return `1-${d.slice(1, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
+  if (d.length === 11 && d[0] === "1") return `${d.slice(1, 4)}-${d.slice(4, 7)}-${d.slice(7)}`;
   return raw;
 }
 
@@ -138,7 +138,7 @@ export default function Landing() {
             <h1 style={{ fontSize: "clamp(2.4rem, 6vw, 4rem)", fontWeight: 900, letterSpacing: "-0.02em", lineHeight: 1.05, marginBottom: "0.5rem", color: "#fff" }}
               data-testid="hero-headline"
             >
-              60 MINUTES FREE!
+              90 MINUTES FREE!
             </h1>
             <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", marginBottom: "1.25rem" }}>
               No credit card required · Click for details
