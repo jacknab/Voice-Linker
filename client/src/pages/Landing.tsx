@@ -140,21 +140,21 @@ export default function Landing() {
             >
               90 MINUTES FREE!
             </h1>
-            <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", marginBottom: "1.25rem" }}>
+            <p style={{ fontSize: "1.15rem", color: "rgba(255,255,255,0.7)", marginBottom: "1.25rem" }}>
               No credit card required · Click for details
             </p>
 
             {/* Local number */}
             {localLoading ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "rgba(255,255,255,0.4)", fontSize: "0.9rem", marginBottom: "1.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "rgba(255,255,255,0.4)", fontSize: "1.1rem", marginBottom: "1.75rem" }}>
                 <Loader2 className="w-4 h-4 animate-spin" /> Finding your local number…
               </div>
             ) : (
               <div style={{ marginBottom: "1.75rem" }}>
-                <p style={{ fontSize: "1.05rem", color: "#fff", fontWeight: 400, marginBottom: "0.25rem" }}>
+                <p style={{ fontSize: "1.35rem", color: "#fff", fontWeight: 400, marginBottom: "0.35rem" }}>
                   Your local <strong>{cityLabel || "area"}</strong> access number
                 </p>
-                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(1.6rem, 4vw, 2.4rem)", fontWeight: 900, color: "#fff", textDecoration: "none", letterSpacing: "0.02em" }}
+                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(2rem, 5vw, 3rem)", fontWeight: 900, color: "#fff", textDecoration: "none", letterSpacing: "0.02em" }}
                   data-testid="text-local-phone"
                 >
                   Call {formatPhone(displayPhone)}
