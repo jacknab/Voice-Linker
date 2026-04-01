@@ -182,19 +182,23 @@ export default function Landing() {
           <div style={{ maxWidth: "560px" }}>
 
             {/* Age disclaimer */}
-            <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.6)", marginBottom: "1rem", fontWeight: 400, letterSpacing: "0.03em", textTransform: "uppercase" }}>
+            <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.55)", marginBottom: "0.6rem", fontWeight: 400, letterSpacing: "0.04em" }}>
               All users must be 18 years or older
             </p>
 
             {/* Free minutes */}
-            <h1 style={{ fontSize: "clamp(2rem, 5vw, 3.75rem)", fontWeight: 900, letterSpacing: "-0.02em", lineHeight: 1, marginBottom: "0.6rem", color: "#fff" }}
+            <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "0.75rem", color: "#fff" }}
               data-testid="hero-headline"
             >
               90 MINUTES FREE!
             </h1>
-            <p style={{ fontSize: "1.05rem", color: "rgba(255,255,255,0.65)", marginBottom: "2rem", fontWeight: 400 }}>
-              No credit card required · Click for details
-            </p>
+
+            {/* Glass pill */}
+            <div style={{ display: "inline-block", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", padding: "0.35rem 0.9rem", marginBottom: "2rem" }}>
+              <p style={{ fontSize: "0.95rem", color: "rgba(255,255,255,0.85)", fontWeight: 400, margin: 0 }}>
+                No credit card required · Click for details
+              </p>
+            </div>
 
             {/* Local number */}
             {localLoading ? (
@@ -203,10 +207,10 @@ export default function Landing() {
               </div>
             ) : (
               <div>
-                <p style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.8)", fontWeight: 400, marginBottom: "0.4rem" }}>
-                  Your local <strong style={{ color: "#fff" }}>{cityLabel || "area"}</strong> access number
+                <p style={{ fontSize: "1.05rem", color: "rgba(255,255,255,0.75)", fontWeight: 400, marginBottom: "0.3rem" }}>
+                  Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access number
                 </p>
-                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(2rem, 4.5vw, 3rem)", fontWeight: 900, color: "#fff", textDecoration: "none", letterSpacing: "0.02em", lineHeight: 1.1 }}
+                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(2rem, 4.5vw, 3rem)", fontWeight: 900, color: "#fff", textDecoration: "none", letterSpacing: "0.01em", lineHeight: 1.1 }}
                   data-testid="text-local-phone"
                 >
                   Call {formatPhone(displayPhone)}
