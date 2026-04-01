@@ -24,6 +24,7 @@ export interface CallerSummary {
 export interface CallerDetail {
   user: User;
   profile: Profile | null;
+  zipCode: ZipCode | null;
   callHistory: { id: string; callSid: string; durationSeconds: number | null; startedAt: Date | null; completedAt: Date | null; toPhoneNumber: string | null }[];
   sentMessages: { id: string; toPhoneNumber: string; createdAt: Date | null; isRead: boolean | null }[];
   receivedMessages: { id: string; fromPhoneNumber: string; createdAt: Date | null; isRead: boolean | null }[];
@@ -791,9 +792,14 @@ export class DatabaseStorage implements IStorage {
       ORDER BY bu.created_at DESC
     `);
 
+    const zipCode = user.zipCodeId
+      ? (await db.select().from(zipCodes).where(eq(zipCodes.id, user.zipCodeId)).limit(1))[0] ?? null
+      : null;
+
     return {
       user,
       profile: profile ?? null,
+      zipCode,
       callHistory: callHistory.rows as any[],
       sentMessages: sentRows.rows as any[],
       receivedMessages: receivedRows.rows as any[],

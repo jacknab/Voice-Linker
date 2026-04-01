@@ -80,6 +80,7 @@ interface CallerDetail {
     createdAt: string | null;
   };
   profile: { id: string; recordingUrl: string; recordingDuration: number | null; createdAt: string | null } | null;
+  zipCode: { code: string; city: string | null; state: string | null; neighborhood: string | null } | null;
   callHistory: { id: string; callSid: string; durationSeconds: number | null; startedAt: string | null; completedAt: string | null; toPhoneNumber: string | null }[];
   sentMessages: { id: string; toPhoneNumber: string; createdAt: string | null; isRead: boolean | null }[];
   receivedMessages: { id: string; fromPhoneNumber: string; createdAt: string | null; isRead: boolean | null }[];
@@ -1534,7 +1535,7 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
     <div className="text-gray-400 font-mono text-xs py-16 text-center">Caller not found.</div>
   );
 
-  const { user, profile, callHistory, sentMessages, receivedMessages, blockedByUser, blockedByOthers } = detail;
+  const { user, profile, zipCode, callHistory, sentMessages, receivedMessages, blockedByUser, blockedByOthers } = detail;
 
   return (
     <div className="space-y-0">
@@ -1570,6 +1571,24 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
                   <span className="text-gray-400 text-xs">{fmtSecs(profile.recordingDuration)}</span>
                 </span>
               ) : <span className={`${C.badge} border-gray-200 bg-gray-50 text-gray-400`}>No Profile</span>}
+            </span>
+          </div>
+          <div className={C.fieldRow}>
+            <span className={C.fieldLabel}>Zip Code</span>
+            <span className={C.fieldValue} data-testid="detail-zip-code">
+              {zipCode ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="font-mono font-bold">{zipCode.code}</span>
+                  {(zipCode.city || zipCode.state) && (
+                    <span className="text-gray-400 text-xs">
+                      {[zipCode.city, zipCode.state].filter(Boolean).join(", ")}
+                    </span>
+                  )}
+                  {zipCode.neighborhood && (
+                    <span className="text-gray-400 text-xs">· {zipCode.neighborhood}</span>
+                  )}
+                </span>
+              ) : <span className="text-gray-400">—</span>}
             </span>
           </div>
         </div>
