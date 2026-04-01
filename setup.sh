@@ -3,7 +3,7 @@
 #  setup.sh  –  Full production VPS setup script
 #
 #  Usage:
-#    bash setup.sh                        # prompts for domain
+#    bash setup.sh                        # uses default domain below
 #    bash setup.sh yourdomain.com         # domain as argument
 #
 #  Requirements:
@@ -24,10 +24,10 @@ error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; exit 1; }
 step()    { echo -e "\n${BOLD}${CYAN}━━━ $* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"; }
 
 # ─── CONFIGURATION ────────────────────────────────────────────────────────────
-# The internal port Node.js listens on (nginx proxies from 80/443 → this port)
-APP_PORT=5000
+# Internal port Node.js listens on (nginx proxies 80/443 → this port)
+APP_PORT=5050
 
-# PostgreSQL credentials (change DB_PASSWORD before first run)
+# PostgreSQL credentials — change DB_PASSWORD before first run
 DB_USER="appuser"
 DB_NAME="appdb"
 DB_PASSWORD="changeme_strong_password_here"
@@ -43,13 +43,14 @@ APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -n "${1-}" ]; then
     DOMAIN="$1"
 else
-    echo ""
-    read -rp "$(echo -e "${BOLD}Enter your domain name${RESET} (e.g. phonebooth.com): ")" DOMAIN
+    DEFAULT_DOMAIN="assicrentals.com"
+    read -rp "$(echo -e "${BOLD}Enter your domain name${RESET} [${DEFAULT_DOMAIN}]: ")" DOMAIN
+    DOMAIN="${DOMAIN:-$DEFAULT_DOMAIN}"
 fi
 
-DOMAIN="${DOMAIN#https://}"   # strip any accidental https://
-DOMAIN="${DOMAIN#http://}"    # strip any accidental http://
-DOMAIN="${DOMAIN%/}"          # strip trailing slash
+DOMAIN="${DOMAIN#https://}"
+DOMAIN="${DOMAIN#http://}"
+DOMAIN="${DOMAIN%/}"
 
 [[ -z "$DOMAIN" ]] && error "Domain name cannot be empty."
 
@@ -69,7 +70,7 @@ step "1/8  Installing system packages"
 
 sudo apt-get update -qq
 
-# Node.js 20.x via NodeSource if not already installed at the right version
+# Node.js 20.x via NodeSource if not already at the right major version
 NODE_VER=$(node --version 2>/dev/null | grep -oP '(?<=v)\d+' || echo "0")
 if (( NODE_VER < 20 )); then
     info "Installing Node.js 20.x..."
@@ -130,7 +131,7 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'"
     | grep -q 1 \
     || sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
 
-# Full privileges on database and public schema
+# Full privileges on the database and public schema (required for PostgreSQL 15+)
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
 sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};"
 
@@ -141,7 +142,7 @@ step "4/8  Writing .env file"
 
 SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
 
-# Only write if .env does not already exist (don't overwrite existing API keys)
+# Only write if .env does not already exist (preserves existing API keys)
 if [ -f "${APP_DIR}/.env" ]; then
     warn ".env already exists – skipping overwrite to preserve existing API keys."
     warn "Make sure DATABASE_URL and PORT are set correctly in .env."
@@ -173,11 +174,12 @@ EOF
     success ".env written."
 fi
 
-# ─── STEP 5 – Push DB schema + build app ─────────────────────────────────────
+# ─── STEP 5 – Push DB schema ──────────────────────────────────────────────────
 step "5/8  Pushing database schema"
 npm run db:push
 success "Database schema is up to date."
 
+# ─── STEP 6 – Build the application ──────────────────────────────────────────
 step "6/8  Building the application"
 npm run build
 success "Build complete. Output: ${APP_DIR}/dist/"
@@ -216,10 +218,67 @@ success "Service '${SERVICE_NAME}' enabled and started."
 info  "  Status : sudo systemctl status ${SERVICE_NAME}"
 info  "  Logs   : sudo journalctl -u ${SERVICE_NAME} -f"
 
-# ─── STEP 8 – Nginx + SSL ─────────────────────────────────────────────────────
-step "8/8  Configuring Nginx + SSL"
+# ─── STEP 8 – SSL certificate via Certbot ────────────────────────────────────
+step "8/8  Obtaining SSL certificate (Certbot)"
 
-# ── 8a. Write the nginx site config ──────────────────────────────────────────
+# Disable default nginx site to avoid conflicts during cert issuance
+if [ -f /etc/nginx/sites-enabled/default ]; then
+    sudo rm -f /etc/nginx/sites-enabled/default
+    info "Removed default nginx site."
+fi
+
+# Write a minimal HTTP-only config so certbot can complete the ACME challenge
+NGINX_CERTBOT_TMP="/etc/nginx/sites-available/${SERVICE_NAME}-certbot-tmp"
+sudo tee "${NGINX_CERTBOT_TMP}" > /dev/null <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN} www.${DOMAIN};
+    root /var/www/html;
+    location /.well-known/acme-challenge/ { try_files \$uri =404; }
+    location / { return 301 https://\$host\$request_uri; }
+}
+EOF
+
+sudo ln -sf "${NGINX_CERTBOT_TMP}" "/etc/nginx/sites-enabled/${SERVICE_NAME}-certbot-tmp"
+sudo nginx -t && sudo systemctl reload nginx
+
+# Obtain the certificate (skip if it already exists for this domain)
+CERT_FOUND=false
+for SUFFIX in "" "-0001" "-0002" "-0003"; do
+    if [ -f "/etc/letsencrypt/live/${DOMAIN}${SUFFIX}/fullchain.pem" ]; then
+        CERT_DIR="${DOMAIN}${SUFFIX}"
+        CERT_FOUND=true
+        info "Existing certificate found at /etc/letsencrypt/live/${CERT_DIR}/ – skipping certbot."
+        break
+    fi
+done
+
+if [ "$CERT_FOUND" = false ]; then
+    info "Requesting SSL certificate for ${DOMAIN} and www.${DOMAIN}..."
+    sudo certbot certonly \
+        --webroot \
+        --webroot-path /var/www/html \
+        --non-interactive \
+        --agree-tos \
+        --register-unsafely-without-email \
+        -d "${DOMAIN}" \
+        -d "www.${DOMAIN}"
+
+    # Detect the actual cert directory certbot created (base or -000x suffix)
+    CERT_DIR=""
+    for SUFFIX in "" "-0001" "-0002" "-0003"; do
+        if [ -f "/etc/letsencrypt/live/${DOMAIN}${SUFFIX}/fullchain.pem" ]; then
+            CERT_DIR="${DOMAIN}${SUFFIX}"
+            break
+        fi
+    done
+
+    [[ -z "$CERT_DIR" ]] && error "Certbot ran but certificate not found. Check: sudo certbot certificates"
+    success "SSL certificate issued. Cert dir: /etc/letsencrypt/live/${CERT_DIR}/"
+fi
+
+# ─── Deploy the full HTTPS nginx config ──────────────────────────────────────
 NGINX_CONF_PATH="/etc/nginx/sites-available/${SERVICE_NAME}"
 
 sudo tee "${NGINX_CONF_PATH}" > /dev/null <<EOF
@@ -237,10 +296,10 @@ server {
     listen [::]:443 ssl http2;
     server_name ${DOMAIN} www.${DOMAIN};
 
-    # SSL certificates (issued by certbot below)
-    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-    ssl_trusted_certificate /etc/letsencrypt/live/${DOMAIN}/chain.pem;
+    # SSL certificates
+    ssl_certificate     /etc/letsencrypt/live/${CERT_DIR}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CERT_DIR}/privkey.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/${CERT_DIR}/chain.pem;
 
     # Modern SSL settings
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -261,7 +320,7 @@ server {
     # Larger body for audio file uploads
     client_max_body_size 50M;
 
-    # Twilio webhooks — /voice/* must respond quickly
+    # Twilio webhooks — /voice/* must respond within 15s
     location /voice/ {
         proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_http_version 1.1;
@@ -296,7 +355,7 @@ server {
         add_header Cache-Control "public, max-age=604800, immutable";
     }
 
-    # React SPA + WebSocket hot-reload support
+    # React SPA + WebSocket support
     location / {
         proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_http_version 1.1;
@@ -310,65 +369,21 @@ server {
     }
 
     # Logging
-    access_log /var/log/nginx/${SERVICE_NAME}_access.log;
-    error_log  /var/log/nginx/${SERVICE_NAME}_error.log warn;
+    access_log /var/log/nginx/voice_protocol_access.log;
+    error_log  /var/log/nginx/voice_protocol_error.log warn;
 }
 EOF
 
-# ── 8b. Enable site, disable default ─────────────────────────────────────────
+# Enable the full HTTPS config and remove the temporary certbot config
 sudo ln -sf "${NGINX_CONF_PATH}" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
+sudo rm -f "/etc/nginx/sites-enabled/${SERVICE_NAME}-certbot-tmp"
+sudo rm -f "${NGINX_CERTBOT_TMP}"
 
-if [ -f /etc/nginx/sites-enabled/default ]; then
-    sudo rm -f /etc/nginx/sites-enabled/default
-    info "Removed default nginx site to prevent conflicts."
-fi
-
-# ── 8c. Temporarily serve HTTP-only for certbot validation ───────────────────
-# Write a plain HTTP-only config for the initial certbot run
-NGINX_TMP_CONF="/etc/nginx/sites-available/${SERVICE_NAME}-certbot-tmp"
-sudo tee "${NGINX_TMP_CONF}" > /dev/null <<EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${DOMAIN} www.${DOMAIN};
-
-    location /.well-known/acme-challenge/ { root /var/www/html; }
-    location / { return 301 https://\$host\$request_uri; }
-}
-EOF
-
-# If SSL certs don't exist yet, run certbot with the temporary HTTP config
-if [ ! -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
-    info "SSL certificates not found – obtaining via Certbot..."
-
-    # Swap to temporary config so certbot can validate over HTTP
-    sudo ln -sf "${NGINX_TMP_CONF}" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
-    sudo nginx -t && sudo systemctl reload nginx
-
-    sudo certbot certonly \
-        --nginx \
-        --non-interactive \
-        --agree-tos \
-        --register-unsafely-without-email \
-        -d "${DOMAIN}" \
-        -d "www.${DOMAIN}"
-
-    success "SSL certificate issued for ${DOMAIN}."
-else
-    info "SSL certificate already exists for ${DOMAIN} – skipping certbot."
-fi
-
-# ── 8d. Enable the full HTTPS config and reload ───────────────────────────────
-sudo ln -sf "${NGINX_CONF_PATH}" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
-sudo rm -f "${NGINX_TMP_CONF}"
+# Enable automatic certificate renewal
+sudo systemctl enable certbot.timer 2>/dev/null || true
 
 sudo nginx -t
 sudo systemctl reload nginx
-
-# ── 8e. Set up automatic renewal ─────────────────────────────────────────────
-sudo systemctl enable certbot.timer 2>/dev/null \
-    || sudo certbot renew --dry-run &>/dev/null \
-    || true   # older certbot uses cron – that's fine too
 
 success "Nginx configured with HTTPS and reloaded."
 
@@ -378,6 +393,7 @@ echo -e "${BOLD}${GREEN}=================================================${RESET
 echo -e "${BOLD}${GREEN}  Setup complete!${RESET}"
 echo ""
 echo -e "  ${BOLD}URL        :${RESET} ${CYAN}https://${DOMAIN}${RESET}"
+echo -e "  ${BOLD}Cert dir   :${RESET} /etc/letsencrypt/live/${CERT_DIR}/"
 echo -e "  ${BOLD}Database   :${RESET} ${DB_NAME}  (user: ${DB_USER})"
 echo -e "  ${BOLD}App port   :${RESET} ${APP_PORT} (internal)"
 echo -e "  ${BOLD}Service    :${RESET} ${SERVICE_NAME}"
@@ -386,7 +402,7 @@ echo -e "  ${BOLD}Useful commands:${RESET}"
 echo -e "    App status : sudo systemctl status ${SERVICE_NAME}"
 echo -e "    App logs   : sudo journalctl -u ${SERVICE_NAME} -f"
 echo -e "    Restart    : sudo systemctl restart ${SERVICE_NAME}"
-echo -e "    Nginx logs : sudo tail -f /var/log/nginx/${SERVICE_NAME}_error.log"
+echo -e "    Nginx logs : sudo tail -f /var/log/nginx/voice_protocol_error.log"
 echo ""
 echo -e "  ${BOLD}${YELLOW}Before going live, edit .env and fill in:${RESET}"
 echo -e "    • TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER"
