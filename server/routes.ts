@@ -1846,12 +1846,15 @@ export async function registerRoutes(
   });
 
   // ─── 4a. Purchase Pre-Menu ────────────────────────────────────────────────
-  // Shown before membership packages. Lets caller enter a promo code first.
+  // Plays promo code option then membership packages in one single prompt.
+  // Digit 1 → promo code entry; any other digit → package selection.
   app.post("/voice/purchase-pre-menu", async (req, res) => {
     const twiml = new VoiceResponse();
+    const audioUrl = `${baseUrl(req)}/uploads/membership_packages_1774058642428.mp3`;
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
-    gather.say("If you have a promotional code press 1. Otherwise, stay on the line to hear our membership packages.");
-    twiml.redirect("/voice/membership-purchase");
+    gather.say("If you have a promotional code press 1.");
+    gather.play(audioUrl);
+    twiml.redirect("/voice/purchase-pre-menu");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -1861,9 +1864,12 @@ export async function registerRoutes(
     const digit = req.body?.Digits;
 
     if (digit === "1") {
+      // Caller has a promo code
       twiml.redirect("/voice/promo-code");
     } else {
-      twiml.redirect("/voice/membership-purchase");
+      // Treat the digit as a package selection — pass it via query string
+      // since a redirect won't carry the original Digits body field
+      twiml.redirect(`/voice/handle-package-selection?Digits=${encodeURIComponent(digit ?? "")}`);
     }
 
     res.type("text/xml");
@@ -3295,7 +3301,8 @@ export async function registerRoutes(
 
   app.post("/voice/handle-package-selection", async (req, res) => {
     const twiml = new VoiceResponse();
-    const digit = req.body?.Digits as string;
+    // Digit may come from a Twilio gather (body) or from a redirect query string
+    const digit = (req.body?.Digits ?? req.query?.Digits) as string;
     const callSid = req.body?.CallSid as string;
     const fromNumber = req.body?.From as string;
 
