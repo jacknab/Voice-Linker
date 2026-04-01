@@ -28,8 +28,8 @@ step()    { echo -e "\n${BOLD}${CYAN}━━━ $* ━━━━━━━━━━
 APP_PORT=5050
 
 # PostgreSQL credentials — change DB_PASSWORD before first run
-DB_USER="appuser"
-DB_NAME="appdb"
+DB_USER="phonebooth_user"
+DB_NAME="phonebooth_db"
 DB_PASSWORD="changeme_strong_password_here"
 
 # systemd service name
