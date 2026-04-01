@@ -715,7 +715,16 @@ export async function registerRoutes(
   app.get("/api/admin/messages", async (_req, res) => {
     try {
       const msgs = await storage.getAllMessagesAdmin();
-      res.json(msgs);
+      // Rewrite Twilio recording URLs to go through the local audio proxy so the
+      // browser never has to authenticate directly against api.twilio.com.
+      const safe = msgs.map((m: any) => {
+        if (m.recordingUrl && !m.recordingUrl.startsWith("/")) {
+          const sid = getRecordingSid(m.recordingUrl);
+          if (sid) return { ...m, recordingUrl: `/audio/${sid}` };
+        }
+        return m;
+      });
+      res.json(safe);
     } catch (e) {
       console.error("[admin] /api/admin/messages GET error:", e);
       res.status(500).json({ message: "Failed to fetch messages" });
