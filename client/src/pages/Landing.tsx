@@ -113,13 +113,12 @@ export default function Landing() {
           </div>
 
           {/* Right: Nav links */}
-          <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.85rem", fontWeight: 500 }}>
+          <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.95rem", fontWeight: 500 }}>
             {[
               { label: "Buy Time", href: "#pricing" },
-              { label: "My Account", href: "#account" },
             ].map(l => (
               <button key={l.label} onClick={() => scrollTo(l.href)}
-                style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: "0.85rem", fontWeight: 500, padding: 0, transition: "color 0.15s" }}
+                style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: "0.95rem", fontWeight: 500, padding: 0, transition: "color 0.15s" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
                 onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
                 data-testid={`nav-${l.label.toLowerCase().replace(/\s+/g, "-")}`}
@@ -129,14 +128,14 @@ export default function Landing() {
             ))}
             <div style={{ width: "1px", height: "18px", background: "#222" }} />
             <Link href="/login"
-              style={{ color: "#ccc", textDecoration: "none", fontSize: "0.85rem", fontWeight: 500, transition: "color 0.15s" }}
+              style={{ color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, transition: "color 0.15s" }}
               onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
               onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
               data-testid="nav-sign-in">
-              Sign in
+              Log in
             </Link>
             <Link href="/register"
-              style={{ background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.82rem", fontWeight: 700, padding: "0.4rem 0.875rem", borderRadius: "7px", transition: "background 0.15s" }}
+              style={{ background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.92rem", fontWeight: 700, padding: "0.4rem 0.875rem", borderRadius: "7px", transition: "background 0.15s" }}
               onMouseEnter={(e: any) => (e.currentTarget.style.background = "#1e40af")}
               onMouseLeave={(e: any) => (e.currentTarget.style.background = "#1d4ed8")}
               data-testid="nav-register">
