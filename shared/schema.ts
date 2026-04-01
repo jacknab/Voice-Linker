@@ -39,6 +39,9 @@ export const users = pgTable("users", {
   zipCodeId: uuid("zip_code_id").references(() => zipCodes.id),
   membershipNumber: text("membership_number").unique(),
   membershipPin: text("membership_pin"),
+  // Set when a membership is first activated; used by per_day billing to enforce
+  // the 24-hour grace period before the first nightly deduction.
+  membershipStartedAt: timestamp("membership_started_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

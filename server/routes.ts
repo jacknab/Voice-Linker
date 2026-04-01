@@ -1446,7 +1446,10 @@ export async function registerRoutes(
   // Billing is per-minute: partial minutes are held in the accumulator and only
   // charged as full minutes — the leftover is rounded up at finalizeCallBilling.
   // When a membership override is active, deducts from the membership holder's account.
+  // In per_day mode no call-time deductions are made — billing is handled nightly.
   async function syncBilling(callSid: string): Promise<void> {
+    const { billingMode } = await getMembershipSettingsCached();
+    if (billingMode === "per_day") return;
     const checkpoint = billingCheckpoints.get(callSid);
     if (!checkpoint) return;
     const now = Date.now();
@@ -1474,7 +1477,13 @@ export async function registerRoutes(
 
   // Runs a final sync, then rounds up any remaining partial minute to a full minute.
   // This ensures that even a 20-second call costs 1 full minute (per-minute billing).
+  // In per_day mode, clears the checkpoint without any deduction.
   async function finalizeCallBilling(callSid: string): Promise<void> {
+    const { billingMode } = await getMembershipSettingsCached();
+    if (billingMode === "per_day") {
+      billingCheckpoints.delete(callSid);
+      return;
+    }
     await syncBilling(callSid);
     const checkpoint = billingCheckpoints.get(callSid);
     if (checkpoint && checkpoint.accumulatedSeconds > 0) {
@@ -1567,10 +1576,24 @@ export async function registerRoutes(
         const client = twilio(accountSid, authToken);
 
         const tickSeconds = LIVE_TICK_MS / 1000;
-        const [initiatorUser, inviteeUser] = await Promise.all([
-          storage.deductSeconds(s.initiatorUserId, tickSeconds),
-          storage.deductSeconds(s.inviteeUserId, tickSeconds),
-        ]);
+        // In per_day mode, calls are free — read balance without deducting.
+        const { billingMode: liveBillingMode } = await getMembershipSettingsCached();
+        let initiatorUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
+        let inviteeUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
+        if (liveBillingMode === "per_day") {
+          const [iu, vv] = await Promise.all([
+            storage.getUserById(s.initiatorUserId),
+            storage.getUserById(s.inviteeUserId),
+          ]);
+          if (!iu || !vv) return;
+          initiatorUser = iu as typeof initiatorUser;
+          inviteeUser = vv as typeof inviteeUser;
+        } else {
+          [initiatorUser, inviteeUser] = await Promise.all([
+            storage.deductSeconds(s.initiatorUserId, tickSeconds),
+            storage.deductSeconds(s.inviteeUserId, tickSeconds),
+          ]);
+        }
 
         const initiatorRemaining = initiatorUser.remainingSeconds ?? 0;
         const inviteeRemaining = inviteeUser.remainingSeconds ?? 0;

@@ -1005,6 +1005,23 @@ function MembershipsTab() {
     onError: (err: Error) => toast({ title: "Failed to save settings", description: err.message, variant: "destructive" }),
   });
 
+  // Helper: display a human-readable duration for a minute count
+  function fmtMinutes(m: number): string {
+    if (m <= 0) return "—";
+    if (billingMode === "per_day") {
+      const days = Math.floor(m / 1440);
+      const hrs = Math.floor((m % 1440) / 60);
+      if (days === 0) return hrs === 1 ? "1 hr" : `${hrs} hrs`;
+      if (hrs === 0) return days === 1 ? "1 day" : `${days} days`;
+      return `${days} day${days !== 1 ? "s" : ""} ${hrs} hr${hrs !== 1 ? "s" : ""}`;
+    }
+    const hrs = Math.floor(m / 60);
+    const mins = m % 60;
+    if (m < 60) return `${m} min`;
+    if (mins === 0) return `${hrs} hr${hrs !== 1 ? "s" : ""}`;
+    return `${hrs} hr ${mins} min`;
+  }
+
   const plans = [
     { label: "Plan 1", keyBadge: "Press 1", planKey: "plan1", name: plan1Name, setName: setPlan1Name, minutes: plan1Minutes, setMinutes: setPlan1Minutes, price: plan1Price, setPrice: setPlan1Price, testPrefix: "plan1" },
     { label: "Plan 2", keyBadge: "Press 2", planKey: "plan2", name: plan2Name, setName: setPlan2Name, minutes: plan2Minutes, setMinutes: setPlan2Minutes, price: plan2Price, setPrice: setPlan2Price, testPrefix: "plan2" },
@@ -1015,131 +1032,184 @@ function MembershipsTab() {
 
   return (
     <div className="space-y-6">
-      <div className={C.card}>
-        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">Free Trial</h3>
-        <p className="text-gray-400 font-mono text-xs">Minutes granted automatically to first-time callers with no membership.</p>
-        <div className="max-w-xs space-y-2">
-          <div>
-            <label className={C.label}>Free Trial Minutes</label>
-            <input data-testid="input-free-trial-minutes" type="number" min="1" value={freeTrialMinutes} onChange={e => setFreeTrialMinutes(e.target.value)} className={C.input} placeholder="90" />
-          </div>
-          <div>
-            <label className={C.label + " text-gray-300"}>Seconds (system value — auto-calculated)</label>
-            <input
-              data-testid="display-free-trial-seconds"
-              type="text"
-              readOnly
-              value={`${(parseInt(freeTrialMinutes) || 0) * 60} sec`}
-              className={C.input + " bg-gray-50 text-gray-400 cursor-default select-none"}
-            />
-          </div>
-        </div>
-      </div>
 
+      {/* ── Billing Mode ─────────────────────────────────────────────────────── */}
       <div className={C.card}>
-        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">Billing Mode</h3>
-        <p className="text-gray-400 font-mono text-xs">Choose how membership time is consumed. Per-minute deducts time during active calls. Per-day deducts one full day from every active member each night at 11:59 PM server time.</p>
-        <div className="flex gap-3 mt-3">
+        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase mb-1">Billing Mode</h3>
+        <p className="text-gray-400 font-mono text-xs mb-4">
+          Controls how member time is consumed. Choose one mode and save — it applies to every caller.
+        </p>
+        <div className="flex gap-3">
           <button
             data-testid="btn-billing-mode-per-minute"
             type="button"
             onClick={() => setBillingMode("per_minute")}
-            className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-mono tracking-widest uppercase transition-colors ${billingMode === "per_minute" ? "border-[#f5a623] bg-amber-50 text-amber-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300 hover:text-gray-500"}`}
+            className={`flex-1 flex items-start gap-3 px-4 py-3.5 rounded-lg border text-sm transition-colors ${billingMode === "per_minute" ? "border-[#f5a623] bg-amber-50" : "border-gray-200 bg-gray-50 hover:border-gray-300"}`}
           >
-            <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${billingMode === "per_minute" ? "border-[#f5a623] bg-[#f5a623]" : "border-gray-300"}`}>
+            <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${billingMode === "per_minute" ? "border-[#f5a623] bg-[#f5a623]" : "border-gray-300"}`}>
               {billingMode === "per_minute" && <span className="w-2 h-2 rounded-full bg-white" />}
             </span>
             <div className="text-left">
-              <div className="font-bold">Per Minute</div>
-              <div className="text-xs font-normal normal-case tracking-normal text-gray-400 mt-0.5">Deducts time during calls</div>
+              <div className={`font-mono font-bold tracking-widest uppercase text-xs ${billingMode === "per_minute" ? "text-amber-700" : "text-gray-500"}`}>Per Minute</div>
+              <div className="text-xs font-normal text-gray-500 mt-1 leading-snug">
+                Time is deducted from the member's balance during active calls only. Calls are free if balance hits zero.
+              </div>
             </div>
           </button>
           <button
             data-testid="btn-billing-mode-per-day"
             type="button"
             onClick={() => setBillingMode("per_day")}
-            className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-sm font-mono tracking-widest uppercase transition-colors ${billingMode === "per_day" ? "border-blue-400 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300 hover:text-gray-500"}`}
+            className={`flex-1 flex items-start gap-3 px-4 py-3.5 rounded-lg border text-sm transition-colors ${billingMode === "per_day" ? "border-blue-400 bg-blue-50" : "border-gray-200 bg-gray-50 hover:border-gray-300"}`}
           >
-            <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${billingMode === "per_day" ? "border-blue-400 bg-blue-400" : "border-gray-300"}`}>
+            <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${billingMode === "per_day" ? "border-blue-400 bg-blue-400" : "border-gray-300"}`}>
               {billingMode === "per_day" && <span className="w-2 h-2 rounded-full bg-white" />}
             </span>
             <div className="text-left">
-              <div className="font-bold">Per Day</div>
-              <div className="text-xs font-normal normal-case tracking-normal text-gray-400 mt-0.5">Deducts 1 day nightly at 11:59 PM</div>
+              <div className={`font-mono font-bold tracking-widest uppercase text-xs ${billingMode === "per_day" ? "text-blue-700" : "text-gray-500"}`}>Per Day</div>
+              <div className="text-xs font-normal text-gray-500 mt-1 leading-snug">
+                One day is deducted from every active member's balance at 11:59 PM nightly. Calls are always free — no per-minute tracking.
+              </div>
             </div>
           </button>
         </div>
         {billingMode === "per_day" && (
-          <div className="mt-3 px-3 py-2 rounded bg-blue-50 border border-blue-100 text-blue-700 font-mono text-xs">
-            Per-day mode active — one day will be deducted from every member's remaining time at 11:59 PM each night. Call-time usage is not tracked.
+          <div className="mt-3 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs leading-relaxed">
+            <strong>How per-day works:</strong> Each plan's "minutes" value represents how many days a member gets
+            (1,440 min = 1 day, 14,400 min = 10 days, 43,200 min = 30 days). New members are protected by a
+            24-hour grace period — the first deduction doesn't happen until a full day after purchase,
+            even if they buy late at night.
           </div>
         )}
       </div>
 
-      <div className="space-y-3">
-        <h3 className="text-gray-700 font-mono text-sm font-bold tracking-widest uppercase">Membership Plans</h3>
-        <p className="text-gray-400 font-mono text-xs">Three plans offered to callers. Callers press 1, 2, or 3 to select.</p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {plans.map(plan => (
-            <div key={plan.label} className={C.card}>
-              <div className="flex items-center justify-between">
-                <h4 className="text-gray-900 font-mono text-sm font-bold tracking-widest uppercase">{plan.label}</h4>
-                <span className={`${C.badge} border-amber-200 bg-amber-50 text-amber-700`}>{plan.keyBadge}</span>
-              </div>
-              <div className="space-y-3">
-                <div>
-                  <label className={C.label}>Plan Name</label>
-                  <input data-testid={`input-${plan.testPrefix}-name`} type="text" value={plan.name} onChange={e => plan.setName(e.target.value)} placeholder="e.g. Premium" className={C.input} />
-                </div>
-                <div className="space-y-2">
-                  <div>
-                    <label className={C.label}>Minutes</label>
-                    <input data-testid={`input-${plan.testPrefix}-minutes`} type="number" min="1" value={plan.minutes} onChange={e => plan.setMinutes(e.target.value)} placeholder="43200" className={C.input} />
-                  </div>
-                  <div>
-                    <label className={C.label + " text-gray-300"}>Seconds (system value — auto-calculated)</label>
-                    <input
-                      data-testid={`display-${plan.testPrefix}-seconds`}
-                      type="text"
-                      readOnly
-                      value={`${(parseInt(plan.minutes) || 0) * 60} sec`}
-                      className={C.input + " bg-gray-50 text-gray-400 cursor-default select-none"}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className={C.label}>Price (USD)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-sm">$</span>
-                    <input data-testid={`input-${plan.testPrefix}-price`} type="number" min="0" step="0.01" value={plan.price} onChange={e => plan.setPrice(e.target.value)} placeholder="25.00" className={C.input + " pl-7"} />
-                  </div>
-                </div>
-              </div>
-              <div className="pt-3 border-t border-gray-100 space-y-3">
-                <div className="text-gray-500 font-mono text-xs">
-                  {(() => { const m = parseInt(plan.minutes) || 0; if (m < 60) return `${m} min`; const hrs = Math.floor(m / 60); const mins = m % 60; return mins === 0 ? `${hrs} hr${hrs !== 1 ? "s" : ""}` : `${hrs} hr ${mins} min`; })()} · ${parseFloat(plan.price || "0").toFixed(2)}
-                </div>
-                <button
-                  data-testid={`btn-bonus-${plan.testPrefix}`}
-                  type="button"
-                  onClick={() => setBonusPlanKey(bonusPlanKey === plan.planKey ? null : plan.planKey)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded border text-xs font-mono tracking-widest uppercase transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-amber-50 text-amber-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300 hover:text-gray-500"}`}
-                >
-                  <span>First-time buyer bonus</span>
-                  <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-[#f5a623]" : "border-gray-300"}`}>
-                    {bonusPlanKey === plan.planKey && <span className="w-2 h-2 rounded-full bg-white" />}
-                  </span>
-                </button>
-                {bonusPlanKey === plan.planKey && (
-                  <div className="text-amber-600 font-mono text-xs">
-                    First-time buyers get double minutes — {(() => { const m = parseInt(plan.minutes) || 0; const total = m * 2; if (total < 60) return `${total} min`; const hrs = Math.floor(total / 60); const mins = total % 60; return mins === 0 ? `${hrs} hrs` : `${hrs} hr ${mins} min`; })()}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+      {/* ── Free Trial ───────────────────────────────────────────────────────── */}
+      <div className={C.card}>
+        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase mb-1">Free Trial</h3>
+        <p className="text-gray-400 font-mono text-xs mb-3">
+          {billingMode === "per_day"
+            ? "Minutes granted to first-time callers. In per-day mode, 1,440 min = 1 free day."
+            : "Minutes of call time granted automatically to first-time callers with no membership."}
+        </p>
+        <div className="max-w-xs">
+          <label className={C.label}>Free Trial Minutes</label>
+          <input
+            data-testid="input-free-trial-minutes"
+            type="number" min="1"
+            value={freeTrialMinutes}
+            onChange={e => setFreeTrialMinutes(e.target.value)}
+            className={C.input}
+            placeholder="90"
+          />
+          {(parseInt(freeTrialMinutes) || 0) > 0 && (
+            <p className="mt-1.5 font-mono text-xs text-gray-400">
+              = {fmtMinutes(parseInt(freeTrialMinutes) || 0)} of free access
+            </p>
+          )}
         </div>
       </div>
+
+      {/* ── Membership Plans ─────────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <div>
+          <h3 className="text-gray-700 font-mono text-sm font-bold tracking-widest uppercase">Membership Plans</h3>
+          <p className="text-gray-400 font-mono text-xs mt-1">
+            {billingMode === "per_day"
+              ? "Set how many days each plan provides. Use multiples of 1,440 min (= 1 day). Callers press 1, 2, or 3 to select."
+              : "Set how many minutes each plan provides. Callers press 1, 2, or 3 to select."}
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {plans.map(plan => {
+            const mins = parseInt(plan.minutes) || 0;
+            const doubleMins = mins * 2;
+            return (
+              <div key={plan.label} className={C.card}>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-gray-900 font-mono text-sm font-bold tracking-widest uppercase">{plan.label}</h4>
+                  <span className={`${C.badge} border-amber-200 bg-amber-50 text-amber-700`}>{plan.keyBadge}</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className={C.label}>Plan Name</label>
+                    <input
+                      data-testid={`input-${plan.testPrefix}-name`}
+                      type="text" value={plan.name}
+                      onChange={e => plan.setName(e.target.value)}
+                      placeholder="e.g. Premium"
+                      className={C.input}
+                    />
+                  </div>
+                  <div>
+                    <label className={C.label}>{billingMode === "per_day" ? "Minutes (1,440 = 1 day)" : "Minutes"}</label>
+                    <input
+                      data-testid={`input-${plan.testPrefix}-minutes`}
+                      type="number" min="1"
+                      value={plan.minutes}
+                      onChange={e => plan.setMinutes(e.target.value)}
+                      placeholder={billingMode === "per_day" ? "43200" : "43200"}
+                      className={C.input}
+                    />
+                    {mins > 0 && (
+                      <p className="mt-1 font-mono text-xs text-gray-400">= {fmtMinutes(mins)}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className={C.label}>Price (USD)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono text-sm">$</span>
+                      <input
+                        data-testid={`input-${plan.testPrefix}-price`}
+                        type="number" min="0" step="0.01"
+                        value={plan.price}
+                        onChange={e => plan.setPrice(e.target.value)}
+                        placeholder="25.00"
+                        className={C.input + " pl-7"}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="pt-3 border-t border-gray-100 space-y-2 mt-3">
+                  <button
+                    data-testid={`btn-bonus-${plan.testPrefix}`}
+                    type="button"
+                    onClick={() => setBonusPlanKey(bonusPlanKey === plan.planKey ? null : plan.planKey)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded border text-xs font-mono tracking-widest uppercase transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-amber-50 text-amber-700" : "border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300 hover:text-gray-500"}`}
+                  >
+                    <span>First-time buyer bonus</span>
+                    <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${bonusPlanKey === plan.planKey ? "border-[#f5a623] bg-[#f5a623]" : "border-gray-300"}`}>
+                      {bonusPlanKey === plan.planKey && <span className="w-2 h-2 rounded-full bg-white" />}
+                    </span>
+                  </button>
+                  {bonusPlanKey === plan.planKey && (
+                    <p className="text-amber-600 font-mono text-xs">
+                      First-time buyers get double — {fmtMinutes(doubleMins)} for the price of {fmtMinutes(mins)}.
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Save ─────────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+        <p className="font-mono text-xs text-gray-400">
+          Changes take effect immediately after saving.
+        </p>
+        <button
+          data-testid="btn-save-membership-settings"
+          type="button"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#f5a623] hover:bg-amber-500 text-white font-mono font-bold text-xs tracking-widest uppercase transition-colors disabled:opacity-60"
+        >
+          {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Settings size={13} />}
+          {saveMutation.isPending ? "Saving…" : "Save Settings"}
+        </button>
+      </div>
+
     </div>
   );
 }

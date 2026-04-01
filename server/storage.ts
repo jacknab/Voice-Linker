@@ -114,7 +114,7 @@ export interface IStorage {
   }[]>;
   adminUnblockById(id: string): Promise<void>;
 
-  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string | null }): Promise<User>;
+  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string | null; membershipStartedAt?: Date | null }): Promise<User>;
   deductSeconds(userId: string, seconds: number): Promise<User>;
   deductOneDayFromAllActiveMembers(): Promise<number>;
   getZipEntryByCode(code: string): Promise<ZipCode | undefined>;
@@ -688,8 +688,15 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string | null }): Promise<User> {
-    const [user] = await db.update(users).set(data).where(eq(users.id, userId)).returning();
+  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string | null; membershipStartedAt?: Date | null }): Promise<User> {
+    // When a membership tier is being activated, record when it started.
+    // This timestamp drives the 24-hour grace period for per_day billing so a member
+    // who buys late at night isn't charged their first day deduction minutes later.
+    const update: typeof data & { membershipStartedAt?: Date | null } = { ...data };
+    if (data.membershipTier !== undefined && data.membershipTier !== null && data.membershipTier !== "" && data.membershipStartedAt === undefined) {
+      update.membershipStartedAt = new Date();
+    }
+    const [user] = await db.update(users).set(update).where(eq(users.id, userId)).returning();
     return user;
   }
 
@@ -703,9 +710,17 @@ export class DatabaseStorage implements IStorage {
 
   async deductOneDayFromAllActiveMembers(): Promise<number> {
     const ONE_DAY_SECONDS = 86400;
+    // Only deduct from members whose membership started at least 24 hours ago.
+    // This gives new members a full first day before deductions begin, even if
+    // they subscribed just minutes before the nightly 23:59 job runs.
+    const cutoff = new Date(Date.now() - ONE_DAY_SECONDS * 1000);
     const result = await db.update(users)
       .set({ remainingSeconds: sql`GREATEST(0, COALESCE(${users.remainingSeconds}, 0) - ${ONE_DAY_SECONDS})` })
-      .where(sql`COALESCE(${users.remainingSeconds}, 0) > 0 AND ${users.membershipTier} IS NOT NULL`);
+      .where(
+        sql`COALESCE(${users.remainingSeconds}, 0) > 0
+          AND ${users.membershipTier} IS NOT NULL
+          AND (${users.membershipStartedAt} IS NULL OR ${users.membershipStartedAt} <= ${cutoff})`
+      );
     return (result as any).rowCount ?? 0;
   }
 
