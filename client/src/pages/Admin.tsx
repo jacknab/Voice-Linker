@@ -1144,10 +1144,36 @@ function MembershipsTab() {
 }
 
 // ── DashboardTab ──────────────────────────────────────────────────────────────
+const MAILBOX_CATEGORY_LABELS: Record<string, string> = {
+  quick_hot_talk: "Quick Hot Talk",
+  bicurious: "Bi-Curious",
+  kink: "Kink",
+  total_top_strictly_bottoms: "Total Tops / Strict Bottoms",
+  trans: "Trans",
+};
+
+interface MailboxStats {
+  total: number;
+  byCategory: { category: string | null; count: number }[];
+}
+
 function DashboardTab() {
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
     refetchInterval: 5000,
+  });
+
+  const { data: siteData } = useQuery<{ siteCategory: string }>({
+    queryKey: ["/api/site-settings"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isMM = (siteData?.siteCategory ?? "MM") === "MM";
+
+  const { data: mailboxStats } = useQuery<MailboxStats>({
+    queryKey: ["/api/admin/mailbox-stats"],
+    enabled: isMM,
+    refetchInterval: 30000,
   });
 
   const items = [
@@ -1170,6 +1196,60 @@ function DashboardTab() {
           </div>
         ))}
       </div>
+
+      {isMM && (
+        <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Tag size={15} className="text-[#f5a623]" />
+              <span className="font-mono font-bold text-sm tracking-widest uppercase text-gray-800">Mailboxes &amp; Personal Ads</span>
+            </div>
+            <span className="font-mono text-xs text-gray-400">
+              {mailboxStats ? `${mailboxStats.total.toLocaleString()} total` : "—"}
+            </span>
+          </div>
+          <div className="p-5">
+            {!mailboxStats ? (
+              <div className="flex items-center gap-2 text-gray-400 font-mono text-xs py-4 justify-center">
+                <Loader2 size={13} className="animate-spin" /> Loading…
+              </div>
+            ) : mailboxStats.total === 0 ? (
+              <div className="text-gray-400 font-mono text-xs text-center py-4">No mailboxes registered yet.</div>
+            ) : (
+              <div className="space-y-3">
+                {/* Total bar */}
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs text-gray-500 w-44 shrink-0">All Categories</span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-2">
+                    <div className="bg-[#f5a623] h-2 rounded-full w-full" />
+                  </div>
+                  <span className="font-mono text-xs font-bold text-gray-800 w-8 text-right">{mailboxStats.total}</span>
+                </div>
+                <div className="border-t border-gray-100 pt-3 space-y-2.5">
+                  {mailboxStats.byCategory.map(row => {
+                    const label = row.category
+                      ? (MAILBOX_CATEGORY_LABELS[row.category] ?? row.category)
+                      : "Uncategorised";
+                    const pct = mailboxStats.total > 0 ? (row.count / mailboxStats.total) * 100 : 0;
+                    return (
+                      <div key={row.category ?? "null"} className="flex items-center gap-3" data-testid={`stat-category-${row.category ?? "null"}`}>
+                        <span className="font-mono text-xs text-gray-500 w-44 shrink-0 truncate">{label}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                          <div
+                            className="bg-blue-400 h-1.5 rounded-full transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="font-mono text-xs text-gray-600 w-8 text-right">{row.count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

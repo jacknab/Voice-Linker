@@ -974,6 +974,17 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Mailbox stats ---
+  app.get("/api/admin/mailbox-stats", async (_req, res) => {
+    try {
+      const data = await storage.getMailboxStats();
+      res.json(data);
+    } catch (e) {
+      console.error("[admin] /api/admin/mailbox-stats error:", e);
+      res.status(500).json({ message: "Failed to fetch mailbox stats" });
+    }
+  });
+
   // --- Admin: Phone number stats ---
   app.get("/api/admin/audit-logs", async (_req, res) => {
     try {

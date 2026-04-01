@@ -198,6 +198,9 @@ export interface IStorage {
   getAdminAccountByEmail(email: string): Promise<AdminAccount | undefined>;
   createAdminAccount(email: string, passwordHash: string): Promise<AdminAccount>;
 
+  // Mailbox stats
+  getMailboxStats(): Promise<{ total: number; byCategory: { category: string | null; count: number }[] }>;
+
   // Analytics
   getAnalytics(): Promise<{
     funnel: { totalCallers: number; withProfile: number; withMessage: number; withMembership: number };
@@ -1310,6 +1313,21 @@ export class DatabaseStorage implements IStorage {
   async createAdminAccount(email: string, passwordHash: string): Promise<AdminAccount> {
     const [row] = await db.insert(adminAccounts).values({ email, passwordHash }).returning();
     return row;
+  }
+
+  async getMailboxStats(): Promise<{ total: number; byCategory: { category: string | null; count: number }[] }> {
+    const totalResult = await db.select({ count: count() }).from(mailboxes);
+    const total = Number(totalResult[0]?.count ?? 0);
+
+    const byCategoryResult = await db.execute(sql`
+      SELECT category, COUNT(*)::int AS count
+      FROM mailboxes
+      GROUP BY category
+      ORDER BY count DESC
+    `);
+
+    const byCategory = (byCategoryResult.rows as { category: string | null; count: number }[]);
+    return { total, byCategory };
   }
 }
 
