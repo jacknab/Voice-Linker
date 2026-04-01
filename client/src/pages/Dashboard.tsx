@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   Phone, LogOut, Loader2, User, Clock, Shield, Star, Zap,
   KeyRound, ChevronRight, Eye, EyeOff, CheckCircle2, PhoneCall,
-  AlertTriangle, Link2, CheckCircle,
+  AlertTriangle, Link2, CheckCircle, History, PhoneIncoming, Timer,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -50,6 +50,15 @@ interface PhoneMembership {
   membershipNumber: string | null;
 }
 
+interface CallHistoryEntry {
+  id: string;
+  callSid: string;
+  durationSeconds: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  toPhoneNumber: string | null;
+}
+
 function formatMemberSince(dateStr: string | null | undefined): string {
   if (!dateStr) return "—";
   return new Date(dateStr).toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -67,6 +76,28 @@ function formatSeconds(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60);
   if (h > 0) return `${h}h ${m}m`;
   return `${m} min`;
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m < 60) return `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  return `${h}h ${rm}m`;
+}
+
+function formatCallDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatCallTime(dateStr: string | null): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
 function formatPrice(cents: number): string {
@@ -302,7 +333,7 @@ export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [activeSection, setActiveSection] = useState<"overview" | "plans" | "account">("overview");
+  const [activeSection, setActiveSection] = useState<"overview" | "plans" | "history" | "account">("overview");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -324,6 +355,13 @@ export default function Dashboard() {
     queryKey: ["/api/auth/membership"],
     enabled: !!me?.linkedPhoneNumber,
     retry: false,
+  });
+
+  const { data: callHistory, isLoading: historyLoading } = useQuery<CallHistoryEntry[]>({
+    queryKey: ["/api/auth/call-history"],
+    enabled: !!me?.linkedPhoneNumber && activeSection === "history",
+    retry: false,
+    staleTime: 60 * 1000,
   });
 
   const logoutMutation = useMutation({
@@ -395,8 +433,9 @@ export default function Dashboard() {
   const navItems = [
     { key: "overview", label: "Overview" },
     { key: "plans", label: "Plans" },
+    ...(me?.linkedPhoneNumber ? [{ key: "history", label: "Call History" }] : []),
     { key: "account", label: "Account" },
-  ] as const;
+  ] as { key: "overview" | "plans" | "history" | "account"; label: string }[];
 
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", background: "#0d0d0d", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -594,6 +633,130 @@ export default function Dashboard() {
                   : " Minutes are deducted during calls as you use them."}
               </p>
             </div>
+          </div>
+        )}
+
+        {/* ── HISTORY ── */}
+        {activeSection === "history" && (
+          <div>
+            <div style={{ marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
+              <div>
+                <h2 style={{ color: "#fff", fontSize: "1.1rem", fontWeight: 700, margin: "0 0 0.25rem" }}>Call History</h2>
+                <p style={{ color: "#666", fontSize: "0.85rem", margin: 0 }}>
+                  Completed membership calls for {me.linkedPhoneNumber ? formatPhone(me.linkedPhoneNumber) : "your linked number"}
+                </p>
+              </div>
+              {callHistory && (
+                <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "8px", padding: "0.4rem 0.875rem" }}>
+                  <span style={{ color: "#888", fontSize: "0.78rem" }}>
+                    <strong style={{ color: "#ccc" }}>{callHistory.length}</strong> {callHistory.length === 1 ? "call" : "calls"} total
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {historyLoading ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "4rem", gap: "0.75rem" }}>
+                <Loader2 size={22} color="#1d4ed8" className="animate-spin" />
+                <span style={{ color: "#666", fontSize: "0.875rem" }}>Loading call history…</span>
+              </div>
+            ) : !callHistory || callHistory.length === 0 ? (
+              <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "14px", padding: "3rem 2rem", textAlign: "center" }}>
+                <div style={{ width: 48, height: 48, background: "#1a1a1a", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
+                  <History size={22} color="#555" />
+                </div>
+                <p style={{ color: "#555", fontSize: "0.9rem", margin: 0 }}>No completed membership calls found yet.</p>
+                <p style={{ color: "#444", fontSize: "0.78rem", margin: "0.5rem 0 0" }}>
+                  Call your access number to get started — your history will appear here.
+                </p>
+              </div>
+            ) : (
+              <div>
+                {/* Summary stats */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>
+                  {[
+                    {
+                      label: "Total Calls",
+                      value: callHistory.length.toString(),
+                      icon: PhoneIncoming,
+                      color: "#1d4ed8",
+                    },
+                    {
+                      label: "Total Talk Time",
+                      value: formatDuration(callHistory.reduce((sum, c) => sum + c.durationSeconds, 0)),
+                      icon: Timer,
+                      color: "#f59e0b",
+                    },
+                    {
+                      label: "Avg Duration",
+                      value: formatDuration(Math.round(callHistory.reduce((sum, c) => sum + c.durationSeconds, 0) / callHistory.length)),
+                      icon: Clock,
+                      color: "#22c55e",
+                    },
+                  ].map(({ label, value, icon: Icon, color }) => (
+                    <div key={label} style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "8px", background: `${color}18`, border: `1px solid ${color}33`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Icon size={16} color={color} />
+                      </div>
+                      <div>
+                        <p style={{ color: "#555", fontSize: "0.68rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", margin: 0 }}>{label}</p>
+                        <p style={{ color: "#fff", fontSize: "1rem", fontWeight: 700, margin: "0.1rem 0 0" }} data-testid={`stat-${label.replace(/\s+/g, "-").toLowerCase()}`}>{value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Call list */}
+                <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "14px", overflow: "hidden" }}>
+                  {/* Table header */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 120px 100px", gap: "1rem", padding: "0.75rem 1.25rem", borderBottom: "1px solid #1e1e1e", background: "#0d0d0d" }}>
+                    {["Date", "Time", "Duration", "Status"].map(h => (
+                      <span key={h} style={{ color: "#555", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</span>
+                    ))}
+                  </div>
+
+                  {callHistory.map((call, idx) => (
+                    <div
+                      key={call.id}
+                      data-testid={`row-call-${call.id}`}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 120px 120px 100px",
+                        gap: "1rem",
+                        padding: "0.875rem 1.25rem",
+                        borderBottom: idx < callHistory.length - 1 ? "1px solid #161616" : "none",
+                        alignItems: "center",
+                        transition: "background 0.1s",
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "#161616")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                        <div style={{ width: 28, height: 28, borderRadius: "7px", background: "#1d4ed820", border: "1px solid #1d4ed830", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <PhoneIncoming size={12} color="#60a5fa" />
+                        </div>
+                        <span style={{ color: "#ccc", fontSize: "0.85rem", fontWeight: 600 }}>
+                          {formatCallDate(call.startedAt)}
+                        </span>
+                      </div>
+                      <span style={{ color: "#888", fontSize: "0.82rem" }}>
+                        {formatCallTime(call.startedAt)}
+                      </span>
+                      <span style={{ color: "#fff", fontSize: "0.85rem", fontWeight: 600, fontFamily: "monospace" }}>
+                        {formatDuration(call.durationSeconds)}
+                      </span>
+                      <span style={{ background: "#052e16", border: "1px solid #166534", borderRadius: "5px", padding: "0.15rem 0.45rem", color: "#4ade80", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", width: "fit-content" }}>
+                        Completed
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <p style={{ color: "#444", fontSize: "0.73rem", textAlign: "center", marginTop: "1rem" }}>
+                  Showing {callHistory.length} most recent completed call{callHistory.length !== 1 ? "s" : ""} · Free trial and zero-duration calls are excluded
+                </p>
+              </div>
+            )}
           </div>
         )}
 

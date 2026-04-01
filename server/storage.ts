@@ -178,6 +178,7 @@ export interface IStorage {
   linkWebUserPhone(id: string, phoneNumber: string): Promise<void>;
   incrementWebUserLinkAttempts(id: string): Promise<number>;
   lockWebUser(id: string): Promise<void>;
+  getCallHistoryByPhone(phoneNumber: string, limit?: number): Promise<{ id: string; callSid: string; durationSeconds: number; startedAt: Date | null; completedAt: Date | null; toPhoneNumber: string | null }[]>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -1140,6 +1141,30 @@ export class DatabaseStorage implements IStorage {
 
   async clearWebUserResetToken(id: string): Promise<void> {
     await db.update(webUsers).set({ resetToken: null, resetTokenExpiry: null }).where(eq(webUsers.id, id));
+  }
+
+  async getCallHistoryByPhone(phoneNumber: string, limit = 100): Promise<{
+    id: string;
+    callSid: string;
+    durationSeconds: number;
+    startedAt: Date | null;
+    completedAt: Date | null;
+    toPhoneNumber: string | null;
+  }[]> {
+    const result = await db.execute(sql`
+      SELECT id, call_sid AS "callSid",
+             duration_seconds AS "durationSeconds",
+             started_at AS "startedAt",
+             completed_at AS "completedAt",
+             to_phone_number AS "toPhoneNumber"
+      FROM call_logs
+      WHERE from_phone_number = ${phoneNumber}
+        AND duration_seconds IS NOT NULL
+        AND duration_seconds > 0
+      ORDER BY started_at DESC
+      LIMIT ${limit}
+    `);
+    return result.rows as any[];
   }
 
   async linkWebUserPhone(id: string, phoneNumber: string): Promise<void> {

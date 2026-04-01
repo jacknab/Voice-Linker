@@ -241,6 +241,24 @@ router.get("/api/auth/membership", async (req: Request, res: Response) => {
   }
 });
 
+// ─── Call History ─────────────────────────────────────────────────────────────
+router.get("/api/auth/call-history", async (req: Request, res: Response) => {
+  if (!req.session.webUserId) {
+    return res.status(401).json({ error: "Not authenticated." });
+  }
+  try {
+    const webUser = await storage.getWebUserById(req.session.webUserId);
+    if (!webUser || !webUser.linkedPhoneNumber) {
+      return res.status(404).json({ error: "No phone linked." });
+    }
+    const history = await storage.getCallHistoryByPhone(webUser.linkedPhoneNumber, 100);
+    return res.json(history);
+  } catch (err) {
+    console.error("[auth] call-history error:", err);
+    return res.status(500).json({ error: "Failed to fetch call history." });
+  }
+});
+
 // ─── Change Password ──────────────────────────────────────────────────────────
 router.post("/api/auth/change-password", async (req: Request, res: Response) => {
   if (!req.session.webUserId) {
