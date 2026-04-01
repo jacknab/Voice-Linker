@@ -368,6 +368,19 @@ export const membershipCards = pgTable("membership_cards", {
 
 export type MembershipCard = typeof membershipCards.$inferSelect;
 
+// ─── Seed Sessions — log of every time a profile is used as a virtual seed ────
+// source: "admin_uploaded" (dedicated seed mp3) | "real_caller" (dormant real user)
+export const seedSessions = pgTable("seed_sessions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull(),
+  source: text("source").notNull(),
+  startedAt: timestamp("started_at").defaultNow(),
+  scheduledEndAt: timestamp("scheduled_end_at").notNull(),
+  endedAt: timestamp("ended_at"),
+});
+
+export type SeedSession = typeof seedSessions.$inferSelect;
+
 // ─── Membership Link Codes — short-lived codes for phone-verified web linking ──
 // A web user generates a 3-digit code, calls the phone line, and presses those
 // digits to prove they own the phone and link it to their web account.

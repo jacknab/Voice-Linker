@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, membershipLinkCodes, membershipCards, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount, type MembershipLinkCode, type MembershipCard } from "@shared/schema";
-import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, membershipLinkCodes, membershipCards, seedSessions, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount, type MembershipLinkCode, type MembershipCard, type SeedSession } from "@shared/schema";
+import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 const VIRTUAL_PREFIX = "VIRTUAL-";
@@ -131,6 +131,13 @@ export interface IStorage {
 
   getMembershipSettings(): Promise<MembershipSettings>;
   updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
+
+  // Seed session tracking
+  startSeedSession(userId: string, source: "admin_uploaded" | "real_caller", scheduledEndAt: Date): Promise<SeedSession>;
+  endSeedSession(userId: string): Promise<void>;
+  getActiveSeedSessions(): Promise<SeedSession[]>;
+  getRecentSeedSessions(limitDays?: number): Promise<SeedSession[]>;
+  getEligibleSeedProfiles(limit: number): Promise<{ userId: string }[]>;
 
   // Call log tracking for phone-number stats
   logCall(callSid: string, fromPhoneNumber: string, toPhoneNumber: string | null, regionId: string | null): Promise<void>;
@@ -505,15 +512,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number> {
-    const activeUserIds = await db.select({ userId: activeCalls.userId })
+    // Real callers in this region
+    const regionalUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(
         regionId
-          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId))
-          : not(eq(activeCalls.userId, excludeUserId))
+          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId), notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`))
+          : and(not(eq(activeCalls.userId, excludeUserId)), notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`))
       );
+    // Virtual callers (admin-uploaded or real-caller seeds) — global, no region filter
+    const virtualUserIds = await db.select({ userId: activeCalls.userId })
+      .from(activeCalls)
+      .where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));
 
-    const ids = activeUserIds.map(r => r.userId);
+    const ids = [...new Set([...regionalUserIds.map(r => r.userId), ...virtualUserIds.map(r => r.userId)])];
     const conditions = ids.length > 0
       ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
       : eq(profiles.isAdminUploaded, true);
@@ -525,15 +537,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]> {
-    const activeUserIds = await db.select({ userId: activeCalls.userId })
+    // Real callers in this region
+    const regionalUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(
         regionId
-          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId))
-          : not(eq(activeCalls.userId, excludeUserId))
+          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId), notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`))
+          : and(not(eq(activeCalls.userId, excludeUserId)), notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`))
       );
+    // Virtual callers (admin-uploaded seeds + real-caller seed sessions) — global
+    const virtualUserIds = await db.select({ userId: activeCalls.userId })
+      .from(activeCalls)
+      .where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));
 
-    const ids = activeUserIds.map(r => r.userId);
+    const ids = [...new Set([...regionalUserIds.map(r => r.userId), ...virtualUserIds.map(r => r.userId)])];
     const conditions = ids.length > 0
       ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
       : eq(profiles.isAdminUploaded, true);
@@ -789,6 +806,69 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({ target: membershipSettings.id, set: data })
       .returning();
     return updated;
+  }
+
+  // --- Seed Session Tracking ---
+
+  async startSeedSession(userId: string, source: "admin_uploaded" | "real_caller", scheduledEndAt: Date): Promise<SeedSession> {
+    // Close any open session for this user before starting a new one
+    await db.update(seedSessions)
+      .set({ endedAt: sql`now()` })
+      .where(and(eq(seedSessions.userId, userId), isNull(seedSessions.endedAt)));
+    const [session] = await db.insert(seedSessions)
+      .values({ userId, source, scheduledEndAt })
+      .returning();
+    return session;
+  }
+
+  async endSeedSession(userId: string): Promise<void> {
+    await db.update(seedSessions)
+      .set({ endedAt: sql`now()` })
+      .where(and(eq(seedSessions.userId, userId), isNull(seedSessions.endedAt)));
+  }
+
+  async getActiveSeedSessions(): Promise<SeedSession[]> {
+    return db.select().from(seedSessions).where(isNull(seedSessions.endedAt));
+  }
+
+  async getRecentSeedSessions(limitDays = 7): Promise<SeedSession[]> {
+    const since = new Date(Date.now() - limitDays * 24 * 60 * 60 * 1000);
+    return db.select()
+      .from(seedSessions)
+      .where(gte(seedSessions.startedAt, since))
+      .orderBy(desc(seedSessions.startedAt));
+  }
+
+  async getEligibleSeedProfiles(limit: number): Promise<{ userId: string }[]> {
+    // Real-caller profiles eligible for seeding:
+    //  1. Has a profile recording
+    //  2. Not admin-uploaded (those are handled separately)
+    //  3. Not a VIRTUAL- phone number
+    //  4. No active membership AND no remaining seconds (exhausted or never had)
+    //  5. No call in the last 30 days (dormant real user)
+    //  6. No seed session started in the last 24 hours
+    const rows = await db.execute<{ user_id: string }>(sql`
+      SELECT p.user_id
+      FROM profiles p
+      JOIN users u ON p.user_id = u.id
+      WHERE p.is_admin_uploaded = false
+        AND u.phone_number NOT LIKE ${`${VIRTUAL_PREFIX}%`}
+        AND (u.membership_tier IS NULL)
+        AND (u.remaining_seconds IS NULL OR u.remaining_seconds = 0)
+        AND NOT EXISTS (
+          SELECT 1 FROM call_logs cl
+          WHERE cl.from_phone_number = u.phone_number
+            AND cl.started_at > now() - INTERVAL '30 days'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM seed_sessions ss
+          WHERE ss.user_id = p.user_id
+            AND ss.started_at > now() - INTERVAL '24 hours'
+        )
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+    `);
+    return (rows.rows as { user_id: string }[]).map(r => ({ userId: r.user_id }));
   }
 
   async getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }> {
