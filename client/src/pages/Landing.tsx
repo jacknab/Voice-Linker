@@ -187,7 +187,7 @@ export default function Landing() {
             </p>
 
             {/* Free minutes */}
-            <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "0.75rem", color: "#fff" }}
+            <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "0.75rem", color: "#fff", whiteSpace: "nowrap" }}
               data-testid="hero-headline"
             >
               90 MINUTES FREE!
@@ -207,13 +207,13 @@ export default function Landing() {
               </div>
             ) : (
               <div>
-                <p style={{ fontSize: "1.05rem", color: "rgba(255,255,255,0.75)", fontWeight: 400, marginBottom: "0.3rem" }}>
+                <p style={{ fontSize: "1.3rem", color: "rgba(255,255,255,0.85)", fontWeight: 400, marginBottom: "0.3rem" }}>
                   Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access number
                 </p>
-                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(2rem, 4.5vw, 3rem)", fontWeight: 900, color: "#fff", textDecoration: "none", letterSpacing: "0.01em", lineHeight: 1.1 }}
+                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(2rem, 4.5vw, 3rem)", color: "#fff", textDecoration: "none", letterSpacing: "0.01em", lineHeight: 1.1 }}
                   data-testid="text-local-phone"
                 >
-                  Call {formatPhone(displayPhone)}
+                  <span style={{ fontWeight: 400 }}>Call </span><span style={{ fontWeight: 900 }}>{formatPhone(displayPhone)}</span>
                 </CallLink>
               </div>
             )}
