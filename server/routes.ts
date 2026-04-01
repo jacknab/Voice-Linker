@@ -2454,17 +2454,167 @@ export async function registerRoutes(
         );
         twiml.redirect("/voice/my-mailbox");
       } else {
+        // No unread messages — show mailbox management menu
         const mailboxLabel = mailbox
           ? `Mailbox number ${mailbox.mailboxNumber.split("").join(", ")}. `
           : "";
-        playPrompt(twiml, req, "mailbox_empty.mp3",
-          `${mailboxLabel}Your mailbox is empty. No new messages.`
+        const hasGreeting = !!mailbox?.adRecordingUrl;
+        const gather = twiml.gather({
+          numDigits: 1,
+          finishOnKey: "",
+          action: "/voice/handle-my-mailbox-options",
+          timeout: 10,
+        });
+        gather.say(
+          `${mailboxLabel}Your mailbox has no new messages. ` +
+          (hasGreeting
+            ? "Press 1 to re-record your mailbox greeting. Press 2 to hear your current greeting. "
+            : "Press 1 to record your mailbox greeting. ") +
+          "Press 9 to return to the mailbox menu."
         );
         twiml.redirect("/voice/mailbox-menu");
       }
     } catch (err) {
       console.error("[voice] /voice/my-mailbox error:", err);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the mailbox menu.");
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Handle My Mailbox Options (empty state menu) ────────────────────────
+  app.post("/voice/handle-my-mailbox-options", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const mailbox = await storage.getMailboxByUserId(user.id);
+
+      if (digit === "1") {
+        twiml.redirect("/voice/record-mailbox-greeting");
+      } else if (digit === "2") {
+        if (mailbox?.adRecordingUrl) {
+          safePlayRecording(twiml, mailbox.adRecordingUrl, req, "Your greeting is not available for playback.");
+        } else {
+          twiml.say("You have not recorded a mailbox greeting yet.");
+        }
+        twiml.redirect("/voice/my-mailbox");
+      } else if (digit === "9") {
+        twiml.redirect("/voice/mailbox-menu");
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect("/voice/my-mailbox");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-my-mailbox-options error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Record Mailbox Greeting (from within My Mailbox) ────────────────────
+  app.post("/voice/record-mailbox-greeting", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const mailbox = await storage.getMailboxByUserId(user.id);
+
+      if (mailbox?.adRecordingUrl) {
+        // Already has a greeting — offer to re-record or hear it
+        const gather = twiml.gather({
+          numDigits: 1,
+          finishOnKey: "",
+          action: "/voice/handle-record-mailbox-greeting",
+          timeout: 10,
+        });
+        gather.say(
+          "You already have a mailbox greeting recorded. " +
+          "Press 1 to record a new greeting. " +
+          "Press 2 to hear your current greeting. " +
+          "Press 9 to return to your mailbox."
+        );
+        twiml.redirect("/voice/my-mailbox");
+      } else {
+        twiml.say("Record your mailbox greeting after the tone. Press pound when finished.");
+        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting" });
+      }
+    } catch (err) {
+      console.error("[voice] /voice/record-mailbox-greeting error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Handle Record Mailbox Greeting Menu ─────────────────────────────────
+  app.post("/voice/handle-record-mailbox-greeting", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const mailbox = await storage.getMailboxByUserId(user.id);
+
+      if (digit === "1") {
+        twiml.say("Record your mailbox greeting after the tone. Press pound when finished.");
+        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting" });
+      } else if (digit === "2") {
+        if (mailbox?.adRecordingUrl) {
+          safePlayRecording(twiml, mailbox.adRecordingUrl, req, "Your greeting is not available for playback.");
+        }
+        twiml.redirect("/voice/record-mailbox-greeting");
+      } else if (digit === "9") {
+        twiml.redirect("/voice/my-mailbox");
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect("/voice/record-mailbox-greeting");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-record-mailbox-greeting error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Save Mailbox Greeting ────────────────────────────────────────────────
+  app.post("/voice/save-mailbox-greeting", async (req, res) => {
+    const twiml = new VoiceResponse();
+
+    try {
+      const fromNumber = req.body?.From as string;
+      const recordingUrl = req.body?.RecordingUrl as string;
+      const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
+
+      if (!recordingUrl || recordingDuration < 3) {
+        playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone.");
+        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting" });
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const user = await getOrCreateUser(fromNumber);
+      const mailbox = await storage.getMailboxByUserId(user.id);
+      // Keep the existing category if set, otherwise use a default
+      const category = mailbox?.category || "quick_hot_talk";
+      await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
+
+      twiml.say("Your mailbox greeting has been saved. Callers who enter your mailbox number will now hear this greeting.");
+      twiml.redirect("/voice/my-mailbox");
+    } catch (err) {
+      console.error("[voice] /voice/save-mailbox-greeting error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred saving your greeting. Returning to the mailbox menu.");
       twiml.redirect("/voice/mailbox-menu");
     }
 
