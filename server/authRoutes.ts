@@ -352,4 +352,83 @@ router.post("/api/auth/reset-password", async (req: Request, res: Response) => {
   }
 });
 
+// ─── Helper: normalize phone number to E.164 ──────────────────────────────────
+function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  if (digits.length > 7) return `+${digits}`;
+  return null;
+}
+
+// ─── GET /api/auth/alt-phones ─────────────────────────────────────────────────
+router.get("/api/auth/alt-phones", async (req: Request, res: Response) => {
+  if (!req.session.webUserId) return res.status(401).json({ error: "Not authenticated" });
+  try {
+    const altPhones = await storage.getAltPhonesForWebUser(req.session.webUserId);
+    return res.json(altPhones);
+  } catch (err) {
+    console.error("[auth] alt-phones GET error:", err);
+    return res.status(500).json({ error: "Failed to load alternate phone numbers." });
+  }
+});
+
+// ─── POST /api/auth/alt-phones ────────────────────────────────────────────────
+router.post("/api/auth/alt-phones", async (req: Request, res: Response) => {
+  if (!req.session.webUserId) return res.status(401).json({ error: "Not authenticated" });
+  const schema = z.object({ phoneNumber: z.string().min(1) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Phone number is required." });
+
+  const normalized = normalizePhone(parsed.data.phoneNumber);
+  if (!normalized) return res.status(400).json({ error: "Please enter a valid phone number (10 digits)." });
+
+  try {
+    const webUser = await storage.getWebUserById(req.session.webUserId);
+    if (!webUser) return res.status(401).json({ error: "Not authenticated" });
+    if (!webUser.linkedPhoneNumber) {
+      return res.status(400).json({ error: "You must link your primary phone before adding alternate numbers." });
+    }
+
+    // Can't add your own primary number as an alt
+    if (normalized === webUser.linkedPhoneNumber) {
+      return res.status(400).json({ error: "This is already your primary linked number." });
+    }
+
+    // Max 2 alt phones
+    const existing = await storage.getAltPhonesForWebUser(req.session.webUserId);
+    if (existing.length >= 2) {
+      return res.status(400).json({ error: "You can only add up to 2 alternate phone numbers." });
+    }
+
+    // Must not already be someone's primary linked number
+    const primaryUser = await storage.getUserByPhone(normalized);
+    if (primaryUser?.membershipTier) {
+      return res.status(400).json({ error: "This number is already associated with a membership. Please use a different number." });
+    }
+
+    const altPhone = await storage.addAltPhoneForWebUser(req.session.webUserId, normalized);
+    console.log(`[auth] alt-phone added: ${normalized} for web user ${req.session.webUserId}`);
+    return res.json(altPhone);
+  } catch (err: any) {
+    if (err?.code === "23505") {
+      return res.status(400).json({ error: "This phone number is already linked to an account." });
+    }
+    console.error("[auth] alt-phones POST error:", err);
+    return res.status(500).json({ error: "Failed to add alternate phone number." });
+  }
+});
+
+// ─── DELETE /api/auth/alt-phones/:id ─────────────────────────────────────────
+router.delete("/api/auth/alt-phones/:id", async (req: Request, res: Response) => {
+  if (!req.session.webUserId) return res.status(401).json({ error: "Not authenticated" });
+  try {
+    await storage.removeAltPhoneForWebUser(req.session.webUserId, req.params.id);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[auth] alt-phones DELETE error:", err);
+    return res.status(500).json({ error: "Failed to remove alternate phone number." });
+  }
+});
+
 export default router;

@@ -292,6 +292,16 @@ export const webUsers = pgTable("web_users", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Alternate phone numbers a web user can call in from — map to their primary membership
+export const webUserAltPhones = pgTable("web_user_alt_phones", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  webUserId: uuid("web_user_id").notNull().references(() => webUsers.id, { onDelete: "cascade" }),
+  phoneNumber: text("phone_number").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type WebUserAltPhone = typeof webUserAltPhones.$inferSelect;
+
 export const insertWebUserSchema = createInsertSchema(webUsers).omit({ id: true, passwordHash: true, resetToken: true, resetTokenExpiry: true, createdAt: true }).extend({
   password: z.string().min(8, "Password must be at least 8 characters"),
   email: z.string().email("Invalid email address"),

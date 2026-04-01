@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   Phone, LogOut, Loader2, User, Clock, Shield, Star, Zap,
   KeyRound, ChevronRight, Eye, EyeOff, CheckCircle2, PhoneCall,
-  AlertTriangle, Link2, CheckCircle, History, PhoneIncoming, Timer,
+  AlertTriangle, Link2, CheckCircle, History, PhoneIncoming, Timer, Plus, Trash2, PhoneForwarded,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -57,6 +57,13 @@ interface CallHistoryEntry {
   startedAt: string | null;
   completedAt: string | null;
   toPhoneNumber: string | null;
+}
+
+interface AltPhone {
+  id: string;
+  webUserId: string;
+  phoneNumber: string;
+  createdAt: string | null;
 }
 
 function formatMemberSince(dateStr: string | null | undefined): string {
@@ -362,6 +369,42 @@ export default function Dashboard() {
     enabled: !!me?.linkedPhoneNumber && activeSection === "history",
     retry: false,
     staleTime: 60 * 1000,
+  });
+
+  const { data: altPhones = [], isLoading: altPhonesLoading } = useQuery<AltPhone[]>({
+    queryKey: ["/api/auth/alt-phones"],
+    enabled: !!me?.linkedPhoneNumber,
+    retry: false,
+    staleTime: 60 * 1000,
+  });
+
+  const [altPhoneInput, setAltPhoneInput] = useState("");
+
+  const addAltPhoneMutation = useMutation({
+    mutationFn: (phoneNumber: string) => apiRequest("POST", "/api/auth/alt-phones", { phoneNumber }),
+    onSuccess: () => {
+      setAltPhoneInput("");
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/alt-phones"] });
+      toast({ title: "Number added", description: "The alternate number has been linked to your membership." });
+    },
+    onError: async (err: any) => {
+      let message = "Failed to add alternate number.";
+      try { const b = await err.response?.json?.(); if (b?.error) message = b.error; } catch {}
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
+  });
+
+  const removeAltPhoneMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/auth/alt-phones/${id}`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/alt-phones"] });
+      toast({ title: "Number removed", description: "The alternate number has been unlinked." });
+    },
+    onError: async (err: any) => {
+      let message = "Failed to remove alternate number.";
+      try { const b = await err.response?.json?.(); if (b?.error) message = b.error; } catch {}
+      toast({ title: "Error", description: message, variant: "destructive" });
+    },
   });
 
   const logoutMutation = useMutation({
@@ -813,6 +856,96 @@ export default function Dashboard() {
                 </button>
               </form>
             </div>
+            {/* ── Alternate Phone Numbers ── */}
+            {me.linkedPhoneNumber && (
+              <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "14px", padding: "1.75rem", marginTop: "1rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.25rem" }}>
+                  <PhoneForwarded size={16} color="#1d4ed8" />
+                  <p style={{ color: "#fff", fontSize: "0.95rem", fontWeight: 700, margin: 0 }}>Alternate Calling Numbers</p>
+                </div>
+                <p style={{ color: "#666", fontSize: "0.82rem", margin: "0 0 1.25rem", lineHeight: 1.5 }}>
+                  Add up to 2 extra phone numbers that can call in and be recognized as your membership automatically.
+                </p>
+
+                {/* Primary number — always shown, read-only */}
+                <div style={{ marginBottom: "0.75rem" }}>
+                  <p style={{ color: "#555", fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.5rem" }}>Primary Number</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: "8px", padding: "0.65rem 1rem" }}>
+                    <Phone size={13} color="#22c55e" />
+                    <span style={{ color: "#ccc", fontSize: "0.875rem", fontFamily: "monospace" }} data-testid="text-primary-phone">{formatPhone(me.linkedPhoneNumber)}</span>
+                    <span style={{ marginLeft: "auto", color: "#22c55e", fontSize: "0.72rem", fontWeight: 600 }}>Primary</span>
+                  </div>
+                </div>
+
+                {/* Existing alt phones */}
+                {altPhonesLoading ? (
+                  <div style={{ display: "flex", justifyContent: "center", padding: "0.75rem" }}>
+                    <Loader2 size={18} color="#555" className="animate-spin" />
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: "1rem" }}>
+                    {altPhones.length > 0 && (
+                      <div style={{ marginBottom: "0.75rem" }}>
+                        <p style={{ color: "#555", fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.5rem" }}>Alternate Numbers</p>
+                        {altPhones.map((ap, idx) => (
+                          <div key={ap.id} data-testid={`row-alt-phone-${ap.id}`}
+                            style={{ display: "flex", alignItems: "center", gap: "0.75rem", background: "#0d0d0d", border: "1px solid #1e1e1e", borderRadius: "8px", padding: "0.65rem 1rem", marginBottom: "0.5rem" }}>
+                            <Phone size={13} color="#1d4ed8" />
+                            <span style={{ color: "#ccc", fontSize: "0.875rem", fontFamily: "monospace" }} data-testid={`text-alt-phone-${ap.id}`}>{formatPhone(ap.phoneNumber)}</span>
+                            <span style={{ color: "#555", fontSize: "0.72rem", marginLeft: "auto" }}>Alt {idx + 1}</span>
+                            <button
+                              onClick={() => removeAltPhoneMutation.mutate(ap.id)}
+                              disabled={removeAltPhoneMutation.isPending}
+                              data-testid={`button-remove-alt-phone-${ap.id}`}
+                              title="Remove this number"
+                              style={{ background: "none", border: "none", cursor: removeAltPhoneMutation.isPending ? "not-allowed" : "pointer", color: "#555", padding: 0, display: "flex", alignItems: "center" }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add alt phone form — only if under the 2-number limit */}
+                    {altPhones.length < 2 ? (
+                      <div>
+                        {altPhones.length === 0 && (
+                          <p style={{ color: "#555", fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0.75rem 0 0.5rem" }}>Alternate Numbers</p>
+                        )}
+                        <form
+                          onSubmit={(e) => { e.preventDefault(); if (altPhoneInput.trim()) addAltPhoneMutation.mutate(altPhoneInput.trim()); }}
+                          style={{ display: "flex", gap: "0.5rem" }}
+                        >
+                          <input
+                            type="tel"
+                            value={altPhoneInput}
+                            onChange={e => setAltPhoneInput(e.target.value)}
+                            placeholder="Enter phone number"
+                            data-testid="input-alt-phone"
+                            style={{ flex: 1, background: "#1a1a1a", border: "1px solid #2a2a2a", borderRadius: "8px", color: "#fff", fontSize: "0.875rem", padding: "0.65rem 0.875rem", outline: "none" }}
+                            onFocus={e => (e.target.style.borderColor = "#1d4ed8")}
+                            onBlur={e => (e.target.style.borderColor = "#2a2a2a")}
+                          />
+                          <button
+                            type="submit"
+                            disabled={addAltPhoneMutation.isPending || !altPhoneInput.trim()}
+                            data-testid="button-add-alt-phone"
+                            style={{ background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px", padding: "0.65rem 1rem", fontWeight: 700, fontSize: "0.85rem", cursor: addAltPhoneMutation.isPending || !altPhoneInput.trim() ? "not-allowed" : "pointer", opacity: addAltPhoneMutation.isPending || !altPhoneInput.trim() ? 0.6 : 1, display: "flex", alignItems: "center", gap: "0.4rem", whiteSpace: "nowrap" }}
+                          >
+                            {addAltPhoneMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                            Add Number
+                          </button>
+                        </form>
+                      </div>
+                    ) : (
+                      <p style={{ color: "#555", fontSize: "0.8rem", margin: "0.25rem 0 0" }}>Maximum of 2 alternate numbers reached. Remove one to add another.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "14px", padding: "1.25rem 1.5rem", marginTop: "1rem" }}>
               <p style={{ color: "#555", fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 0.5rem" }}>Login Email</p>
               <p style={{ color: "#ccc", fontSize: "0.9rem", margin: 0 }} data-testid="text-account-email">{me.email}</p>

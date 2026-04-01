@@ -1191,9 +1191,13 @@ export async function registerRoutes(
   // --- Twilio Voice Webhooks ---
 
   async function getOrCreateUser(phoneNumber: string) {
-    let user = await storage.getUserByPhone(phoneNumber);
+    // Check if this number is an alternate number linked to a primary membership
+    const primaryPhone = await storage.getPrimaryPhoneForAltNumber(phoneNumber);
+    const effectivePhone = primaryPhone ?? phoneNumber;
+
+    let user = await storage.getUserByPhone(effectivePhone);
     if (!user) {
-      user = await storage.createUser({ phoneNumber });
+      user = await storage.createUser({ phoneNumber: effectivePhone });
     }
     return user;
   }

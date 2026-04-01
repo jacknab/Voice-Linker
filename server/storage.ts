@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -179,6 +179,11 @@ export interface IStorage {
   incrementWebUserLinkAttempts(id: string): Promise<number>;
   lockWebUser(id: string): Promise<void>;
   getCallHistoryByPhone(phoneNumber: string, limit?: number): Promise<{ id: string; callSid: string; durationSeconds: number; startedAt: Date | null; completedAt: Date | null; toPhoneNumber: string | null }[]>;
+  // Alt phone numbers
+  getAltPhonesForWebUser(webUserId: string): Promise<WebUserAltPhone[]>;
+  addAltPhoneForWebUser(webUserId: string, phoneNumber: string): Promise<WebUserAltPhone>;
+  removeAltPhoneForWebUser(webUserId: string, altPhoneId: string): Promise<void>;
+  getPrimaryPhoneForAltNumber(phoneNumber: string): Promise<string | null>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -1182,6 +1187,31 @@ export class DatabaseStorage implements IStorage {
 
   async lockWebUser(id: string): Promise<void> {
     await db.update(webUsers).set({ isLocked: true }).where(eq(webUsers.id, id));
+  }
+
+  async getAltPhonesForWebUser(webUserId: string): Promise<WebUserAltPhone[]> {
+    return db.select().from(webUserAltPhones).where(eq(webUserAltPhones.webUserId, webUserId));
+  }
+
+  async addAltPhoneForWebUser(webUserId: string, phoneNumber: string): Promise<WebUserAltPhone> {
+    const [row] = await db.insert(webUserAltPhones).values({ webUserId, phoneNumber }).returning();
+    return row;
+  }
+
+  async removeAltPhoneForWebUser(webUserId: string, altPhoneId: string): Promise<void> {
+    await db.delete(webUserAltPhones).where(and(
+      eq(webUserAltPhones.id, altPhoneId),
+      eq(webUserAltPhones.webUserId, webUserId),
+    ));
+  }
+
+  async getPrimaryPhoneForAltNumber(phoneNumber: string): Promise<string | null> {
+    const [row] = await db
+      .select({ linkedPhoneNumber: webUsers.linkedPhoneNumber })
+      .from(webUserAltPhones)
+      .innerJoin(webUsers, eq(webUserAltPhones.webUserId, webUsers.id))
+      .where(eq(webUserAltPhones.phoneNumber, phoneNumber));
+    return row?.linkedPhoneNumber ?? null;
   }
 }
 
