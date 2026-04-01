@@ -135,7 +135,7 @@ export default function Landing() {
             </p>
 
             {/* Free minutes */}
-            <h1 style={{ fontSize: "clamp(2.4rem, 6vw, 4rem)", fontWeight: 900, letterSpacing: "-0.02em", lineHeight: 1.05, marginBottom: "0.5rem", color: "#fff" }}
+            <h1 style={{ fontSize: "clamp(1.8rem, 5vw, 3.5rem)", fontWeight: 900, letterSpacing: "-0.02em", lineHeight: 1.05, marginBottom: "0.5rem", color: "#fff", whiteSpace: "nowrap" }}
               data-testid="hero-headline"
             >
               90 MINUTES FREE!
