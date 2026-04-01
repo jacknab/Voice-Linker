@@ -1668,20 +1668,23 @@ export async function registerRoutes(
       try {
         const linkCode = await storage.getActiveMembershipLinkCode(digits);
         if (linkCode) {
+          // Look up existing phone user — only carry over membership number if they have one (purchased)
           const phoneUser = await storage.getUserByPhone(fromNumber);
-          if (phoneUser) {
-            await storage.linkWebUserPhone(linkCode.webUserId, fromNumber);
-            await storage.consumeMembershipLinkCode(linkCode.id);
-            console.log(`[voice] Web link code ${digits} matched — linked ${fromNumber} to webUserId=${linkCode.webUserId}`);
-            playPrompt(twiml, req, "link_code_success.mp3",
-              "Your phone number has been linked to your web account. Welcome.");
+          const membershipNumber = phoneUser?.membershipNumber ?? undefined;
+
+          await storage.linkWebUserPhone(linkCode.webUserId, fromNumber, membershipNumber);
+          await storage.consumeMembershipLinkCode(linkCode.id);
+          console.log(`[voice] Web link code ${digits} matched — linked ${fromNumber}${membershipNumber ? ` (membership ${membershipNumber})` : " (no membership yet)"} to webUserId=${linkCode.webUserId}`);
+
+          if (membershipNumber) {
+            // Read the membership number digit-by-digit
+            twiml.say("Your phone number has been linked to your web account. Your membership number is:");
+            for (const digit of membershipNumber.replace(/\D/g, "")) {
+              twiml.say(digit);
+            }
+            twiml.say("You can now sign in to the web portal to manage your account.");
           } else {
-            // Phone number not in system yet — link will be set up on first full call
-            await storage.linkWebUserPhone(linkCode.webUserId, fromNumber);
-            await storage.consumeMembershipLinkCode(linkCode.id);
-            console.log(`[voice] Web link code ${digits} matched (new caller) — linked ${fromNumber} to webUserId=${linkCode.webUserId}`);
-            playPrompt(twiml, req, "link_code_success.mp3",
-              "Your phone number has been linked to your web account. Welcome.");
+            twiml.say("Your phone number has been linked to your web account. You can now sign in to the web portal.");
           }
         } else {
           console.log(`[voice] Web link code ${digits} invalid or expired`);

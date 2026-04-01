@@ -184,7 +184,7 @@ export interface IStorage {
   getWebUserByResetToken(token: string): Promise<WebUser | undefined>;
   updateWebUserPassword(id: string, passwordHash: string): Promise<void>;
   clearWebUserResetToken(id: string): Promise<void>;
-  linkWebUserPhone(id: string, phoneNumber: string): Promise<void>;
+  linkWebUserPhone(id: string, phoneNumber: string, membershipNumber?: string): Promise<void>;
   incrementWebUserLinkAttempts(id: string): Promise<number>;
   lockWebUser(id: string): Promise<void>;
   getCallHistoryByPhone(phoneNumber: string, limit?: number): Promise<{ id: string; callSid: string; durationSeconds: number; startedAt: Date | null; completedAt: Date | null; toPhoneNumber: string | null }[]>;
@@ -1269,8 +1269,12 @@ export class DatabaseStorage implements IStorage {
     return result.rows as any[];
   }
 
-  async linkWebUserPhone(id: string, phoneNumber: string): Promise<void> {
-    await db.update(webUsers).set({ linkedPhoneNumber: phoneNumber, linkAttempts: 0 }).where(eq(webUsers.id, id));
+  async linkWebUserPhone(id: string, phoneNumber: string, membershipNumber?: string): Promise<void> {
+    await db.update(webUsers).set({
+      linkedPhoneNumber: phoneNumber,
+      ...(membershipNumber ? { linkedMembershipNumber: membershipNumber } : {}),
+      linkAttempts: 0,
+    }).where(eq(webUsers.id, id));
   }
 
   async incrementWebUserLinkAttempts(id: string): Promise<number> {

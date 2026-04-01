@@ -18,6 +18,7 @@ interface WebUser {
   email: string;
   createdAt: string | null;
   linkedPhoneNumber: string | null;
+  linkedMembershipNumber: string | null;
   linkAttempts: number;
   isLocked: boolean;
 }
@@ -733,6 +734,14 @@ export default function Dashboard() {
                       {me.linkedPhoneNumber ? "Yes" : "Not yet"}
                     </span>
                   </div>
+                  {me.linkedMembershipNumber && (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ color: "#666", fontSize: "0.8rem" }}>Membership #</span>
+                      <span style={{ color: "#60a5fa", fontSize: "0.8rem", fontWeight: 700, fontFamily: "monospace", letterSpacing: "0.05em" }} data-testid="text-membership-number">
+                        {me.linkedMembershipNumber}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -132,6 +132,7 @@ router.get("/api/auth/me", async (req: Request, res: Response) => {
       email: user.email,
       createdAt: user.createdAt,
       linkedPhoneNumber: user.linkedPhoneNumber,
+      linkedMembershipNumber: user.linkedMembershipNumber ?? null,
       linkAttempts: user.linkAttempts,
       isLocked: user.isLocked,
     });
