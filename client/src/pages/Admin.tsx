@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -42,7 +42,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings";
 
 interface FlaggedItem {
   id: string;
@@ -1232,6 +1232,140 @@ function MessagesTab() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Website Settings Tab ───────────────────────────────────────────────────
+interface SiteSettingsData {
+  siteName: string;
+  fallbackPhoneNumber: string;
+  customerServiceEmail: string | null;
+  customerServicePhone: string | null;
+}
+
+function WebsiteSettingsTab() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery<SiteSettingsData>({
+    queryKey: ["/api/admin/site-settings"],
+  });
+
+  const [siteName, setSiteName] = useState("");
+  const [fallbackPhone, setFallbackPhone] = useState("");
+  const [csEmail, setCsEmail] = useState("");
+  const [csPhone, setCsPhone] = useState("");
+  const [initialized, setInitialized] = useState(false);
+
+  if (!initialized && data) {
+    setSiteName(data.siteName);
+    setFallbackPhone(data.fallbackPhoneNumber);
+    setCsEmail(data.customerServiceEmail ?? "");
+    setCsPhone(data.customerServicePhone ?? "");
+    setInitialized(true);
+  }
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      apiRequest("PUT", "/api/admin/site-settings", {
+        siteName,
+        fallbackPhoneNumber: fallbackPhone,
+        customerServiceEmail: csEmail || null,
+        customerServicePhone: csPhone || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/site-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/site-settings"] });
+      toast({ title: "Saved", description: "Website settings updated." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  const LabelRow = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-6 items-start py-5 border-b border-gray-100 last:border-0">
+      <div className="sm:pt-1">
+        <p className="text-sm font-semibold text-gray-700">{label}</p>
+        {hint && <p className="text-xs text-gray-400 mt-0.5 leading-snug">{hint}</p>}
+      </div>
+      <div className="sm:col-span-2">{children}</div>
+    </div>
+  );
+
+  return (
+    <div className="max-w-2xl mx-auto py-8 px-4">
+      <h2 className="text-base font-semibold text-gray-900 mb-1">Website Settings</h2>
+      <p className="text-sm text-gray-500 mb-6">These values control how your public-facing site appears and how callers can reach support.</p>
+
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="px-6 py-2">
+          <LabelRow label="Site Name" hint="Shown in the browser tab, header, and footer.">
+            <input
+              type="text"
+              value={siteName}
+              onChange={e => setSiteName(e.target.value)}
+              placeholder="Phone Booth"
+              data-testid="input-site-name"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </LabelRow>
+
+          <LabelRow label="Fallback Phone Number" hint="Displayed when a caller's local number cannot be determined.">
+            <input
+              type="text"
+              value={fallbackPhone}
+              onChange={e => setFallbackPhone(e.target.value)}
+              placeholder="800-730-2508"
+              data-testid="input-fallback-phone"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </LabelRow>
+
+          <LabelRow label="Customer Service Email" hint="If set, shown in the footer as a support contact. Leave blank to hide.">
+            <input
+              type="email"
+              value={csEmail}
+              onChange={e => setCsEmail(e.target.value)}
+              placeholder="support@example.com"
+              data-testid="input-cs-email"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </LabelRow>
+
+          <LabelRow label="Customer Service Phone" hint="If set, shown on the public site as a support number. Leave blank to hide.">
+            <input
+              type="text"
+              value={csPhone}
+              onChange={e => setCsPhone(e.target.value)}
+              placeholder="800-555-0100"
+              data-testid="input-cs-phone"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </LabelRow>
+        </div>
+      </div>
+
+      <div className="flex justify-end mt-5">
+        <button
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending}
+          data-testid="button-save-site-settings"
+          className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold px-5 py-2 rounded-lg transition-colors"
+        >
+          {mutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save Changes
+        </button>
+      </div>
     </div>
   );
 }
@@ -3222,6 +3356,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "analytics",      label: "Analytics",       icon: <BarChart2 size={15} /> },
   { id: "audit-log",      label: "Audit Log",       icon: <TrendingUp size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
+  { id: "site-settings",  label: "Website Settings", icon: <Settings size={15} /> },
 ];
 
 // ── Section-level action buttons ──────────────────────────────────────────────
@@ -3348,6 +3483,7 @@ export default function Admin() {
           {activeTab === "analytics"      && <AnalyticsTab />}
           {activeTab === "audit-log"      && <AuditLogTab />}
           {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
+          {activeTab === "site-settings"  && <WebsiteSettingsTab />}
         </div>
       </div>
     </div>

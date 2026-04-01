@@ -160,6 +160,19 @@ export const flaggedContent = pgTable("flagged_content", {
   reviewedAt: timestamp("reviewed_at"),
 });
 
+// Singleton settings row for website/operator configuration
+export const siteSettings = pgTable("site_settings", {
+  id: text("id").primaryKey().default("singleton"),
+  siteName: text("site_name").notNull().default("Phone Booth"),
+  fallbackPhoneNumber: text("fallback_phone_number").notNull().default("800-730-2508"),
+  customerServiceEmail: text("customer_service_email"),
+  customerServicePhone: text("customer_service_phone"),
+});
+
+export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({ id: true });
+export type SiteSettings = typeof siteSettings.$inferSelect;
+export type InsertSiteSettings = z.infer<typeof insertSiteSettingsSchema>;
+
 // Singleton settings row for membership/free-trial configuration
 export const membershipSettings = pgTable("membership_settings", {
   id: text("id").primaryKey().default("singleton"),

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, isNull, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -121,6 +121,9 @@ export interface IStorage {
   deleteZipEntry(id: string): Promise<void>;
   updateZipNeighborhood(id: string, neighborhood: string): Promise<ZipCode>;
   updateZipEntry(id: string, neighborhood: string, latitude?: number, longitude?: number): Promise<ZipCode>;
+
+  getSiteSettings(): Promise<SiteSettings>;
+  updateSiteSettings(data: Partial<InsertSiteSettings>): Promise<SiteSettings>;
 
   getMembershipSettings(): Promise<MembershipSettings>;
   updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
@@ -637,6 +640,21 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(zipCodes)
       .set(updateData)
       .where(eq(zipCodes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getSiteSettings(): Promise<SiteSettings> {
+    const [settings] = await db.select().from(siteSettings).where(eq(siteSettings.id, "singleton"));
+    if (settings) return settings;
+    const [created] = await db.insert(siteSettings).values({ id: "singleton" }).returning();
+    return created;
+  }
+
+  async updateSiteSettings(data: Partial<InsertSiteSettings>): Promise<SiteSettings> {
+    const [updated] = await db.insert(siteSettings)
+      .values({ id: "singleton", ...data })
+      .onConflictDoUpdate({ target: siteSettings.id, set: data })
       .returning();
     return updated;
   }

@@ -4,7 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import heroImg from "@assets/hero_guy_1.png";
 
 const DEFAULT_PHONE = "800-730-2508";
+const DEFAULT_SITE_NAME = "Phone Booth";
 
+interface SiteSettings {
+  siteName: string;
+  fallbackPhoneNumber: string;
+  customerServiceEmail: string | null;
+  customerServicePhone: string | null;
+}
 
 interface LocalNumberData {
   city: string | null;
@@ -39,13 +46,24 @@ function CallLink({ phone, children, className, style }: {
 export default function Landing() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const { data: siteData } = useQuery<SiteSettings>({
+    queryKey: ["/api/site-settings"],
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
   const { data: localData, isLoading: localLoading } = useQuery<LocalNumberData>({
     queryKey: ["/api/local-number"],
     staleTime: Infinity,
     retry: 1,
   });
 
-  const displayPhone = localData?.phoneNumber || DEFAULT_PHONE;
+  const siteName = siteData?.siteName || DEFAULT_SITE_NAME;
+  const fallbackPhone = siteData?.fallbackPhoneNumber || DEFAULT_PHONE;
+  const csEmail = siteData?.customerServiceEmail || null;
+  const csPhone = siteData?.customerServicePhone || null;
+
+  const displayPhone = localData?.phoneNumber || fallbackPhone;
   const cityLabel = localData?.city || localData?.regionName || null;
   const stateLabel = localData?.state || null;
   const cityFull = cityLabel && stateLabel ? `${cityLabel}, ${stateLabel}` : cityLabel;
@@ -62,13 +80,13 @@ export default function Landing() {
       <nav style={{ background: "#000", position: "sticky", top: 0, zIndex: 100, borderBottom: "1px solid #1a1a1a" }}>
         <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "64px" }}>
 
-          {/* Left: Logo + Local Number */}
+          {/* Left: Logo + Site Name */}
           <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
               <div style={{ width: 36, height: 36, background: "#1d4ed8", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Phone className="w-4 h-4 text-white" />
               </div>
-              <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>Phone Booth</span>
+              <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>{siteName}</span>
             </div>
           </div>
 
@@ -167,10 +185,10 @@ export default function Landing() {
       <section style={{ background: "#f4f4f4", padding: "3.5rem 1.5rem", textAlign: "center" }}>
         <div style={{ maxWidth: "760px", margin: "0 auto" }}>
           <h2 style={{ fontSize: "clamp(1.4rem, 3vw, 2rem)", fontWeight: 800, color: "#111", lineHeight: 1.35, marginBottom: "1.25rem" }}>
-            Phone Booth is the best place to chat with local guys like you — anytime, anywhere.
+            {siteName} is the best place to chat with local guys like you — anytime, anywhere.
           </h2>
           <p style={{ fontSize: "1rem", color: "#444", lineHeight: 1.75, marginBottom: "1.5rem" }}>
-            <strong>Phone Booth</strong> is a place where you can chat with real men looking to meet men. The Connection booth is where the action is with real guys who are on the line right now <strong>Phone Booth</strong> is the go-to outlet for men seeking men.
+            <strong>{siteName}</strong> is a place where you can chat with real men looking to meet men. The Connection booth is where the action is with real guys who are on the line right now <strong>{siteName}</strong> is the go-to outlet for men seeking men.
           </p>
           <CallLink phone={displayPhone}
             style={{ fontSize: "1.25rem", fontWeight: 800, color: "#1d6fa8", textDecoration: "none", letterSpacing: "-0.01em" }}
@@ -212,6 +230,31 @@ export default function Landing() {
           >
             <Phone className="w-5 h-5" /> {formatPhone(displayPhone)}
           </CallLink>
+
+          {/* Customer service contact info — only shown when configured */}
+          {(csEmail || csPhone) && (
+            <div style={{ marginTop: "2rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
+              <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>
+                Customer Support
+              </p>
+              {csPhone && (
+                <a href={"tel:" + csPhone.replace(/\D/g, "")}
+                  style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", textDecoration: "none" }}
+                  data-testid="link-cs-phone"
+                >
+                  {formatPhone(csPhone)}
+                </a>
+              )}
+              {csEmail && (
+                <a href={"mailto:" + csEmail}
+                  style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", textDecoration: "none" }}
+                  data-testid="link-cs-email"
+                >
+                  {csEmail}
+                </a>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
@@ -224,7 +267,7 @@ export default function Landing() {
                 <div style={{ width: 28, height: 28, borderRadius: "6px", background: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Phone className="w-3.5 h-3.5 text-white" />
                 </div>
-                <span style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff" }}>Phone Booth</span>
+                <span style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff" }}>{siteName}</span>
               </div>
               <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.3)", lineHeight: 1.65 }}>
                 The most popular gay, bi &amp; curious live chat line. Real guys, real voices.
@@ -232,7 +275,18 @@ export default function Landing() {
             </div>
             {[
               { heading: "Account", links: ["Buy Time", "Free Trial", "Memberships"] },
-              { heading: "Help", links: ["Customer Support", "FAQ", "Keypad Tips", "Cities Coverage", "Safety Tips"] },
+              {
+                heading: "Help",
+                links: [
+                  "Customer Support",
+                  "FAQ",
+                  "Keypad Tips",
+                  "Cities Coverage",
+                  "Safety Tips",
+                  ...(csPhone ? [`Call: ${formatPhone(csPhone)}`] : []),
+                  ...(csEmail ? [`Email: ${csEmail}`] : []),
+                ],
+              },
               { heading: "Company", links: ["About Us", "Privacy Policy", "Terms of Use"] },
             ].map(col => (
               <div key={col.heading}>
@@ -256,7 +310,7 @@ export default function Landing() {
           </div>
           <div style={{ borderTop: "1px solid #1a1a1a", paddingTop: "1.5rem", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
             <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.2)" }}>
-              © {new Date().getFullYear()} Phone Booth. All Rights Reserved.
+              © {new Date().getFullYear()} {siteName}. All Rights Reserved.
             </p>
             <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.2)" }}>
               All callers must be 18 years or older.
