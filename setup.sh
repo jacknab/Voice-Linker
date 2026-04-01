@@ -100,9 +100,9 @@ else
     info "Nginx already installed – skipping."
 fi
 
-# Certbot (Let's Encrypt)
+# Certbot — needed for automatic renewal cron/timer even though cert already exists
 if ! command -v certbot &>/dev/null; then
-    info "Installing Certbot..."
+    info "Installing Certbot (for auto-renewal)..."
     sudo apt-get install -y certbot python3-certbot-nginx -qq
 else
     info "Certbot already installed – skipping."
@@ -218,64 +218,24 @@ success "Service '${SERVICE_NAME}' enabled and started."
 info  "  Status : sudo systemctl status ${SERVICE_NAME}"
 info  "  Logs   : sudo journalctl -u ${SERVICE_NAME} -f"
 
-# ─── STEP 8 – SSL certificate via Certbot ────────────────────────────────────
-step "8/8  Obtaining SSL certificate (Certbot)"
+# ─── STEP 8 – Nginx config + SSL ─────────────────────────────────────────────
+step "8/8  Configuring Nginx with SSL"
 
-# Disable default nginx site to avoid conflicts during cert issuance
+# SSL certificate already issued by Certbot — use the known path
+CERT_DIR="assicrentals.com-0001"
+CERT_BASE="/etc/letsencrypt/live/${CERT_DIR}"
+
+info "Using existing SSL certificate at ${CERT_BASE}/"
+
+# Verify the cert files are actually there before writing the nginx config
+[ -f "${CERT_BASE}/fullchain.pem" ] || error "Certificate not found at ${CERT_BASE}/fullchain.pem — check: sudo certbot certificates"
+[ -f "${CERT_BASE}/privkey.pem"   ] || error "Certificate not found at ${CERT_BASE}/privkey.pem — check: sudo certbot certificates"
+[ -f "${CERT_BASE}/chain.pem"     ] || error "Certificate not found at ${CERT_BASE}/chain.pem — check: sudo certbot certificates"
+
+# Remove the default nginx site to prevent it intercepting requests
 if [ -f /etc/nginx/sites-enabled/default ]; then
     sudo rm -f /etc/nginx/sites-enabled/default
     info "Removed default nginx site."
-fi
-
-# Write a minimal HTTP-only config so certbot can complete the ACME challenge
-NGINX_CERTBOT_TMP="/etc/nginx/sites-available/${SERVICE_NAME}-certbot-tmp"
-sudo tee "${NGINX_CERTBOT_TMP}" > /dev/null <<EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${DOMAIN} www.${DOMAIN};
-    root /var/www/html;
-    location /.well-known/acme-challenge/ { try_files \$uri =404; }
-    location / { return 301 https://\$host\$request_uri; }
-}
-EOF
-
-sudo ln -sf "${NGINX_CERTBOT_TMP}" "/etc/nginx/sites-enabled/${SERVICE_NAME}-certbot-tmp"
-sudo nginx -t && sudo systemctl reload nginx
-
-# Obtain the certificate (skip if it already exists for this domain)
-CERT_FOUND=false
-for SUFFIX in "" "-0001" "-0002" "-0003"; do
-    if [ -f "/etc/letsencrypt/live/${DOMAIN}${SUFFIX}/fullchain.pem" ]; then
-        CERT_DIR="${DOMAIN}${SUFFIX}"
-        CERT_FOUND=true
-        info "Existing certificate found at /etc/letsencrypt/live/${CERT_DIR}/ – skipping certbot."
-        break
-    fi
-done
-
-if [ "$CERT_FOUND" = false ]; then
-    info "Requesting SSL certificate for ${DOMAIN} and www.${DOMAIN}..."
-    sudo certbot certonly \
-        --webroot \
-        --webroot-path /var/www/html \
-        --non-interactive \
-        --agree-tos \
-        --register-unsafely-without-email \
-        -d "${DOMAIN}" \
-        -d "www.${DOMAIN}"
-
-    # Detect the actual cert directory certbot created (base or -000x suffix)
-    CERT_DIR=""
-    for SUFFIX in "" "-0001" "-0002" "-0003"; do
-        if [ -f "/etc/letsencrypt/live/${DOMAIN}${SUFFIX}/fullchain.pem" ]; then
-            CERT_DIR="${DOMAIN}${SUFFIX}"
-            break
-        fi
-    done
-
-    [[ -z "$CERT_DIR" ]] && error "Certbot ran but certificate not found. Check: sudo certbot certificates"
-    success "SSL certificate issued. Cert dir: /etc/letsencrypt/live/${CERT_DIR}/"
 fi
 
 # ─── Deploy the full HTTPS nginx config ──────────────────────────────────────
