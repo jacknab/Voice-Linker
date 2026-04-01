@@ -1726,7 +1726,6 @@ export async function registerRoutes(
     }
 
     const gather = twiml.gather({
-      numDigits: 5,
       finishOnKey: "#",
       action: "/voice/handle-membership-entry",
       timeout: 10,
