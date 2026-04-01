@@ -1390,6 +1390,18 @@ interface SiteSettingsData {
   siteCategory: string;
 }
 
+function SiteLabelRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-6 items-start py-5 border-b border-gray-100 last:border-0">
+      <div className="sm:pt-1">
+        <p className="text-sm font-semibold text-gray-700">{label}</p>
+        {hint && <p className="text-xs text-gray-400 mt-0.5 leading-snug">{hint}</p>}
+      </div>
+      <div className="sm:col-span-2">{children}</div>
+    </div>
+  );
+}
+
 function WebsiteSettingsTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1441,16 +1453,6 @@ function WebsiteSettingsTab() {
     );
   }
 
-  const LabelRow = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-6 items-start py-5 border-b border-gray-100 last:border-0">
-      <div className="sm:pt-1">
-        <p className="text-sm font-semibold text-gray-700">{label}</p>
-        {hint && <p className="text-xs text-gray-400 mt-0.5 leading-snug">{hint}</p>}
-      </div>
-      <div className="sm:col-span-2">{children}</div>
-    </div>
-  );
-
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
       <h2 className="text-base font-semibold text-gray-900 mb-1">Website Settings</h2>
@@ -1458,7 +1460,7 @@ function WebsiteSettingsTab() {
 
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <div className="px-6 py-2">
-          <LabelRow label="Site Name" hint="Shown in the browser tab, header, and footer.">
+          <SiteLabelRow label="Site Name" hint="Shown in the browser tab, header, and footer.">
             <input
               type="text"
               value={siteName}
@@ -1467,9 +1469,9 @@ function WebsiteSettingsTab() {
               data-testid="input-site-name"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-          </LabelRow>
+          </SiteLabelRow>
 
-          <LabelRow label="Fallback Phone Number" hint="Displayed when a caller's local number cannot be determined.">
+          <SiteLabelRow label="Fallback Phone Number" hint="Displayed when a caller's local number cannot be determined.">
             <input
               type="text"
               value={fallbackPhone}
@@ -1478,9 +1480,9 @@ function WebsiteSettingsTab() {
               data-testid="input-fallback-phone"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-          </LabelRow>
+          </SiteLabelRow>
 
-          <LabelRow label="Customer Service Email" hint="If set, shown in the footer as a support contact. Leave blank to hide.">
+          <SiteLabelRow label="Customer Service Email" hint="If set, shown in the footer as a support contact. Leave blank to hide.">
             <input
               type="email"
               value={csEmail}
@@ -1489,9 +1491,9 @@ function WebsiteSettingsTab() {
               data-testid="input-cs-email"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-          </LabelRow>
+          </SiteLabelRow>
 
-          <LabelRow label="Customer Service Phone" hint="If set, shown on the public site as a support number. Leave blank to hide.">
+          <SiteLabelRow label="Customer Service Phone" hint="If set, shown on the public site as a support number. Leave blank to hide.">
             <input
               type="text"
               value={csPhone}
@@ -1500,9 +1502,9 @@ function WebsiteSettingsTab() {
               data-testid="input-cs-phone"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
-          </LabelRow>
+          </SiteLabelRow>
 
-          <LabelRow
+          <SiteLabelRow
             label="Site Category"
             hint="Sets the audience type for this system. MM = Men seeking Men (gay). MW = Men seeking Women (straight). Controls hero images and on-site language."
           >
@@ -1515,7 +1517,7 @@ function WebsiteSettingsTab() {
               <option value="MM">MM — Men seeking Men (gay / bi)</option>
               <option value="MW">MW — Men seeking Women (straight)</option>
             </select>
-          </LabelRow>
+          </SiteLabelRow>
         </div>
       </div>
 
