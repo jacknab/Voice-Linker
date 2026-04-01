@@ -87,9 +87,6 @@ export default function Landing() {
                 {l.label}
               </button>
             ))}
-            <button onClick={() => setMobileOpen(v => !v)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", padding: "0.25rem" }}>
-              <Menu className="w-5 h-5" />
-            </button>
           </div>
 
           {/* Mobile hamburger */}
