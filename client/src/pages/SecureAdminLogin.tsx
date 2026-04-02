@@ -20,7 +20,6 @@ export default function SecureAdminLogin() {
     // Check if sequence matches
     if (newSequence.length === CORRECT_SEQUENCE.length) {
       if (JSON.stringify(newSequence) === JSON.stringify(CORRECT_SEQUENCE)) {
-        toast({ title: "Access Granted", description: "Welcome to Admin Panel" });
         // Set a simple session flag
         sessionStorage.setItem('adminAuthenticated', 'true');
         setLocation("/admin");
@@ -66,7 +65,7 @@ export default function SecureAdminLogin() {
     }}>
       <div style={{ width: "100%", maxWidth: "400px" }}>
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+        <div style={{ textAlign: "center", marginBottom: "2rem", display: "none" }}>
           <div style={{ 
             width: 80, 
             height: 80, 
@@ -108,7 +107,8 @@ export default function SecureAdminLogin() {
           padding: "1.5rem", 
           marginBottom: "1.5rem",
           position: "relative",
-          overflow: "hidden"
+          overflow: "hidden",
+          display: "none"
         }}>
           {/* Progress bar */}
           <div style={{
@@ -331,7 +331,8 @@ export default function SecureAdminLogin() {
           textAlign: "center", 
           color: "#555", 
           fontSize: "0.75rem", 
-          fontFamily: "monospace" 
+          fontFamily: "monospace",
+          display: "none"
         }}>
           <p>Enter the correct sequence to continue</p>
         </div>
