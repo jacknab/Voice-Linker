@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -4463,6 +4463,12 @@ export default function Admin({ onLogout }: AdminProps) {
   const [showUpload, setShowUpload] = useState(false);
   const [showAddRegion, setShowAddRegion] = useState(false);
   const [saveMembership, setSaveMembership] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Auto-collapse sidebar when switching to IVR Flow Map for more canvas space
+  useEffect(() => {
+    if (activeTab === "ivr-flow") setSidebarOpen(false);
+  }, [activeTab]);
 
   const logoutMutation = useMutation({
     mutationFn: () => fetch("/api/admin/logout", { method: "POST" }),
@@ -4482,22 +4488,34 @@ export default function Admin({ onLogout }: AdminProps) {
     <div className="flex h-screen bg-white overflow-hidden">
 
       {/* ── Sidebar ── */}
-      <aside className="w-52 bg-[#111827] flex flex-col flex-shrink-0">
+      <aside
+        className="bg-[#111827] flex flex-col flex-shrink-0 overflow-hidden transition-all duration-200 ease-in-out"
+        style={{ width: sidebarOpen ? "208px" : "0px" }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 min-w-[208px]">
           <div className="flex items-center gap-2.5">
             <div className="w-6 h-6 grid grid-cols-2 gap-0.5 opacity-80">
               {[...Array(4)].map((_, i) => <div key={i} className="bg-[#f5a623] rounded-[1px]" />)}
             </div>
             <span className="text-white font-mono font-bold text-sm tracking-widest">BACK OFFICE</span>
           </div>
-          <Link href="/">
-            <X size={14} className="text-white/40 hover:text-white/80 transition-colors cursor-pointer" />
-          </Link>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setSidebarOpen(false)}
+              title="Collapse sidebar"
+              className="text-white/30 hover:text-white/70 transition-colors"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <Link href="/">
+              <X size={14} className="text-white/40 hover:text-white/80 transition-colors cursor-pointer" />
+            </Link>
+          </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 py-3 px-2 space-y-0.5 overflow-y-auto min-w-[208px]">
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -4516,7 +4534,7 @@ export default function Admin({ onLogout }: AdminProps) {
         </nav>
 
         {/* Bottom */}
-        <div className="px-2 py-3 border-t border-white/10 space-y-0.5">
+        <div className="px-2 py-3 border-t border-white/10 space-y-0.5 min-w-[208px]">
           <button
             data-testid="btn-admin-logout"
             onClick={() => logoutMutation.mutate()}
@@ -4528,6 +4546,44 @@ export default function Admin({ onLogout }: AdminProps) {
           </button>
         </div>
       </aside>
+
+      {/* ── Collapsed sidebar rail ── */}
+      {!sidebarOpen && (
+        <div className="bg-[#111827] flex flex-col flex-shrink-0 w-8 border-r border-white/10">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            title="Expand sidebar"
+            className="flex items-center justify-center h-12 text-white/30 hover:text-white/80 hover:bg-white/5 transition-colors w-full"
+          >
+            <ChevronRight size={14} />
+          </button>
+          {/* Active tab indicator dot */}
+          <div className="flex-1 flex flex-col items-center pt-1 gap-1.5">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => { setActiveTab(tab.id); setSidebarOpen(true); }}
+                title={tab.label}
+                className={`w-6 h-6 rounded flex items-center justify-center transition-colors ${
+                  activeTab === tab.id
+                    ? "bg-[#f5a623]/20 text-[#f5a623]"
+                    : "text-white/20 hover:text-white/50 hover:bg-white/5"
+                }`}
+              >
+                {tab.icon}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => logoutMutation.mutate()}
+            disabled={logoutMutation.isPending}
+            title="Sign Out"
+            className="flex items-center justify-center h-10 text-white/20 hover:text-white/50 transition-colors w-full border-t border-white/10"
+          >
+            <LogOut size={13} />
+          </button>
+        </div>
+      )}
 
       {/* ── Main content ── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-gray-50">
@@ -4545,7 +4601,7 @@ export default function Admin({ onLogout }: AdminProps) {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className={`flex-1 min-h-0 ${activeTab === "ivr-flow" ? "overflow-hidden p-0" : "overflow-y-auto p-6"}`}>
           {showUpload && <UploadDialog onClose={() => setShowUpload(false)} />}
           {showAddRegion && <RegionDialog onClose={() => setShowAddRegion(false)} />}
 
