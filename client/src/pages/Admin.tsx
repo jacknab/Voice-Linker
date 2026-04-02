@@ -2787,6 +2787,245 @@ const FLAG_REASONS = [
   "Other",
 ];
 
+// ── FlaggedAudioPlayer ────────────────────────────────────────────────────────
+function FlaggedAudioPlayer({ url, label }: { url: string; label: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const toggle = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) { a.pause(); setPlaying(false); }
+    else { a.play(); setPlaying(true); }
+  };
+
+  return (
+    <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+      <audio
+        ref={audioRef}
+        src={url}
+        onTimeUpdate={e => {
+          const a = e.currentTarget;
+          setProgress(a.duration ? a.currentTime / a.duration : 0);
+        }}
+        onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
+        onEnded={() => { setPlaying(false); setProgress(0); }}
+      />
+      <button
+        data-testid={`btn-play-flagged-audio`}
+        onClick={toggle}
+        className="w-7 h-7 rounded-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0 transition-colors"
+      >
+        {playing ? <Pause size={12} /> : <Play size={12} />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-gray-600 font-medium truncate">{label}</div>
+        <div className="mt-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-blue-500 rounded-full transition-all"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
+      </div>
+      {duration > 0 && (
+        <span className="text-[10px] font-mono text-gray-400 flex-shrink-0">
+          {fmtSecs(Math.round(duration))}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── FlaggedCard ───────────────────────────────────────────────────────────────
+function FlaggedCard({
+  item,
+  onResolve,
+  onDelete,
+  resolving,
+  deleting,
+}: {
+  item: FlaggedItem;
+  onResolve: (id: string, status: string) => void;
+  onDelete: (id: string) => void;
+  resolving: boolean;
+  deleting: boolean;
+}) {
+  const isProfile = item.contentType === "profile";
+  const isMessage = item.contentType === "message";
+  const recordingUrl = isProfile ? item.profileRecordingUrl : item.messageRecordingUrl;
+
+  const contentOwner = isProfile
+    ? item.profilePhone
+    : item.messageFromPhone;
+
+  const contentTypeLabel = isProfile ? "Profile Greeting" : "Voice Message";
+
+  const statusColors: Record<string, string> = {
+    pending:  "bg-amber-50 border-amber-300 text-amber-700",
+    approved: "bg-emerald-50 border-emerald-300 text-emerald-700",
+    removed:  "bg-red-50 border-red-300 text-red-600",
+  };
+  const statusColor = statusColors[item.status] ?? "bg-gray-50 border-gray-300 text-gray-500";
+
+  const typeColors = isProfile
+    ? "bg-blue-50 border-blue-200 text-blue-700"
+    : "bg-purple-50 border-purple-200 text-purple-700";
+
+  return (
+    <div
+      data-testid={`row-flag-${item.id}`}
+      className={`border rounded-xl overflow-hidden ${
+        item.status === "pending"
+          ? "border-amber-200 bg-white"
+          : item.status === "removed"
+          ? "border-red-100 bg-red-50/30"
+          : "border-gray-200 bg-gray-50/50"
+      }`}
+    >
+      {/* Card header */}
+      <div className={`flex items-center gap-3 px-4 py-3 border-b ${
+        item.status === "pending" ? "bg-amber-50/60 border-amber-100" :
+        item.status === "removed" ? "bg-red-50/60 border-red-100" :
+        "bg-gray-50 border-gray-100"
+      }`}>
+        <span className={`${C.badge} ${typeColors} text-[11px]`}>{contentTypeLabel}</span>
+        <span className={`${C.badge} ${statusColor} text-[11px]`}>{item.status.toUpperCase()}</span>
+        <span className="ml-auto text-xs text-gray-400">
+          Flagged {item.createdAt ? new Date(item.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+        </span>
+        {item.reviewedAt && (
+          <span className="text-xs text-gray-400">
+            · Reviewed {new Date(item.reviewedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          </span>
+        )}
+      </div>
+
+      {/* Card body */}
+      <div className="px-4 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Left: flagged content info */}
+        <div className="space-y-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+              {isProfile ? "Caller's Profile" : "Voice Message"}
+            </div>
+            {isProfile && contentOwner && (
+              <div className="flex items-center gap-2">
+                <Phone size={13} className="text-gray-400 flex-shrink-0" />
+                <span className="font-mono text-sm text-gray-800 font-semibold">{contentOwner}</span>
+              </div>
+            )}
+            {isMessage && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-gray-400 w-6">FROM</span>
+                  <Phone size={11} className="text-gray-400" />
+                  <span className="font-mono text-sm text-gray-800 font-semibold">{item.messageFromPhone ?? "Unknown"}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-gray-400 w-6">TO</span>
+                  <Phone size={11} className="text-gray-400" />
+                  <span className="font-mono text-sm text-gray-700">{item.messageToPhone ?? "Unknown"}</span>
+                </div>
+              </div>
+            )}
+            {isProfile && item.profileDuration != null && (
+              <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                <Volume2 size={10} /> {fmtSecs(item.profileDuration)} recording
+              </div>
+            )}
+          </div>
+
+          {/* Audio player */}
+          {recordingUrl ? (
+            <FlaggedAudioPlayer
+              url={recordingUrl}
+              label={isProfile ? "Play Profile Greeting" : "Play Voice Message"}
+            />
+          ) : (
+            <div className="flex items-center gap-2 bg-gray-50 border border-dashed border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-400">
+              <VolumeX size={13} /> No recording available
+            </div>
+          )}
+        </div>
+
+        {/* Right: report info */}
+        <div className="space-y-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+              Reported By
+            </div>
+            <div className="flex items-center gap-2">
+              {item.reportedByPhone ? (
+                <>
+                  <Phone size={13} className="text-gray-400 flex-shrink-0" />
+                  <span className="font-mono text-sm text-gray-700">{item.reportedByPhone}</span>
+                </>
+              ) : (
+                <span className="text-xs text-gray-400 italic">System / auto-flagged</span>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+              Reason
+            </div>
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+              <AlertTriangle size={13} className="text-amber-500 mt-0.5 flex-shrink-0" />
+              <span className="text-sm text-amber-800">{item.reason}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Actions footer */}
+      <div className="flex items-center gap-2 px-4 py-3 border-t border-gray-100 bg-gray-50/50 flex-wrap">
+        {item.status === "pending" && (
+          <>
+            <button
+              data-testid={`btn-approve-flag-${item.id}`}
+              onClick={() => onResolve(item.id, "approved")}
+              disabled={resolving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50"
+            >
+              <CheckCircle2 size={13} /> Approve — Content OK
+            </button>
+            <button
+              data-testid={`btn-remove-flag-${item.id}`}
+              onClick={() => onResolve(item.id, "removed")}
+              disabled={resolving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50"
+            >
+              <XCircle size={13} /> Remove Content
+            </button>
+          </>
+        )}
+        {item.status !== "pending" && (
+          <button
+            data-testid={`btn-reopen-flag-${item.id}`}
+            onClick={() => onResolve(item.id, "pending")}
+            disabled={resolving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 transition-colors"
+          >
+            <Flag size={13} /> Re-open Review
+          </button>
+        )}
+        <button
+          data-testid={`btn-delete-flag-${item.id}`}
+          onClick={() => onDelete(item.id)}
+          disabled={deleting}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 bg-white hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-gray-400 transition-colors"
+        >
+          <Trash2 size={13} /> Dismiss Record
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── FlaggedContentTab ─────────────────────────────────────────────────────────
 function FlaggedContentTab() {
   const [statusFilter, setStatusFilter] = useState<"pending" | "approved" | "removed" | "all">("pending");
   const [showAddFlag, setShowAddFlag] = useState(false);
@@ -2829,36 +3068,31 @@ function FlaggedContentTab() {
     },
   });
 
-  const statusBadge = (s: string) => {
-    if (s === "pending")  return "bg-amber-50 border-amber-200 text-amber-700";
-    if (s === "approved") return "bg-emerald-50 border-emerald-200 text-emerald-700";
-    if (s === "removed")  return "bg-red-50 border-red-200 text-red-600";
-    return "bg-gray-50 border-gray-200 text-gray-500";
-  };
-
-  const typeBadge = (t: string) => t === "profile"
-    ? "bg-blue-50 border-blue-200 text-blue-700"
-    : "bg-purple-50 border-purple-200 text-purple-700";
-
-  const displayLabel = (item: FlaggedItem) => {
-    if (item.contentType === "profile") return item.profilePhone ?? item.contentId.slice(0, 8);
-    return item.messageFromPhone ? `${item.messageFromPhone} → ${item.messageToPhone ?? "?"}` : item.contentId.slice(0, 8);
-  };
-
   const pendingCount = (allItems ?? []).filter(i => i.status === "pending").length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5 text-gray-400 font-mono text-xs">
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
           {(["pending", "approved", "removed", "all"] as const).map(s => (
             <button
               key={s}
               data-testid={`btn-filter-${s}`}
               onClick={() => setStatusFilter(s)}
-              className={`px-2.5 py-0.5 rounded font-mono text-xs tracking-widest uppercase transition-colors ${statusFilter === s ? "bg-[#f5a623] text-black" : "text-gray-400 hover:text-gray-700"}`}
-            >{s}{s === "pending" && pendingCount > 0 ? ` (${pendingCount})` : ""}</button>
+              className={`px-3 py-1 rounded-md font-mono text-xs tracking-wide uppercase transition-colors ${
+                statusFilter === s
+                  ? "bg-white shadow-sm text-gray-800 font-semibold"
+                  : "text-gray-400 hover:text-gray-600"
+              }`}
+            >
+              {s}
+              {s === "pending" && pendingCount > 0 && (
+                <span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
           ))}
         </div>
         <span className="ml-auto" />
@@ -2871,8 +3105,10 @@ function FlaggedContentTab() {
 
       {/* Manual Flag Form */}
       {showAddFlag && (
-        <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
-          <h3 className="font-mono text-xs font-bold tracking-widest uppercase text-amber-800">Flag Content Manually</h3>
+        <div className="border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
+          <h3 className="font-semibold text-sm text-amber-800 flex items-center gap-2">
+            <Flag size={14} className="text-amber-600" /> Flag Content Manually
+          </h3>
           <div className="flex flex-wrap gap-3 items-end">
             <div className="space-y-1">
               <label className="font-mono text-xs text-gray-500 uppercase tracking-widest">Type</label>
@@ -2880,10 +3116,10 @@ function FlaggedContentTab() {
                 data-testid="select-flag-type"
                 value={addForm.contentType}
                 onChange={e => setAddForm(f => ({ ...f, contentType: e.target.value }))}
-                className="border border-gray-200 rounded px-2 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none focus:border-[#f5a623]"
+                className="border border-gray-200 rounded-lg px-2 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none focus:border-[#f5a623]"
               >
-                <option value="profile">Profile</option>
-                <option value="message">Message</option>
+                <option value="profile">Profile Greeting</option>
+                <option value="message">Voice Message</option>
               </select>
             </div>
             <div className="space-y-1 flex-1 min-w-48">
@@ -2894,7 +3130,7 @@ function FlaggedContentTab() {
                 placeholder="paste UUID here…"
                 value={addForm.contentId}
                 onChange={e => setAddForm(f => ({ ...f, contentId: e.target.value.trim() }))}
-                className="w-full border border-gray-200 rounded px-2 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none focus:border-[#f5a623]"
+                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none focus:border-[#f5a623]"
               />
             </div>
             <div className="space-y-1">
@@ -2903,7 +3139,7 @@ function FlaggedContentTab() {
                 data-testid="select-flag-reason"
                 value={addForm.reason}
                 onChange={e => setAddForm(f => ({ ...f, reason: e.target.value }))}
-                className="border border-gray-200 rounded px-2 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none focus:border-[#f5a623]"
+                className="border border-gray-200 rounded-lg px-2 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none focus:border-[#f5a623]"
               >
                 {FLAG_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
@@ -2927,103 +3163,32 @@ function FlaggedContentTab() {
         </div>
       )}
 
-      {/* Queue table */}
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr>
-              <th className={C.th}>Type</th>
-              <th className={C.th}>Content</th>
-              <th className={C.th}>Reason</th>
-              <th className={C.th}>Reported By</th>
-              <th className={C.th}>Flagged</th>
-              <th className={C.th}>Status</th>
-              <th className={C.th}>Reviewed</th>
-              <th className={C.th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest"><Loader2 size={14} className="inline animate-spin mr-2" />LOADING…</td></tr>
-            ) : !items || items.length === 0 ? (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">
-                {statusFilter === "pending" ? "NO PENDING FLAGS" : "NO ITEMS IN THIS CATEGORY"}
-              </td></tr>
-            ) : items.map(item => (
-              <tr key={item.id} data-testid={`row-flag-${item.id}`} className={C.row}>
-                <td className={C.td}>
-                  <span className={`${C.badge} ${typeBadge(item.contentType)}`}>{item.contentType.toUpperCase()}</span>
-                </td>
-                <td className={C.td}>
-                  <div className="space-y-0.5">
-                    <div className="font-mono text-xs text-gray-800">{displayLabel(item)}</div>
-                    {item.contentType === "profile" && item.profileDuration != null && (
-                      <div className="font-mono text-xs text-gray-400">{fmtSecs(item.profileDuration)} recording</div>
-                    )}
-                    <div className="font-mono text-[10px] text-gray-300">{item.contentId.slice(0, 12)}…</div>
-                  </div>
-                </td>
-                <td className={C.td}>
-                  <div className="flex items-center gap-1.5 text-xs text-gray-600">
-                    <AlertTriangle size={11} className="text-amber-400 shrink-0" />
-                    {item.reason}
-                  </div>
-                </td>
-                <td className={C.td + " font-mono text-xs text-gray-500"}>
-                  {item.reportedByPhone ?? <span className="text-gray-300 italic">auto</span>}
-                </td>
-                <td className={C.td + " text-gray-400 text-xs"}>
-                  {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "—"}
-                </td>
-                <td className={C.td}>
-                  <span className={`${C.badge} ${statusBadge(item.status)}`}>{item.status.toUpperCase()}</span>
-                </td>
-                <td className={C.td + " text-gray-400 text-xs"}>
-                  {item.reviewedAt ? new Date(item.reviewedAt).toLocaleDateString() : "—"}
-                </td>
-                <td className={C.td}>
-                  <div className="flex items-center gap-1">
-                    {item.status === "pending" && (
-                      <>
-                        <button
-                          data-testid={`btn-approve-flag-${item.id}`}
-                          title="Approve — keep content visible"
-                          onClick={() => resolveMutation.mutate({ id: item.id, status: "approved" })}
-                          disabled={resolveMutation.isPending}
-                          className="flex items-center gap-0.5 px-2 py-1 rounded text-xs font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition-colors"
-                        ><CheckCircle2 size={11} /> OK</button>
-                        <button
-                          data-testid={`btn-remove-flag-${item.id}`}
-                          title="Remove — mark content for removal"
-                          onClick={() => resolveMutation.mutate({ id: item.id, status: "removed" })}
-                          disabled={resolveMutation.isPending}
-                          className="flex items-center gap-0.5 px-2 py-1 rounded text-xs font-mono bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition-colors"
-                        ><XCircle size={11} /> Remove</button>
-                      </>
-                    )}
-                    {item.status !== "pending" && (
-                      <button
-                        data-testid={`btn-reopen-flag-${item.id}`}
-                        title="Re-open flag as pending"
-                        onClick={() => resolveMutation.mutate({ id: item.id, status: "pending" })}
-                        disabled={resolveMutation.isPending}
-                        className="flex items-center gap-0.5 px-2 py-1 rounded text-xs font-mono bg-gray-50 border border-gray-200 text-gray-500 hover:bg-gray-100 transition-colors"
-                      ><Flag size={11} /> Reopen</button>
-                    )}
-                    <button
-                      data-testid={`btn-delete-flag-${item.id}`}
-                      title="Dismiss flag record"
-                      onClick={() => deleteMutation.mutate(item.id)}
-                      disabled={deleteMutation.isPending}
-                      className="flex items-center gap-0.5 px-2 py-1 rounded text-xs font-mono bg-gray-50 border border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-red-500 transition-colors"
-                    ><Trash2 size={11} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Cards */}
+      {isLoading ? (
+        <div className="py-16 text-center text-gray-400 font-mono text-xs tracking-widest">
+          <Loader2 size={16} className="inline animate-spin mr-2" />LOADING…
+        </div>
+      ) : !items || items.length === 0 ? (
+        <div className="py-16 text-center border border-dashed border-gray-200 rounded-xl">
+          <Flag size={28} className="mx-auto mb-3 text-gray-300" />
+          <div className="text-gray-400 font-medium text-sm">
+            {statusFilter === "pending" ? "No pending flags — you're all caught up" : "No items in this category"}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {items.map(item => (
+            <FlaggedCard
+              key={item.id}
+              item={item}
+              onResolve={(id, status) => resolveMutation.mutate({ id, status })}
+              onDelete={id => deleteMutation.mutate(id)}
+              resolving={resolveMutation.isPending}
+              deleting={deleteMutation.isPending}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
