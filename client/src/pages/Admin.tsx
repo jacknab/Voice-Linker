@@ -10,8 +10,9 @@ import {
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ChevronRight, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
-  BarChart2, TrendingUp, RefreshCw,
+  BarChart2, TrendingUp, RefreshCw, GitBranch,
 } from "lucide-react";
+import IvrFlowMap from "./admin/IvrFlowMap";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -42,7 +43,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow";
 
 interface FlaggedItem {
   id: string;
@@ -4414,6 +4415,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "analytics",      label: "Analytics",       icon: <BarChart2 size={15} /> },
   { id: "audit-log",      label: "Audit Log",       icon: <TrendingUp size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
+  { id: "ivr-flow",       label: "IVR Flow Map",    icon: <GitBranch size={15} /> },
   { id: "site-settings",  label: "Website Settings", icon: <Settings size={15} /> },
 ];
 
@@ -4564,6 +4566,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "analytics"      && <AnalyticsTab />}
           {activeTab === "audit-log"      && <AuditLogTab />}
           {activeTab === "phone-testing"  && <IVRTesterTab />}
+          {activeTab === "ivr-flow"       && <IvrFlowMap />}
           {activeTab === "site-settings"  && <WebsiteSettingsTab />}
         </div>
       </div>
