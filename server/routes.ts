@@ -2751,7 +2751,7 @@ export async function registerRoutes(
       if (digit === "1") {
         await storage.markMessageRead(msgId);
         playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}&returnTo=mailbox` });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}&returnTo=mailbox` });
       } else if (digit === "2") {
         await storage.markMessageRead(msgId);
         const senderProfile = await storage.getProfile(senderId);
@@ -2799,7 +2799,7 @@ export async function registerRoutes(
 
       if (digit === "1") {
         playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}&returnTo=mailbox` });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}&returnTo=mailbox` });
       } else {
         twiml.redirect("/voice/my-mailbox");
       }
@@ -2946,7 +2946,7 @@ export async function registerRoutes(
     try {
       if (digit === "1") {
         playPrompt(twiml, req, "record_message.mp3", "Record your message for this guy after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${toUserId}&returnTo=category&category=${category}` });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${toUserId}&returnTo=category&category=${category}` });
       } else if (digit === "2") {
         twiml.redirect(`/voice/browse-category-ads?category=${category}`);
       } else if (digit === "9") {
@@ -3048,7 +3048,7 @@ export async function registerRoutes(
     try {
       if (digit === "1") {
         playPrompt(twiml, req, "record_message.mp3", "Record your message for this guy after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${toUserId}&returnTo=mailbox` });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${toUserId}&returnTo=mailbox` });
       } else if (digit === "9") {
         twiml.redirect(`/voice/mailbox-lookup?mode=${mode}`);
       } else if (digit === "#") {
@@ -3972,7 +3972,7 @@ export async function registerRoutes(
       if (digit === "1") {
         await storage.markMessageRead(msgId);
         playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}` });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}` });
       } else if (digit === "2") {
         const senderProfile = await storage.getProfile(senderId);
         const senderGather = twiml.gather({
@@ -4053,7 +4053,7 @@ export async function registerRoutes(
       if (digit === "1") {
         await storage.markMessageRead(msgId);
         playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${senderId}` });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}` });
       } else if (digit === "2") {
         await storage.markMessageRead(msgId);
         twiml.redirect("/voice/browse-profiles");
@@ -4084,7 +4084,7 @@ export async function registerRoutes(
 
       if (digit === "1") {
         playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${profileUserId}` });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
       } else if (digit === "2") {
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "3") {
@@ -4288,7 +4288,7 @@ export async function registerRoutes(
     try {
       if (digit === "1" && profileUserId) {
         playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-message?toUserId=${profileUserId}` });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
       } else {
         twiml.redirect("/voice/browse-profiles");
       }
@@ -4558,7 +4558,113 @@ export async function registerRoutes(
     res.send(twiml.toString());
   });
 
-  // ─── 9. Save Message ──────────────────────────────────────────────────────
+  // ─── 9a. Review Message (play back + confirm before sending) ─────────────
+  // Keyed by CallSid so each active call has its own pending recording.
+  const pendingMessages = new Map<string, {
+    recordingUrl: string; toUserId: string; returnTo: string; category: string;
+  }>();
+
+  function cancelReturnPath(returnTo: string, category: string): string {
+    if (returnTo === "mailbox") return "/voice/my-mailbox";
+    if (returnTo === "category" && category) return `/voice/browse-category-ads?category=${category}`;
+    return "/voice/browse-profiles";
+  }
+
+  app.post("/voice/review-message", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const recordingUrl = req.body?.RecordingUrl as string;
+    const duration = parseInt(req.body?.RecordingDuration || "0", 10);
+    const toUserId = req.query.toUserId as string;
+    const returnTo = (req.query.returnTo as string) || "";
+    const category = (req.query.category as string) || "";
+
+    try {
+      if (!recordingUrl || duration === 0) {
+        playPrompt(twiml, req, "no_recording.mp3", "No recording was detected.");
+        twiml.redirect(cancelReturnPath(returnTo, category));
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      pendingMessages.set(callSid, { recordingUrl, toUserId, returnTo, category });
+
+      const gather = twiml.gather({
+        numDigits: 1,
+        action: `/voice/handle-review-message`,
+        timeout: 10,
+      });
+      playPrompt(gather, req, "review_your_message.mp3", "Here is your recorded message.");
+      safePlayRecording(gather, recordingUrl, req, "");
+      gather.say("Press 1 to send. Press 2 to cancel.");
+      // No input → cancel
+      twiml.redirect(cancelReturnPath(returnTo, category));
+    } catch (err) {
+      console.error("[voice] /voice/review-message error:", err);
+      twiml.redirect(cancelReturnPath(returnTo, category));
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-review-message", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
+
+    const pending = pendingMessages.get(callSid);
+    if (!pending) {
+      playPrompt(twiml, req, "error_generic.mp3", "Your session has expired. Returning to main menu.");
+      twiml.redirect("/voice/main-menu");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const { recordingUrl, toUserId, returnTo, category } = pending;
+
+    try {
+      if (digit === "1") {
+        // Send the message
+        pendingMessages.delete(callSid);
+        const user = await getOrCreateUser(fromNumber);
+        if (returnTo === "mailbox" || returnTo === "category") {
+          await syncBilling(callSid);
+        }
+        await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
+        if (returnTo === "mailbox") {
+          playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
+          twiml.redirect("/voice/my-mailbox");
+        } else if (returnTo === "category" && category) {
+          playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to ads.");
+          twiml.redirect(`/voice/browse-category-ads?category=${category}`);
+        } else {
+          playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
+          twiml.redirect("/voice/browse-profiles");
+        }
+      } else if (digit === "2") {
+        // Cancel — discard recording and return
+        pendingMessages.delete(callSid);
+        playPrompt(twiml, req, "message_cancelled.mp3", "Message cancelled.");
+        twiml.redirect(cancelReturnPath(returnTo, category));
+      } else {
+        // Invalid — re-prompt
+        const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-review-message", timeout: 10 });
+        gather.say("Press 1 to send. Press 2 to cancel.");
+        twiml.redirect(cancelReturnPath(returnTo, category));
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-review-message error:", err);
+      pendingMessages.delete(callSid);
+      twiml.redirect(cancelReturnPath(returnTo, category));
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 9b. Save Message (legacy direct path — kept for safety) ─────────────
   app.post("/voice/save-message", async (req, res) => {
     const twiml = new VoiceResponse();
 
