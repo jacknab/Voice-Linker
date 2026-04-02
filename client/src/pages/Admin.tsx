@@ -4397,26 +4397,28 @@ function MembershipCardsTab() {
 }
 
 // ── Tab definitions ───────────────────────────────────────────────────────────
-const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: "dashboard",      label: "Dashboard",      icon: <LayoutDashboard size={15} /> },
-  { id: "callers",        label: "Callers",         icon: <Users size={15} /> },
-  { id: "flagged",        label: "Flagged Content", icon: <Flag size={15} /> },
-  { id: "voice-profiles", label: "Voice Profiles",  icon: <Phone size={15} /> },
-  { id: "regions",        label: "Regions",         icon: <Globe size={15} /> },
-  { id: "memberships",    label: "Memberships",     icon: <CreditCard size={15} /> },
-  { id: "cards",          label: "Member Cards",    icon: <CreditCard size={15} /> },
-  { id: "audio-gen",      label: "Audio Gen",       icon: <Volume2 size={15} /> },
-  { id: "messages",       label: "Messages",        icon: <MessageSquare size={15} /> },
-  { id: "phone-numbers",  label: "Phone Numbers",   icon: <Phone size={15} /> },
-  { id: "blocked",        label: "Blocked Numbers", icon: <X size={15} /> },
-  { id: "promo-codes",    label: "Promo Codes",     icon: <Tag size={15} /> },
-  { id: "zip-codes",      label: "Zip Codes",       icon: <MapPin size={15} /> },
-  { id: "announcements",  label: "Announcements",   icon: <Megaphone size={15} /> },
-  { id: "analytics",      label: "Analytics",       icon: <BarChart2 size={15} /> },
-  { id: "audit-log",      label: "Audit Log",       icon: <TrendingUp size={15} /> },
-  { id: "phone-testing",  label: "Phone Testing",   icon: <PhoneCall size={15} /> },
-  { id: "ivr-flow",       label: "IVR Flow Map",    icon: <GitBranch size={15} /> },
-  { id: "site-settings",  label: "Website Settings", icon: <Settings size={15} /> },
+const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boolean }[] = [
+  // ── Main
+  { id: "dashboard",      label: "Dashboard",        icon: <LayoutDashboard size={15} /> },
+  { id: "callers",        label: "Callers",           icon: <Users size={15} /> },
+  { id: "flagged",        label: "Flagged Content",   icon: <Flag size={15} /> },
+  { id: "voice-profiles", label: "Voice Profiles",    icon: <Phone size={15} /> },
+  { id: "messages",       label: "Messages",          icon: <MessageSquare size={15} /> },
+  { id: "memberships",    label: "$$ Memberships",    icon: <CreditCard size={15} /> },
+  { id: "cards",          label: "Member Cards",      icon: <CreditCard size={15} /> },
+  { id: "audio-gen",      label: "Audio Gen",         icon: <Volume2 size={15} /> },
+  { id: "regions",        label: "Regions",           icon: <Globe size={15} /> },
+  { id: "announcements",  label: "Announcements",     icon: <Megaphone size={15} /> },
+  // ── System Settings
+  { id: "analytics",      label: "Analytics",         icon: <BarChart2 size={15} />,  dividerBefore: true },
+  { id: "audit-log",      label: "Audit Log",         icon: <TrendingUp size={15} /> },
+  { id: "phone-testing",  label: "Phone Testing",     icon: <PhoneCall size={15} /> },
+  { id: "ivr-flow",       label: "IVR Flow Map",      icon: <GitBranch size={15} /> },
+  { id: "phone-numbers",  label: "Phone Numbers",     icon: <Phone size={15} /> },
+  { id: "blocked",        label: "Blocked Numbers",   icon: <X size={15} /> },
+  { id: "promo-codes",    label: "Promo Codes",       icon: <Tag size={15} /> },
+  { id: "zip-codes",      label: "Zip Codes",         icon: <MapPin size={15} /> },
+  { id: "site-settings",  label: "Website Settings",  icon: <Settings size={15} /> },
 ];
 
 // ── Section-level action buttons ──────────────────────────────────────────────
