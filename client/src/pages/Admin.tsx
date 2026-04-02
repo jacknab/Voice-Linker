@@ -6,7 +6,7 @@ import { Link, useLocation } from "wouter";
 import {
   Upload, Trash2, Play, Pause, Plus, Phone, LayoutDashboard,
   MessageSquare, PhoneCall, X, MapPin, Clock, Copy, Eye, EyeOff,
-  Pencil, Globe, Volume2, Wand2, CheckCircle, AlertCircle, Loader2,
+  Pencil, Globe, Volume2, VolumeX, Wand2, CheckCircle, AlertCircle, Loader2,
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ChevronRight, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
@@ -1634,6 +1634,56 @@ function IVRTesterTab() {
   const [numDigits, setNumDigits] = useState<number | null>(null);
   const [digitBuffer, setDigitBuffer] = useState("");
   const [loading, setLoading] = useState(false);
+  const [muted, setMuted] = useState(false);
+
+  // Audio queue: play say/play entries sequentially
+  const audioQueue = useRef<IVRLogEntry[]>([]);
+  const audioPlaying = useRef(false);
+  const currentAudio = useRef<HTMLAudioElement | null>(null);
+  const mutedRef = useRef(false);
+
+  function stopAudio() {
+    if (currentAudio.current) {
+      currentAudio.current.pause();
+      currentAudio.current = null;
+    }
+    window.speechSynthesis?.cancel();
+    audioQueue.current = [];
+    audioPlaying.current = false;
+  }
+
+  function processAudioQueue() {
+    if (audioPlaying.current || audioQueue.current.length === 0) return;
+    if (mutedRef.current) return;
+    const entry = audioQueue.current.shift()!;
+    audioPlaying.current = true;
+
+    if (entry.type === "play" && entry.content.startsWith("/")) {
+      const audio = new Audio(entry.content);
+      currentAudio.current = audio;
+      audio.onended = () => { audioPlaying.current = false; currentAudio.current = null; processAudioQueue(); };
+      audio.onerror = () => { audioPlaying.current = false; currentAudio.current = null; processAudioQueue(); };
+      audio.play().catch(() => { audioPlaying.current = false; processAudioQueue(); });
+    } else if (entry.type === "say" && entry.content && window.speechSynthesis) {
+      const utt = new SpeechSynthesisUtterance(entry.content);
+      utt.rate = 0.95;
+      utt.onend = () => { audioPlaying.current = false; processAudioQueue(); };
+      utt.onerror = () => { audioPlaying.current = false; processAudioQueue(); };
+      window.speechSynthesis.speak(utt);
+    } else {
+      audioPlaying.current = false;
+      processAudioQueue();
+    }
+  }
+
+  function enqueueAudio(entries: IVRLogEntry[]) {
+    for (const e of entries) {
+      if (e.type === "say" || e.type === "play") {
+        audioQueue.current.push(e);
+      }
+    }
+    processAudioQueue();
+  }
 
   function scrollToBottom() {
     setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -1647,11 +1697,13 @@ function IVRTesterTab() {
       setEnded(true);
       setConnected(false);
     }
+    enqueueAudio(result.entries);
     scrollToBottom();
   }
 
   async function handleConnect() {
     if (loading) return;
+    stopAudio();
     setLoading(true);
     setLog([]);
     setDigitBuffer("");
@@ -1677,6 +1729,7 @@ function IVRTesterTab() {
   }
 
   async function handleDisconnect() {
+    stopAudio();
     if (!sessionId) return;
     try {
       await fetch(`/api/ivr-tester/${sessionId}`, { method: "DELETE" });
@@ -1688,6 +1741,15 @@ function IVRTesterTab() {
     setWaitingForInput(false);
     setDigitBuffer("");
     scrollToBottom();
+  }
+
+  function toggleMute() {
+    const next = !muted;
+    setMuted(next);
+    mutedRef.current = next;
+    if (next) {
+      stopAudio();
+    }
   }
 
   async function sendDigits(digits: string) {

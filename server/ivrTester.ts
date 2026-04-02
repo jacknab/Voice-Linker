@@ -31,6 +31,17 @@ export const ivrTestSessions = new Map<string, IVRTestSession>();
 
 const MAX_REDIRECTS = 15;
 
+function extractAudioPath(rawUrl: string, serverBase: string): string {
+  if (!rawUrl) return "";
+  try {
+    const u = new URL(rawUrl);
+    return u.pathname;
+  } catch {
+    if (rawUrl.startsWith("/")) return rawUrl;
+    return `/${rawUrl}`;
+  }
+}
+
 function parseTwiMLAndAdvance(
   xml: string,
   session: IVRTestSession,
@@ -51,9 +62,9 @@ function parseTwiMLAndAdvance(
   }
   const topPlayRe = /<Play[^>]*>([\s\S]*?)<\/Play>/g;
   for (const m of Array.from(xmlWithoutGather.matchAll(topPlayRe))) {
-    const url = m[1].trim();
-    const filename = url.split("/").pop() || url;
-    session.log.push({ type: "play", content: filename, ts });
+    const rawUrl = m[1].trim();
+    const audioPath = extractAudioPath(rawUrl, serverBase);
+    session.log.push({ type: "play", content: audioPath, ts });
   }
 
   // ── Gather ──
@@ -78,9 +89,9 @@ function parseTwiMLAndAdvance(
       if (text) session.log.push({ type: "say", content: text, ts });
     }
     for (const m of Array.from(inner.matchAll(/<Play[^>]*>([\s\S]*?)<\/Play>/g))) {
-      const url = m[1].trim();
-      const filename = url.split("/").pop() || url;
-      session.log.push({ type: "play", content: filename, ts });
+      const rawUrl = m[1].trim();
+      const audioPath = extractAudioPath(rawUrl, serverBase);
+      session.log.push({ type: "play", content: audioPath, ts });
     }
 
     return { redirect: null, hangup: false, waitingForInput: true };
