@@ -458,6 +458,55 @@ export async function registerRoutes(
   // ── Auth routes ───────────────────────────────────────────────────────────
   app.use(authRouter);
 
+  // ── IVR Tester API ─────────────────────────────────────────────────────────
+  {
+    const { ivrTestSessions, createIVRSession, sendIVRInput, endIVRSession } = await import("./ivrTester");
+
+    app.post("/api/ivr-tester/connect", async (req: Request, res: Response) => {
+      const fromNumber = (req.body?.fromNumber as string) || "+19999999999";
+      try {
+        const session = await createIVRSession(fromNumber);
+        res.json({
+          sessionId: session.id,
+          entries: session.log,
+          status: session.status,
+          waitingForInput: session.waitingForInput,
+          numDigits: session.numDigits,
+        });
+      } catch (err: any) {
+        console.error("[ivr-tester] connect error:", err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/ivr-tester/input", async (req: Request, res: Response) => {
+      const { sessionId, digits } = req.body as { sessionId: string; digits: string };
+      const session = ivrTestSessions.get(sessionId);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      if (session.status === "ended") return res.status(400).json({ error: "Session already ended" });
+      const before = session.log.length;
+      try {
+        await sendIVRInput(session, digits);
+        res.json({
+          entries: session.log.slice(before),
+          status: session.status,
+          waitingForInput: session.waitingForInput,
+          numDigits: session.numDigits,
+        });
+      } catch (err: any) {
+        console.error("[ivr-tester] input error:", err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.delete("/api/ivr-tester/:sessionId", async (req: Request, res: Response) => {
+      const session = ivrTestSessions.get(req.params.sessionId as string);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      await endIVRSession(session);
+      res.json({ success: true });
+    });
+  }
+
   // ── Admin auth middleware ─────────────────────────────────────────────────
   // REMOVED: No authentication required for admin access
 

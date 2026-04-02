@@ -1615,6 +1615,309 @@ function PlaceholderTab({ label }: { label: string }) {
   );
 }
 
+// ── IVR Tester Tab ────────────────────────────────────────────────────────────
+interface IVRLogEntry {
+  type: "say" | "play" | "keypress" | "system" | "record" | "conference" | "hangup" | "pay";
+  content: string;
+  ts: number;
+}
+
+function IVRTesterTab() {
+  const { toast } = useToast();
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const [fromNumber, setFromNumber] = useState("+19999999999");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [log, setLog] = useState<IVRLogEntry[]>([]);
+  const [connected, setConnected] = useState(false);
+  const [ended, setEnded] = useState(false);
+  const [waitingForInput, setWaitingForInput] = useState(false);
+  const [numDigits, setNumDigits] = useState<number | null>(null);
+  const [digitBuffer, setDigitBuffer] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function scrollToBottom() {
+    setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+  }
+
+  function applyResult(result: { entries: IVRLogEntry[]; status: string; waitingForInput: boolean; numDigits: number | null }) {
+    setLog(prev => [...prev, ...result.entries]);
+    setWaitingForInput(result.waitingForInput);
+    setNumDigits(result.numDigits);
+    if (result.status === "ended") {
+      setEnded(true);
+      setConnected(false);
+    }
+    scrollToBottom();
+  }
+
+  async function handleConnect() {
+    if (loading) return;
+    setLoading(true);
+    setLog([]);
+    setDigitBuffer("");
+    setEnded(false);
+    setWaitingForInput(false);
+    setNumDigits(null);
+    try {
+      const res = await fetch("/api/ivr-tester/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromNumber: fromNumber.trim() || "+19999999999" }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setSessionId(data.sessionId);
+      setConnected(true);
+      applyResult(data);
+    } catch (err: any) {
+      toast({ title: "Connection failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!sessionId) return;
+    try {
+      await fetch(`/api/ivr-tester/${sessionId}`, { method: "DELETE" });
+    } catch { /* best effort */ }
+    setLog(prev => [...prev, { type: "hangup", content: "Disconnected by admin.", ts: Date.now() }]);
+    setConnected(false);
+    setEnded(true);
+    setSessionId(null);
+    setWaitingForInput(false);
+    setDigitBuffer("");
+    scrollToBottom();
+  }
+
+  async function sendDigits(digits: string) {
+    if (!sessionId || !connected || ended || loading) return;
+
+    let toSend = digits;
+    if (numDigits && numDigits > 1) {
+      const next = digitBuffer + digits;
+      setDigitBuffer(next);
+      setLog(prev => [...prev, { type: "keypress", content: digits, ts: Date.now() }]);
+      scrollToBottom();
+      if (next.length < numDigits) return;
+      toSend = next;
+      setDigitBuffer("");
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/ivr-tester/input", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, digits: toSend }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      applyResult(data);
+    } catch (err: any) {
+      toast({ title: "Input failed", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
+  const keySub: Record<string, string> = {
+    "1": "", "2": "ABC", "3": "DEF", "4": "GHI", "5": "JKL", "6": "MNO",
+    "7": "PQRS", "8": "TUV", "9": "WXYZ", "*": "", "0": "+", "#": "",
+  };
+
+  function entryIcon(type: IVRLogEntry["type"]) {
+    switch (type) {
+      case "say": return <Volume2 size={12} className="text-blue-500 flex-shrink-0 mt-0.5" />;
+      case "play": return <Play size={12} className="text-purple-500 flex-shrink-0 mt-0.5" />;
+      case "keypress": return <Phone size={12} className="text-amber-500 flex-shrink-0 mt-0.5" />;
+      case "record": return <Wand2 size={12} className="text-orange-500 flex-shrink-0 mt-0.5" />;
+      case "conference": return <Users size={12} className="text-green-500 flex-shrink-0 mt-0.5" />;
+      case "hangup": return <PhoneCall size={12} className="text-red-500 flex-shrink-0 mt-0.5" />;
+      case "pay": return <CreditCard size={12} className="text-teal-500 flex-shrink-0 mt-0.5" />;
+      default: return <Settings size={12} className="text-gray-400 flex-shrink-0 mt-0.5" />;
+    }
+  }
+
+  function entryLabel(type: IVRLogEntry["type"]) {
+    switch (type) {
+      case "say": return "SYSTEM";
+      case "play": return "AUDIO";
+      case "keypress": return "KEY";
+      case "record": return "RECORD";
+      case "conference": return "CONF";
+      case "hangup": return "END";
+      case "pay": return "PAY";
+      default: return "INFO";
+    }
+  }
+
+  function entryColor(type: IVRLogEntry["type"]) {
+    switch (type) {
+      case "say": return "text-blue-800";
+      case "play": return "text-purple-800";
+      case "keypress": return "text-amber-700 font-bold";
+      case "hangup": return "text-red-700";
+      case "record": return "text-orange-700";
+      case "conference": return "text-green-700";
+      case "pay": return "text-teal-700";
+      default: return "text-gray-500 italic";
+    }
+  }
+
+  const canType = connected && !ended && waitingForInput && !loading;
+  const showBuffer = numDigits && numDigits > 1 && digitBuffer.length > 0;
+
+  return (
+    <div className="flex gap-6 p-4 min-h-0">
+      {/* Left: Config + Keypad */}
+      <div className="flex flex-col gap-4 w-64 flex-shrink-0">
+        {/* Phone number */}
+        <div className={C.panel}>
+          <div className={C.panelHeader}>Caller Number</div>
+          <div className="p-3">
+            <input
+              data-testid="input-ivr-from-number"
+              type="tel"
+              value={fromNumber}
+              onChange={e => setFromNumber(e.target.value)}
+              disabled={connected}
+              placeholder="+19999999999"
+              className="w-full border border-gray-300 rounded px-3 py-2 font-mono text-sm focus:outline-none focus:border-amber-400 disabled:bg-gray-50 disabled:text-gray-400"
+            />
+            <p className="text-gray-400 font-mono text-xs mt-1.5">Simulates calls from this number</p>
+          </div>
+        </div>
+
+        {/* Status + Connect/Disconnect */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 px-1">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected ? "bg-green-500 animate-pulse" : ended ? "bg-red-400" : "bg-gray-300"}`} />
+            <span className="font-mono text-xs text-gray-600 uppercase tracking-widest">
+              {connected ? "Connected" : ended ? "Call Ended" : "Idle"}
+            </span>
+          </div>
+          {!connected ? (
+            <button
+              data-testid="btn-ivr-connect"
+              onClick={handleConnect}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-600/40 text-white font-mono text-sm font-bold tracking-widest uppercase rounded transition-colors"
+            >
+              {loading ? <Loader2 size={15} className="animate-spin" /> : <Phone size={15} />}
+              {loading ? "Connecting…" : "Connect"}
+            </button>
+          ) : (
+            <button
+              data-testid="btn-ivr-disconnect"
+              onClick={handleDisconnect}
+              className="flex items-center justify-center gap-2 w-full py-3 bg-red-600 hover:bg-red-700 text-white font-mono text-sm font-bold tracking-widest uppercase rounded transition-colors"
+            >
+              <PhoneCall size={15} /> Disconnect
+            </button>
+          )}
+        </div>
+
+        {/* Digit buffer display */}
+        {showBuffer && (
+          <div className="border border-amber-300 bg-amber-50 rounded p-2 text-center font-mono text-lg tracking-widest text-amber-800">
+            {digitBuffer}
+            <span className="text-amber-400 animate-pulse">_</span>
+            <div className="text-amber-500 font-mono text-xs mt-1">{numDigits - digitBuffer.length} more digit{numDigits - digitBuffer.length !== 1 ? "s" : ""}</div>
+          </div>
+        )}
+
+        {/* Telephone Keypad */}
+        <div className={C.panel}>
+          <div className={C.panelHeader}>Keypad</div>
+          <div className="p-3">
+            <div className="grid grid-cols-3 gap-2">
+              {keys.map(k => (
+                <button
+                  key={k}
+                  data-testid={`btn-ivr-key-${k}`}
+                  onClick={() => sendDigits(k)}
+                  disabled={!canType}
+                  className={`flex flex-col items-center justify-center py-3 rounded border font-mono font-bold text-lg transition-all select-none
+                    ${canType
+                      ? "border-gray-300 bg-white hover:bg-amber-50 hover:border-amber-400 active:scale-95 active:bg-amber-100 cursor-pointer text-gray-800"
+                      : "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed"
+                    }`}
+                >
+                  <span>{k}</span>
+                  {keySub[k] && <span className="text-gray-400 text-[9px] font-normal mt-0.5">{keySub[k]}</span>}
+                </button>
+              ))}
+            </div>
+            {!canType && connected && (
+              <p className="text-gray-400 font-mono text-xs text-center mt-2">
+                {loading ? "Processing…" : "Waiting for prompt…"}
+              </p>
+            )}
+            {!connected && !ended && (
+              <p className="text-gray-400 font-mono text-xs text-center mt-2">Connect to enable keypad</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Right: Call Log */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className={C.panel + " flex-1 flex flex-col overflow-hidden"}>
+          <div className={C.panelHeader + " flex items-center justify-between"}>
+            <span>Call Log</span>
+            {log.length > 0 && (
+              <button
+                data-testid="btn-ivr-clear-log"
+                onClick={() => setLog([])}
+                className="text-gray-400 hover:text-white font-mono text-xs tracking-widest transition-colors"
+              >
+                CLEAR
+              </button>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-[400px] max-h-[600px] bg-gray-950 font-mono text-xs">
+            {log.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-40 text-gray-600">
+                <Phone size={28} className="mb-3 opacity-30" />
+                <span className="tracking-widest uppercase text-xs">Press Connect to start a test call</span>
+              </div>
+            )}
+            {log.map((entry, i) => (
+              <div
+                key={i}
+                data-testid={`log-entry-${i}`}
+                className={`flex items-start gap-2 py-1 border-b border-gray-800/50 last:border-0 ${entry.type === "keypress" ? "justify-end" : ""}`}
+              >
+                {entry.type !== "keypress" && (
+                  <>
+                    {entryIcon(entry.type)}
+                    <span className="text-gray-600 text-[10px] pt-0.5 w-12 flex-shrink-0">{entryLabel(entry.type)}</span>
+                  </>
+                )}
+                <span className={`flex-1 leading-relaxed ${entryColor(entry.type)} ${entry.type === "keypress" ? "text-right text-amber-400 font-bold text-sm" : ""}`}>
+                  {entry.type === "keypress" ? `▶ ${entry.content}` : entry.content}
+                </span>
+                {entry.type === "keypress" && entryIcon(entry.type)}
+              </div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+          {/* Legend */}
+          <div className="border-t border-gray-200 px-3 py-2 flex flex-wrap gap-3">
+            {([["say","SYSTEM","text-blue-600"],["play","AUDIO","text-purple-600"],["keypress","KEY PRESS","text-amber-600"],["record","RECORD","text-orange-600"],["hangup","END","text-red-600"]] as const).map(([type, label, color]) => (
+              <span key={type} className={`flex items-center gap-1 font-mono text-[10px] ${color}`}>
+                {entryIcon(type as IVRLogEntry["type"])} {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Phone Numbers Tab ─────────────────────────────────────────────────────────
 interface PhoneStat {
   phoneNumber: string;
@@ -4198,7 +4501,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "announcements"  && <AnnouncementsTab />}
           {activeTab === "analytics"      && <AnalyticsTab />}
           {activeTab === "audit-log"      && <AuditLogTab />}
-          {activeTab === "phone-testing"  && <PlaceholderTab label="Phone Testing" />}
+          {activeTab === "phone-testing"  && <IVRTesterTab />}
           {activeTab === "site-settings"  && <WebsiteSettingsTab />}
         </div>
       </div>
