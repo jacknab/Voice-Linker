@@ -334,7 +334,6 @@ export default function SecureAdminLogin() {
           fontFamily: "monospace" 
         }}>
           <p>Enter the correct sequence to continue</p>
-          <p style={{ marginTop: "0.5rem" }}>Hint: 7764 OK 9348 OK</p>
         </div>
       </div>
 
