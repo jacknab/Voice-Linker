@@ -2970,11 +2970,11 @@ export async function registerRoutes(
   app.post("/voice/mailbox-lookup", async (req, res) => {
     const twiml = new VoiceResponse();
     const mode = (req.query.mode as string) || "listen";
-    const gather = twiml.gather({ numDigits: 5, action: `/voice/handle-mailbox-lookup?mode=${mode}`, timeout: 15 });
+    const gather = twiml.gather({ numDigits: 5, finishOnKey: "#", action: `/voice/handle-mailbox-lookup?mode=${mode}`, timeout: 15 });
     playPrompt(gather, req, "mailbox_lookup.mp3",
-      "Enter the five digit mailbox number you'd like to look up, followed by pound."
+      "Enter the five digit mailbox number you'd like to look up, followed by pound. Or press pound alone to return to the mailbox menu."
     );
-    twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+    twiml.redirect(`/voice/mailbox-menu`);
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -2985,7 +2985,14 @@ export async function registerRoutes(
     const mode = (req.query.mode as string) || "listen";
 
     try {
-      if (!digits || digits.length !== 5) {
+      // Empty digits means caller pressed # alone — return to mailbox menu
+      if (!digits || digits.length === 0) {
+        twiml.redirect("/voice/mailbox-menu");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      if (digits.length !== 5) {
         playPrompt(twiml, req, "invalid_choice.mp3", "Please enter a five digit mailbox number.");
         twiml.redirect(`/voice/mailbox-lookup?mode=${mode}`);
         res.type("text/xml");
