@@ -204,10 +204,9 @@ The generated file includes placeholder lines for every required key — see [Se
 
 Creates `uploads/`, `uploads/mm/`, and `uploads/mw/` if they do not exist. These directories store ElevenLabs-generated MP3 audio files used by the IVR phone system. The app crashes silently on first audio generation if these are missing.
 
-### Step 8 — Database Schema + Admin Account
+### Step 8 — Database Schema
 
-- Runs `npx drizzle-kit push --force` to create or update all database tables to match the current schema
-- Runs `scripts/reset-admin.ts` to create the admin account (or reset it if it already exists)
+Runs `npx drizzle-kit push --force` to create or update all database tables to match the current schema.
 
 ### Step 9 — Production Build
 
@@ -528,11 +527,4 @@ Once the app is running, access the admin panel at:
 
 ```
 https://yourdomain.com/admin
-```
-
-The admin panel is protected by a secure numeric keypad sequence. Use the on-screen keypad to enter the sequence. If you need to reset the admin credentials, re-run Step 8:
-
-```bash
-bash setup.sh yourdomain.com
-# Choose: 9) Step 8 – Database schema + admin account
 ```

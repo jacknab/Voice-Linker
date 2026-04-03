@@ -358,16 +358,13 @@ do_step_7() {
     success "uploads/ directory structure ready."
 }
 
-# ── Step 8 – Database schema + admin account ──────────────────────────────────
+# ── Step 8 – Database schema ──────────────────────────────────────────────────
 do_step_8() {
-    hdr "Step 8/10  Database schema + admin account"
+    hdr "Step 8/10  Database schema"
     cd "${APP_DIR}"
     info "Pushing Drizzle schema..."
     npx drizzle-kit push --force
     success "Schema pushed."
-    info "Ensuring admin account..."
-    npx tsx scripts/reset-admin.ts
-    success "Admin account ready."
 }
 
 # ── Step 9 – Production build ─────────────────────────────────────────────────

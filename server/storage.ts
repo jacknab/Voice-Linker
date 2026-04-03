@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -248,10 +248,6 @@ export interface IStorage {
   deleteMembershipCard(id: string): Promise<void>;
   updateMembershipCardNotes(id: string, notes: string): Promise<void>;
   isMembershipCardNumberTaken(cardNumber: string): Promise<boolean>;
-
-  // Admin accounts
-  getAdminAccountByEmail(email: string): Promise<AdminAccount | undefined>;
-  createAdminAccount(email: string, passwordHash: string): Promise<AdminAccount>;
 
   // Mailbox stats
   getMailboxStats(): Promise<{ total: number; byCategory: { category: string | null; count: number }[] }>;
@@ -1724,16 +1720,6 @@ export class DatabaseStorage implements IStorage {
   async isMembershipCardNumberTaken(cardNumber: string): Promise<boolean> {
     const [row] = await db.select({ id: membershipCards.id }).from(membershipCards).where(eq(membershipCards.cardNumber, cardNumber));
     return !!row;
-  }
-
-  async getAdminAccountByEmail(email: string): Promise<AdminAccount | undefined> {
-    const [row] = await db.select().from(adminAccounts).where(eq(adminAccounts.email, email));
-    return row;
-  }
-
-  async createAdminAccount(email: string, passwordHash: string): Promise<AdminAccount> {
-    const [row] = await db.insert(adminAccounts).values({ email, passwordHash }).returning();
-    return row;
   }
 
   async getMailboxStats(): Promise<{ total: number; byCategory: { category: string | null; count: number }[] }> {

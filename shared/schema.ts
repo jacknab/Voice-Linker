@@ -338,16 +338,6 @@ export const insertMailboxSchema = createInsertSchema(mailboxes).omit({ id: true
 export type Mailbox = typeof mailboxes.$inferSelect;
 export type InsertMailbox = z.infer<typeof insertMailboxSchema>;
 
-// ─── Admin Accounts ───────────────────────────────────────────────────────────
-export const adminAccounts = pgTable("admin_accounts", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export type AdminAccount = typeof adminAccounts.$inferSelect;
-
 // ─── Web Users (email/password auth for the website) ──────────────────────────
 export const webUsers = pgTable("web_users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
