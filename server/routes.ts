@@ -149,33 +149,11 @@ function playTimeRemaining(
   req: Request,
   totalMinutes: number
 ): void {
-  if (totalMinutes >= 120) {
-    // 2+ hours
-    const hours = Math.floor(totalMinutes / 60);
-    playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
-    playNumber(twiml, req, hours);
-    playPrompt(twiml, req, "phrase_hours_of_pbtr.mp3", "hours of phone booth time remaining.");
-  } else if (totalMinutes >= 60) {
-    const mins = totalMinutes % 60;
-    if (mins === 0) {
-      // Exactly 1 hour
-      playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
-      playNumber(twiml, req, 1);
-      playPrompt(twiml, req, "phrase_hour_of_pbtr.mp3", "hour of phone booth time remaining.");
-    } else {
-      // 1 hour and X minutes (61–119 minutes)
-      playPrompt(twiml, req, "phrase_you_have_1_hour_and.mp3", "You have 1 hour and");
-      playNumber(twiml, req, mins);
-      playPrompt(twiml, req, mins === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
-        mins === 1 ? "minute remaining." : "minutes remaining.");
-    }
-  } else {
-    // Under 60 minutes (1–59; 0 is already blocked at main-menu)
-    playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
-    playNumber(twiml, req, totalMinutes);
-    playPrompt(twiml, req, totalMinutes === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
-      totalMinutes === 1 ? "minute remaining." : "minutes remaining.");
-  }
+  // Always announce in minutes — the system is per-minute based.
+  playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
+  playNumber(twiml, req, totalMinutes);
+  playPrompt(twiml, req, totalMinutes === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
+    totalMinutes === 1 ? "minute remaining." : "minutes remaining.");
 }
 
 // Play the active caller count announcement by chaining phrase + number audio files.
@@ -4300,17 +4278,8 @@ export async function registerRoutes(
       const user = await getOrCreateUser(fromNumber);
       const remainingSeconds = user.remainingSeconds ?? 0;
       const minutes = Math.floor(remainingSeconds / 60);
-      const hours = Math.floor(minutes / 60);
-      const mins = minutes % 60;
-
-      let timeMsg = "";
-      if (hours > 0 && mins > 0) {
-        timeMsg = `You have ${hours} hour${hours !== 1 ? "s" : ""} and ${mins} minute${mins !== 1 ? "s" : ""} remaining.`;
-      } else if (hours > 0) {
-        timeMsg = `You have ${hours} hour${hours !== 1 ? "s" : ""} remaining.`;
-      } else {
-        timeMsg = `You have ${minutes} minute${minutes !== 1 ? "s" : ""} remaining.`;
-      }
+      // Always report in minutes — the system is per-minute based.
+      const timeMsg = `You have ${minutes.toLocaleString()} minute${minutes !== 1 ? "s" : ""} remaining.`;
 
       const tier = user.membershipTier ?? "none";
       const tierMsg = tier === "free_trial" ? "You are on a free trial." : tier !== "none" ? `Your membership type is ${tier}.` : "You do not have an active membership.";
