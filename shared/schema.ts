@@ -322,6 +322,11 @@ export const mailboxes = pgTable("mailboxes", {
   adTranscription: text("ad_transcription"), // auto-generated transcript of the mailbox ad audio
   adTranscriptionStatus: text("ad_transcription_status"), // null | 'pending' | 'completed' | 'failed'
   lastCheckedAt: timestamp("last_checked_at"), // updated each time the member calls /voice/my-mailbox
+  // Profile fields collected during mailbox setup
+  dateOfBirth: text("date_of_birth"),   // MMDDYYYY format
+  bodyType: text("body_type"),           // slim | average | athletic | large | big_and_tall
+  ethnicity: text("ethnicity"),          // prefer_not_to_say | caucasian | african_american | asian | latino | middle_eastern | aboriginal
+  setupComplete: boolean("setup_complete"), // null=legacy (treat as complete) | false=in-progress | true=done
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -353,6 +353,35 @@ const pendingPinAuth = new Map<string, string>(); // callSid → membership hold
 // Pending new PIN setup: the caller is confirming a newly entered PIN
 const pendingNewPinSetup = new Map<string, string>(); // callSid → first PIN entry (4 digits)
 
+// Mailbox setup state — tracks multi-step setup progress per call
+const mailboxSetupState = new Map<string, {
+  dob?: string;
+  bodyType?: string;
+  ethnicity?: string;
+  returnTo?: string; // "mailbox" | "record" | "listen"
+  passcode1?: string;
+}>();
+
+// Body type labels for mailbox setup
+const BODY_TYPE_LABELS: Record<string, string> = {
+  slim: "Slim",
+  average: "Average",
+  athletic: "Athletic",
+  large: "Large",
+  big_and_tall: "Big and Tall",
+};
+
+// Ethnicity labels for mailbox setup
+const ETHNICITY_LABELS: Record<string, string> = {
+  prefer_not_to_say: "prefer not to identify",
+  caucasian: "Caucasian",
+  african_american: "African-American",
+  asian: "Asian",
+  latino: "Latino",
+  middle_eastern: "Middle Eastern",
+  aboriginal: "Aboriginal",
+};
+
 // Generate a unique random 5-digit membership card number.
 // Rule: first digit is never 0 — range is 10000–99999.
 async function generateUniqueCardNumber(): Promise<string> {
@@ -2815,8 +2844,7 @@ export async function registerRoutes(
       "To record a new mailbox ad press two. " +
       "To listen to ads from other guys press three. " +
       "To repeat these choices press nine. " +
-      "For the phone booth press star. " +
-      "To go to the main menu press pound."
+      "To exit to the main menu press pound."
     );
     twiml.redirect("/voice/mailbox-menu");
     res.type("text/xml");
@@ -2826,22 +2854,539 @@ export async function registerRoutes(
   app.post("/voice/handle-mailbox-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+
+    try {
+      if (digit === "1" || digit === "2" || digit === "3") {
+        const returnTo = digit === "1" ? "mailbox" : digit === "2" ? "record" : "listen";
+        const user = await getOrCreateUser(fromNumber);
+        const mailbox = await storage.getMailboxByUserId(user.id);
+
+        // If mailbox doesn't exist or setup is explicitly marked incomplete, run setup
+        if (!mailbox || mailbox.setupComplete === false) {
+          twiml.redirect(`/voice/setup-mailbox?returnTo=${returnTo}`);
+        } else if (digit === "1") {
+          twiml.redirect("/voice/my-mailbox");
+        } else if (digit === "2") {
+          twiml.redirect("/voice/ad-category-menu?mode=record");
+        } else {
+          twiml.redirect("/voice/ad-category-menu?mode=listen");
+        }
+      } else if (digit === "9") {
+        twiml.redirect("/voice/mailbox-menu");
+      } else if (digit === "#") {
+        twiml.redirect("/voice/main-menu");
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect("/voice/mailbox-menu");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-mailbox-menu error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Step 1 — Intro + Date of Birth ───────────────────────
+  app.post("/voice/setup-mailbox", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    // Initialise or reset setup state for this call
+    mailboxSetupState.set(callSid, { returnTo });
+
+    const gather = twiml.gather({ numDigits: 8, finishOnKey: "", action: "/voice/handle-setup-mailbox-dob", timeout: 20 });
+    playPrompt(gather, req, "mailbox_setup_intro.mp3",
+      "You need to first set up your mailbox. " +
+      "To set up your mailbox we need to gather a couple of things from you which helps callers search for the perfect guy and help them find your ads. " +
+      "First we need to know your date of birth. " +
+      "Please enter your date of birth in this order: " +
+      "two digits for the month, two digits for the day, and four digits for the year. " +
+      "For example, for April 17 1976, enter zero four one seven one nine seven six."
+    );
+    twiml.redirect("/voice/mailbox-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Handle DOB ────────────────────────────────────────────
+  app.post("/voice/handle-setup-mailbox-dob", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const digits = (req.body?.Digits as string) ?? "";
+    const returnTo = (req.query.returnTo as string) || mailboxSetupState.get(callSid)?.returnTo || "mailbox";
+
+    if (digits.length !== 8 || !/^\d{8}$/.test(digits)) {
+      playPrompt(twiml, req, "mailbox_setup_dob_invalid.mp3", "We did not receive a valid date of birth. Please try again.");
+      twiml.redirect(`/voice/setup-mailbox?returnTo=${returnTo}`);
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const mm = parseInt(digits.substring(0, 2), 10);
+    const dd = parseInt(digits.substring(2, 4), 10);
+    const yyyy = parseInt(digits.substring(4, 8), 10);
+
+    // Basic date validity check
+    const birthDate = new Date(yyyy, mm - 1, dd);
+    if (
+      isNaN(birthDate.getTime()) ||
+      birthDate.getFullYear() !== yyyy ||
+      birthDate.getMonth() !== mm - 1 ||
+      birthDate.getDate() !== dd ||
+      mm < 1 || mm > 12 ||
+      dd < 1 || dd > 31
+    ) {
+      playPrompt(twiml, req, "mailbox_setup_dob_invalid.mp3", "We did not receive a valid date of birth. Please try again.");
+      twiml.redirect(`/voice/setup-mailbox?returnTo=${returnTo}`);
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    // Age check — must be 18 or older
+    const today = new Date();
+    let age = today.getFullYear() - yyyy;
+    const monthDiff = today.getMonth() - (mm - 1);
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dd)) age--;
+
+    if (age < 18) {
+      playPrompt(twiml, req, "mailbox_setup_underage.mp3",
+        "We are sorry, but you must be 18 years of age or older to use this service. Goodbye."
+      );
+      twiml.hangup();
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    // Save DOB to setup state
+    const state = mailboxSetupState.get(callSid) || { returnTo };
+    state.dob = digits;
+    mailboxSetupState.set(callSid, state);
+
+    twiml.redirect(`/voice/setup-mailbox-bodytype?returnTo=${returnTo}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Step 2 — Body Type ───────────────────────────────────
+  app.post("/voice/setup-mailbox-bodytype", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-setup-mailbox-bodytype?returnTo=${returnTo}` });
+    playPrompt(gather, req, "mailbox_setup_bodytype.mp3",
+      "Now please select your body type. " +
+      "For Slim press one. " +
+      "For Average press two. " +
+      "For Athletic press three. " +
+      "For Large press four. " +
+      "For Big and Tall press five. " +
+      "To repeat these choices press nine. " +
+      "To exit press pound."
+    );
+    twiml.redirect(`/voice/setup-mailbox-bodytype?returnTo=${returnTo}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Handle Body Type ─────────────────────────────────────
+  app.post("/voice/handle-setup-mailbox-bodytype", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const digit = req.body?.Digits as string;
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    const digitToBodyType: Record<string, string> = {
+      "1": "slim", "2": "average", "3": "athletic", "4": "large", "5": "big_and_tall",
+    };
+
+    if (digitToBodyType[digit]) {
+      const bodyType = digitToBodyType[digit];
+      const state = mailboxSetupState.get(callSid) || { returnTo };
+      state.bodyType = bodyType;
+      mailboxSetupState.set(callSid, state);
+      twiml.redirect(`/voice/setup-mailbox-ethnicity?returnTo=${returnTo}`);
+    } else if (digit === "9") {
+      twiml.redirect(`/voice/setup-mailbox-bodytype?returnTo=${returnTo}`);
+    } else if (digit === "#") {
+      mailboxSetupState.delete(callSid);
+      playPrompt(twiml, req, "mailbox_setup_cancelled.mp3", "Mailbox setup cancelled.");
+      twiml.redirect("/voice/mailbox-menu");
+    } else {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect(`/voice/setup-mailbox-bodytype?returnTo=${returnTo}`);
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Step 3 — Ethnicity ───────────────────────────────────
+  app.post("/voice/setup-mailbox-ethnicity", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-setup-mailbox-ethnicity?returnTo=${returnTo}` });
+    playPrompt(gather, req, "mailbox_setup_ethnicity.mp3",
+      "Now please tell us your ethnicity. " +
+      "If you don't want to identify your ethnicity press one. " +
+      "If you're Caucasian press two. " +
+      "African-American press three. " +
+      "Asian press four. " +
+      "Latino press five. " +
+      "Middle Eastern press six. " +
+      "Aboriginal press seven. " +
+      "To repeat these choices press nine. " +
+      "To exit press pound."
+    );
+    twiml.redirect(`/voice/setup-mailbox-ethnicity?returnTo=${returnTo}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Handle Ethnicity ─────────────────────────────────────
+  app.post("/voice/handle-setup-mailbox-ethnicity", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const digit = req.body?.Digits as string;
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    const digitToEthnicity: Record<string, string> = {
+      "1": "prefer_not_to_say", "2": "caucasian", "3": "african_american",
+      "4": "asian", "5": "latino", "6": "middle_eastern", "7": "aboriginal",
+    };
+
+    if (digitToEthnicity[digit]) {
+      const ethnicity = digitToEthnicity[digit];
+      const state = mailboxSetupState.get(callSid) || { returnTo };
+      state.ethnicity = ethnicity;
+      mailboxSetupState.set(callSid, state);
+      twiml.redirect(`/voice/setup-mailbox-ethnicity-confirm?returnTo=${returnTo}`);
+    } else if (digit === "9") {
+      twiml.redirect(`/voice/setup-mailbox-ethnicity?returnTo=${returnTo}`);
+    } else if (digit === "#") {
+      mailboxSetupState.delete(callSid);
+      playPrompt(twiml, req, "mailbox_setup_cancelled.mp3", "Mailbox setup cancelled.");
+      twiml.redirect("/voice/mailbox-menu");
+    } else {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect(`/voice/setup-mailbox-ethnicity?returnTo=${returnTo}`);
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Ethnicity Confirmation ────────────────────────────────
+  app.post("/voice/setup-mailbox-ethnicity-confirm", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+    const state = mailboxSetupState.get(callSid);
+    const ethnicity = state?.ethnicity || "prefer_not_to_say";
+    const ethnicityLabel = ETHNICITY_LABELS[ethnicity] || ethnicity;
+
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-setup-mailbox-ethnicity-confirm?returnTo=${returnTo}` });
+    playPrompt(gather, req, "mailbox_setup_ethnicity_confirm.mp3",
+      `You selected ${ethnicityLabel}. ` +
+      "If this is correct press one. " +
+      "To select your ethnicity press two. " +
+      "If you don't want to identify your ethnicity press three."
+    );
+    twiml.redirect(`/voice/setup-mailbox-ethnicity?returnTo=${returnTo}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Handle Ethnicity Confirmation ────────────────────────
+  app.post("/voice/handle-setup-mailbox-ethnicity-confirm", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const digit = req.body?.Digits as string;
+    const returnTo = (req.query.returnTo as string) || "mailbox";
 
     if (digit === "1") {
-      twiml.redirect("/voice/my-mailbox");
+      // Confirmed — proceed to ready-to-write menu
+      twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);
     } else if (digit === "2") {
-      twiml.redirect("/voice/ad-category-menu?mode=record");
+      // Re-select ethnicity
+      twiml.redirect(`/voice/setup-mailbox-ethnicity?returnTo=${returnTo}`);
     } else if (digit === "3") {
-      twiml.redirect("/voice/ad-category-menu?mode=listen");
-    } else if (digit === "9") {
+      // Prefer not to identify — update state and proceed
+      const state = mailboxSetupState.get(callSid) || { returnTo };
+      state.ethnicity = "prefer_not_to_say";
+      mailboxSetupState.set(callSid, state);
+      twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);
+    } else {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect(`/voice/setup-mailbox-ethnicity-confirm?returnTo=${returnTo}`);
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Step 4 — Ready to Write ──────────────────────────────
+  app.post("/voice/setup-mailbox-ready", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-setup-mailbox-ready?returnTo=${returnTo}`, timeout: 30 });
+    playPrompt(gather, req, "mailbox_setup_ready.mp3",
+      "Please get something ready to write down your new mailbox number and passcode. " +
+      "This is the only chance you will have to write them down. " +
+      "And don't get them confused with your membership number — we issue separate numbers for memberships. " +
+      "If you're ready to write down your mailbox number and passcode press one. " +
+      "To pause the system while you get a pen and paper press two. " +
+      "For customer service press zero. " +
+      "To repeat these choices press nine. " +
+      "To cancel setting up your mailbox press the pound key."
+    );
+    twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Handle Ready to Write ────────────────────────────────
+  app.post("/voice/handle-setup-mailbox-ready", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const digit = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    try {
+      if (digit === "1") {
+        // Ready — create the mailbox and reveal the number
+        const user = await getOrCreateUser(fromNumber);
+        const mailbox = await storage.createMailboxForSetup(user.id);
+        const state = mailboxSetupState.get(callSid) || { returnTo };
+        // Save profile fields collected so far
+        await storage.updateMailboxProfile(user.id, {
+          dateOfBirth: state.dob,
+          bodyType: state.bodyType,
+          ethnicity: state.ethnicity,
+        });
+        twiml.redirect(`/voice/setup-mailbox-reveal?returnTo=${returnTo}`);
+      } else if (digit === "2") {
+        // Pause — loop back with a short pause
+        twiml.pause({ length: 5 });
+        twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);
+      } else if (digit === "0") {
+        twiml.redirect("/voice/customer-service");
+      } else if (digit === "9") {
+        twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);
+      } else if (digit === "#") {
+        mailboxSetupState.delete(callSid);
+        playPrompt(twiml, req, "mailbox_setup_cancelled.mp3", "Mailbox setup cancelled.");
+        twiml.redirect("/voice/mailbox-menu");
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-setup-mailbox-ready error:", err);
       twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Step 5 — Reveal Mailbox Number ───────────────────────
+  app.post("/voice/setup-mailbox-reveal", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const mailbox = await storage.getMailboxByUserId(user.id);
+
+      if (!mailbox) {
+        twiml.redirect("/voice/mailbox-menu");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const numSpoken = mailbox.mailboxNumber.split("").join(", ");
+      twiml.say(`Your mailbox number is ${numSpoken}. Again, your mailbox number is ${numSpoken}.`);
+
+      if (user.membershipPin) {
+        // Already has a passcode — tell them it's shared
+        const gather = twiml.gather({ numDigits: 1, finishOnKey: "#", action: `/voice/handle-setup-mailbox-passcode-existing?returnTo=${returnTo}`, timeout: 15 });
+        playPrompt(gather, req, "mailbox_setup_existing_passcode.mp3",
+          "Your mailbox passcode is the same as your membership passcode. " +
+          "If you do not remember your passcode and would like to create a new one, press pound."
+        );
+        // Timeout or any digit other than # → complete setup
+        twiml.redirect(`/voice/setup-mailbox-complete?returnTo=${returnTo}`);
+      } else {
+        // No passcode yet — go to create passcode
+        twiml.redirect(`/voice/setup-mailbox-create-passcode?returnTo=${returnTo}`);
+      }
+    } catch (err) {
+      console.error("[voice] /voice/setup-mailbox-reveal error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Handle Existing Passcode Choice ─────────────────────
+  app.post("/voice/handle-setup-mailbox-passcode-existing", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+    const digit = req.body?.Digits as string;
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    try {
+      if (digit === "#") {
+        // Create a new passcode — clear existing PIN so setup flow works
+        const user = await getOrCreateUser(fromNumber);
+        await storage.updateUserMembership(user.id, { membershipPin: null });
+        twiml.redirect(`/voice/setup-mailbox-create-passcode?returnTo=${returnTo}`);
+      } else {
+        // Keep existing passcode — mark setup complete
+        const user = await getOrCreateUser(fromNumber);
+        await storage.updateMailboxProfile(user.id, { setupComplete: true });
+        mailboxSetupState.delete(callSid);
+        twiml.redirect(`/voice/setup-mailbox-complete?returnTo=${returnTo}`);
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-setup-mailbox-passcode-existing error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Create Passcode ──────────────────────────────────────
+  app.post("/voice/setup-mailbox-create-passcode", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    const gather = twiml.gather({ numDigits: 4, finishOnKey: "", action: `/voice/handle-setup-mailbox-create-passcode?returnTo=${returnTo}`, timeout: 15 });
+    playPrompt(gather, req, "mailbox_setup_create_passcode.mp3",
+      "For security you need a passcode. " +
+      "Please enter a four digit passcode now. " +
+      "If you make a mistake press star to start over."
+    );
+    twiml.redirect(`/voice/setup-mailbox-create-passcode?returnTo=${returnTo}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Handle First Passcode Entry ──────────────────────────
+  app.post("/voice/handle-setup-mailbox-create-passcode", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const digits = (req.body?.Digits as string) ?? "";
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    if (digits === "*" || digits.length !== 4 || !/^\d{4}$/.test(digits)) {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Please enter a four digit passcode.");
+      twiml.redirect(`/voice/setup-mailbox-create-passcode?returnTo=${returnTo}`);
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    // Store first entry
+    const state = mailboxSetupState.get(callSid) || { returnTo };
+    state.passcode1 = digits;
+    mailboxSetupState.set(callSid, state);
+
+    // Ask to re-enter
+    const gather = twiml.gather({ numDigits: 4, finishOnKey: "", action: `/voice/handle-setup-mailbox-confirm-passcode?returnTo=${returnTo}`, timeout: 15 });
+    playPrompt(gather, req, "mailbox_setup_passcode_reenter.mp3", "Please re-enter your four digit passcode.");
+    twiml.redirect(`/voice/setup-mailbox-create-passcode?returnTo=${returnTo}`);
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Handle Passcode Confirmation ─────────────────────────
+  app.post("/voice/handle-setup-mailbox-confirm-passcode", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
+    const digits = (req.body?.Digits as string) ?? "";
+    const returnTo = (req.query.returnTo as string) || "mailbox";
+
+    try {
+      const state = mailboxSetupState.get(callSid);
+      const passcode1 = state?.passcode1;
+
+      if (!passcode1) {
+        twiml.redirect(`/voice/setup-mailbox-create-passcode?returnTo=${returnTo}`);
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      if (digits !== passcode1) {
+        // Mismatch — clear stored passcode and retry
+        if (state) { state.passcode1 = undefined; mailboxSetupState.set(callSid, state); }
+        playPrompt(twiml, req, "mailbox_setup_passcode_mismatch.mp3",
+          "Your passcode entries did not match. Please try again."
+        );
+        twiml.redirect(`/voice/setup-mailbox-create-passcode?returnTo=${returnTo}`);
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      // Passcodes match — save as membershipPin and mark setup complete
+      const user = await getOrCreateUser(fromNumber);
+      await storage.updateUserMembership(user.id, { membershipPin: digits });
+      await storage.updateMailboxProfile(user.id, { setupComplete: true });
+      mailboxSetupState.delete(callSid);
+
+      twiml.redirect(`/voice/setup-mailbox-complete?returnTo=${returnTo}`);
+    } catch (err) {
+      console.error("[voice] /voice/handle-setup-mailbox-confirm-passcode error:", err);
+      twiml.redirect("/voice/mailbox-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Complete Menu ────────────────────────────────────────
+  app.post("/voice/setup-mailbox-complete", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-setup-mailbox-complete" });
+    playPrompt(gather, req, "mailbox_setup_complete.mp3",
+      "Your mailbox is now set up. " +
+      "To begin recording a new ad press one. " +
+      "To listen to ads from other guys press two. " +
+      "To enter the phone booth press star. " +
+      "To cancel creating your mailbox press pound."
+    );
+    twiml.redirect("/voice/mailbox-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Mailbox Setup: Handle Complete Menu ─────────────────────────────────
+  app.post("/voice/handle-setup-mailbox-complete", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+
+    if (digit === "1") {
+      twiml.redirect("/voice/ad-category-menu?mode=record");
+    } else if (digit === "2") {
+      twiml.redirect("/voice/ad-category-menu?mode=listen");
     } else if (digit === "*") {
       twiml.redirect("/voice/phone-booth");
     } else if (digit === "#") {
-      twiml.redirect("/voice/main-menu");
+      twiml.redirect("/voice/mailbox-menu");
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
-      twiml.redirect("/voice/mailbox-menu");
+      twiml.redirect("/voice/setup-mailbox-complete");
     }
 
     res.type("text/xml");
@@ -3565,8 +4110,9 @@ export async function registerRoutes(
       // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
       await storage.updateMailboxTranscription(recordingUrl, null, "pending");
 
-      playPrompt(twiml, req, "mailbox_ad_saved.mp3",
-        `Your ${categoryLabel} mailbox ad has been saved. Other guys can now find your ad.`
+      playPrompt(twiml, req, "mailbox_ad_recorded_pending.mp3",
+        "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. " +
+        "In the meantime you can browse other ads or visit the phone booth to check out who's on the line right now."
       );
       twiml.redirect("/voice/mailbox-menu");
     } catch (err) {

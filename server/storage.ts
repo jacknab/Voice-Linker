@@ -169,6 +169,8 @@ export interface IStorage {
   touchMailboxLastChecked(userId: string): Promise<void>;
   getMailboxByNumber(mailboxNumber: string): Promise<Mailbox | null>;
   getOrCreateMailbox(userId: string): Promise<Mailbox>;
+  createMailboxForSetup(userId: string): Promise<Mailbox>;
+  updateMailboxProfile(userId: string, data: { dateOfBirth?: string; bodyType?: string; ethnicity?: string; setupComplete?: boolean }): Promise<void>;
   getMailboxesByCategory(category: string, excludeUserId: string): Promise<Mailbox[]>;
   updateMailboxAd(userId: string, category: string, adRecordingUrl: string, adRecordingDuration: number): Promise<Mailbox>;
 
@@ -1207,6 +1209,28 @@ export class DatabaseStorage implements IStorage {
     const [mailbox] = await db.insert(mailboxes).values({ userId, mailboxNumber }).returning();
     console.log(`[mailbox] Created mailbox ${mailboxNumber} for userId=${userId}`);
     return mailbox;
+  }
+
+  async createMailboxForSetup(userId: string): Promise<Mailbox> {
+    const existing = await this.getMailboxByUserId(userId);
+    if (existing) return existing;
+
+    let mailboxNumber: string;
+    let attempts = 0;
+    do {
+      mailboxNumber = String(Math.floor(10000 + Math.random() * 90000));
+      const conflict = await this.getMailboxByNumber(mailboxNumber);
+      if (!conflict) break;
+      attempts++;
+    } while (attempts < 20);
+
+    const [mailbox] = await db.insert(mailboxes).values({ userId, mailboxNumber, setupComplete: false }).returning();
+    console.log(`[mailbox] Created mailbox ${mailboxNumber} for setup — userId=${userId}`);
+    return mailbox;
+  }
+
+  async updateMailboxProfile(userId: string, data: { dateOfBirth?: string; bodyType?: string; ethnicity?: string; setupComplete?: boolean }): Promise<void> {
+    await db.update(mailboxes).set(data).where(eq(mailboxes.userId, userId));
   }
 
   async getMailboxesByCategory(category: string, excludeUserId: string): Promise<Mailbox[]> {

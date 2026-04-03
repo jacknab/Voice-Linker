@@ -1,0 +1,47 @@
+[MAILBOX/PERSON AD MAIN MENU]
+To go to your mailbox press one to record a new mailbox ad press two to listen to ads from other guys press three to repeat these choices press 9 to exit to the main menu press pound.
+
+*when the caller enters the mailbox menu if they press one or two the system checks to see if the caller has a mailbox setup. if the caller does have a mailbox setup it continues to the designated menu the user selected.  If the caller does not have a mailbox setup they would be routed to the create mailbox menu shown below:
+
+[CREATE MAILBOX MENU]
+Your need to first set up your mailbox, To set up your mailbox we need to gather a couple of things from you which helps caller search for the perfect guy and help him find your ads. first we need to know your date of birth. Please enter your date of birth in this order. 2 digits for the month, 2 digits for the day and 4 digits for the year. for example for April 17 1976 enter zero four one seven one nine seven six. the prompt waits for 8 digits to be entered. after the 8th digit was entered the system announces the caller date of birth back to them by saying: let see what we have. you were born on is on April, 17 1976 if this is correct press one to re-enter the birthday press two.
+
+[when they press 1]
+now please tell us your ethnicity if you don't want to identify your ethnicity press one
+if your caucasion press 2, african-american press 3, Asian press 4, latino press 5, Middler eastern press 6 aboriginal press 7 to repeat these choices press 9 to exit press pound.
+
+*after the caller selects there ethnicity the system confirms the ethnicity they selected saying if this is correct press 1 to select your ethnicity press 2 if you don't want to identify your ethnicity press 3
+*after the caller chooses either 1 or 3 it then goes to the next menu, which is below* 
+
+
+[CREATE NEW MAILBOX AND READ OUT THE NEW MAILBOX NUMBER TO CALLER]
+
+Please get something ready to write down your new mailbox number and passcode. This is the only chance you'll have to write them down.   [And dont get them confused with your membership number. We issue separate numbers for memberships.]  if you're ready to write down your mailbox number and passcode press one to pause the system while you get a pen and paper press two for customer service press zero to repeat these choices press 9 to cancel setting up your mailbox press the pound key.
+
+[pressed one]
+Your mailbox number is xxxxx again your mailbox number is xxxxx 
+then route to the passcode setup [this passcode would be the same passcode used if the caller has or purchases a membership, so if the caller aleady has a membership the system would tell them there mailbox passcode is the same as there membership passcode, and if they do not remember there passcode and would like to create a new passcode press pound. Which routes the caller to the create a passcode menu in the system. *we want the caller to be returned to the mailbox menu after they create a passcode so you might need to create a seperate create passcode menu which is specifically for the mailbox flow so that the caller is returned back into the mailbox system after there passcode is created*]
+the create passcode menu would say:  for security You need a passcode. Please enter a four digit passcode now, if you make a mistake press star to start over.  [after the caller enters the 4th digit the system should ask the caller to re-enter there 4 digit passcode.
+
+[MENU FOR WHEN PASSCODES DIDN'T MATCH]
+If the passcode doesn't match the system would say:
+Your passcode enteries didn't match. Please try again.
+[which then places the caller back to the create passcode menu. 
+
+[after the caller creates there passcode, the system says:] 
+Your mailbox is now set up, to begin recording a new ad press one, to listen to ads from other guys press two. to enter the phone booth press star to cancel creating your mailbox press pound
+
+[now this menu the caller is routed to if they press option 1]
+please select the category you'd like to place your ad in
+ [now place the caller into the categories menu]
+--- after the caller record there person ad it places in this menu:
+Thanks for recording your ad once it's approved, you'll be able too send messages to other mailboxes. In the meantime you can browse other ads or visit the phone booth to check out who's on the line right now.
+
+[now this menu the caller is routed to if they press option 2]
+please select the category for the ads you like to hear [now place the caller into the categories menu]
+
+
+
+
+
+
