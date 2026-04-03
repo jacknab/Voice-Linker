@@ -819,6 +819,8 @@ function TTSTab() {
     }
   });
   const [generating, setGenerating] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const [filter, setFilter] = useState("");
   const [categoryFolder, setCategoryFolder] = useState<"shared" | "mm" | "mw">("shared");
 
@@ -885,6 +887,38 @@ function TTSTab() {
     setCustomText(""); setCustomFilename("");
   }
 
+  async function handlePreview() {
+    if (!customText.trim()) return;
+    if (previewing) {
+      previewAudioRef.current?.pause();
+      previewAudioRef.current = null;
+      setPreviewing(false);
+      return;
+    }
+    setPreviewing(true);
+    try {
+      const res = await fetch("/api/admin/tts/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: customText.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Preview failed" }));
+        throw new Error(err.message);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      previewAudioRef.current = audio;
+      audio.onended = () => { setPreviewing(false); URL.revokeObjectURL(url); previewAudioRef.current = null; };
+      audio.onerror = () => { setPreviewing(false); URL.revokeObjectURL(url); previewAudioRef.current = null; };
+      audio.play();
+    } catch (err: any) {
+      toast({ title: "Preview failed", description: err.message, variant: "destructive" });
+      setPreviewing(false);
+    }
+  }
+
   const filtered = SYSTEM_PROMPTS.filter(p => !filter || p.label.toLowerCase().includes(filter.toLowerCase()) || p.filename.toLowerCase().includes(filter.toLowerCase()));
   const generatedCount = SYSTEM_PROMPTS.filter(p =>
     fileExistsIn("shared", p.filename) || fileExistsIn("mm", p.filename) || fileExistsIn("mw", p.filename)
@@ -949,15 +983,31 @@ function TTSTab() {
           </div>
           <div>
             <label className={C.label}>Text to Speak</label>
-            <input
-              data-testid="input-custom-text"
-              type="text"
-              value={customText}
-              onChange={e => setCustomText(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCustomGenerate(); }}
-              placeholder="Enter text to convert to speech..."
-              className={C.input}
-            />
+            <div className="flex gap-2 items-center">
+              <button
+                data-testid="btn-preview-tts"
+                type="button"
+                onClick={handlePreview}
+                disabled={!customText.trim()}
+                title={previewing ? "Stop preview" : "Preview audio via ElevenLabs"}
+                className={`flex-shrink-0 flex items-center justify-center w-9 h-9 rounded border transition-colors ${
+                  previewing
+                    ? "bg-[#f5a623] border-[#f5a623] text-white"
+                    : "bg-white border-gray-300 text-gray-500 hover:border-[#f5a623] hover:text-[#f5a623] disabled:opacity-40 disabled:cursor-not-allowed"
+                }`}
+              >
+                {previewing ? <Loader2 size={15} className="animate-spin" /> : <Play size={15} />}
+              </button>
+              <input
+                data-testid="input-custom-text"
+                type="text"
+                value={customText}
+                onChange={e => setCustomText(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleCustomGenerate(); }}
+                placeholder="Enter text to convert to speech..."
+                className={C.input + " flex-1"}
+              />
+            </div>
           </div>
         </div>
         <button data-testid="btn-generate-custom" onClick={handleCustomGenerate} disabled={!customText.trim() || !customFilename.trim() || !!generating} className={C.btnPrimary}>

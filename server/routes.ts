@@ -1350,6 +1350,41 @@ export async function registerRoutes(
     }
   });
 
+  // Preview TTS audio — generates via ElevenLabs and streams audio back without saving to disk
+  app.post("/api/admin/tts/preview", async (req, res) => {
+    try {
+      const { text } = req.body as { text?: string };
+      if (!text?.trim()) return res.status(400).json({ message: "text is required" });
+
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+      if (!apiKey) return res.status(500).json({ message: "ELEVENLABS_API_KEY is not configured" });
+
+      const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
+        body: JSON.stringify({
+          text: text.trim(),
+          model_id: "eleven_turbo_v2",
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        }),
+      });
+
+      if (!elRes.ok) {
+        const errText = await elRes.text().catch(() => "Unknown error");
+        return res.status(500).json({ message: `ElevenLabs API error ${elRes.status}: ${errText}` });
+      }
+
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+      const buffer = Buffer.from(await elRes.arrayBuffer());
+      res.send(buffer);
+    } catch (e: any) {
+      console.error("[admin/tts/preview] failed:", e);
+      res.status(500).json({ message: e?.message ?? "Preview generation failed" });
+    }
+  });
+
   // Delete a prompt file from uploads/ — supports ?folder=mm or ?folder=mw for category files
   app.delete("/api/admin/tts/prompts/:filename", (req, res) => {
     try {
