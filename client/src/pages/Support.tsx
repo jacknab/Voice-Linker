@@ -19,8 +19,8 @@ export default function Support() {
   const csPhone = siteData?.customerServicePhone || null;
   const isMM = (siteData?.siteCategory ?? "MM") === "MM";
   const footerBlurb = isMM
-    ? "The most popular gay, bi & curious live chat line. Real guys, real voices."
-    : "The most popular mixed live chat line. Real men, real women, real conversations.";
+    ? "A gay, bi & curious live chat line. Real guys, real voices."
+    : "A live chat line for men and women. Real voices, real conversations.";
 
   const topics = [
     { icon: <Phone className="w-5 h-5" />, title: "Calling Issues", desc: "Trouble connecting, call quality, or being blocked by caller ID. Make sure your number isn't marked private before calling in.", href: "/faq" },

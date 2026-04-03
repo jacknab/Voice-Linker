@@ -70,20 +70,20 @@ export default function Landing() {
   const heroImg = isMM ? heroImgMM : heroImgMW;
   const heroAlt = isMM ? "Man on the phone" : "Woman smiling on the phone";
   const introHeadline = isMM
-    ? `${siteName} is the best place to chat with local guys like you — anytime, anywhere.`
-    : `${siteName} is the best place to connect with local singles — men and women — anytime, anywhere.`;
+    ? `${siteName} is your place to chat with local guys like you — anytime, anywhere.`
+    : `${siteName} is your place to connect with local singles — men and women — anytime, anywhere.`;
   const introBody = isMM
     ? `${siteName} is a place where you can chat with real men looking to meet men. The Connection booth is where the action is with real guys who are on the line right now. ${siteName} is the go-to outlet for men seeking men.`
     : `${siteName} is a place where real men and women connect over the phone. Whether you're a man looking to meet women, or a woman looking to meet men, real people are on the line right now. ${siteName} is your go-to live chat line for singles of all kinds.`;
   const taglineHeadline = isMM
-    ? "The most popular gay, bi and curious live chatline in"
-    : "The most popular live chat line for men and women in";
+    ? "A gay, bi and curious live chat line in"
+    : "A live chat line for men and women in";
   const taglineSubtags = isMM
     ? ["Real guys just like you", "Freedom to be yourself"]
     : ["Real men & real women", "Connect with someone near you"];
   const footerBlurb = isMM
-    ? "The most popular gay, bi & curious live chat line. Real guys, real voices."
-    : "The most popular mixed live chat line. Real men, real women, real conversations.";
+    ? "A gay, bi & curious live chat line. Real guys, real voices."
+    : "A live chat line for men and women. Real voices, real conversations.";
 
   const displayPhone = localData?.phoneNumber || fallbackPhone;
   const cityLabel = localData?.city || localData?.regionName || null;

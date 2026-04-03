@@ -402,8 +402,8 @@ export default function FAQ() {
     : buildFAQsMW(siteName, phone);
 
   const footerBlurb = isMM
-    ? "The most popular gay, bi & curious live chat line. Real guys, real voices."
-    : "The most popular mixed live chat line. Real men, real women, real conversations.";
+    ? "A gay, bi & curious live chat line. Real guys, real voices."
+    : "A live chat line for men and women. Real voices, real conversations.";
 
   const handleToggle = (i: number) => {
     setOpenIndex(prev => (prev === i ? null : i));
