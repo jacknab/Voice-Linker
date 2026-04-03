@@ -311,6 +311,40 @@ Every caller greeting and personal ad recording is automatically transcribed by 
 - `promoCodes` — promotional codes for discounts or free access
 - `callLogs` — per-call log records for reporting and stats
 
+## Admin Audio Gen Tab
+
+The **Audio Gen** tab (`/admin` → Audio Gen) provides tools to generate ElevenLabs TTS audio files for the IVR system.
+
+### Category Folder Selection
+Choose **Shared**, **MM**, or **MW** before generating. Files are saved to:
+- `uploads/` (shared)
+- `uploads/mm/` (MM override)
+- `uploads/mw/` (MW override)
+
+The phone system automatically plays the correct folder's version based on the **Site Category** setting.
+
+### TTS Preview (Play Button)
+In the **Custom Audio File** section, a **play button** sits to the left of the "Text to Speak" input. Clicking it:
+1. Sends the typed text to the `/api/admin/tts/preview` endpoint
+2. ElevenLabs generates the audio using the configured `ELEVENLABS_VOICE_ID`
+3. The MP3 is streamed back and played in the browser — **nothing is saved to disk**
+4. The button turns amber/spinning while playing; click again to stop
+
+**API route:** `POST /api/admin/tts/preview` — body `{ text }` → streams `audio/mpeg` response
+
+### Generate All
+The **Generate All** button in the System Prompts section header generates every system prompt sequentially into the currently selected folder:
+1. Iterates through `SYSTEM_PROMPTS` (defined in `Admin.tsx`) one at a time
+2. For each prompt, calls `POST /api/admin/tts/generate` with the prompt text and selected folder
+3. Uses any edited prompt text saved in `localStorage` (`admin_prompt_texts`) in place of defaults
+4. Shows a live progress bar and current prompt name while running
+5. The button switches to **Cancel** (red) during generation — clicking it stops after the current file finishes
+6. On completion, shows a toast with the count of prompts generated and the target folder
+7. Invalidates the file list cache so the status column updates immediately
+
+### Custom Audio File
+Manually generate a single named file outside the system prompts list. Enter a filename (`.mp3` is appended automatically) and the text to speak, then click **Generate**. Files are saved to the selected category folder.
+
 ## Running
 
 1. Copy `.env.example` to `.env` and fill in all credentials (see Environment Variables section above)
