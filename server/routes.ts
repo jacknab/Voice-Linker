@@ -6047,16 +6047,18 @@ export async function registerRoutes(
     }
 
     const mins = session.packageMinutes;
-    const minutesLabel = session.isFirstPurchase
-      ? `${mins} minutes — plus ${mins} bonus minutes for your first purchase, giving you ${mins * 2} minutes total`
-      : `${mins} minutes`;
+    const dynamicPart = session.isFirstPurchase
+      ? `${mins.toLocaleString()} minutes — plus ${mins.toLocaleString()} bonus minutes for your first purchase, giving you ${(mins * 2).toLocaleString()} minutes total, for ${session.priceLabel}.`
+      : `${mins.toLocaleString()} minutes for ${session.priceLabel}.`;
 
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-confirm-package" });
-    gather.say(
-      `You selected ${minutesLabel} for ${session.priceLabel}. ` +
-      `If this is correct press 1. ` +
-      `To select a different package press 2.`
-    );
+    if (session.isFirstPurchase) {
+      playPrompt(gather, req, "package_confirm_bonus_prefix.mp3", "Great choice! You selected");
+    } else {
+      playPrompt(gather, req, "package_confirm_prefix.mp3", "You selected");
+    }
+    gather.say(dynamicPart);
+    playPrompt(gather, req, "package_confirm_suffix.mp3", "If this is correct press one. To select a different package press two.");
     twiml.redirect("/voice/confirm-package");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -6230,28 +6232,19 @@ export async function registerRoutes(
         const siteConf = await getSiteSettingsCached();
         const isMWPurchase = siteConf.siteCategory === "MW";
 
-        const bonusMsg = bonusMinutes > 0
-          ? ` Plus your first purchase bonus doubles your minutes — enjoy ${totalMinutes.toLocaleString()} minutes total!`
-          : "";
-        const cardMsg = (!isMWPurchase && issuedCardNumber)
-          ? ` Your new membership card number is: ${issuedCardNumber.split("").join(", ")}. Please save this number — you can use it to access your membership from any phone.`
-          : "";
-        const successText =
-          `Payment successful! You now have ${session.packageLabel} access. ` +
-          `Your card has been charged ${session.priceLabel}.${bonusMsg}${cardMsg} ` +
-          "Thank you for joining. Returning to the main menu.";
-
-        if (session.isFirstPurchase) {
-          playPrompt(twiml, req, "payment_success_14day_bonus.mp3", successText);
-        } else if (session.packageName === "plan1") {
-          playPrompt(twiml, req, "payment_success_30day.mp3", successText);
-        } else if (session.packageName === "plan2") {
-          playPrompt(twiml, req, "payment_success_14day.mp3", successText);
-        } else if (session.packageName === "plan3") {
-          playPrompt(twiml, req, "payment_success_24hour.mp3", successText);
-        } else {
-          twiml.say(successText);
+        // Split payment success into static audio parts + inline TTS for dynamic values
+        // Static prefix → TTS (package + price) → optional bonus audio → optional TTS (card number) → static suffix
+        playPrompt(twiml, req, "payment_success_prefix.mp3", "Payment successful! You now have");
+        twiml.say(`${session.packageLabel} access. Your card has been charged ${session.priceLabel}.`);
+        if (bonusMinutes > 0) {
+          playPrompt(twiml, req, "payment_success_bonus.mp3",
+            `Plus your first purchase bonus doubles your minutes — enjoy ${totalMinutes.toLocaleString()} minutes total!`
+          );
         }
+        if (!isMWPurchase && issuedCardNumber) {
+          twiml.say(`Your new membership card number is: ${issuedCardNumber.split("").join(", ")}. Please save this number — you can use it to access your membership from any phone.`);
+        }
+        playPrompt(twiml, req, "payment_success_suffix.mp3", "Thank you for joining. Returning to the main menu.");
 
         // Post-Purchase MOTD
         try {
