@@ -89,13 +89,14 @@ export interface IStorage {
 
   // Active call tracking (real-time party line)
   registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void>;
+  updateActiveCallGender(callSid: string, gender: string): Promise<void>;
   removeActiveCall(callSid: string): Promise<void>;
   removeActiveCallsByUser(userId: string): Promise<void>;
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
   finalizeOrphanedCallLogs(olderThanMinutes: number): Promise<void>;
-  getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number>;
-  getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number>;
-  getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]>;
+  getActiveCallerCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number>;
+  getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number>;
+  getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<Profile[]>;
   getNearbyProfileUserIds(excludeUserId: string, regionId: string | undefined, callerLat: number, callerLon: number, thresholdKm: number): Promise<string[]>;
   getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined>;
   getZipEntryById(id: string): Promise<ZipCode | undefined>;
@@ -453,6 +454,12 @@ export class DatabaseStorage implements IStorage {
       });
   }
 
+  async updateActiveCallGender(callSid: string, gender: string): Promise<void> {
+    await db.update(activeCalls)
+      .set({ gender })
+      .where(eq(activeCalls.callSid, callSid));
+  }
+
   async removeActiveCall(callSid: string): Promise<void> {
     // Finalize the call log (calculate duration from startedAt) before removing
     await db.execute(sql`
@@ -513,26 +520,46 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
-  async getActiveCallerCount(excludeUserId: string, regionId?: string): Promise<number> {
+  async getActiveCallerCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number> {
+    // If callerGender is provided, count only opposite-gender real callers (MW systems)
+    const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
     const conditions = regionId
-      ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId))
-      : not(eq(activeCalls.userId, excludeUserId));
+      ? and(
+          not(eq(activeCalls.userId, excludeUserId)),
+          eq(activeCalls.regionId, regionId),
+          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
+        )
+      : and(
+          not(eq(activeCalls.userId, excludeUserId)),
+          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
+        );
     const [result] = await db.select({ count: count() })
       .from(activeCalls)
       .where(conditions);
     return result.count;
   }
 
-  async getAvailableProfileCount(excludeUserId: string, regionId?: string): Promise<number> {
-    // Real callers in this region
+  async getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number> {
+    // Determine the opposite gender for MW filtering (real callers only)
+    const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
+
+    // Real callers in this region — filtered by opposite gender on MW systems
+    const realCallerCondition = regionId
+      ? and(
+          not(eq(activeCalls.userId, excludeUserId)),
+          eq(activeCalls.regionId, regionId),
+          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
+          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
+        )
+      : and(
+          not(eq(activeCalls.userId, excludeUserId)),
+          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
+          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
+        );
     const regionalUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
-      .where(
-        regionId
-          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId), notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`))
-          : and(not(eq(activeCalls.userId, excludeUserId)), notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`))
-      );
-    // Virtual callers (admin-uploaded or real-caller seeds) — global, no region filter
+      .where(realCallerCondition);
+    // Virtual callers (admin-uploaded or real-caller seeds) — global, no gender filter (always shown)
     const virtualUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));
@@ -548,16 +575,27 @@ export class DatabaseStorage implements IStorage {
     return result.count;
   }
 
-  async getAllActiveProfiles(excludeUserId: string, regionId?: string): Promise<Profile[]> {
-    // Real callers in this region
+  async getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<Profile[]> {
+    // Determine the opposite gender for MW filtering (real callers only)
+    const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
+
+    // Real callers in this region — filtered by opposite gender on MW systems
+    const realCallerCondition = regionId
+      ? and(
+          not(eq(activeCalls.userId, excludeUserId)),
+          eq(activeCalls.regionId, regionId),
+          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
+          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
+        )
+      : and(
+          not(eq(activeCalls.userId, excludeUserId)),
+          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
+          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
+        );
     const regionalUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
-      .where(
-        regionId
-          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId), notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`))
-          : and(not(eq(activeCalls.userId, excludeUserId)), notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`))
-      );
-    // Virtual callers (admin-uploaded seeds + real-caller seed sessions) — global
+      .where(realCallerCondition);
+    // Virtual callers (admin-uploaded seeds + real-caller seed sessions) — global, no gender filter
     const virtualUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));

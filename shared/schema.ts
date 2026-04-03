@@ -71,6 +71,7 @@ export const activeCalls = pgTable("active_calls", {
   callSid: text("call_sid").primaryKey(),
   userId: uuid("user_id").notNull(),
   regionId: uuid("region_id"),
+  gender: text("gender"),  // 'male' | 'female' — set during MW gender-select; null for MM systems
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 

@@ -1915,11 +1915,17 @@ export async function registerRoutes(
     if (digit === "1") {
       // Male caller — proceed through the normal membership / free-trial flow
       console.log(`[voice] gender-select: male caller callSid=${callSid}`);
+      storage.updateActiveCallGender(callSid, "male").catch(err =>
+        console.error("[voice] gender-select: failed to set gender=male", err)
+      );
       twiml.redirect("/voice/membership-entry");
     } else if (digit === "2") {
       // Female caller — always free on MW systems, go straight to the phone booth
       console.log(`[voice] gender-select: female caller callSid=${callSid} — bypassing membership`);
       femaleCallers.add(callSid);
+      storage.updateActiveCallGender(callSid, "female").catch(err =>
+        console.error("[voice] gender-select: failed to set gender=female", err)
+      );
       twiml.redirect("/voice/phone-booth");
     } else {
       // Invalid input — ask again
@@ -2331,11 +2337,30 @@ export async function registerRoutes(
   app.post("/voice/phone-booth", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     try {
-      // Play the phone booth welcome intro every time
-      playPrompt(twiml, req, "phone_booth_welcome.mp3",
-        "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
+      // Determine site mode and caller gender for gender-aware prompts
+      const boothSiteConf = await getSiteSettingsCached();
+      const isMW = boothSiteConf.siteCategory === "MW";
+      const isFemale = femaleCallers.has(callSid);
+
+      // Play the phone booth welcome intro — gender-aware for MW systems
+      if (isMW) {
+        if (isFemale) {
+          // Female caller on MW hears guys' greetings
+          playPrompt(twiml, req, "phone_booth_welcome.mp3",
+            "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
+        } else {
+          // Male caller on MW hears women's greetings
+          playPrompt(twiml, req, "phone_booth_welcome.mp3",
+            "Welcome to the live connector. Greetings from all the local women here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
+        }
+      } else {
+        // MM — standard message
+        playPrompt(twiml, req, "phone_booth_welcome.mp3",
+          "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
+      }
 
       // Phone Booth MOTD
       try {
@@ -2351,9 +2376,17 @@ export async function registerRoutes(
       const profile = await storage.getProfile(user.id);
 
       if (!profile) {
-        // No profile yet — need to record their name first
-        playPrompt(twiml, req, "welcome_record_name.mp3",
-          "You need to record a greeting to introduce yourself to the other guys first. Let's record the name you want to use. After the tone, record just your first name.");
+        // No profile yet — need to record their name first (gender-aware for MW)
+        if (isMW && isFemale) {
+          playPrompt(twiml, req, "welcome_record_name.mp3",
+            "You need to record a greeting to introduce yourself to the guys first. Let's record the name you want to use. After the tone, record just your first name.");
+        } else if (isMW) {
+          playPrompt(twiml, req, "welcome_record_name.mp3",
+            "You need to record a greeting to introduce yourself to the women first. Let's record the name you want to use. After the tone, record just your first name.");
+        } else {
+          playPrompt(twiml, req, "welcome_record_name.mp3",
+            "You need to record a greeting to introduce yourself to the other guys first. Let's record the name you want to use. After the tone, record just your first name.");
+        }
         twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else {
         twiml.redirect("/voice/greeting-setup");
@@ -3877,7 +3910,12 @@ export async function registerRoutes(
       }
 
       // Announce how many callers are currently on the line
-      const activeCallerCount = await storage.getActiveCallerCount(user.id, regionId);
+      // On MW systems, only count opposite-gender callers so the announcement is accurate
+      const goLiveSiteConf = await getSiteSettingsCached();
+      const goLiveCallerGender = goLiveSiteConf.siteCategory === "MW"
+        ? (femaleCallers.has(callSid) ? "female" : "male")
+        : null;
+      const activeCallerCount = await storage.getActiveCallerCount(user.id, regionId, goLiveCallerGender);
       playCallerCount(twiml, req, activeCallerCount);
 
       // In per-minute billing, notify the caller that their time is now running.
@@ -3941,11 +3979,18 @@ export async function registerRoutes(
         }
       }
 
+      // Determine caller gender for MW gender-filtering (null = MM, no filter)
+      const browseSiteConf = await getSiteSettingsCached();
+      const browseCallerGender = browseSiteConf.siteCategory === "MW"
+        ? (femaleCallers.has(callSid) ? "female" : "male")
+        : null;
+
       // Count available profiles: active callers + admin-uploaded greetings (region-scoped)
-      const availableCount = await storage.getAvailableProfileCount(user.id, regionId);
+      // On MW systems, only count opposite-gender profiles
+      const availableCount = await storage.getAvailableProfileCount(user.id, regionId, browseCallerGender);
       // Caller count is system-wide (no region filter) so virtual callers with no region are included
-      const activeCallerCount = await storage.getActiveCallerCount(user.id);
-      console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, activeOtherCallers=${activeCallerCount}, availableProfiles=${availableCount}`);
+      const activeCallerCount = await storage.getActiveCallerCount(user.id, undefined, browseCallerGender);
+      console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, callerGender=${browseCallerGender}, activeOtherCallers=${activeCallerCount}, availableProfiles=${availableCount}`);
 
       if (availableCount === 0) {
         playPrompt(twiml, req, "no_profiles.mp3", "There are no profiles available right now. Please call back later.");
@@ -4002,7 +4047,7 @@ export async function registerRoutes(
         // Build the queue once per caller, then advance position on each visit
         let state = callerBrowseState.get(callSid);
         if (!state) {
-          const allProfiles = await storage.getAllActiveProfiles(user.id, regionId);
+          const allProfiles = await storage.getAllActiveProfiles(user.id, regionId, browseCallerGender);
           const nearbySet = new Set<string>(
             callerLat != null && callerLon != null
               ? await storage.getNearbyProfileUserIds(user.id, regionId, callerLat, callerLon, 80)
