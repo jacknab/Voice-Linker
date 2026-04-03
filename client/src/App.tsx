@@ -17,6 +17,7 @@ import Dashboard from "@/pages/Dashboard";
 import Membership from "@/pages/Membership";
 import MembershipSuccess from "@/pages/MembershipSuccess";
 import FAQ from "@/pages/FAQ";
+import KeypadTips from "@/pages/KeypadTips";
 import { useEffect } from "react";
 
 function Router() {
@@ -31,6 +32,7 @@ function Router() {
       <Route path="/membership/success" component={MembershipSuccess} />
       <Route path="/membership" component={Membership} />
       <Route path="/faq" component={FAQ} />
+      <Route path="/keypad-tips" component={KeypadTips} />
       <Route path="/setup" component={Home} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/secure-login" component={SecureAdminLogin} />
