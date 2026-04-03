@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  setup.sh  –  Full production VPS setup
+#  setup.sh  –  Full production VPS setup for Phone Booth
 #
 #  Usage:
 #    bash setup.sh              # prompts for domain
-#    bash setup.sh mydomain.com # domain as argument
-#    bash setup.sh mydomain.com --yes  # skip confirmation prompt
+#    bash setup.sh mydomain.com # domain as argument (still prompts to confirm)
+#    bash setup.sh mydomain.com --yes  # fully unattended / no prompts
 #
 #  Requirements:
-#    - Ubuntu 20.04 / 22.04 / 24.04
-#    - Non-root user with sudo privileges
-#    - DNS A records for the domain already pointing at this server
+#    - Ubuntu 20.04 / 22.04 / 24.04  (amd64 or arm64)
+#    - Non-root user with sudo privileges  (e.g. adduser deploy; usermod -aG sudo deploy)
+#    - DNS A record for the domain already pointing at this server's IP
+#    - SSL certificate already issued via certbot before running step 10
+#      (or obtained afterwards; nginx SSL config is skipped with a helpful hint)
 # =============================================================================
 
 set -euo pipefail
-export DEBIAN_FRONTEND=noninteractive
+export DEBIAN_FRONTEND=noninteractive   # suppress interactive apt prompts
 
 # ─── COLOUR HELPERS ───────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -32,7 +34,8 @@ DB_NAME="phonebooth_db"                # PostgreSQL database
 SERVICE_NAME="phonebooth"              # systemd service name
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Generate a secure random DB password (or reuse existing one from .env)
+# ── DB password: reuse from existing .env, or generate a fresh one ────────────
+DB_PASSWORD=""
 if [ -f "${APP_DIR}/.env" ] && grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
     EXISTING_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d= -f2-)
     DB_PASSWORD=$(echo "${EXISTING_URL}" | grep -oP '(?<=:)[^@]+(?=@)' || true)
@@ -42,7 +45,7 @@ if [ -z "${DB_PASSWORD:-}" ]; then
 fi
 # ──────────────────────────────────────────────────────────────────────────────
 
-# ─── ARGUMENTS ────────────────────────────────────────────────────────────────
+# ─── ARGUMENT PARSING ─────────────────────────────────────────────────────────
 AUTO_YES=false
 DOMAIN=""
 for ARG in "$@"; do
@@ -76,18 +79,60 @@ else
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
-step "1/9  System packages"
+step "1/10  Swap space"
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+#  npm install and the production build can use 500 MB–1 GB of RAM on a clean
+#  run.  VPS plans with 1–2 GB RAM will OOM-kill the process without swap.
+#  We create a 2 GB swap file if the server has less than 512 MB of swap.
+#
+SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
+if (( SWAP_MB < 512 )); then
+    info "Swap: ${SWAP_MB} MB detected — creating a 2 GB swap file..."
+    if [ -f /swapfile ]; then
+        sudo swapoff /swapfile 2>/dev/null || true
+        sudo rm -f /swapfile
+    fi
+    # fallocate is instant; dd is the fallback for filesystems that don't support it
+    sudo fallocate -l 2G /swapfile 2>/dev/null \
+        || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile -q
+    sudo swapon /swapfile
+    # Make permanent across reboots
+    if ! grep -q '/swapfile' /etc/fstab; then
+        echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
+    fi
+    # Reduce swappiness (default 60 is too aggressive for a server)
+    echo 'vm.swappiness=10' | sudo tee /etc/sysctl.d/99-swappiness.conf > /dev/null
+    sudo sysctl -p /etc/sysctl.d/99-swappiness.conf -q
+    success "2 GB swap file created and enabled."
+else
+    info "Swap already configured (${SWAP_MB} MB) — skipping."
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+step "2/10  System packages"
 # ═══════════════════════════════════════════════════════════════════════════════
 sudo apt-get update -qq
+sudo apt-get install -y -qq \
+    curl wget git openssl ca-certificates gnupg lsb-release \
+    build-essential python3 \
+    ufw fail2ban \
+    unattended-upgrades apt-listchanges
 
 # ── Node.js 20.x ──────────────────────────────────────────────────────────────
+#  Some npm packages (e.g. bcrypt) compile native add-ons; build-essential
+#  (gcc, make, g++) is required for those to install correctly.
 NODE_VER=$(node --version 2>/dev/null | grep -oP '(?<=v)\d+' || echo "0")
 if (( NODE_VER < 20 )); then
-    info "Installing Node.js 20.x..."
+    info "Node.js ${NODE_VER} found — upgrading to 20.x LTS..."
     curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - -q
     sudo apt-get install -y nodejs -qq
+    NODE_VER=$(node --version | grep -oP '(?<=v)\d+')
+    success "Node.js $(node --version) installed."
 else
-    info "Node.js ${NODE_VER} already present – skipping."
+    info "Node.js $(node --version) already present — skipping."
 fi
 
 # ── PostgreSQL ─────────────────────────────────────────────────────────────────
@@ -98,8 +143,8 @@ fi
 #    3. Determine the correct systemd service name (version-specific on Ubuntu).
 #    4. Ensure the service is enabled and running.
 #    5. Wait up to 30 s for pg_isready before proceeding.
-#    6. Verify pg_hba.conf allows TCP password auth on 127.0.0.1 (the method
-#       the app uses) — patch it to md5 if it is set to peer/ident/trust.
+#    6. Verify pg_hba.conf allows TCP password auth on 127.0.0.1 — the method
+#       the app uses.  Patch it to md5 if it is set to peer/ident/trust.
 #
 PG_VERSION=$(dpkg -l 'postgresql-[0-9]*' 2>/dev/null \
     | awk '/^ii/{print $2}' \
@@ -109,7 +154,6 @@ PG_VERSION=$(dpkg -l 'postgresql-[0-9]*' 2>/dev/null \
 if [[ -z "$PG_VERSION" ]]; then
     info "PostgreSQL not found — installing..."
     sudo apt-get install -y postgresql postgresql-contrib -qq
-    # Re-detect version after install
     PG_VERSION=$(dpkg -l 'postgresql-[0-9]*' 2>/dev/null \
         | awk '/^ii/{print $2}' \
         | grep -oP '(?<=postgresql-)\d+' \
@@ -120,16 +164,13 @@ else
     info "PostgreSQL ${PG_VERSION} already installed."
 fi
 
-# ── Determine the correct service name ────────────────────────────────────────
-# Ubuntu uses versioned units like postgresql@14-main; the alias "postgresql"
-# also exists but may not always be the active unit.
+# ── PostgreSQL service ─────────────────────────────────────────────────────────
 PG_SERVICE="postgresql"
 if sudo systemctl list-units --type=service --all 2>/dev/null \
         | grep -q "postgresql@${PG_VERSION}-main.service"; then
     PG_SERVICE="postgresql@${PG_VERSION}-main"
 fi
 
-# ── Enable and start ──────────────────────────────────────────────────────────
 if ! sudo systemctl is-active --quiet "${PG_SERVICE}" 2>/dev/null; then
     info "Starting PostgreSQL service (${PG_SERVICE})..."
     sudo systemctl enable "${PG_SERVICE}" --now
@@ -138,7 +179,7 @@ else
     info "PostgreSQL service (${PG_SERVICE}) is already running."
 fi
 
-# ── Wait for PostgreSQL to be ready to accept connections ─────────────────────
+# Wait for PostgreSQL to be ready
 info "Waiting for PostgreSQL to accept connections..."
 PG_WAIT_MAX=30; PG_WAITED=0
 until sudo -u postgres pg_isready -q 2>/dev/null; do
@@ -149,17 +190,11 @@ until sudo -u postgres pg_isready -q 2>/dev/null; do
 done
 success "PostgreSQL ${PG_VERSION} is running and accepting connections."
 
-# ── Verify pg_hba.conf allows password auth for TCP connections ───────────────
-# The app connects via TCP (postgresql://user:pass@localhost/db) so the relevant
-# pg_hba.conf lines are the "host" entries for 127.0.0.1 and ::1.
-# If those are set to "trust" we patch them to "md5"; if they don't exist we
-# insert an explicit entry.  We never touch the "local all postgres peer" line
-# so that sudo -u postgres psql continues to work normally.
+# ── pg_hba.conf — ensure TCP password auth works ──────────────────────────────
 PG_HBA="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
 if [[ -f "$PG_HBA" ]]; then
     PATCHED=false
-
-    # Replace "trust" on host lines (insecure — should never be left as-is)
+    # Replace "trust" on host lines (insecure)
     if sudo grep -qP '^host\s+all\s+all\s+(127\.0\.0\.1/32|::1/128)\s+trust' "$PG_HBA" 2>/dev/null; then
         info "pg_hba.conf: patching 'trust' → 'md5' for TCP connections..."
         sudo sed -i -E \
@@ -167,27 +202,23 @@ if [[ -f "$PG_HBA" ]]; then
             "$PG_HBA"
         PATCHED=true
     fi
-
-    # Add an explicit host entry for our DB user if no host line covers 127.0.0.1
+    # Add explicit host entry if no 127.0.0.1 line exists at all
     if ! sudo grep -qP '^host\s+all\s+all\s+127\.0\.0\.1/32' "$PG_HBA" 2>/dev/null; then
         info "pg_hba.conf: adding host md5 entry for 127.0.0.1..."
         echo "host    all             all             127.0.0.1/32            md5" \
             | sudo tee -a "$PG_HBA" > /dev/null
         PATCHED=true
     fi
-
     if [ "$PATCHED" = true ]; then
         sudo systemctl reload "${PG_SERVICE}" 2>/dev/null \
             || sudo systemctl restart "${PG_SERVICE}"
-        # Wait again after reload
         until sudo -u postgres pg_isready -q 2>/dev/null; do sleep 1; done
         success "pg_hba.conf updated and PostgreSQL reloaded."
     else
-        info "pg_hba.conf already configured correctly — no changes needed."
+        info "pg_hba.conf already configured correctly."
     fi
 else
     warn "pg_hba.conf not found at ${PG_HBA} — skipping auth configuration."
-    warn "If the app cannot connect, manually ensure 127.0.0.1 uses md5 or scram-sha-256."
 fi
 
 # ── Nginx ──────────────────────────────────────────────────────────────────────
@@ -195,31 +226,84 @@ if ! command -v nginx &>/dev/null; then
     info "Installing Nginx..."
     sudo apt-get install -y nginx -qq
     sudo systemctl enable nginx --now
+    success "Nginx installed and started."
 else
-    info "Nginx already present – skipping."
+    info "Nginx $(nginx -v 2>&1 | grep -oP '[\d.]+') already present — skipping."
 fi
 
-# ── Certbot ───────────────────────────────────────────────────────────────────
+# ── Certbot (Let's Encrypt SSL) ───────────────────────────────────────────────
 if ! command -v certbot &>/dev/null; then
     info "Installing Certbot..."
     sudo apt-get install -y certbot python3-certbot-nginx -qq
+    success "Certbot installed."
 else
-    info "Certbot already present – skipping."
+    info "Certbot already present — skipping."
 fi
 
-success "System packages ready."
+success "All system packages ready."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-step "2/9  Node.js dependencies"
+step "3/10  Firewall (UFW)"
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+#  Rules: allow SSH (so we don't lock ourselves out), allow HTTP + HTTPS for
+#  Nginx, block everything else inbound.  Outbound is unrestricted.
+#
+info "Configuring UFW firewall rules..."
+sudo ufw allow OpenSSH     > /dev/null   # port 22 — MUST be first
+sudo ufw allow 80/tcp      > /dev/null   # HTTP
+sudo ufw allow 443/tcp     > /dev/null   # HTTPS
+
+# Enable UFW non-interactively if not already active
+UFW_STATUS=$(sudo ufw status | head -1)
+if echo "$UFW_STATUS" | grep -q "inactive"; then
+    echo "y" | sudo ufw enable > /dev/null
+    success "Firewall enabled — SSH (22), HTTP (80), HTTPS (443) allowed."
+else
+    sudo ufw reload > /dev/null
+    success "Firewall already active — rules updated."
+fi
+
+# ── fail2ban (SSH brute-force protection) ─────────────────────────────────────
+if ! sudo systemctl is-active --quiet fail2ban 2>/dev/null; then
+    sudo systemctl enable fail2ban --now
+fi
+# Write a local jail config if it doesn't exist yet
+F2B_JAIL="/etc/fail2ban/jail.d/phonebooth.conf"
+if [ ! -f "$F2B_JAIL" ]; then
+    sudo tee "$F2B_JAIL" > /dev/null <<F2BEOF
+[DEFAULT]
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+
+[sshd]
+enabled = true
+F2BEOF
+    sudo systemctl reload fail2ban 2>/dev/null || sudo systemctl restart fail2ban
+fi
+success "fail2ban active — SSH brute-force protection enabled."
+
+# ── Automatic security updates ────────────────────────────────────────────────
+# Enable unattended-upgrades for the security pocket only (safe default).
+if [ -f /etc/apt/apt.conf.d/50unattended-upgrades ]; then
+    info "unattended-upgrades already configured — skipping."
+else
+    sudo dpkg-reconfigure -plow unattended-upgrades 2>/dev/null || true
+    info "Automatic security updates enabled."
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+step "4/10  Node.js dependencies"
 # ═══════════════════════════════════════════════════════════════════════════════
 cd "${APP_DIR}"
-info "Cleaning node_modules for a fresh install..."
+info "Installing npm packages (this may take a minute)..."
 rm -rf node_modules
 npm install --silent
 success "npm install complete."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-step "3/9  PostgreSQL – user, database, permissions"
+step "5/10  PostgreSQL – user, database, permissions"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Create role if missing, always sync password
@@ -239,14 +323,14 @@ else
         -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
 fi
 
-# Always ensure correct privileges (safe to run multiple times)
+# Ensure correct privileges (safe to run multiple times)
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
 sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};"
 
 success "Database '${DB_NAME}' and user '${DB_USER}' are ready."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-step "4/9  .env file"
+step "6/10  .env file"
 # ═══════════════════════════════════════════════════════════════════════════════
 NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1/${DB_NAME}?sslmode=disable"
 
@@ -278,7 +362,7 @@ if [ -f "${APP_DIR}/.env" ]; then
     upsert_env "DATABASE_URL" "${NEW_DB_URL}"
     upsert_env "PORT"         "${APP_PORT}"
     upsert_env "NODE_ENV"     "production"
-    success ".env updated — DATABASE_URL now points to ${DB_NAME}."
+    success ".env updated — DATABASE_URL points to ${DB_NAME}."
 else
     SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
     cat > "${APP_DIR}/.env" <<EOF
@@ -305,36 +389,60 @@ ELEVENLABS_VOICE_ID=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 EOF
-    success ".env written."
+    success ".env created."
 fi
 
+# Lock down .env so only the current user can read it
+chmod 600 "${APP_DIR}/.env"
+info ".env permissions set to 600 (owner-read only)."
+
 # ═══════════════════════════════════════════════════════════════════════════════
-step "5/9  Database schema (drizzle-kit push)"
+step "7/10  Uploads directory"
 # ═══════════════════════════════════════════════════════════════════════════════
+#
+#  The app writes ElevenLabs-generated MP3s to uploads/, uploads/mm/, uploads/mw/
+#  and stores caller recordings under uploads/.  If these directories don't exist
+#  the app crashes silently on first audio generation.
+#
+for DIR in \
+    "${APP_DIR}/uploads" \
+    "${APP_DIR}/uploads/mm" \
+    "${APP_DIR}/uploads/mw"; do
+    if [ ! -d "$DIR" ]; then
+        mkdir -p "$DIR"
+        info "Created: $DIR"
+    fi
+done
+chmod -R 755 "${APP_DIR}/uploads"
+success "uploads/ directory structure verified."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+step "8/10  Database schema + admin account"
+# ═══════════════════════════════════════════════════════════════════════════════
+info "Pushing Drizzle schema..."
 npx drizzle-kit push --force
 success "Schema pushed."
 
-# ═══════════════════════════════════════════════════════════════════════════════
-step "6/9  Admin account"
-# ═══════════════════════════════════════════════════════════════════════════════
+info "Ensuring admin account..."
 npx tsx scripts/reset-admin.ts
 success "Admin account ready."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-step "7/9  Build"
+step "9/10  Build"
 # ═══════════════════════════════════════════════════════════════════════════════
 npm run build
 success "Build complete → ${APP_DIR}/dist/"
 
 # ═══════════════════════════════════════════════════════════════════════════════
-step "8/9  systemd service (${SERVICE_NAME})"
+step "10a/10  systemd service (${SERVICE_NAME})"
 # ═══════════════════════════════════════════════════════════════════════════════
 RUN_AS_USER="$(whoami)"
 
 sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
-Description=Phone Booth – Node.js
+Description=Phone Booth – Node.js production server
 After=network.target postgresql.service
+Wants=postgresql.service
 
 [Service]
 Type=simple
@@ -344,6 +452,8 @@ EnvironmentFile=${APP_DIR}/.env
 ExecStart=$(which node) ${APP_DIR}/dist/index.cjs
 Restart=always
 RestartSec=5
+# Allow large numbers of open files (for concurrent audio + call connections)
+LimitNOFILE=65536
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=${SERVICE_NAME}
@@ -359,11 +469,10 @@ sudo systemctl restart "${SERVICE_NAME}"
 success "Service '${SERVICE_NAME}' enabled and started."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-step "9/9  Nginx + SSL"
+step "10b/10  Nginx + SSL"
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Auto-detect the Let's Encrypt certificate directory for this domain.
-# Certbot names them <domain>, <domain>-0001, <domain>-0002, etc.
+# ── Auto-detect the Let's Encrypt certificate directory ───────────────────────
 CERT_BASE=""
 for CANDIDATE in \
     "/etc/letsencrypt/live/${DOMAIN}" \
@@ -376,19 +485,22 @@ for CANDIDATE in \
 done
 
 if [ -z "$CERT_BASE" ]; then
-    warn "No SSL certificate found for '${DOMAIN}' under /etc/letsencrypt/live/"
-    warn "Run the following to obtain one, then re-run this script:"
-    warn "  sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos -m admin@${DOMAIN}"
-    warn "Skipping Nginx SSL configuration."
+    warn "────────────────────────────────────────────────────────────────"
+    warn "No SSL certificate found for '${DOMAIN}'."
+    warn "Obtain one first with:"
+    warn "  sudo certbot certonly --nginx -d ${DOMAIN} -d www.${DOMAIN} \\"
+    warn "       --non-interactive --agree-tos -m admin@${DOMAIN}"
+    warn "Then re-run this script to complete the Nginx configuration."
+    warn "────────────────────────────────────────────────────────────────"
 else
     info "SSL certificate found at ${CERT_BASE}/"
 
-    # Remove default site so it does not intercept requests
+    # Remove default nginx site
     [ -L /etc/nginx/sites-enabled/default ] \
         && sudo rm -f /etc/nginx/sites-enabled/default \
         && info "Removed default nginx site."
 
-    # Remove any broken symlinks in sites-enabled
+    # Remove broken symlinks
     for LINK in /etc/nginx/sites-enabled/*; do
         if [ -L "${LINK}" ] && [ ! -e "${LINK}" ]; then
             sudo rm -f "${LINK}"
@@ -396,7 +508,21 @@ else
         fi
     done
 
-    # Write nginx site config
+    # Nginx global tweaks (applied only once)
+    NGINX_CONF_TWEAKED="/etc/nginx/conf.d/phonebooth_global.conf"
+    if [ ! -f "$NGINX_CONF_TWEAKED" ]; then
+        sudo tee "$NGINX_CONF_TWEAKED" > /dev/null <<NGXGLOBAL
+# Phone Booth global Nginx settings
+server_tokens off;                      # hide Nginx version
+gzip on;
+gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
+gzip_min_length 1024;
+client_max_body_size 50M;
+NGXGLOBAL
+        info "Applied global Nginx tweaks (gzip, server_tokens off)."
+    fi
+
+    # Write site config
     NGINX_SITE="/etc/nginx/sites-available/${SERVICE_NAME}"
     sudo tee "${NGINX_SITE}" > /dev/null <<NGINXEOF
 # HTTP → HTTPS redirect
@@ -431,9 +557,7 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy no-referrer-when-downgrade always;
 
-    client_max_body_size 50M;
-
-    # Twilio webhooks
+    # Twilio webhooks — short read timeout (Twilio gives up after 15 s)
     location /voice/ {
         proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_http_version 1.1;
@@ -459,7 +583,7 @@ server {
         proxy_pass_header Set-Cookie;
     }
 
-    # Audio uploads (cached)
+    # Audio uploads — long cache (files are content-addressable by name)
     location /uploads/ {
         proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_http_version 1.1;
@@ -470,7 +594,7 @@ server {
         add_header Cache-Control "public, max-age=604800, immutable";
     }
 
-    # React SPA + WebSocket
+    # React SPA + WebSocket hot-reload
     location / {
         proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_http_version 1.1;
@@ -488,14 +612,11 @@ server {
 }
 NGINXEOF
 
-    # Enable site
     sudo ln -sf "${NGINX_SITE}" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
-
-    # Test and reload
     sudo nginx -t
     sudo systemctl reload nginx
 
-    # Enable cert auto-renewal
+    # Enable automatic cert renewal
     sudo systemctl enable certbot.timer 2>/dev/null || true
 
     success "Nginx configured and reloaded."
@@ -508,22 +629,26 @@ echo -e "${BOLD}${GREEN}  All done!${RESET}"
 echo ""
 echo -e "  ${BOLD}Site       :${RESET} ${CYAN}https://${DOMAIN}${RESET}"
 echo -e "  ${BOLD}Admin      :${RESET} https://${DOMAIN}/admin/login"
-echo -e "  ${BOLD}Database   :${RESET} ${DB_NAME} (user: ${DB_USER})"
+echo -e "  ${BOLD}Database   :${RESET} ${DB_NAME}  (user: ${DB_USER})"
 echo -e "  ${BOLD}PostgreSQL :${RESET} version ${PG_VERSION}, service: ${PG_SERVICE}"
-echo -e "  ${BOLD}Service    :${RESET} ${SERVICE_NAME}"
+echo -e "  ${BOLD}Service    :${RESET} ${SERVICE_NAME}  (systemd)"
+echo -e "  ${BOLD}Node.js    :${RESET} $(node --version)"
+echo -e "  ${BOLD}Nginx      :${RESET} $(nginx -v 2>&1 | grep -oP '[\d.]+')"
 echo ""
 echo -e "  ${BOLD}Useful commands:${RESET}"
-echo -e "    Logs    : sudo journalctl -u ${SERVICE_NAME} -f"
-echo -e "    Restart : sudo systemctl restart ${SERVICE_NAME}"
-echo -e "    Nginx   : sudo tail -f /var/log/nginx/phonebooth_error.log"
+echo -e "    App logs  : sudo journalctl -u ${SERVICE_NAME} -f"
+echo -e "    Restart   : sudo systemctl restart ${SERVICE_NAME}"
+echo -e "    Nginx log : sudo tail -f /var/log/nginx/phonebooth_error.log"
+echo -e "    Firewall  : sudo ufw status"
+echo -e "    Fail2ban  : sudo fail2ban-client status sshd"
 echo ""
-echo -e "  ${BOLD}${YELLOW}Fill in your API keys in .env then restart the service:${RESET}"
+echo -e "  ${BOLD}${YELLOW}Next: fill in your API keys in .env then restart:${RESET}"
 echo -e "    nano ${APP_DIR}/.env"
-echo -e ""
+echo ""
 echo -e "    TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER"
 echo -e "    ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID"
 echo -e "    STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET"
-echo -e ""
+echo ""
 echo -e "    sudo systemctl restart ${SERVICE_NAME}"
 echo -e "${BOLD}${GREEN}=================================================${RESET}"
 echo ""
