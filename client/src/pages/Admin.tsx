@@ -823,6 +823,8 @@ function TTSTab() {
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const [filter, setFilter] = useState("");
   const [categoryFolder, setCategoryFolder] = useState<"shared" | "mm" | "mw">("shared");
+  const [generateAllProgress, setGenerateAllProgress] = useState<{ done: number; total: number; currentLabel: string } | null>(null);
+  const generateAllAbortRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -916,6 +918,46 @@ function TTSTab() {
     } catch (err: any) {
       toast({ title: "Preview failed", description: err.message, variant: "destructive" });
       setPreviewing(false);
+    }
+  }
+
+  async function handleGenerateAll() {
+    if (generateAllProgress) {
+      generateAllAbortRef.current = true;
+      return;
+    }
+    generateAllAbortRef.current = false;
+    const prompts = SYSTEM_PROMPTS;
+    setGenerateAllProgress({ done: 0, total: prompts.length, currentLabel: prompts[0]?.label ?? "" });
+    let done = 0;
+    for (const prompt of prompts) {
+      if (generateAllAbortRef.current) break;
+      const text = editingText[prompt.filename] ?? prompt.text;
+      const key = `${categoryFolder}:${prompt.filename}`;
+      setGenerating(key);
+      setGenerateAllProgress({ done, total: prompts.length, currentLabel: prompt.label });
+      try {
+        const res = await fetch("/api/admin/tts/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: text.trim(), filename: prompt.filename, folder: categoryFolder !== "shared" ? categoryFolder : undefined }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ message: "Failed" }));
+          toast({ title: `Failed: ${prompt.label}`, description: err.message, variant: "destructive" });
+        }
+      } catch {
+        toast({ title: `Error: ${prompt.label}`, description: "Network error", variant: "destructive" });
+      }
+      done++;
+    }
+    const wasCancelled = generateAllAbortRef.current;
+    setGenerating(null);
+    setGenerateAllProgress(null);
+    generateAllAbortRef.current = false;
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
+    if (!wasCancelled) {
+      toast({ title: "Generate All complete", description: `${done} of ${prompts.length} prompts generated into ${categoryFolder === "shared" ? "Shared" : categoryFolder.toUpperCase()} folder.` });
     }
   }
 
@@ -1090,22 +1132,52 @@ function TTSTab() {
       )}
 
       <div className={C.card}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">
             System Prompts
             <span className="ml-2 text-[10px] font-normal normal-case text-gray-400 border border-gray-200 rounded px-2 py-0.5">
               Folder: {categoryFolder === "shared" ? "Shared" : categoryFolder.toUpperCase()}
             </span>
           </h3>
-          <input
-            data-testid="input-filter-prompts"
-            type="text"
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            placeholder="Filter prompts..."
-            className="w-56 bg-white border border-gray-300 rounded px-3 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#f5a623] transition-colors"
-          />
+          <div className="flex items-center gap-2 ml-auto">
+            <input
+              data-testid="input-filter-prompts"
+              type="text"
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              placeholder="Filter prompts..."
+              className="w-44 bg-white border border-gray-300 rounded px-3 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#f5a623] transition-colors"
+            />
+            <button
+              data-testid="btn-generate-all"
+              onClick={handleGenerateAll}
+              disabled={!!generating && !generateAllProgress}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-bold border transition-colors ${
+                generateAllProgress
+                  ? "bg-red-50 border-red-300 text-red-600 hover:bg-red-100"
+                  : "bg-[#f5a623] border-[#f5a623] text-white hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              }`}
+            >
+              {generateAllProgress
+                ? <><X size={12} /> Cancel</>
+                : <><Wand2 size={12} /> Generate All</>}
+            </button>
+          </div>
         </div>
+        {generateAllProgress && (
+          <div className="mt-3 space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-mono text-gray-500">
+              <span className="truncate max-w-xs">{generateAllProgress.currentLabel}</span>
+              <span className="flex-shrink-0 ml-2 text-[#f5a623] font-bold">{generateAllProgress.done} / {generateAllProgress.total}</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-[#f5a623] h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${(generateAllProgress.done / generateAllProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <table className="w-full">
             <thead>
