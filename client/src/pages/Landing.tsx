@@ -115,16 +115,16 @@ export default function Landing() {
           {/* Right: Nav links */}
           <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.95rem", fontWeight: 500 }}>
             {[
-              { label: "Buy Time", href: "#pricing" },
+              { label: "Buy Time", href: "/membership" },
             ].map(l => (
-              <button key={l.label} onClick={() => scrollTo(l.href)}
-                style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: "0.95rem", fontWeight: 500, padding: 0, transition: "color 0.15s" }}
-                onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-                onMouseLeave={e => (e.currentTarget.style.color = "#ccc")}
+              <Link key={l.label} href={l.href}
+                style={{ color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, transition: "color 0.15s" }}
+                onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
+                onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
                 data-testid={`nav-${l.label.toLowerCase().replace(/\s+/g, "-")}`}
               >
                 {l.label}
-              </button>
+              </Link>
             ))}
             <div style={{ width: "1px", height: "18px", background: "#222" }} />
             <Link href="/login"
@@ -153,12 +153,14 @@ export default function Landing() {
         {/* Mobile menu */}
         {mobileOpen && (
           <div style={{ background: "#111", borderTop: "1px solid #222", padding: "1rem 1.5rem 1.5rem" }}>
-            {["Buy Time", "My Account"].map(l => (
-              <button key={l} onClick={() => scrollTo("#pricing")}
-                style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
-                {l}
-              </button>
-            ))}
+            <Link href="/membership"
+              style={{ display: "block", width: "100%", textAlign: "left", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
+              Buy Time
+            </Link>
+            <Link href="/dashboard"
+              style={{ display: "block", width: "100%", textAlign: "left", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
+              My Account
+            </Link>
           </div>
         )}
       </nav>

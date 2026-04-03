@@ -686,13 +686,35 @@ export default function Dashboard() {
                 );
               })}
             </div>
-            <div style={{ marginTop: "1.5rem", background: "#111", border: "1px solid #1e1e1e", borderRadius: "12px", padding: "1.25rem" }}>
-              <p style={{ color: "#666", fontSize: "0.8rem", margin: 0, lineHeight: 1.6 }}>
-                <strong style={{ color: "#888" }}>How to purchase:</strong> Call {accessNumber}, sign in using your linked phone number, then choose "Manage Membership" from the main menu.
-                {membershipSettings?.billingMode === "per_day"
-                  ? " Minutes are deducted nightly as long as you have an active membership."
-                  : " Minutes are deducted during calls as you use them."}
-              </p>
+            <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <Link
+                href="/membership"
+                data-testid="link-buy-membership"
+                style={{
+                  background: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+                  color: "#fff",
+                  textDecoration: "none",
+                  borderRadius: "10px",
+                  padding: "0.875rem 1.5rem",
+                  fontWeight: 700,
+                  fontSize: "0.9rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "0.5rem",
+                }}
+              >
+                Buy a Membership Online
+                <ChevronRight size={16} />
+              </Link>
+              <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "12px", padding: "1.25rem" }}>
+                <p style={{ color: "#666", fontSize: "0.8rem", margin: 0, lineHeight: 1.6 }}>
+                  <strong style={{ color: "#888" }}>Buy by phone:</strong> Call {accessNumber}, sign in using your linked phone number, then choose "Manage Membership" from the main menu.
+                  {membershipSettings?.billingMode === "per_day"
+                    ? " Minutes are deducted nightly as long as you have an active membership."
+                    : " Minutes are deducted during calls as you use them."}
+                </p>
+              </div>
             </div>
           </div>
         )}

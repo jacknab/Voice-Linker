@@ -14,6 +14,7 @@ import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./
 import { runFlagAutoChecks, runBlockAutoChecks } from "./autoModeration";
 import { generateTTS, listVoices } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
+import { getUncachableStripeClient } from "./stripeClient";
 
 // Ensure uploads directory and category subdirectories exist
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -5324,6 +5325,140 @@ export async function registerRoutes(
 
     res.type("text/xml");
     res.send(twiml.toString());
+  });
+
+  // ─── Web Stripe Checkout ────────────────────────────────────────────────────
+  // In-memory set to prevent double-crediting (idempotency for same server instance)
+  const processedCheckoutSessions = new Set<string>();
+
+  app.post("/api/stripe/create-web-checkout", async (req: Request, res: Response) => {
+    if (!req.session.webUserId) {
+      return res.status(401).json({ error: "You must be logged in to purchase a membership." });
+    }
+    const planKey = req.body?.planKey as string;
+    if (!["plan1", "plan2", "plan3"].includes(planKey)) {
+      return res.status(400).json({ error: "Invalid plan selected." });
+    }
+
+    try {
+      const webUser = await storage.getWebUserById(req.session.webUserId);
+      if (!webUser) return res.status(401).json({ error: "Session expired." });
+
+      if (!webUser.linkedPhoneNumber) {
+        return res.status(400).json({ error: "You must link a phone number before purchasing. Please visit your dashboard." });
+      }
+
+      const settings = await storage.getMembershipSettings();
+      const planNames: Record<string, string> = {
+        plan1: settings.plan1Name,
+        plan2: settings.plan2Name,
+        plan3: settings.plan3Name,
+      };
+      const planMinutes: Record<string, number> = {
+        plan1: settings.plan1Minutes,
+        plan2: settings.plan2Minutes,
+        plan3: settings.plan3Minutes,
+      };
+      const planPriceCents: Record<string, number> = {
+        plan1: settings.plan1PriceCents,
+        plan2: settings.plan2PriceCents,
+        plan3: settings.plan3PriceCents,
+      };
+
+      const name = planNames[planKey];
+      const minutes = planMinutes[planKey];
+      const priceCents = planPriceCents[planKey];
+
+      const proto = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.get("host");
+      const baseUrl = `${proto}://${host}`;
+
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              unit_amount: priceCents,
+              product_data: {
+                name: `${name} Membership`,
+                description: `${Math.round(minutes / 60)} hours of talk time`,
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          webUserId: webUser.id,
+          planKey,
+          planName: name,
+          planMinutes: String(minutes),
+          linkedPhoneNumber: webUser.linkedPhoneNumber,
+        },
+        success_url: `${baseUrl}/membership/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/membership`,
+      });
+
+      return res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("[stripe] create-web-checkout error:", err);
+      return res.status(500).json({ error: "Failed to create checkout session. Please try again." });
+    }
+  });
+
+  app.get("/api/stripe/verify-checkout/:sessionId", async (req: Request, res: Response) => {
+    if (!req.session.webUserId) {
+      return res.status(401).json({ error: "Not authenticated." });
+    }
+    const { sessionId } = req.params;
+
+    try {
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.payment_status !== "paid") {
+        return res.status(400).json({ error: "Payment not completed." });
+      }
+
+      const meta = session.metadata || {};
+      if (meta.webUserId !== req.session.webUserId) {
+        return res.status(403).json({ error: "Session mismatch." });
+      }
+
+      const planName = meta.planName || "";
+      const planMinutes = parseInt(meta.planMinutes || "0", 10);
+      const linkedPhone = meta.linkedPhoneNumber || "";
+
+      // Apply membership (idempotent via processedCheckoutSessions set)
+      if (!processedCheckoutSessions.has(sessionId)) {
+        processedCheckoutSessions.add(sessionId);
+        if (linkedPhone) {
+          const phoneUser = await storage.getUserByPhone(linkedPhone);
+          if (phoneUser) {
+            const addedSeconds = planMinutes * 60;
+            const currentSeconds = phoneUser.remainingSeconds ?? 0;
+            await storage.updateUserMembership(phoneUser.id, {
+              membershipTier: planName.toLowerCase(),
+              remainingSeconds: currentSeconds + addedSeconds,
+              membershipStartedAt: phoneUser.membershipStartedAt ?? new Date(),
+            });
+            console.log(`[stripe] Applied ${planName} membership to phone=${linkedPhone}, added ${addedSeconds}s`);
+          }
+        }
+      }
+
+      return res.json({
+        ok: true,
+        planName,
+        planMinutes,
+        linkedPhoneNumber: linkedPhone,
+      });
+    } catch (err: any) {
+      console.error("[stripe] verify-checkout error:", err);
+      return res.status(500).json({ error: "Failed to verify checkout session." });
+    }
   });
 
   return httpServer;
