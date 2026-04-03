@@ -27,6 +27,7 @@ interface SiteSettings {
   fallbackPhoneNumber: string;
   customerServiceEmail: string | null;
   customerServicePhone: string | null;
+  siteCategory: string | null;
 }
 
 interface LocalNumber {
@@ -262,6 +263,139 @@ function LinkMembershipModal({
           >
             {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
             {isSubmitting ? "Linking…" : "Link Membership"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Link Phone (MW mode) ─────────────────────────────────────────────────────
+// MW systems don't use membership cards. The user enters their 10-digit phone
+// number and the backend verifies an active membership with time remaining.
+function LinkPhoneMWModal({ onSuccess }: { onSuccess: () => void }) {
+  const queryClient = useQueryClient();
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [linked, setLinked] = useState(false);
+
+  const digits = phoneNumber.replace(/\D/g, "");
+  const canSubmit = digits.length === 10;
+
+  const formatPhoneInput = (raw: string) => {
+    const d = raw.replace(/\D/g, "").slice(0, 10);
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+    return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, "").slice(0, 10);
+    setPhoneNumber(formatPhoneInput(raw));
+    setError(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!canSubmit || isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/link-phone-mw", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: digits }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to link membership.");
+      setLinked(true);
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/membership"] });
+      setTimeout(() => onSuccess(), 1800);
+    } catch (err: any) {
+      setError(err.message || "Failed to link membership.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const inputStyle = {
+    width: "100%", background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "8px",
+    padding: "0.75rem 1rem", color: "#fff", fontSize: "1.1rem", outline: "none",
+    boxSizing: "border-box" as const, letterSpacing: "0.08em", fontFamily: "monospace",
+  };
+  const labelStyle = {
+    color: "#555", fontSize: "0.7rem", fontWeight: 600 as const, textTransform: "uppercase" as const,
+    letterSpacing: "0.08em", margin: "0 0 0.35rem", display: "block",
+  };
+
+  return (
+    <div
+      data-testid="card-link-phone-mw"
+      style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "14px", padding: "1.75rem", marginBottom: "1.5rem" }}
+    >
+      {linked ? (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "0.75rem 0", gap: "0.75rem" }}>
+          <div style={{ width: 52, height: 52, background: "#14532d30", border: "1px solid #166534", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <CheckCircle size={26} color="#22c55e" />
+          </div>
+          <p style={{ color: "#22c55e", fontSize: "1rem", fontWeight: 700, margin: 0 }}>Membership Linked!</p>
+          <p style={{ color: "#666", fontSize: "0.82rem", margin: 0 }}>Your membership has been connected to this account.</p>
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "1rem", marginBottom: "1.25rem" }}>
+            <div style={{ width: 44, height: 44, background: "#1d4ed820", border: "1px solid #1d4ed840", borderRadius: "10px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "0.1rem" }}>
+              <Phone size={20} color="#60a5fa" />
+            </div>
+            <div>
+              <h3 style={{ color: "#fff", fontSize: "1rem", fontWeight: 700, margin: "0 0 0.3rem" }}>Link Your Membership</h3>
+              <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: 0, lineHeight: 1.6 }}>
+                Enter the 10-digit phone number associated with your membership to connect your account.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "1rem" }}>
+            <label style={labelStyle}>
+              <PhoneForwarded size={11} style={{ display: "inline", marginRight: "0.3rem", verticalAlign: "middle" }} />
+              Phone Number
+            </label>
+            <input
+              data-testid="input-mw-phone"
+              type="tel"
+              inputMode="numeric"
+              value={phoneNumber}
+              onChange={handleChange}
+              onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
+              placeholder="(555) 555-5555"
+              style={inputStyle}
+              autoFocus
+            />
+            <p style={{ color: "#444", fontSize: "0.72rem", margin: "0.4rem 0 0" }}>Enter the 10-digit number you used to sign up</p>
+          </div>
+
+          {error && (
+            <div style={{ background: "#2d0a0a", border: "1px solid #7f1d1d", borderRadius: "8px", padding: "0.65rem 1rem", marginBottom: "1rem", display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+              <AlertTriangle size={14} color="#f87171" style={{ flexShrink: 0, marginTop: "0.15rem" }} />
+              <p style={{ color: "#f87171", fontSize: "0.82rem", margin: 0, lineHeight: 1.5 }}>{error}</p>
+            </div>
+          )}
+
+          <button
+            data-testid="button-link-membership-mw"
+            onClick={handleSubmit}
+            disabled={!canSubmit || isSubmitting}
+            style={{
+              background: "#1d4ed8", color: "#fff", border: "none", borderRadius: "8px",
+              padding: "0.7rem 1.5rem", fontWeight: 700, fontSize: "0.875rem", cursor: canSubmit && !isSubmitting ? "pointer" : "not-allowed",
+              display: "inline-flex", alignItems: "center", gap: "0.5rem",
+              opacity: (!canSubmit || isSubmitting) ? 0.55 : 1,
+            }}
+          >
+            {isSubmitting ? <Loader2 size={15} className="animate-spin" /> : <Link2 size={15} />}
+            {isSubmitting ? "Verifying…" : "Link Membership"}
           </button>
         </>
       )}
@@ -544,10 +678,16 @@ export default function Dashboard() {
           <div>
             {/* Phone linking or membership info */}
             {!me.linkedPhoneNumber ? (
-              <LinkMembershipModal
-                accessNumber={accessNumber}
-                onSuccess={() => queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] })}
-              />
+              siteData?.siteCategory === "MM" ? (
+                <LinkPhoneMWModal
+                  onSuccess={() => queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] })}
+                />
+              ) : (
+                <LinkMembershipModal
+                  accessNumber={accessNumber}
+                  onSuccess={() => queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] })}
+                />
+              )
             ) : phoneMembership ? (
               <MembershipInfoCard membership={phoneMembership} siteName={siteName} />
             ) : (
