@@ -2833,6 +2833,13 @@ export async function registerRoutes(
         await storage.markMessageRead(msgId);
         twiml.redirect("/voice/my-mailbox");
       } else if (digit === "9") {
+        // Exiting the mailbox messages area — in per-minute billing notify caller deductions have stopped.
+        // In per-day billing time is not deducted per-call, so skip the announcement.
+        const mailboxExitSettings = await getMembershipSettingsCached();
+        if (mailboxExitSettings.billingMode !== "per_day") {
+          playPrompt(twiml, req, "time_deduction_stop.mp3",
+            "Time is no longer being deducted from your membership.");
+        }
         twiml.redirect("/voice/mailbox-menu");
       } else {
         playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
@@ -4339,6 +4346,13 @@ export async function registerRoutes(
         playPrompt(twiml, req, "profile_flagged.mp3", "This profile has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "9") {
+        // Exiting the phone booth — in per-minute billing notify caller deductions have stopped.
+        // In per-day billing time is not deducted per-call, so skip the announcement.
+        const boothExitSettings = await getMembershipSettingsCached();
+        if (boothExitSettings.billingMode !== "per_day") {
+          playPrompt(twiml, req, "time_deduction_stop.mp3",
+            "Time is no longer being deducted from your membership.");
+        }
         twiml.redirect("/voice/main-menu");
       } else {
         playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
