@@ -206,10 +206,10 @@ export default function Landing() {
               </div>
             ) : (
               <div>
-                <p style={{ fontSize: "1.3rem", color: "rgba(255,255,255,0.85)", fontWeight: 400, marginBottom: "0.3rem", textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 2px 2px 0 #000" }}>
+                <p style={{ fontSize: "1.1rem", color: "rgba(255,255,255,0.85)", fontWeight: 400, marginBottom: "0.3rem", textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 2px 2px 0 #000" }}>
                   Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access number
                 </p>
-                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(2rem, 4.5vw, 3rem)", color: "#fff", textDecoration: "none", letterSpacing: "0.01em", lineHeight: 1.1, textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
+                <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(1.75rem, 4vw, 2.7rem)", color: "#fff", textDecoration: "none", letterSpacing: "0.01em", lineHeight: 1.1, textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
                   data-testid="text-local-phone"
                 >
                   <span style={{ fontWeight: 400 }}>Call </span><span style={{ fontWeight: 900 }}>{formatPhone(displayPhone)}</span>
