@@ -26,7 +26,6 @@ interface KeyDef {
   key: string;
   label: string;
   active: boolean;
-  highlight?: "blue" | "green" | "red" | "amber" | "purple";
 }
 
 function PhoneKeypad({ keys, title, description }: {
@@ -34,154 +33,137 @@ function PhoneKeypad({ keys, title, description }: {
   title: string;
   description: string;
 }) {
-  const highlightColors: Record<string, { bg: string; border: string; text: string; label: string }> = {
-    blue:   { bg: "rgba(29,78,216,0.18)",  border: "#1d4ed8", text: "#60a5fa", label: "#93c5fd" },
-    green:  { bg: "rgba(22,163,74,0.18)",  border: "#16a34a", text: "#4ade80", label: "#86efac" },
-    red:    { bg: "rgba(220,38,38,0.18)",  border: "#dc2626", text: "#f87171", label: "#fca5a5" },
-    amber:  { bg: "rgba(217,119,6,0.18)",  border: "#d97706", text: "#fbbf24", label: "#fcd34d" },
-    purple: { bg: "rgba(147,51,234,0.18)", border: "#9333ea", text: "#c084fc", label: "#d8b4fe" },
-  };
-
   return (
-    <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "14px", padding: "2rem", maxWidth: "420px", width: "100%" }}>
+    <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "14px", padding: "2rem", maxWidth: "380px", width: "100%" }}>
       <h2 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#fff", marginBottom: "0.35rem" }}>{title}</h2>
-      <p style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.45)", lineHeight: 1.6, marginBottom: "1.75rem" }}>{description}</p>
+      <p style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.4)", lineHeight: 1.6, marginBottom: "1.75rem" }}>{description}</p>
 
-      {/* 3-column keypad grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem" }}>
-        {keys.map((k, i) => {
-          const colors = k.highlight ? highlightColors[k.highlight] : null;
-          const isActive = k.active;
-          return (
-            <div
-              key={i}
-              data-testid={`keypad-key-${k.key}`}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "0.55rem",
-                opacity: isActive ? 1 : 0.25,
-              }}
-            >
-              {/* Circle */}
-              <div style={{
-                width: 72,
-                height: 72,
-                borderRadius: "50%",
-                border: `2px solid ${isActive && colors ? colors.border : isActive ? "#2d2d2d" : "#1a1a1a"}`,
-                background: isActive && colors ? colors.bg : isActive ? "#1a1a1a" : "#111",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.15s",
+        {keys.map((k, i) => (
+          <div
+            key={i}
+            data-testid={`keypad-key-${k.key}`}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "0.55rem",
+              opacity: k.active ? 1 : 0.2,
+            }}
+          >
+            <div style={{
+              width: 68,
+              height: 68,
+              borderRadius: "50%",
+              border: `2px solid ${k.active ? "#2d2d2d" : "#1a1a1a"}`,
+              background: k.active ? "#1a1a1a" : "#111",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              <span style={{
+                fontSize: "1.6rem",
+                fontWeight: 700,
+                color: k.active ? "#fff" : "rgba(255,255,255,0.25)",
+                lineHeight: 1,
               }}>
-                <span style={{
-                  fontSize: "1.65rem",
-                  fontWeight: 700,
-                  color: isActive && colors ? colors.text : isActive ? "#fff" : "rgba(255,255,255,0.3)",
-                  lineHeight: 1,
-                  fontFamily: "'Inter', system-ui, sans-serif",
-                }}>
-                  {k.key}
-                </span>
-              </div>
-              {/* Label */}
-              {k.label && isActive ? (
-                <span style={{
-                  fontSize: "0.72rem",
-                  fontWeight: 500,
-                  color: colors ? colors.label : "rgba(255,255,255,0.6)",
-                  textAlign: "center",
-                  lineHeight: 1.35,
-                  maxWidth: "72px",
-                }}>
-                  {k.label}
-                </span>
-              ) : (
-                <span style={{ height: "1rem" }} />
-              )}
+                {k.key}
+              </span>
             </div>
-          );
-        })}
+            {k.label && k.active ? (
+              <span style={{
+                fontSize: "0.7rem",
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.55)",
+                textAlign: "center",
+                lineHeight: 1.35,
+                maxWidth: "72px",
+              }}>
+                {k.label}
+              </span>
+            ) : (
+              <span style={{ height: "1rem" }} />
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
 const PHONE_BOOTH_KEYS: KeyDef[] = [
-  { key: "1", label: "Send Message",     active: true,  highlight: "blue"   },
-  { key: "2", label: "Next Profile",     active: true,  highlight: "green"  },
-  { key: "3", label: "Live Connect",     active: true,  highlight: "purple" },
-  { key: "4", label: "Block Caller",     active: true,  highlight: "red"    },
-  { key: "5", label: "Prev Profile",     active: true,  highlight: "amber"  },
-  { key: "6", label: "Location",         active: true,  highlight: "blue"   },
-  { key: "7", label: "Flag Profile",     active: true,  highlight: "red"    },
-  { key: "8", label: "",                 active: false                       },
-  { key: "9", label: "Main Menu",        active: true,  highlight: "amber"  },
-  { key: "*", label: "",                 active: false                       },
-  { key: "0", label: "",                 active: false                       },
-  { key: "#", label: "Exit",             active: true,  highlight: "red"    },
+  { key: "1", label: "Send Message",   active: true  },
+  { key: "2", label: "Next Profile",   active: true  },
+  { key: "3", label: "Live Connect",   active: true  },
+  { key: "4", label: "Block Caller",   active: true  },
+  { key: "5", label: "Prev Profile",   active: true  },
+  { key: "6", label: "Location",       active: true  },
+  { key: "7", label: "Flag Profile",   active: true  },
+  { key: "8", label: "",               active: false },
+  { key: "9", label: "Main Menu",      active: true  },
+  { key: "*", label: "",               active: false },
+  { key: "0", label: "",               active: false },
+  { key: "#", label: "Exit",           active: true  },
 ];
 
 const MAIN_MENU_KEYS_MM: KeyDef[] = [
-  { key: "1", label: "Mailbox & Ads",   active: true,  highlight: "blue"   },
-  { key: "2", label: "Buy Time",        active: true,  highlight: "green"  },
-  { key: "3", label: "",                active: false                       },
-  { key: "4", label: "Pricing Info",    active: true,  highlight: "amber"  },
-  { key: "5", label: "",                active: false                       },
-  { key: "6", label: "",                active: false                       },
-  { key: "7", label: "",                active: false                       },
-  { key: "8", label: "My Membership",   active: true,  highlight: "purple" },
-  { key: "9", label: "Repeat Menu",     active: true,  highlight: "amber"  },
-  { key: "*", label: "Phone Booth",     active: true,  highlight: "green"  },
-  { key: "0", label: "Customer Care",   active: true,  highlight: "blue"   },
-  { key: "#", label: "",                active: false                       },
+  { key: "1", label: "Mailbox & Ads",  active: true  },
+  { key: "2", label: "Buy Time",       active: true  },
+  { key: "3", label: "",               active: false },
+  { key: "4", label: "Pricing Info",   active: true  },
+  { key: "5", label: "",               active: false },
+  { key: "6", label: "",               active: false },
+  { key: "7", label: "",               active: false },
+  { key: "8", label: "My Membership",  active: true  },
+  { key: "9", label: "Repeat Menu",    active: true  },
+  { key: "*", label: "Phone Booth",    active: true  },
+  { key: "0", label: "Customer Care",  active: true  },
+  { key: "#", label: "",               active: false },
 ];
 
 const MAIN_MENU_KEYS_MW: KeyDef[] = [
-  { key: "1", label: "Join the Action", active: true,  highlight: "blue"   },
-  { key: "2", label: "Buy Time",        active: true,  highlight: "green"  },
-  { key: "3", label: "",                active: false                       },
-  { key: "4", label: "",                active: false                       },
-  { key: "5", label: "",                active: false                       },
-  { key: "6", label: "",                active: false                       },
-  { key: "7", label: "",                active: false                       },
-  { key: "8", label: "My Membership",   active: true,  highlight: "purple" },
-  { key: "9", label: "Repeat Menu",     active: true,  highlight: "amber"  },
-  { key: "*", label: "",                active: false                       },
-  { key: "0", label: "Customer Care",   active: true,  highlight: "blue"   },
-  { key: "#", label: "",                active: false                       },
+  { key: "1", label: "Join the Action",active: true  },
+  { key: "2", label: "Buy Time",       active: true  },
+  { key: "3", label: "",               active: false },
+  { key: "4", label: "",               active: false },
+  { key: "5", label: "",               active: false },
+  { key: "6", label: "",               active: false },
+  { key: "7", label: "",               active: false },
+  { key: "8", label: "My Membership",  active: true  },
+  { key: "9", label: "Repeat Menu",    active: true  },
+  { key: "*", label: "",               active: false },
+  { key: "0", label: "Customer Care",  active: true  },
+  { key: "#", label: "",               active: false },
 ];
 
 const MESSAGE_KEYS: KeyDef[] = [
-  { key: "1", label: "Reply",           active: true,  highlight: "blue"   },
-  { key: "2", label: "Sender's Profile",active: true,  highlight: "green"  },
-  { key: "3", label: "Keep Browsing",   active: true,  highlight: "green"  },
-  { key: "4", label: "Block Caller",    active: true,  highlight: "red"    },
-  { key: "5", label: "",                active: false                       },
-  { key: "6", label: "",                active: false                       },
-  { key: "7", label: "Flag Message",    active: true,  highlight: "red"    },
-  { key: "8", label: "",                active: false                       },
-  { key: "9", label: "Main Menu",       active: true,  highlight: "amber"  },
-  { key: "*", label: "",                active: false                       },
-  { key: "0", label: "",                active: false                       },
-  { key: "#", label: "",                active: false                       },
+  { key: "1", label: "Reply",             active: true  },
+  { key: "2", label: "Sender's Profile",  active: true  },
+  { key: "3", label: "Keep Browsing",     active: true  },
+  { key: "4", label: "Block Caller",      active: true  },
+  { key: "5", label: "",                  active: false },
+  { key: "6", label: "",                  active: false },
+  { key: "7", label: "Flag Message",      active: true  },
+  { key: "8", label: "",                  active: false },
+  { key: "9", label: "Main Menu",         active: true  },
+  { key: "*", label: "",                  active: false },
+  { key: "0", label: "",                  active: false },
+  { key: "#", label: "",                  active: false },
 ];
 
 const LIVE_INVITE_KEYS: KeyDef[] = [
-  { key: "1", label: "Accept",          active: true,  highlight: "green"  },
-  { key: "2", label: "Decline & Next",  active: true,  highlight: "red"    },
-  { key: "3", label: "Hear Greeting",   active: true,  highlight: "blue"   },
-  { key: "4", label: "Block Caller",    active: true,  highlight: "red"    },
-  { key: "5", label: "",                active: false                       },
-  { key: "6", label: "",                active: false                       },
-  { key: "7", label: "",                active: false                       },
-  { key: "8", label: "",                active: false                       },
-  { key: "9", label: "",                active: false                       },
-  { key: "*", label: "",                active: false                       },
-  { key: "0", label: "",                active: false                       },
-  { key: "#", label: "Exit Call",       active: true,  highlight: "red"    },
+  { key: "1", label: "Accept",         active: true  },
+  { key: "2", label: "Decline & Next", active: true  },
+  { key: "3", label: "Hear Greeting",  active: true  },
+  { key: "4", label: "Block Caller",   active: true  },
+  { key: "5", label: "",               active: false },
+  { key: "6", label: "",               active: false },
+  { key: "7", label: "",               active: false },
+  { key: "8", label: "",               active: false },
+  { key: "9", label: "",               active: false },
+  { key: "*", label: "",               active: false },
+  { key: "0", label: "",               active: false },
+  { key: "#", label: "Exit Call",      active: true  },
 ];
 
 type Mode = "booth" | "menu" | "messages" | "invite";
@@ -214,38 +196,36 @@ export default function KeypadTips() {
     { id: "invite",   label: "Live Invite" },
   ];
 
-  const keypads: Record<Mode, { keys: KeyDef[]; title: string; description: string }> = {
+  const keypads: Record<Mode, { keys: KeyDef[]; title: string; description: string; tip: string }> = {
     booth: {
       keys: PHONE_BOOTH_KEYS,
       title: "Phone Booth — Browse Profiles",
-      description: "Use these keys while listening to a caller's greeting to interact with their profile.",
+      description: "Use these keys while listening to a caller's greeting.",
+      tip: "Press 2 to skip a greeting at any point — even while it's still playing. Press 3 to request a live connection.",
     },
     menu: {
       keys: mainMenuKeys,
       title: "Main Menu",
-      description: "Use these keys when you're at the main menu to navigate the system.",
+      description: "Use these keys when you're at the main menu.",
+      tip: isMM
+        ? "Press * anytime from the main menu to jump straight into the Phone Booth."
+        : "Press 1 from the main menu to join the action and start browsing live callers.",
     },
     messages: {
       keys: MESSAGE_KEYS,
       title: "Inbox — Listening to a Message",
-      description: "Use these keys while a received message is playing to reply, browse, or manage the sender.",
+      description: "Use these keys while a received message is playing.",
+      tip: "Press 2 while reading a message to hear the sender's recorded greeting before you reply.",
     },
     invite: {
       keys: LIVE_INVITE_KEYS,
       title: "Live Connect Invite",
-      description: "When another caller sends you a live connect request, use these keys to respond.",
+      description: "Use these keys when another caller sends a live connect request.",
+      tip: "Press 3 to hear the caller's greeting before deciding to accept or decline.",
     },
   };
 
   const current = keypads[activeMode];
-
-  const legend = [
-    { color: "#4ade80", label: "Navigate / Accept" },
-    { color: "#60a5fa", label: "Interact / Send"   },
-    { color: "#c084fc", label: "Live Connect"       },
-    { color: "#fbbf24", label: "Menu / Repeat"      },
-    { color: "#f87171", label: "Block / Exit / Flag"},
-  ];
 
   return (
     <div style={{ fontFamily: "'Inter', system-ui, sans-serif", background: "#0d0d0d", color: "#fff", minHeight: "100vh" }}>
@@ -262,7 +242,7 @@ export default function KeypadTips() {
 
           <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.95rem", fontWeight: 500 }}>
             <Link href="/membership"
-              style={{ color: "#ccc", textDecoration: "none", transition: "color 0.15s" }}
+              style={{ color: "#ccc", textDecoration: "none" }}
               onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
               onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
               data-testid="nav-buy-time">
@@ -270,14 +250,14 @@ export default function KeypadTips() {
             </Link>
             <div style={{ width: "1px", height: "18px", background: "#222" }} />
             <Link href="/login"
-              style={{ color: "#ccc", textDecoration: "none", transition: "color 0.15s" }}
+              style={{ color: "#ccc", textDecoration: "none" }}
               onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
               onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
               data-testid="nav-sign-in">
               Log in
             </Link>
             <Link href="/register"
-              style={{ background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.92rem", fontWeight: 700, padding: "0.4rem 0.875rem", borderRadius: "7px", transition: "background 0.15s" }}
+              style={{ background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.92rem", fontWeight: 700, padding: "0.4rem 0.875rem", borderRadius: "7px" }}
               onMouseEnter={(e: any) => (e.currentTarget.style.background = "#1e40af")}
               onMouseLeave={(e: any) => (e.currentTarget.style.background = "#1d4ed8")}
               data-testid="nav-register">
@@ -296,7 +276,7 @@ export default function KeypadTips() {
             <Link href="/membership" style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
               Buy Time
             </Link>
-            <Link href="/dashboard" style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
+            <Link href="/dashboard" style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0" }}>
               My Account
             </Link>
           </div>
@@ -313,8 +293,8 @@ export default function KeypadTips() {
             data-testid="keypad-title">
             Keypad Tips
           </h1>
-          <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.55)", lineHeight: 1.7, maxWidth: "600px" }}>
-            Navigate {siteName} quickly and easily with this keypad reference guide. Select a screen below to see which keys do what.
+          <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.5)", lineHeight: 1.7, maxWidth: "580px" }}>
+            Select a screen below to see which keys do what.
           </p>
         </div>
       </section>
@@ -339,7 +319,7 @@ export default function KeypadTips() {
                   cursor: "pointer",
                   border: activeMode === m.id ? "1px solid #1d4ed8" : "1px solid #1e1e1e",
                   background: activeMode === m.id ? "#1d4ed8" : "#111",
-                  color: activeMode === m.id ? "#fff" : "rgba(255,255,255,0.5)",
+                  color: activeMode === m.id ? "#fff" : "rgba(255,255,255,0.45)",
                   transition: "all 0.15s",
                 }}
               >
@@ -348,83 +328,25 @@ export default function KeypadTips() {
             ))}
           </div>
 
-          {/* Keypad + legend layout */}
+          {/* Keypad + tip layout */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "2.5rem", alignItems: "flex-start" }}>
 
-            {/* Keypad */}
             <PhoneKeypad
               keys={current.keys}
               title={current.title}
               description={current.description}
             />
 
-            {/* Right side: legend + quick tips */}
-            <div style={{ flex: "1 1 260px", minWidth: "220px" }}>
-
-              {/* Color legend */}
-              <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: "12px", padding: "1.5rem", marginBottom: "1.25rem" }}>
-                <h3 style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", marginBottom: "1rem" }}>
-                  Color Key
-                </h3>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
-                  {legend.map(l => (
-                    <div key={l.label} style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-                      <div style={{ width: 12, height: 12, borderRadius: "50%", background: l.color, flexShrink: 0 }} />
-                      <span style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.55)" }}>{l.label}</span>
-                    </div>
-                  ))}
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-                    <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#2d2d2d", border: "1px solid #333", flexShrink: 0 }} />
-                    <span style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.3)" }}>Not used on this screen</span>
-                  </div>
-                </div>
+            {/* Pro tip */}
+            <div style={{ flex: "1 1 240px", minWidth: "200px" }}>
+              <div style={{ background: "rgba(29,78,216,0.08)", border: "1px solid rgba(29,78,216,0.25)", borderRadius: "10px", padding: "1.25rem" }}>
+                <p style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#60a5fa", marginBottom: "0.5rem" }}>
+                  Pro Tip
+                </p>
+                <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.65, margin: 0 }}>
+                  {current.tip}
+                </p>
               </div>
-
-              {/* Quick tip for current mode */}
-              {activeMode === "booth" && (
-                <div style={{ background: "rgba(29,78,216,0.1)", border: "1px solid rgba(29,78,216,0.3)", borderRadius: "10px", padding: "1.25rem" }}>
-                  <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#60a5fa", marginBottom: "0.5rem" }}>
-                    Pro Tip
-                  </p>
-                  <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.65, margin: 0 }}>
-                    Press <strong style={{ color: "#fff" }}>2</strong> to skip a greeting at any point — even while it's still playing. Press <strong style={{ color: "#fff" }}>3</strong> to request a live connection with whoever you're currently listening to.
-                  </p>
-                </div>
-              )}
-              {activeMode === "menu" && (
-                <div style={{ background: "rgba(29,78,216,0.1)", border: "1px solid rgba(29,78,216,0.3)", borderRadius: "10px", padding: "1.25rem" }}>
-                  <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#60a5fa", marginBottom: "0.5rem" }}>
-                    Pro Tip
-                  </p>
-                  <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.65, margin: 0 }}>
-                    {isMM
-                      ? <>Press <strong style={{ color: "#fff" }}>*</strong> anytime from the main menu to jump straight into the Phone Booth and start hearing live callers.</>
-                      : <>Press <strong style={{ color: "#fff" }}>1</strong> from the main menu to join the action and start browsing live callers right away.</>
-                    }
-                  </p>
-                </div>
-              )}
-              {activeMode === "messages" && (
-                <div style={{ background: "rgba(29,78,216,0.1)", border: "1px solid rgba(29,78,216,0.3)", borderRadius: "10px", padding: "1.25rem" }}>
-                  <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#60a5fa", marginBottom: "0.5rem" }}>
-                    Pro Tip
-                  </p>
-                  <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.65, margin: 0 }}>
-                    Press <strong style={{ color: "#fff" }}>2</strong> while reading a message to hear the sender's recorded greeting before you reply.
-                  </p>
-                </div>
-              )}
-              {activeMode === "invite" && (
-                <div style={{ background: "rgba(29,78,216,0.1)", border: "1px solid rgba(29,78,216,0.3)", borderRadius: "10px", padding: "1.25rem" }}>
-                  <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#60a5fa", marginBottom: "0.5rem" }}>
-                    Pro Tip
-                  </p>
-                  <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.65, margin: 0 }}>
-                    Press <strong style={{ color: "#fff" }}>3</strong> to hear the caller's greeting before deciding to accept or decline their live connect request.
-                  </p>
-                </div>
-              )}
-
             </div>
           </div>
 
@@ -436,23 +358,17 @@ export default function KeypadTips() {
             <h2 style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#3b82f6", marginBottom: "1.25rem" }}>
               Phone Booth — Full Key Reference
             </h2>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "0.6rem" }}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "0.6rem" }}
               data-testid="keypad-reference-table">
-              {PHONE_BOOTH_KEYS.filter(k => k.active && k.label).map(k => {
-                const colorMap: Record<string, string> = {
-                  blue: "#60a5fa", green: "#4ade80", red: "#f87171", amber: "#fbbf24", purple: "#c084fc",
-                };
-                const dotColor = k.highlight ? colorMap[k.highlight] : "#fff";
-                return (
-                  <div key={k.key} style={{ display: "flex", alignItems: "center", gap: "0.85rem", background: "#111", border: "1px solid #1e1e1e", borderRadius: "8px", padding: "0.65rem 0.9rem" }}
-                    data-testid={`keypad-ref-${k.key}`}>
-                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#1a1a1a", border: `2px solid ${dotColor}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <span style={{ fontSize: "1rem", fontWeight: 700, color: dotColor }}>{k.key}</span>
-                    </div>
-                    <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "rgba(255,255,255,0.7)" }}>{k.label}</span>
+              {PHONE_BOOTH_KEYS.filter(k => k.active && k.label).map(k => (
+                <div key={k.key} style={{ display: "flex", alignItems: "center", gap: "0.85rem", background: "#111", border: "1px solid #1e1e1e", borderRadius: "8px", padding: "0.65rem 0.9rem" }}
+                  data-testid={`keypad-ref-${k.key}`}>
+                  <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#1a1a1a", border: "1px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "#fff" }}>{k.key}</span>
                   </div>
-                );
-              })}
+                  <span style={{ fontSize: "0.85rem", fontWeight: 500, color: "rgba(255,255,255,0.6)" }}>{k.label}</span>
+                </div>
+              ))}
             </div>
           </div>
 
