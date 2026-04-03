@@ -321,6 +321,7 @@ export const mailboxes = pgTable("mailboxes", {
   adRecordingDuration: integer("ad_recording_duration"),
   adTranscription: text("ad_transcription"), // auto-generated transcript of the mailbox ad audio
   adTranscriptionStatus: text("ad_transcription_status"), // null | 'pending' | 'completed' | 'failed'
+  lastCheckedAt: timestamp("last_checked_at"), // updated each time the member calls /voice/my-mailbox
   createdAt: timestamp("created_at").defaultNow(),
 });
 

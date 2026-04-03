@@ -166,6 +166,7 @@ export interface IStorage {
 
   // Mailboxes
   getMailboxByUserId(userId: string): Promise<Mailbox | null>;
+  touchMailboxLastChecked(userId: string): Promise<void>;
   getMailboxByNumber(mailboxNumber: string): Promise<Mailbox | null>;
   getOrCreateMailbox(userId: string): Promise<Mailbox>;
   getMailboxesByCategory(category: string, excludeUserId: string): Promise<Mailbox[]>;
@@ -1174,6 +1175,13 @@ export class DatabaseStorage implements IStorage {
   async getMailboxByUserId(userId: string): Promise<Mailbox | null> {
     const [mailbox] = await db.select().from(mailboxes).where(eq(mailboxes.userId, userId));
     return mailbox ?? null;
+  }
+
+  async touchMailboxLastChecked(userId: string): Promise<void> {
+    await db
+      .update(mailboxes)
+      .set({ lastCheckedAt: new Date() })
+      .where(eq(mailboxes.userId, userId));
   }
 
   async getMailboxByNumber(mailboxNumber: string): Promise<Mailbox | null> {

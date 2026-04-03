@@ -13,6 +13,13 @@
  *   Nulls out membershipTier / remainingSeconds / membershipStartedAt
  *   for any user whose remainingSeconds has dropped to 0.
  *
+ * Part 3 — Purge inactive mailboxes & personal ads (MM system):
+ *   Deletes the mailbox and voice profile for any member who has not
+ *   checked their mailbox in 3 weeks (21 days). The user account and
+ *   membership are preserved — only the mailbox + profile are removed.
+ *   The 3-week clock runs from lastCheckedAt, or createdAt if the
+ *   mailbox has never been accessed.
+ *
  * Usage:
  *   npx tsx scripts/cleanup.ts          → dry run (preview only, no DB writes)
  *   npx tsx scripts/cleanup.ts --run    → live run (commits changes)
@@ -33,11 +40,13 @@ import {
   moderationLogs,
   flaggedContent,
   webUsers,
+  mailboxes,
 } from "../shared/schema";
-import { eq, lte, and, isNotNull, or, inArray } from "drizzle-orm";
+import { eq, lte, and, isNotNull, or, inArray, isNull, sql } from "drizzle-orm";
 
 const DRY_RUN = !process.argv.includes("--run");
 const STALE_FREE_TRIAL_DAYS = 40;
+const MAILBOX_INACTIVE_DAYS  = 21;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -89,8 +98,8 @@ async function cleanupStaleFreeTrialUsers(): Promise<number> {
     return staleUsers.length;
   }
 
-  const userIds    = staleUsers.map(u => u.id);
-  const phoneNums  = staleUsers.map(u => u.phoneNumber);
+  const userIds   = staleUsers.map(u => u.id);
+  const phoneNums = staleUsers.map(u => u.phoneNumber);
 
   // 1. Active calls
   const ac = await db.delete(activeCalls).where(inArray(activeCalls.userId, userIds));
@@ -193,6 +202,66 @@ async function resetExpiredMemberships(): Promise<number> {
   return expiredIds.length;
 }
 
+// ─── Part 3: Purge inactive mailboxes & personal ads (MM system) ───────────────
+
+async function purgeInactiveMailboxes(): Promise<number> {
+  banner("Part 3: Purge inactive mailboxes & personal ads (MM system)");
+
+  const cutoff = new Date(Date.now() - MAILBOX_INACTIVE_DAYS * 24 * 60 * 60 * 1000);
+  indent(`Criteria : mailbox not checked in ${MAILBOX_INACTIVE_DAYS} days (using lastCheckedAt, or createdAt if never checked)`);
+  indent(`Cutoff   : ${cutoff.toISOString().slice(0, 10)}`);
+
+  // Stale = (lastCheckedAt is set but older than cutoff) OR (never checked and createdAt older than cutoff)
+  const staleMailboxes = await db
+    .select({
+      id: mailboxes.id,
+      userId: mailboxes.userId,
+      mailboxNumber: mailboxes.mailboxNumber,
+      lastCheckedAt: mailboxes.lastCheckedAt,
+      createdAt: mailboxes.createdAt,
+    })
+    .from(mailboxes)
+    .where(
+      or(
+        and(isNotNull(mailboxes.lastCheckedAt), lte(mailboxes.lastCheckedAt, cutoff)),
+        and(isNull(mailboxes.lastCheckedAt),    lte(mailboxes.createdAt, cutoff)),
+      ),
+    );
+
+  if (staleMailboxes.length === 0) {
+    indent("Found 0 inactive mailboxes — nothing to do.");
+    return 0;
+  }
+
+  indent(`Found ${staleMailboxes.length} inactive mailbox(es):`);
+  for (const m of staleMailboxes) {
+    const lastSeen = m.lastCheckedAt
+      ? `last checked ${m.lastCheckedAt.toISOString().slice(0, 10)}`
+      : `never checked, created ${m.createdAt?.toISOString().slice(0, 10)}`;
+    indent(`  • mailbox #${m.mailboxNumber}  (${lastSeen})`);
+  }
+
+  if (DRY_RUN) {
+    indent("[DRY RUN] No changes written.");
+    return staleMailboxes.length;
+  }
+
+  const staleUserIds    = staleMailboxes.map(m => m.userId);
+  const staleMailboxIds = staleMailboxes.map(m => m.id);
+
+  // Delete profiles (personal ads) for these users
+  const pf = await db.delete(profiles).where(inArray(profiles.userId, staleUserIds));
+  indent(`  Deleted profiles (personal ads) : ${(pf as any).rowCount ?? "?"}`);
+
+  // Delete mailboxes themselves
+  const mb = await db.delete(mailboxes).where(inArray(mailboxes.id, staleMailboxIds));
+  indent(`  Deleted mailboxes               : ${(mb as any).rowCount ?? "?"}`);
+
+  indent(`✓ Purged ${staleMailboxes.length} inactive mailbox(es) and their personal ads.`);
+  indent("  Note: member accounts and memberships are preserved.");
+  return staleMailboxes.length;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -209,10 +278,12 @@ async function main() {
   try {
     const deleted = await cleanupStaleFreeTrialUsers();
     const reset   = await resetExpiredMemberships();
+    const purged  = await purgeInactiveMailboxes();
 
     banner("Summary");
     indent(`Stale free-trial accounts deleted : ${deleted}${DRY_RUN ? " (dry run)" : ""}`);
     indent(`Expired memberships reset         : ${reset}${DRY_RUN ? " (dry run)" : ""}`);
+    indent(`Inactive mailboxes purged         : ${purged}${DRY_RUN ? " (dry run)" : ""}`);
     console.log("\n  Done.\n");
   } catch (err) {
     console.error("\n❌ Cleanup failed:", err);

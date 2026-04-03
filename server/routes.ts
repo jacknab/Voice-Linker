@@ -2868,6 +2868,10 @@ export async function registerRoutes(
       }
 
       const mailbox = await storage.getMailboxByUserId(user.id);
+
+      // Stamp last-checked so the cleanup script knows the mailbox is still active
+      await storage.touchMailboxLastChecked(user.id);
+
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
       if (unreadMessage) {
