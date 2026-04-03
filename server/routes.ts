@@ -6610,12 +6610,36 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Chatbot API token guard ───────────────────────────────────────────────
+  // Used by /caller/:phoneNumber and /everything.
+  // Accepts the token via:
+  //   • Query param:  ?token=<value>
+  //   • HTTP header:  Authorization: Bearer <value>
+  // Set the CHATBOT_API_TOKEN environment variable to enable protection.
+  function verifyChatbotToken(req: Request, res: Response): boolean {
+    const expected = process.env.CHATBOT_API_TOKEN;
+    if (!expected) return true; // no token configured — allow (useful in dev if unset)
+
+    const fromQuery  = req.query.token as string | undefined;
+    const authHeader = req.headers.authorization ?? "";
+    const fromHeader = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : undefined;
+    const provided   = fromQuery ?? fromHeader;
+
+    if (!provided || provided !== expected) {
+      res.status(401).json({ error: "Unauthorized. A valid token is required.", hint: "Pass ?token=<your-token> or Authorization: Bearer <your-token>" });
+      return false;
+    }
+    return true;
+  }
+
   // ─── /caller/:phoneNumber — Full caller record for chatbot lookups ──────────
   // Accepts a 10-digit US phone number (with or without formatting / leading 1).
   // Returns the same full CallerDetail payload the admin /callers panel shows,
   // plus moderation logs, presented as a structured JSON document.
-  // No authentication required — intended for internal chatbot use only.
+  // Requires CHATBOT_API_TOKEN via ?token= or Authorization: Bearer header.
   app.get("/caller/:phoneNumber", async (req, res) => {
+    if (!verifyChatbotToken(req, res)) return;
+
     // Normalize: strip everything except digits, then strip leading 1 if 11-digit
     let digits = req.params.phoneNumber.replace(/\D/g, "");
     if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
@@ -6767,8 +6791,10 @@ export async function registerRoutes(
 
   // ─── /everything — Plain-text knowledge base for chatbot training ─────────
   // Returns a comprehensive plain-text document describing every aspect of the
-  // system. No authentication required (content is general knowledge only).
-  app.get("/everything", async (_req, res) => {
+  // system. Requires CHATBOT_API_TOKEN via ?token= or Authorization: Bearer header.
+  app.get("/everything", async (req, res) => {
+    if (!verifyChatbotToken(req, res)) return;
+
     let ms: Awaited<ReturnType<typeof getMembershipSettingsCached>>;
     let ss: Awaited<ReturnType<typeof getSiteSettingsCached>>;
     try {
