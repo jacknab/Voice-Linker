@@ -9,6 +9,12 @@
  *
  * Auto-remove threshold:  5+ unique flaggers → auto-remove content + restrict/ban user
  * Escalation:             1st auto-remove → restrict; 2nd → ban
+ *
+ * Recording Auto-Mod (runTranscriptionAutoChecks):
+ *  - No/blank transcription → rejected as "unclear"
+ *  - Too few meaningful words (< 6) → rejected as "unclear"
+ *  - Repeated words (e.g. "hey hey hey") → rejected as "unclear"
+ *  - Phone number detected in text → rejected as "phone_number"
  */
 
 import { storage } from "./storage";
@@ -175,6 +181,200 @@ export async function runFlagAutoChecks(
   } catch (err) {
     console.error("[automod] runFlagAutoChecks error:", err);
   }
+}
+
+// ─── Phone-number detection helpers ──────────────────────────────────────────
+
+const SPOKEN_DIGIT_MAP: Record<string, string> = {
+  zero: "0", oh: "0", one: "1", two: "2", three: "3", four: "4",
+  five: "5", six: "6", seven: "7", eight: "8", nine: "9",
+};
+const SPOKEN_DIGIT_PATTERN = /\b(zero|one|two|three|four|five|six|seven|eight|nine|oh)\b/gi;
+
+// Words that can appear between digit groups in a phone number (filler only, NOT general words)
+const INLINE_FILLER = /^(uh+|um+|er+|uhh+|hmm+|and|dash|hyphen)$/i;
+
+/**
+ * Returns true if the transcribed text appears to contain a phone number.
+ *
+ * Strategy:
+ *  1. Direct regex for formatted phone numbers (with -, ., (), spaces)
+ *  2. Tokenise into "digit tokens" (numeric strings or spoken digit words) vs "other",
+ *     sliding along and collecting digit tokens separated only by filler words.
+ *     If a contiguous window sums to 7 or 10 digits, it's a phone number.
+ *
+ * Example caught: "303 uh 430 2099" → tokens [303][uh=filler][430][2099] → 10 digits
+ * Not caught: "I'm 25 years old, 6 foot 3 and 180 pounds" → no 7-digit window
+ */
+export function containsPhoneNumber(text: string): boolean {
+  if (!text) return false;
+
+  // ── 1. Common formatted patterns ──────────────────────────────────────────
+  // 10-digit: 303-430-2099 / (303) 430-2099 / 303.430.2099 / 3034302099
+  if (/\(?\d{3}\)?[\s.\-]{0,2}\d{3}[\s.\-]{0,2}\d{4}/.test(text)) return true;
+  // 7-digit: 430-2099 / 4302099
+  if (/\b\d{3}[\s.\-]\d{4}\b/.test(text)) return true;
+  // 10 consecutive digits anywhere (after stripping punctuation)
+  if (/\b\d{10}\b/.test(text.replace(/[\s\-().]/g, " "))) return true;
+
+  // ── 2. Tokenise and slide for spoken/spaced digit sequences ───────────────
+  // Replace spoken digit words with digit characters in a clone
+  const normalised = text.replace(SPOKEN_DIGIT_PATTERN, (m) => SPOKEN_DIGIT_MAP[m.toLowerCase()] ?? m);
+
+  // Split into tokens (words and numbers)
+  const tokens = normalised.trim().split(/\s+/);
+
+  let digitBuffer = "";
+  let gapCount = 0;         // consecutive non-digit, non-filler tokens seen since last digit token
+  const MAX_GAP = 1;        // allow at most 1 filler word between digit groups
+
+  for (const token of tokens) {
+    // Check if this token is purely digits
+    const digitsOnly = token.replace(/[^0-9]/g, "");
+    const isDigitToken = digitsOnly.length > 0 && digitsOnly.length === token.length;
+    const isFillerToken = INLINE_FILLER.test(token);
+
+    if (isDigitToken) {
+      digitBuffer += digitsOnly;
+      gapCount = 0;
+    } else if (isFillerToken && digitBuffer.length > 0) {
+      // Filler between digit groups — keep the buffer alive
+      gapCount = 0;
+    } else {
+      // Non-digit, non-filler word — close the current window
+      if (digitBuffer.length >= 7) return true;
+      // Only reset if we've seen more than MAX_GAP breaking words in a row
+      gapCount++;
+      if (gapCount > MAX_GAP) {
+        digitBuffer = "";
+        gapCount = 0;
+      }
+    }
+  }
+
+  // Check whatever's left in the buffer
+  if (digitBuffer.length >= 7) return true;
+
+  return false;
+}
+
+// ─── Repeated-word / low-quality detection ────────────────────────────────────
+
+/**
+ * Returns true if the recording appears to be low-quality or meaningless:
+ *  - Fewer than 6 distinct words total
+ *  - Any single word repeats 3+ times (e.g. "hey hey hey boys")
+ *  - More than 50% of words are the same word
+ */
+export function isLowQualityTranscription(text: string): boolean {
+  if (!text || text.trim().length === 0) return true;
+
+  const words = text.toLowerCase().replace(/[^a-z\s]/g, "").trim().split(/\s+/).filter(Boolean);
+
+  if (words.length < 6) return true;
+
+  const freq: Record<string, number> = {};
+  for (const w of words) {
+    freq[w] = (freq[w] ?? 0) + 1;
+  }
+
+  const maxCount = Math.max(...Object.values(freq));
+
+  // Any word repeated 3+ times is suspicious
+  if (maxCount >= 3) return true;
+
+  // More than half the words are the same word
+  if (maxCount / words.length > 0.5) return true;
+
+  return false;
+}
+
+// ─── Main transcription auto-check ───────────────────────────────────────────
+
+/**
+ * Called from the transcription callback after storing the transcription.
+ * Checks the recording for policy violations and, if found:
+ *   1. Removes the recording from the system
+ *   2. Sets a rejection flag on the user record
+ *   3. Logs a moderation event
+ *
+ * @param recordingUrl  The Twilio recording URL (used to look up which record was transcribed)
+ * @param text          The transcription text (null if transcription failed)
+ */
+export async function runTranscriptionAutoChecks(
+  recordingUrl: string,
+  text: string | null,
+): Promise<void> {
+  try {
+    // Try to find the associated user via profile first, then mailbox
+    let user = await storage.getUserByProfileRecordingUrl(recordingUrl);
+    let recordingType: "greeting" | "personal_ad" = "greeting";
+
+    if (!user) {
+      user = await storage.getUserByMailboxAdRecordingUrl(recordingUrl);
+      recordingType = "personal_ad";
+    }
+
+    if (!user) {
+      console.log(`[automod-transcription] No user found for recordingUrl=${recordingUrl} — skipping`);
+      return;
+    }
+
+    const userId = user.id;
+    const typeLabel = recordingType === "greeting" ? "greeting" : "personal ad";
+
+    // ── Check 1: No transcription or blank ─────────────────────────────────
+    if (!text || text.trim().length === 0) {
+      console.log(`[automod-transcription] REJECT userId=${userId} type=${recordingType} reason=no_transcription`);
+      await rejectRecording(userId, recordingType, "unclear", `Auto-rejected: no transcription text for ${typeLabel}`);
+      return;
+    }
+
+    // ── Check 2: Phone number detected ─────────────────────────────────────
+    if (containsPhoneNumber(text)) {
+      console.log(`[automod-transcription] REJECT userId=${userId} type=${recordingType} reason=phone_number text="${text}"`);
+      await rejectRecording(userId, recordingType, "phone_number", `Auto-rejected: phone number detected in ${typeLabel} transcription`);
+      return;
+    }
+
+    // ── Check 3: Low quality / repeated words ──────────────────────────────
+    if (isLowQualityTranscription(text)) {
+      console.log(`[automod-transcription] REJECT userId=${userId} type=${recordingType} reason=low_quality text="${text}"`);
+      await rejectRecording(userId, recordingType, "unclear", `Auto-rejected: low-quality or repeated-word ${typeLabel} transcription`);
+      return;
+    }
+
+    console.log(`[automod-transcription] PASSED userId=${userId} type=${recordingType} text="${text}"`);
+  } catch (err) {
+    console.error("[automod-transcription] runTranscriptionAutoChecks error:", err);
+  }
+}
+
+async function rejectRecording(
+  userId: string,
+  recordingType: "greeting" | "personal_ad",
+  reason: "unclear" | "phone_number",
+  logReason: string,
+): Promise<void> {
+  // Remove the recording from the system
+  if (recordingType === "greeting") {
+    await storage.deleteProfileByUserId(userId);
+  } else {
+    await storage.clearMailboxAdByUserId(userId);
+  }
+
+  // Set rejection flag on user so the IVR can intercept next call
+  await storage.setUserRecordingRejection(userId, reason, recordingType);
+
+  // Log moderation event
+  await storage.logModerationEvent({
+    targetUserId: userId,
+    eventType: "auto_remove",
+    reason: logReason,
+    triggeredByRule: `recording_${reason}`,
+    contentType: recordingType,
+    contentId: userId,
+  });
 }
 
 /**

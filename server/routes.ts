@@ -11,7 +11,7 @@ import path from "path";
 import fs from "fs";
 import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
-import { runFlagAutoChecks, runBlockAutoChecks } from "./autoModeration";
+import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
 import { generateTTS, listVoices } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
@@ -2296,6 +2296,17 @@ export async function registerRoutes(
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         twiml.redirect("/voice/membership-purchase");
       } else {
+        // ── Recording rejection gate ─────────────────────────────────────────
+        // If the auto-moderator rejected a greeting, intercept before going live
+        if (user.recordingRejectionReason && user.recordingRejectionType === "greeting") {
+          const rejectionRoute = user.recordingRejectionReason === "phone_number"
+            ? "/voice/recording-rejected-phone-number"
+            : "/voice/recording-rejected-unclear";
+          twiml.redirect(rejectionRoute);
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        }
+
         // Has time — announce remaining time to all callers at entry
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
         callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
@@ -2503,6 +2514,8 @@ export async function registerRoutes(
         recordingUrl,
         recordingDuration,
       });
+      // Clear any previous recording rejection — this new recording will go through auto-mod again
+      await storage.clearUserRecordingRejection(user.id);
       // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
       const saved = await storage.getProfile(user.id);
       if (saved) await storage.setProfileTranscriptionPending(saved.id);
@@ -2843,6 +2856,17 @@ export async function registerRoutes(
 
     try {
       const user = await getOrCreateUser(fromNumber);
+
+      // ── Personal-ad recording rejection gate ─────────────────────────────
+      if (user.recordingRejectionReason && user.recordingRejectionType === "personal_ad") {
+        const rejectionRoute = user.recordingRejectionReason === "phone_number"
+          ? "/voice/recording-rejected-phone-number"
+          : "/voice/recording-rejected-unclear";
+        twiml.redirect(rejectionRoute);
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       const mailbox = await storage.getMailboxByUserId(user.id);
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
@@ -3030,6 +3054,8 @@ export async function registerRoutes(
       // Keep the existing category if set, otherwise use a default
       const category = mailbox?.category || "quick_hot_talk";
       await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
+      // Clear any previous recording rejection — this new recording will go through auto-mod again
+      await storage.clearUserRecordingRejection(user.id);
       // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
       await storage.updateMailboxTranscription(recordingUrl, null, "pending");
 
@@ -3530,6 +3556,8 @@ export async function registerRoutes(
 
       const user = await getOrCreateUser(fromNumber);
       await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
+      // Clear any previous recording rejection — this new recording will go through auto-mod again
+      await storage.clearUserRecordingRejection(user.id);
       // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
       await storage.updateMailboxTranscription(recordingUrl, null, "pending");
 
@@ -3565,11 +3593,149 @@ export async function registerRoutes(
       await storage.updateProfileTranscription(recordingUrl, status === "completed" ? text : null, status === "completed" ? "completed" : "failed");
       await storage.updateMailboxTranscription(recordingUrl, status === "completed" ? text : null, status === "completed" ? "completed" : "failed");
       console.log(`[transcription] stored for recordingUrl=${recordingUrl} status=${status}`);
+
+      // Run auto-moderation checks on completed transcriptions
+      if (status === "completed") {
+        runTranscriptionAutoChecks(recordingUrl, text).catch((err) =>
+          console.error("[transcription] auto-mod error:", err)
+        );
+      }
     } catch (err) {
       console.error("[transcription] callback error:", err);
     }
 
     res.sendStatus(200);
+  });
+
+  // ─── Auto-Mod Recording Rejection Menus ──────────────────────────────────
+  // reject1 — played when the recording could not be understood (no audio,
+  //           too few words, or repeated words like "hey hey hey boys").
+  app.post("/voice/recording-rejected-unclear", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await storage.getUserByPhone(fromNumber);
+      const typeLabel = user?.recordingRejectionType === "personal_ad" ? "personal ad" : "greeting";
+
+      const gather = twiml.gather({
+        numDigits: 1,
+        finishOnKey: "",
+        action: "/voice/handle-recording-rejected-unclear",
+        timeout: 15,
+      });
+      gather.say(
+        `You need to re-record your ${typeLabel} because we can't understand it. ` +
+        `Please speak clearly into the phone so that everyone can hear what you have to say about yourself and what you're looking for. ` +
+        `Be sure to turn down loud music or the television before you record. ` +
+        `To re-record your ${typeLabel}, press 1.`
+      );
+      twiml.redirect("/voice/recording-rejected-unclear");
+    } catch (err) {
+      console.error("[voice] /voice/recording-rejected-unclear error:", err);
+      twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-recording-rejected-unclear", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const digit = req.body?.Digits as string;
+
+    try {
+      if (digit === "1") {
+        const user = await storage.getUserByPhone(fromNumber);
+        const rejectionType = user?.recordingRejectionType;
+
+        // Clear the rejection flag before sending to re-record
+        if (user) await storage.clearUserRecordingRejection(user.id);
+
+        if (rejectionType === "personal_ad") {
+          twiml.redirect("/voice/record-mailbox-greeting");
+        } else {
+          // Greeting re-record: start at the name-recording step
+          playPrompt(twiml, req, "welcome_record_name.mp3",
+            "Say your first name only after the tone. You have 5 seconds."
+          );
+          twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+        }
+      } else {
+        twiml.redirect("/voice/recording-rejected-unclear");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-recording-rejected-unclear error:", err);
+      twiml.redirect("/voice/recording-rejected-unclear");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // reject2 — played when the recording contains a phone number.
+  app.post("/voice/recording-rejected-phone-number", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await storage.getUserByPhone(fromNumber);
+      const typeLabel = user?.recordingRejectionType === "personal_ad" ? "personal ad" : "greeting";
+
+      const gather = twiml.gather({
+        numDigits: 1,
+        finishOnKey: "",
+        action: "/voice/handle-recording-rejected-phone-number",
+        timeout: 15,
+      });
+      gather.say(
+        `You need to re-record your ${typeLabel}. ` +
+        `Please do not include your phone number in your ${typeLabel} or it will not be approved. ` +
+        `To re-record your ${typeLabel}, press 1.`
+      );
+      twiml.redirect("/voice/recording-rejected-phone-number");
+    } catch (err) {
+      console.error("[voice] /voice/recording-rejected-phone-number error:", err);
+      twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-recording-rejected-phone-number", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const digit = req.body?.Digits as string;
+
+    try {
+      if (digit === "1") {
+        const user = await storage.getUserByPhone(fromNumber);
+        const rejectionType = user?.recordingRejectionType;
+
+        // Clear the rejection flag before sending to re-record
+        if (user) await storage.clearUserRecordingRejection(user.id);
+
+        if (rejectionType === "personal_ad") {
+          twiml.redirect("/voice/record-mailbox-greeting");
+        } else {
+          // Greeting re-record
+          playPrompt(twiml, req, "welcome_record_name.mp3",
+            "Say your first name only after the tone. You have 5 seconds."
+          );
+          twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+        }
+      } else {
+        twiml.redirect("/voice/recording-rejected-phone-number");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-recording-rejected-phone-number error:", err);
+      twiml.redirect("/voice/recording-rejected-phone-number");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
   });
 
   // ─── 4a3. Manage Membership ───────────────────────────────────────────────

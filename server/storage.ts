@@ -190,7 +190,12 @@ export interface IStorage {
   countAutoRemovesForUser(userId: string): Promise<number>;
   setUserAccountStatus(userId: string, status: string): Promise<void>;
   getUserById(userId: string): Promise<User | null>;
+  getUserByProfileRecordingUrl(url: string): Promise<User | null>;
+  getUserByMailboxAdRecordingUrl(url: string): Promise<User | null>;
+  setUserRecordingRejection(userId: string, reason: string, type: string): Promise<void>;
+  clearUserRecordingRejection(userId: string): Promise<void>;
   deleteProfileByUserId(userId: string): Promise<void>;
+  clearMailboxAdByUserId(userId: string): Promise<void>;
   logModerationEvent(data: InsertModerationLog): Promise<ModerationLog>;
   getModerationLogs(opts?: { targetUserId?: string; limit?: number }): Promise<(ModerationLog & { targetPhone: string })[]>;
 
@@ -1765,6 +1770,42 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProfileByUserId(userId: string): Promise<void> {
     await db.delete(profiles).where(eq(profiles.userId, userId));
+  }
+
+  async getUserByProfileRecordingUrl(url: string): Promise<User | null> {
+    const [row] = await db
+      .select({ user: users })
+      .from(profiles)
+      .innerJoin(users, eq(profiles.userId, users.id))
+      .where(eq(profiles.recordingUrl, url));
+    return row?.user ?? null;
+  }
+
+  async getUserByMailboxAdRecordingUrl(url: string): Promise<User | null> {
+    const [row] = await db
+      .select({ user: users })
+      .from(mailboxes)
+      .innerJoin(users, eq(mailboxes.userId, users.id))
+      .where(eq(mailboxes.adRecordingUrl, url));
+    return row?.user ?? null;
+  }
+
+  async setUserRecordingRejection(userId: string, reason: string, type: string): Promise<void> {
+    await db.update(users)
+      .set({ recordingRejectionReason: reason, recordingRejectionType: type })
+      .where(eq(users.id, userId));
+  }
+
+  async clearUserRecordingRejection(userId: string): Promise<void> {
+    await db.update(users)
+      .set({ recordingRejectionReason: null, recordingRejectionType: null })
+      .where(eq(users.id, userId));
+  }
+
+  async clearMailboxAdByUserId(userId: string): Promise<void> {
+    await db.update(mailboxes)
+      .set({ adRecordingUrl: null, adRecordingDuration: null, adTranscription: null, adTranscriptionStatus: null })
+      .where(eq(mailboxes.userId, userId));
   }
 
   async logModerationEvent(data: InsertModerationLog): Promise<ModerationLog> {

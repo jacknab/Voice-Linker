@@ -44,6 +44,11 @@ export const users = pgTable("users", {
   membershipStartedAt: timestamp("membership_started_at"),
   // Moderation status: "active" | "restricted" (no go-live) | "banned" (rejected at entry)
   accountStatus: text("account_status").notNull().default("active"),
+  // Auto-mod recording rejection: set when a greeting/ad is rejected; cleared on re-record
+  // reason: "unclear" | "phone_number" | null
+  // type:   "greeting" | "personal_ad" | null
+  recordingRejectionReason: text("recording_rejection_reason"),
+  recordingRejectionType: text("recording_rejection_type"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
