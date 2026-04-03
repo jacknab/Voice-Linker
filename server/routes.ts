@@ -2598,8 +2598,12 @@ export async function registerRoutes(
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
       if (unreadMessage) {
-        // Time is deducted when listening to mailbox responses — start billing now
-        startBilling(callSid, fromNumber);
+        // In per-minute billing, start the deduction clock while the caller listens to messages.
+        // In per-day billing, time is not deducted per-call, so skip starting the billing checkpoint.
+        const mailboxSettings = await getMembershipSettingsCached();
+        if (mailboxSettings.billingMode !== "per_day") {
+          startBilling(callSid, fromNumber);
+        }
         const senderProfile = await storage.getProfile(unreadMessage.fromUserId);
         const msgGather = twiml.gather({
           numDigits: 1,
@@ -3697,9 +3701,13 @@ export async function registerRoutes(
       const activeCallerCount = await storage.getActiveCallerCount(user.id, regionId);
       playCallerCount(twiml, req, activeCallerCount);
 
-      // Notify the caller that their membership time is now running
-      playPrompt(twiml, req, "time_deduction_start.mp3",
-        "Time is now being deducted from your membership.");
+      // In per-minute billing, notify the caller that their time is now running.
+      // In per-day billing, time is not deducted per-call, so skip this announcement.
+      const goLiveSettings = await getMembershipSettingsCached();
+      if (goLiveSettings.billingMode !== "per_day") {
+        playPrompt(twiml, req, "time_deduction_start.mp3",
+          "Time is now being deducted from your membership.");
+      }
 
       // Start the billing checkpoint — use the membership override account if linked
       const billingPhone = callMembershipOverride.get(callSid) ?? fromNumber;
