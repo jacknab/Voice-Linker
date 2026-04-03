@@ -568,6 +568,52 @@ router.post("/api/auth/link-card", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "This card has not been activated yet. Please call the access number first to activate it." });
     }
 
+    // Verify the card's phone account has an active membership with time remaining
+    const phoneUser = await storage.getUserByPhone(card.phoneNumber);
+    const membershipSettings = await storage.getMembershipSettings();
+    const billingMode = membershipSettings.billingMode ?? "per_minute";
+
+    let valid = false;
+    let failReason = "No active membership found for this card.";
+
+    if (phoneUser && phoneUser.membershipTier) {
+      const remaining = phoneUser.remainingSeconds ?? 0;
+      if (billingMode === "per_day") {
+        if (remaining > 0 && phoneUser.membershipStartedAt !== null) {
+          valid = true;
+        } else if (remaining <= 0) {
+          failReason = "Your membership has expired. Please call the access number to renew.";
+        } else {
+          failReason = "Your membership has not been fully activated yet. Please call the access number first.";
+        }
+      } else {
+        if (remaining >= 60) {
+          valid = true;
+        } else {
+          failReason = "Your membership balance is too low to link. Please call the access number to add more time.";
+        }
+      }
+    }
+
+    if (!valid) {
+      const attempts = await storage.incrementWebUserLinkAttempts(webUser.id);
+      const remaining = Math.max(0, 3 - attempts);
+      if (attempts >= 3) {
+        await storage.lockWebUser(webUser.id);
+        req.session.destroy(() => {});
+        console.log(`[auth] link-card: account locked for web user ${webUser.id} after 3 failed attempts`);
+        return res.status(403).json({
+          error: "Your account has been locked after 3 failed attempts. Please contact support.",
+          locked: true,
+        });
+      }
+      console.log(`[auth] link-card: failed attempt ${attempts}/3 for web user ${webUser.id} (card=${cardNumber}, reason=${failReason})`);
+      return res.status(400).json({
+        error: `${failReason} ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+        attemptsRemaining: remaining,
+      });
+    }
+
     await storage.linkWebUserPhone(webUser.id, card.phoneNumber, card.cardNumber);
     console.log(`[auth] link-card: webUserId=${webUser.id} linked to phone=${card.phoneNumber} via card=${card.cardNumber}`);
     return res.json({ ok: true });
