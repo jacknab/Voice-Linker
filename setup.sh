@@ -49,6 +49,30 @@ fi
 DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN%/}"
 [[ -z "$DOMAIN" ]] && error "Domain name cannot be empty."
 
+# ─── PORT ─────────────────────────────────────────────────────────────────────
+while true; do
+    echo ""
+    echo -e "${BOLD}What port should the app run on?${RESET}"
+    echo -e "  (1024–65535 — default: ${CYAN}${APP_PORT}${RESET})"
+    if ss -tlnp 2>/dev/null | awk '{print $4}' | grep -q ":${APP_PORT}$"; then
+        echo -e "  ${RED}[WARN]${RESET} Port ${APP_PORT} appears to be in use — consider choosing a different one."
+    fi
+    read -rp "  Port: " _INPUT_PORT
+    _INPUT_PORT="${_INPUT_PORT:-$APP_PORT}"
+    if [[ "$_INPUT_PORT" =~ ^[0-9]+$ ]] && (( _INPUT_PORT >= 1024 && _INPUT_PORT <= 65535 )); then
+        if ss -tlnp 2>/dev/null | awk '{print $4}' | grep -q ":${_INPUT_PORT}$"; then
+            echo -e "  ${RED}[WARN]${RESET} Port ${_INPUT_PORT} is already in use by another process."
+            read -rp "  Use it anyway? [y/N]: " _CONFIRM_PORT
+            [[ "$_CONFIRM_PORT" =~ ^[Yy]$ ]] || continue
+        fi
+        APP_PORT="$_INPUT_PORT"
+        info "Application will run on port ${APP_PORT}."
+        break
+    else
+        echo -e "${RED}[ERROR]${RESET} Enter a number between 1024 and 65535."
+    fi
+done
+
 # ─── DB PASSWORD (reuse from .env or generate fresh) ─────────────────────────
 DB_PASSWORD=""
 if [ -f "${APP_DIR}/.env" ] && grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
@@ -254,6 +278,25 @@ do_step_4() {
 # ── Step 5 – PostgreSQL database + user ──────────────────────────────────────
 do_step_5() {
     hdr "Step 5/10  PostgreSQL – user, database, permissions"
+
+    # ── Prompt for database name ──────────────────────────────────────────────
+    while true; do
+        echo ""
+        echo -e "${BOLD}What should the database be called?${RESET}"
+        echo -e "  (letters, numbers and underscores only — default: ${CYAN}${DB_NAME}${RESET})"
+        read -rp "  Database name: " _INPUT_DB_NAME
+        # Use default if user pressed Enter without typing anything
+        _INPUT_DB_NAME="${_INPUT_DB_NAME:-$DB_NAME}"
+        # Validate: only a-z A-Z 0-9 _
+        if [[ "$_INPUT_DB_NAME" =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
+            DB_NAME="$_INPUT_DB_NAME"
+            info "Database will be named '${DB_NAME}'."
+            break
+        else
+            echo -e "${RED}[ERROR]${RESET} Invalid name — use only letters, numbers, and underscores, starting with a letter."
+        fi
+    done
+
     detect_pg
     [[ -z "${PG_VERSION:-}" ]] && error "PostgreSQL is not installed. Please run Step 2 first."
     if ! sudo -u postgres pg_isready -q 2>/dev/null; then
@@ -362,8 +405,19 @@ do_step_7() {
 do_step_8() {
     hdr "Step 8/10  Database schema"
     cd "${APP_DIR}"
-    info "Pushing Drizzle schema..."
-    npx drizzle-kit push --force
+    echo ""
+    echo -e "${BOLD}The following step will create or update database tables to match the application schema.${RESET}"
+    echo -e "  Drizzle will show you exactly which tables will be created or altered before applying any changes."
+    echo ""
+
+    if [ "$AUTO_YES" = true ]; then
+        info "Running in unattended mode (--yes) — applying schema without prompt."
+        npx drizzle-kit push --force
+    else
+        info "Pushing Drizzle schema — you will be asked to confirm any destructive changes..."
+        npx drizzle-kit push
+    fi
+
     success "Schema pushed."
 }
 
@@ -413,11 +467,13 @@ EOF
     hdr "Step 10b/10  Nginx + SSL"
 
     # Auto-detect Let's Encrypt cert directory
+    # Certbot sometimes appends -0001, -0002 when a domain already had a cert
     local CERT_BASE=""
     for CANDIDATE in \
         "/etc/letsencrypt/live/${DOMAIN}" \
         "/etc/letsencrypt/live/${DOMAIN}-0001" \
-        "/etc/letsencrypt/live/${DOMAIN}-0002"; do
+        "/etc/letsencrypt/live/${DOMAIN}-0002" \
+        "/etc/letsencrypt/live/${DOMAIN}-0003"; do
         if [ -f "${CANDIDATE}/fullchain.pem" ] && [ -f "${CANDIDATE}/privkey.pem" ]; then
             CERT_BASE="$CANDIDATE"
             break
@@ -425,17 +481,60 @@ EOF
     done
 
     if [ -z "$CERT_BASE" ]; then
-        warn "────────────────────────────────────────────────────────────────"
-        warn "No SSL certificate found for '${DOMAIN}'."
-        warn "Obtain one first with:"
-        warn "  sudo certbot certonly --nginx -d ${DOMAIN} -d www.${DOMAIN} \\"
-        warn "       --non-interactive --agree-tos -m admin@${DOMAIN}"
-        warn "Then re-run Step 10 to complete the Nginx configuration."
-        warn "────────────────────────────────────────────────────────────────"
-        return 0
-    fi
+        info "No SSL certificate found for '${DOMAIN}' — requesting one from Let's Encrypt now."
+        echo ""
 
-    info "SSL certificate found at ${CERT_BASE}/"
+        # Ask for the email Let's Encrypt will use for renewal reminders
+        read -rp "$(echo -e "${BOLD}Email for SSL certificate notices${RESET} [admin@${DOMAIN}]: ")" _CERT_EMAIL
+        _CERT_EMAIL="${_CERT_EMAIL:-admin@${DOMAIN}}"
+
+        # Write a minimal HTTP server block so certbot can serve the ACME challenge
+        local TMP_SITE="/etc/nginx/sites-available/${SERVICE_NAME}_acme"
+        sudo tee "$TMP_SITE" > /dev/null <<ACMENGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN} www.${DOMAIN};
+    root /var/www/html;
+    location /.well-known/acme-challenge/ { try_files \$uri =404; }
+    location / { return 444; }
+}
+ACMENGINX
+        sudo ln -sf "$TMP_SITE" "/etc/nginx/sites-enabled/${SERVICE_NAME}_acme"
+        sudo nginx -t && sudo systemctl reload nginx \
+            || error "Nginx config test failed — fix nginx errors and re-run Step 10."
+
+        info "Running certbot — make sure ${DOMAIN} and www.${DOMAIN} point to this server's IP and port 80 is open."
+        sudo certbot certonly --nginx \
+            -d "${DOMAIN}" -d "www.${DOMAIN}" \
+            --non-interactive --agree-tos -m "${_CERT_EMAIL}" \
+            || error "Certbot failed. Confirm DNS is pointing to this server and port 80 is reachable, then re-run Step 10."
+
+        # Clean up the temporary ACME challenge site
+        sudo rm -f "/etc/nginx/sites-enabled/${SERVICE_NAME}_acme" "$TMP_SITE"
+        sudo systemctl reload nginx
+
+        # Re-scan now that the cert has been issued
+        for CANDIDATE in \
+            "/etc/letsencrypt/live/${DOMAIN}" \
+            "/etc/letsencrypt/live/${DOMAIN}-0001" \
+            "/etc/letsencrypt/live/${DOMAIN}-0002" \
+            "/etc/letsencrypt/live/${DOMAIN}-0003"; do
+            if [ -f "${CANDIDATE}/fullchain.pem" ] && [ -f "${CANDIDATE}/privkey.pem" ]; then
+                CERT_BASE="$CANDIDATE"
+                break
+            fi
+        done
+
+        [[ -z "$CERT_BASE" ]] \
+            && error "Certificate was issued but could not be located under /etc/letsencrypt/live/ — check certbot output above."
+
+        success "SSL certificate obtained at ${CERT_BASE}/"
+    else
+        # Existing cert found — reuse it; never touch certs belonging to other apps
+        info "Existing SSL certificate found at ${CERT_BASE}/"
+        info "Reusing existing certificate — no new certbot request needed."
+    fi
     [ -L /etc/nginx/sites-enabled/default ] \
         && sudo rm -f /etc/nginx/sites-enabled/default \
         && info "Removed default nginx site."
@@ -445,17 +544,13 @@ EOF
             && warn "Removed broken symlink: ${LINK}"
     done
 
-    # Global Nginx tweaks (applied once)
+    # Global Nginx tweaks — always rewritten so re-runs self-heal any old config
     local NG_GLOBAL="/etc/nginx/conf.d/phonebooth_global.conf"
-    if [ ! -f "$NG_GLOBAL" ]; then
-        sudo tee "$NG_GLOBAL" > /dev/null <<NGXGLOBAL
+    sudo tee "$NG_GLOBAL" > /dev/null <<NGXGLOBAL
 server_tokens off;
-gzip on;
-gzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;
-gzip_min_length 1024;
 client_max_body_size 50M;
 NGXGLOBAL
-    fi
+    info "Wrote ${NG_GLOBAL}"
 
     local NGINX_SITE="/etc/nginx/sites-available/${SERVICE_NAME}"
     sudo tee "${NGINX_SITE}" > /dev/null <<NGINXEOF
