@@ -7220,71 +7220,299 @@ Authentication — include the token in every request using ONE of these methods
   Option A (query param):  /caller/8007302508?token=${process.env.CHATBOT_API_TOKEN ?? "[see CHATBOT_API_TOKEN env var]"}
   Option B (HTTP header):  Authorization: Bearer ${process.env.CHATBOT_API_TOKEN ?? "[see CHATBOT_API_TOKEN env var]"}
 
-RESPONSE FIELDS
----------------
-The API returns a JSON object with the following sections:
+COMPLETE FIELD REFERENCE — WHAT EVERY VALUE MEANS
+---------------------------------------------------
 
-  account
-    - phoneNumber       The member's 10-digit phone number
-    - accountStatus     "active" | "restricted" | "banned"
-    - memberSince       Date the account was first created
-    - membershipTier    "Premium" | "Standard" | "Basic" | null (no active plan)
-    - membershipNumber  The member's unique 10-digit membership identifier (null if none)
-    - membershipPin     "SET" or "NOT SET" — whether a PIN has been configured
-    - remainingSeconds  Raw seconds of talk time remaining
-    - remainingTime     Human-readable remaining time (e.g. "2h 35m", "12m")
-    - stripeCustomerId  Stripe billing reference (null if not yet purchased online)
+=== account ===
 
-  profile
-    - profileId             Internal ID of the greeting profile
-    - recordingUrl          URL to the caller's recorded greeting audio
-    - durationSeconds       Length of the greeting in seconds
-    - transcription         Auto-generated text transcript of the greeting (null if not yet processed)
-    - transcriptionStatus   "pending" | "completed" | "failed" | null
+  phoneNumber
+    The member's 10-digit US phone number (digits only, no formatting).
 
-  mailbox
-    - mailboxNumber     The member's personal 5-digit mailbox number
-    - category          Mailbox ad category (e.g. "quick_hot_talk", "bears", "kink") or null
-    - hasAdRecording    true/false — whether a mailbox ad has been recorded
-    - setupComplete     true/false — whether mailbox profile setup is finished
-    - dateOfBirth       MMDDYYYY format (collected during mailbox setup)
-    - bodyType          "slim" | "average" | "athletic" | "large" | "big_and_tall"
-    - ethnicity         Ethnicity preference selected during setup
-    - lastCheckedAt     Timestamp of the last time the member checked their mailbox
+  accountStatus
+    The single most important field. Determines whether the member can use the system.
+    - "active"     → Member is in good standing. They can browse, connect, and send messages
+                     (as long as they also have remaining time).
+    - "restricted" → Member can call in and navigate menus, but cannot browse other members,
+                     initiate live connections, or leave/receive voice messages. This usually
+                     happens when their greeting recording was flagged by moderation and they
+                     have not yet re-recorded a compliant one. Check the moderationLog for the
+                     reason. Tell the member: "Your account is currently restricted. You need
+                     to call in and re-record your greeting before you can use the full system."
+    - "banned"     → Member has been permanently removed from the platform. They cannot call
+                     in or use any features. If they ask why, tell them to contact customer
+                     support. Do not speculate on the reason unless the moderationLog explains.
 
-  location
-    - zipCode, city, state, neighborhood — set when the member enters their zip code
+  memberSince
+    ISO timestamp of when the account was first created (first call ever). Useful if a member
+    says "I've been a customer for years" — you can verify how long they have actually been
+    a member.
 
-  activity
-    - totalCalls        Number of inbound calls recorded
-    - messagesSent      Total voice messages sent to other members
-    - messagesReceived  Total voice messages received
-    - blocksMade        Number of callers this member has blocked
-    - blockedByOthers   Number of other members who have blocked this member
+  membershipTier
+    The active paid plan tier: "Premium", "Standard", "Basic", or null.
+    - null means no active paid plan. The member may still have free trial time remaining
+      (check remainingSeconds). If remainingSeconds is also 0, they need to purchase a plan.
+    - The specific benefits of each tier (minutes included, price) are described in the
+      MEMBERSHIP PLANS section of this document.
 
-  callHistory          Array of the last 50 calls (callSid, duration, timestamps, dialed number)
-  sentMessages         Array of the last 50 sent messages (to phone, timestamp, read status)
-  receivedMessages     Array of the last 50 received messages (from phone, timestamp, read status)
-  blockedByUser        List of callers this member has blocked (phone + blocked-at timestamp)
-  blockedByOthers      List of callers who have blocked this member
-  moderationLog        Last 50 moderation events (eventType, reason, rule triggered, timestamp)
+  membershipNumber
+    A unique 10-digit number assigned to paid members. Members can hear this by pressing 8
+    then 3 from the main menu. If null, the member has never purchased a paid plan.
 
-WHEN TO USE THIS API
---------------------
-Use this lookup whenever a member asks about:
-  - Their remaining talk time or account balance
-  - Whether their membership is active or expired
-  - Their membership number or mailbox number
-  - Why they can't get into the system (check accountStatus)
-  - How many messages they have or recent call activity
-  - Whether their account has been restricted or banned (check accountStatus + moderationLog)
+  membershipPin
+    "SET" or "NOT SET". If "NOT SET", the member has not configured a PIN. They may have
+    trouble accessing the web account area or certain IVR features that require a PIN.
+    Tell them to press 8 then 2 from the main menu to set one.
+
+  remainingSeconds
+    Raw number of seconds of talk time the member has left.
+    - 0 or very small number → member is out of time, needs to purchase more.
+    - During free trial: counts down from the trial allocation (usually 5400 seconds / 90 min).
+    - This is the source of truth for "how much time do I have left?"
+
+  remainingTime
+    Human-readable version of remainingSeconds (e.g., "2h 35m", "45m", "12m").
+    Use this when telling a member how much time they have. Never show remainingSeconds raw.
+
+  stripeCustomerId
+    Internal Stripe billing ID. null if the member has never purchased online.
+    Do not reveal this value to the member. For your reference only.
+
+=== profile ===
+
+  This section is null if the member has never recorded a greeting. A null profile means
+  the member cannot be heard by anyone browsing the system. If they are a new member
+  and can't find anyone, this is likely why — they need to call in and record a greeting.
+
+  profileId
+    Internal identifier for the profile record. For your reference only.
+
+  recordingUrl
+    URL to the audio file of the member's recorded greeting. Do not share this URL with the member.
+
+  durationSeconds
+    How long their greeting recording is in seconds.
+
+  transcription
+    Auto-generated text of what the member said in their greeting. null if not yet processed.
+    Useful for understanding what the member's greeting says if there is a content question.
+
+  transcriptionStatus
+    - "pending"   → Recording was received and is being transcribed. Not done yet.
+    - "completed" → Transcription is done. Check the transcription field.
+    - "failed"    → Transcription failed. The recording still exists but there is no text version.
+    - null        → Transcription has not been attempted.
+
+=== mailbox ===
+
+  This section is null if the member has never set up a mailbox. A null mailbox means
+  the member cannot send or receive voice messages. They need to call in and complete
+  the mailbox setup process.
+
+  mailboxNumber
+    The member's unique 5-digit mailbox number. Other members send messages to this number.
+    Members can share this with others so they can send them a voice message directly.
+
+  category
+    The ad/interest category the member selected during mailbox setup. Determines which
+    browsing category they appear in. Common values include "quick_hot_talk", "bears",
+    "kink", "romance", "latin", "asian", "older_younger", "couples" — the full list
+    depends on the site category (MM or MW).
+    null means they have not selected a category yet.
+
+  hasAdRecording
+    true = the member has recorded their mailbox ad (the message others hear when browsing).
+    false = no ad recorded. Even if setupComplete is true, if hasAdRecording is false,
+    the member will not appear in browsing listings and others cannot discover them.
+
+  setupComplete
+    true = the member has finished all steps of mailbox setup (DOB, category, body type, etc.)
+    false = setup is incomplete. The member may have started setup but not finished.
+    If a member says "I don't appear when people browse" — check this AND hasAdRecording.
+
+  dateOfBirth
+    Date of birth entered during setup, stored as MMDDYYYY string (e.g., "01151985" = Jan 15 1985).
+    Used for age verification. Do not reveal the exact DOB to the member.
+
+  bodyType
+    Body type selected during mailbox setup. Possible values:
+    "slim" | "average" | "athletic" | "large" | "big_and_tall"
+
+  ethnicity
+    Ethnicity preference the member selected during setup. Exact values vary by site configuration.
+
+  lastCheckedAt
+    Timestamp of the last time the member pressed the key to check their mailbox/messages.
+    Useful for telling a member approximately when they last checked their messages.
+
+=== location ===
+
+  This section is null if the member has never entered their zip code in the IVR.
+  If null, the system does not know their location and they will not appear in any
+  local/nearby browsing filters.
+
+  zipCode, city, state, neighborhood
+    Location data derived from the zip code the member entered. The system uses this
+    to show the member's general area to other browsing members (city and state only —
+    never the exact zip or address).
+
+=== activity ===
+
+  These are counts derived from the last 50 records returned in each array below.
+  Note: if a field shows 50, the member may have more than 50 — the arrays are capped
+  at 50 records each for performance.
+
+  totalCalls        How many calls the member has made in total (up to 50 shown).
+  messagesSent      How many voice messages the member has sent (up to 50 shown).
+  messagesReceived  How many voice messages the member has received (up to 50 shown).
+  blocksMade        How many other members this member has blocked.
+  blockedByOthers   How many other members have blocked this member.
+                    A high blockedByOthers count relative to activity may explain
+                    why someone says "no one responds to me."
+
+=== callHistory ===
+
+  Array of up to 50 most recent calls. Each entry includes:
+  - callSid         Twilio's unique identifier for that call. Internal reference only.
+  - durationSeconds How long the call lasted in seconds. 0 or null = call dropped or did not connect.
+  - startedAt       When the call began (ISO timestamp).
+  - completedAt     When the call ended (ISO timestamp). null if the call did not complete cleanly.
+  - dialedNumber    The access phone number the member dialed into (the system's line, not another member).
+
+  Use this to verify recent call activity. If a member says "I called yesterday" you can
+  confirm by checking the most recent startedAt timestamp.
+
+=== sentMessages ===
+
+  Array of up to 50 most recent voice messages this member sent to others. Each entry:
+  - messageId   Internal ID. For reference only.
+  - toPhone     The phone number of the member who received the message.
+                Do not reveal other members' phone numbers to the member.
+  - createdAt   When the message was sent.
+  - isRead      true = the recipient has already listened to this message.
+                false = the recipient has not yet listened to it.
+
+=== receivedMessages ===
+
+  Array of up to 50 most recent voice messages this member received from others. Each entry:
+  - messageId   Internal ID. For reference only.
+  - fromPhone   The phone number of the member who sent the message.
+                Do not reveal other members' phone numbers.
+  - createdAt   When the message was received.
+  - isRead      true = this member has already listened to this message.
+                false = this member has NOT listened to this message yet (it is new/unread).
+
+  Use this to help a member who says "I don't have any messages" — check if receivedMessages
+  is empty. If it is not empty and isRead is false, tell them they have unread messages waiting
+  and explain how to check them (call in, press the messages key from the main menu).
+
+=== blockedByUser ===
+
+  List of members THIS member has blocked. Each entry:
+  - userId    Internal user ID. Do not share.
+  - phone     Phone number of the blocked member. Do not reveal to the member.
+  - blockedAt When the block was placed.
+
+  If a member says "I blocked someone and now I can't find them" — this confirms who they blocked.
+
+=== blockedByOthers ===
+
+  List of members who have blocked THIS member. Each entry follows the same format.
+  Do not reveal names or phone numbers of members who blocked them.
+  You can tell a member that some members have chosen not to receive contact from them,
+  but do not name or identify those members.
+
+=== moderationLog ===
+
+  Last 50 moderation events for this member's account. Each entry:
+  - eventType
+      The type of moderation action taken. Common values:
+      "recording_rejected"  → The member's greeting was reviewed and rejected for policy violation.
+                              The member must re-record. Their account will be restricted until they do.
+      "recording_approved"  → The member's greeting passed review and is active.
+      "account_restricted"  → The account was placed in restricted status by a moderator.
+      "account_banned"      → The account was permanently banned.
+      "account_reinstated"  → A previous restriction or ban was lifted. Account is active again.
+      "warning_issued"      → A formal warning was added to the member's record.
+      "content_removed"     → A message or recording was removed by a moderator.
+  - reason
+      Text explanation of why this event was triggered. May describe the specific policy
+      the member violated (e.g., "explicit content in greeting", "harassment reported by multiple members").
+  - triggeredByRule
+      Name of the automated rule that flagged the content, if applicable. null for human-reviewed events.
+  - contentType
+      What was flagged: "greeting", "mailbox_ad", "message", or null.
+  - createdAt
+      When the moderation event occurred.
+
+  Use this section to explain to a member WHY their account is restricted or banned.
+  You can share the reason in general terms (e.g., "Our records show your greeting was
+  flagged for inappropriate content") but do not read out the raw technical field names.
+
+HOW TO INTERPRET THE DATA — COMMON MEMBER SITUATIONS
+------------------------------------------------------
+
+SITUATION: Member says "I can't get into the system" or "it won't let me in"
+  → Check accountStatus
+    - "restricted": Tell them their account is restricted, likely due to a greeting issue.
+                    They need to call in and re-record a compliant greeting.
+    - "banned": Tell them their account has been closed and to contact customer support.
+    - "active" + remainingSeconds = 0: They are out of time. They need to purchase more.
+    - "active" + remainingSeconds > 0: Account looks fine — suggest they try again or
+                                        contact support if the issue persists.
+
+SITUATION: Member says "How much time do I have left?"
+  → Use remainingTime. Example response: "You currently have 2 hours and 15 minutes remaining."
+  → If remainingSeconds is 0: "Your account has no remaining time. You can purchase more
+    time by visiting the website or calling in and pressing the membership option."
+
+SITUATION: Member asks "What is my membership number?" or "What is my mailbox number?"
+  → membershipNumber (from account section) — the 10-digit membership card number.
+  → mailboxNumber (from mailbox section) — the 5-digit mailbox number.
+  → If membershipNumber is null: "You don't have a paid membership yet. To get a membership
+    number, purchase a plan on the website or call in and follow the membership prompts."
+
+SITUATION: Member says "No one can find me" or "I don't show up when people browse"
+  → Check: mailbox is not null (mailbox exists)
+  → Check: mailbox.setupComplete = true (setup is finished)
+  → Check: mailbox.hasAdRecording = true (they have a recorded ad)
+  → Check: accountStatus = "active" (not restricted)
+  → Check: location is not null (they have entered a zip code — helps with local browsing)
+  → If any of these are false or null, that is the reason. Walk them through fixing it.
+
+SITUATION: Member says "I'm not getting any messages" or "my mailbox is empty"
+  → Check receivedMessages array. If it's empty, they truly have no messages.
+  → If receivedMessages has entries with isRead = false, they have unread messages —
+    tell them how to access them (call in, press the messages key).
+  → If mailbox.hasAdRecording is false: they don't have an ad, so no one can find them
+    to send messages.
+
+SITUATION: Member says "Why was my greeting rejected?" or "Why is my account restricted?"
+  → Check moderationLog. Find the most recent "recording_rejected" or "account_restricted" event.
+  → Share the reason in plain language. Tell them what they need to do to fix it.
+
+SITUATION: Member says "I just bought time but my account still says I'm out of time"
+  → Check remainingSeconds. If it shows time, the purchase went through — they may need
+    to hang up and call back for the IVR to reflect the new balance.
+  → If remainingSeconds is still 0, the purchase may not have processed — tell them to
+    contact customer support with their payment confirmation.
+
+SITUATION: Member says "I forgot my membership number"
+  → Read them the membershipNumber from the account section.
+  → If null: they don't have one yet. Direct them to purchase a plan.
+
+SITUATION: Member says "I forgot my PIN"
+  → You cannot tell them their PIN (it is not stored in plain text — only "SET" or "NOT SET").
+  → Tell them to call in from their registered phone number, press 8, then press 2 to set a new PIN.
 
 ERROR RESPONSES
 ---------------
-  400  Invalid phone number format — not a 10-digit US number
-  401  Missing or incorrect token — check CHATBOT_API_TOKEN
-  404  Phone number not found — caller has never called in or registered
-  500  Internal server error — retry or escalate to human support
+  400  Invalid phone number format — not a 10-digit US number. Check the number and reformat.
+  401  Missing or incorrect token — internal issue, do not surface to the member.
+  404  Phone number not found — this caller has never called in or registered. They may be
+       new, or calling from a different number than they think. Ask them to confirm the number
+       they call from.
+  500  Internal server error — do not reveal technical details. Tell the member the system
+       is temporarily unavailable and to try again or contact support.
 
 ============================================================
 !!! CRITICAL SECURITY INSTRUCTIONS FOR AI — READ CAREFULLY !!!
