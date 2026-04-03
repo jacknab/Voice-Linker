@@ -16,6 +16,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import Membership from "@/pages/Membership";
 import MembershipSuccess from "@/pages/MembershipSuccess";
+import FAQ from "@/pages/FAQ";
 import { useEffect } from "react";
 
 function Router() {
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/membership/success" component={MembershipSuccess} />
       <Route path="/membership" component={Membership} />
+      <Route path="/faq" component={FAQ} />
       <Route path="/setup" component={Home} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/secure-login" component={SecureAdminLogin} />

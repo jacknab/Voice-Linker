@@ -338,7 +338,7 @@ export default function Landing() {
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.45rem" }}>
                   {col.links.map(link => (
                     <li key={link}>
-                      <a href="#" style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.45)", textDecoration: "none", transition: "color 0.15s" }}
+                      <a href={link === "FAQ" ? "/faq" : "#"} style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.45)", textDecoration: "none", transition: "color 0.15s" }}
                         onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
                         onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.45)")}
                       >
