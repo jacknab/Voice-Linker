@@ -2148,9 +2148,8 @@ export async function registerRoutes(
       } else {
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
         callTimeAnnounced.add(callSid);
-        // MW systems bypass the main menu and go straight into the phone booth
         const siteConf = await getSiteSettingsCached();
-        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/phone-booth" : "/voice/main-menu");
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check-override error:", error);
@@ -2253,9 +2252,8 @@ export async function registerRoutes(
         // Has time — announce remaining time to all callers at entry
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
         callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
-        // MW systems bypass the main menu and go straight into the phone booth
         const siteConf = await getSiteSettingsCached();
-        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/phone-booth" : "/voice/main-menu");
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check error:", error);
@@ -2307,9 +2305,8 @@ export async function registerRoutes(
           "Your free trial will expire in seven days and it must be used from this phone number.");
         callTimeAnnounced.add(callSid);
 
-        // MW systems bypass the main menu and go straight into the phone booth
         const siteConf = await getSiteSettingsCached();
-        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/phone-booth" : "/voice/main-menu");
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
       } catch (error) {
         console.error("[voice] handle-free-trial-offer error:", error);
         playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
@@ -2451,6 +2448,17 @@ export async function registerRoutes(
     const callSid  = req.body?.CallSid as string;
     const fromNumber = req.body?.From as string;
 
+    // MW systems have their own main menu — bounce there automatically so all
+    // sub-routes that redirect to /voice/main-menu land in the right place.
+    try {
+      const siteConf = await getSiteSettingsCached();
+      if (siteConf.siteCategory === "MW") {
+        twiml.redirect("/voice/mw-main-menu");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+    } catch (_) { /* fall through to MM menu on error */ }
+
     try {
       const user = await getOrCreateUser(fromNumber);
       const remainingSeconds = user.remainingSeconds ?? 0;
@@ -2535,6 +2543,96 @@ export async function registerRoutes(
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
       twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 3b. MW Main Menu ─────────────────────────────────────────────────────
+  // MW-specific main menu (men/women line). Callers arrive here after gender
+  // selection + membership check. Women land here too (always free on MW).
+  app.post("/voice/mw-main-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid   = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const remainingSeconds = user.remainingSeconds ?? 0;
+
+      // Access expired
+      if (user.membershipTier && remainingSeconds <= 0 && !femaleCallers.has(callSid)) {
+        playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
+        twiml.redirect("/voice/membership-purchase");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      // Under-5-minute warning (once per call)
+      if (user.membershipTier && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
+        callWarningShown.add(callSid);
+        twiml.redirect("/voice/time-warning");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      // First-visit balance announcement
+      if (user.membershipTier && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
+        callTimeAnnounced.add(callSid);
+        playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
+      }
+    } catch (err) {
+      console.error("[voice] mw-main-menu time check error:", err);
+    }
+
+    // MW Main Menu MOTD
+    try {
+      const motdCfg = await getMembershipSettingsCached();
+      if (motdCfg.motdMainMenuEnabled && motdCfg.motdMainMenuText) {
+        playPrompt(twiml, req, "motd_main_menu.mp3", motdCfg.motdMainMenuText);
+      }
+    } catch (err) {
+      console.error("[voice] mw-main-menu motd error:", err);
+    }
+
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-mw-main-menu" });
+    playPrompt(gather, req, "mw_main_menu.mp3",
+      "Main menu. " +
+      "If you're ready to join the action press 1. " +
+      "To buy membership time press 2. " +
+      "To manage your membership press 8. " +
+      "For customer service press 0. " +
+      "To repeat these choices press 9."
+    );
+    twiml.redirect("/voice/mw-main-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 3c. Handle MW Main Menu ──────────────────────────────────────────────
+  app.post("/voice/handle-mw-main-menu", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+
+    if (digit === "1") {
+      // Join the action — enter the phone booth
+      twiml.redirect("/voice/phone-booth");
+    } else if (digit === "2") {
+      // Buy membership time
+      twiml.redirect("/voice/purchase-pre-menu");
+    } else if (digit === "8") {
+      // Manage membership
+      twiml.redirect("/voice/manage-membership");
+    } else if (digit === "0") {
+      // Customer service
+      twiml.redirect("/voice/customer-service");
+    } else if (digit === "9") {
+      // Repeat
+      twiml.redirect("/voice/mw-main-menu");
+    } else {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect("/voice/mw-main-menu");
     }
 
     res.type("text/xml");
