@@ -1859,8 +1859,23 @@ export async function registerRoutes(
 
   // ─── 1b-i. Membership Gateway ──────────────────────────────────────────────
   // Asks caller if they have a membership. Press 1 to enter it, # to skip.
+  // NOTE: When billing mode is 'per_day', membership number entry is disabled.
+  // Authentication is handled purely by caller ID to prevent account sharing.
   app.post("/voice/membership-entry", async (req, res) => {
     const twiml = new VoiceResponse();
+
+    try {
+      const settings = await getMembershipSettingsCached();
+      if (settings.billingMode === "per_day") {
+        // Per-day billing: skip membership number prompt entirely — caller ID is the sole authenticator
+        twiml.redirect("/voice/entry-check");
+        res.type("text/xml");
+        res.send(twiml.toString());
+        return;
+      }
+    } catch (err) {
+      console.error("[voice] membership-entry billing mode check error:", err);
+    }
 
     const gather = twiml.gather({
       numDigits: 1,
