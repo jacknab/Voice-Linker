@@ -6610,5 +6610,419 @@ export async function registerRoutes(
     }
   });
 
+  // ─── /everything — Plain-text knowledge base for chatbot training ─────────
+  // Returns a comprehensive plain-text document describing every aspect of the
+  // system. No authentication required (content is general knowledge only).
+  app.get("/everything", async (_req, res) => {
+    let ms: Awaited<ReturnType<typeof getMembershipSettingsCached>>;
+    let ss: Awaited<ReturnType<typeof getSiteSettingsCached>>;
+    try {
+      ms = await getMembershipSettingsCached();
+      ss = await getSiteSettingsCached();
+    } catch {
+      return res.status(503).type("text/plain").send("Settings unavailable. Please try again.");
+    }
+
+    const siteName  = ss.siteName  || "Phone Booth";
+    const isMM      = (ss.siteCategory ?? "MM") === "MM";
+    const fallback  = ss.fallbackPhoneNumber || "[access number]";
+    const csPhone   = ss.customerServicePhone  || "see website footer";
+    const csEmail   = ss.customerServiceEmail  || "see website footer";
+
+    const trialMin  = ms.freeTrialMinutes;
+    const p1Name    = ms.plan1Name  || "Plan 1";
+    const p1Min     = ms.plan1Minutes;
+    const p1Price   = centsToLabel(ms.plan1PriceCents);
+    const p2Name    = ms.plan2Name  || "Plan 2";
+    const p2Min     = ms.plan2Minutes;
+    const p2Price   = centsToLabel(ms.plan2PriceCents);
+    const p3Name    = ms.plan3Name  || "Plan 3";
+    const p3Min     = ms.plan3Minutes;
+    const p3Price   = centsToLabel(ms.plan3PriceCents);
+
+    const audience  = isMM
+      ? "gay, bi, and curious men"
+      : "men and women looking to connect with each other";
+
+    const doc = `
+${siteName.toUpperCase()} — COMPLETE SYSTEM KNOWLEDGE BASE
+Generated automatically from live system settings. For chatbot / AI assistant use.
+============================================================
+
+OVERVIEW
+--------
+${siteName} is a live voice chatline for ${audience}. Callers dial in from any phone, interact with a fully automated Interactive Voice Response (IVR) system, and can browse real callers, exchange private voice messages, and connect live for private one-on-one conversations. No internet connection or app is required. Calls are completely anonymous — no caller's real phone number is ever shared with another caller.
+
+The system has two components:
+1. The VOICE SYSTEM — accessed by phone. Everything happens through keypad presses and voice recordings.
+2. The WEBSITE (web account) — optional. Members can manage their account, check their balance, and purchase time online at ${siteName.toLowerCase().replace(/\s+/g, "")}.com.
+
+ACCESS NUMBER
+-------------
+Callers dial in using the local access number for their area. The website automatically shows the nearest local number based on the caller's location. A national fallback number is ${fallback}. Multiple local numbers may exist for different cities or regions.
+
+WHO CAN USE THE SYSTEM
+-----------------------
+Anyone 18 years of age or older. All callers must be adults. The system enforces this through an age gate in the mailbox setup flow (date of birth entry) and through terms acceptance.${isMM ? "\n\nThe system is designed specifically for men who want to meet men. Women are not part of the MM line." : "\n\nThe MW line is open to both men and women. Men browse women's profiles; women browse men's profiles. Gender is selected at the start of each call."}
+
+GETTING STARTED — HOW TO CALL IN
+----------------------------------
+1. Dial the access number from any phone (cell, landline, or VoIP).
+2. Caller ID must NOT be blocked. The system uses your phone number to identify your account. If your number comes in as Private or Unknown, the system cannot identify you and will say so.
+3. Brand-new callers (first time ever calling): the system offers a FREE TRIAL automatically.
+4. The system asks you to record a short voice greeting — your first name and a brief intro. This is what other callers will hear when they browse your profile.
+5. After recording your greeting, you are placed at the main menu and can start using the system.
+
+FREE TRIAL
+----------
+- Brand-new callers (phone number never seen by the system before) receive a free trial automatically.
+- Free trial length: ${trialMin} minutes of talk time. No credit card required.
+- The free trial is valid for 7 days from the date it was first activated. It is tied to the specific phone number used to call in.
+- During the free trial, the caller has access to the full system (phone booth, mailboxes, messaging, live connect).
+- The system announces a warning when less than 15 minutes remain on the free trial.
+- Free trials cannot be restarted or extended. Once used or expired, a membership must be purchased to continue.
+- Free trial minutes are only deducted while the caller is actively in the phone booth or in a live one-on-one connection — NOT while navigating menus.
+
+IVR CALL FLOW — STEP BY STEP
+------------------------------
+When a caller dials in:
+
+STEP 1 — IDENTIFICATION
+  - System reads the caller's phone number (via Twilio Caller ID).
+  - If caller ID is blocked/private: call is rejected with an explanation.
+  - If the phone number is associated with a blocked account: caller is informed and call ends.
+  - Brand new callers → go to Step 2a (Free Trial Offer).
+  - Returning callers with active membership → time is announced, then Main Menu.
+  - Returning callers whose membership/trial has expired → prompted to purchase.
+  - Returning callers calling from an unlinked phone → can enter membership number + PIN to authenticate.
+
+STEP 2a — FREE TRIAL OFFER (brand-new callers only)
+  - System offers the free trial.
+  - Press 1 to accept the trial now. Press # to skip and go to the main menu without a trial.
+  - If accepted: ${trialMin} minutes are granted and the system announces the time, then proceeds.
+
+STEP 2b — RECORD YOUR GREETING (first-time callers, before reaching main menu)
+  - Caller is asked to record their name (short, up to ~5 seconds).
+  - Then asked to record a full profile greeting (up to ~60 seconds, minimum ~8 seconds).
+  - The greeting goes live immediately and is heard by other callers in the phone booth.
+
+STEP 3 — MAIN MENU
+  - After identification and any first-time setup, all callers land at the Main Menu.
+  - If the caller has less than 5 minutes of time remaining, a warning is played once per call before the menu.
+  - If time has fully expired, the caller is prompted to purchase more time before reaching the menu.
+
+MAIN MENU OPTIONS
+-----------------
+When at the main menu, callers hear their options and press the corresponding key:
+
+  * (Star)  → Enter the Phone Booth (browse live caller profiles)
+  1         → Mailboxes and personal ads
+  2         → Purchase time / add membership
+  4         → Hear membership pricing information
+  8         → Manage your membership (check balance, set PIN, hear membership number)
+  0         → Customer service message
+  9         → Repeat the menu choices
+  #         → (no action / returns to menu)
+
+PHONE BOOTH (LIVE CONNECTOR)
+------------------------------
+The phone booth is the core of the system. This is where callers browse live profiles and can connect with each other in real time.
+
+HOW IT WORKS:
+- Press * from the main menu to enter the phone booth.
+- The system first announces how many minutes you have remaining (if you're a member or trialist).
+- You're asked to enter your 5-digit zip code (optional) so the system can prioritize nearby callers.
+  - Press # to skip the zip code step.
+- The system plays caller profiles one at a time — you hear each caller's recorded voice greeting.
+- Callers closest to your zip code (if entered) are played first.
+
+KEYPAD OPTIONS WHILE BROWSING A PROFILE:
+  1 → Send a voice message to this caller
+  2 → Skip to the next profile
+  3 → Send a live one-on-one connect request to this caller
+  4 → Block this caller (you will never hear them again)
+  5 → Go back to the previous profile
+  6 → Hear this caller's approximate location
+  7 → Flag this profile for review (report inappropriate content)
+  9 → Return to the main menu
+  # → Exit the phone booth
+
+LIVE CONNECT (one-on-one private calls):
+- Press 3 while listening to a profile to send a live connect request.
+- The other caller receives a chime alert and can press 1 to accept or 2 to decline.
+- If accepted, both callers are placed in a private two-way voice call — no one else can hear them.
+- Either party can end the live connect at any time by pressing the # (pound) key.
+- The conversation is private and completely anonymous (real phone numbers are not shared).
+- You need at least 5 minutes remaining on your membership to initiate a live connect.
+- Live connect time is deducted from your membership balance.
+
+PENDING MESSAGES:
+- If you have unread voice messages when you enter the phone booth, the system notifies you before you start browsing profiles.
+- Press 1 to listen to your messages now, or press # to browse profiles first.
+
+TIME DEDUCTION:
+- Minutes are only deducted while you are actively in the phone booth or in a live connect.
+- Time is NOT deducted while you are in menus, on hold, or navigating other parts of the system.
+- If your time runs out while in the phone booth, your session ends and you are returned to purchase options.
+
+VOICE MESSAGES
+--------------
+- Any caller can send a voice message to another caller's mailbox by pressing 1 while listening to their profile.
+- Record your message after the tone, press # when finished.
+- The recipient will be notified the next time they enter the phone booth.
+- When notified of a message, pressing 1 plays all new messages.
+- After listening to a message, you can:
+  - Press 1 to reply to the message
+  - Press 2 to hear the sender's profile greeting
+  - Press 3 to continue browsing
+  - Press 4 to block this caller
+  - Press 7 to flag the message for review
+
+MAILBOX SYSTEM
+--------------
+The mailbox system gives every member a personal voice mailbox with a 5-digit mailbox number.
+
+ACCESSING THE MAILBOX MENU:
+- Press 1 from the main menu → "Mailboxes and personal ads" menu.
+- From here:
+  - Press 1 → Go to your mailbox (check messages, manage your greeting)
+  - Press 2 → Record a new mailbox ad in a category
+  - Press 3 → Browse other callers' mailbox ads
+  - Press 9 → Repeat choices
+  - Press # → Return to main menu
+
+MAILBOX SETUP (first-time mailbox users):
+If you've never set up a mailbox before, you must complete a one-time setup process:
+1. DATE OF BIRTH: Enter your date of birth (MMDDYYYY format, 8 digits). Must be 18 or older.
+2. BODY TYPE: Select your body type from a menu:
+   - 1 = Slim, 2 = Average, 3 = Athletic, 4 = Large, 5 = Big and Tall
+3. ETHNICITY: Select your ethnicity from a menu (optional — you can skip/not identify):
+   - 1 = Prefer not to say, 2 = Caucasian, 3 = African-American, 4 = Asian, 5 = Latino, 6 = Middle Eastern, 7 = Aboriginal
+4. READY TO WRITE DOWN: The system tells you to get pen and paper — your mailbox number and passcode are about to be revealed. You only get one chance to write them down.
+5. MAILBOX NUMBER AND PASSCODE: The system reveals your unique 5-digit mailbox number and your 4-digit passcode.
+   - If you already have a membership PIN set, your mailbox passcode is the SAME as your PIN.
+   - If you don't have a PIN yet, you'll create a new 4-digit passcode now (this becomes your PIN too).
+6. Setup is complete. You can now use the full mailbox system.
+
+YOUR MAILBOX:
+- Check unread messages
+- Record or update your mailbox greeting (the ad that other callers see when browsing ads)
+- Mailbox ads are reviewed by moderators before going live
+
+BROWSING OTHER MAILBOX ADS:
+- Ads are organized into categories (e.g., Quick & Hot Talk, Kink, Bears, etc.)
+- You can look up a specific mailbox by entering its 5-digit number
+- When browsing an ad, you can send the person a voice message
+
+MEMBERSHIP & BILLING
+---------------------
+After the free trial, callers need a paid membership to use the phone booth.
+
+MEMBERSHIP PLANS:
+${siteName} currently offers three plans:
+
+  Plan 1: ${p1Name}
+    - ${p1Min.toLocaleString()} minutes of talk time
+    - Price: ${p1Price}
+
+  Plan 2: ${p2Name}
+    - ${p2Min.toLocaleString()} minutes of talk time
+    - Price: ${p2Price}
+
+  Plan 3: ${p3Name}
+    - ${p3Min.toLocaleString()} minutes of talk time
+    - Price: ${p3Price}
+
+FIRST PURCHASE BONUS:
+- First-time buyers receive DOUBLE the minutes. Example: buying Plan 1 gives ${p1Min.toLocaleString()} base minutes + ${p1Min.toLocaleString()} bonus minutes = ${(p1Min * 2).toLocaleString()} total minutes.
+
+HOW TO PURCHASE BY PHONE:
+1. Press 2 from the main menu → "Purchase time / add membership".
+2. If you have a promo code, press 1 to enter it; otherwise press 2 to skip.
+3. Select your plan (press the number shown in the menu).
+4. Confirm your selection: press 1 to confirm, press 2 to change.
+5. Read the billing disclosure, then press 1 to proceed to card entry.
+6. Enter your credit card number, expiration date, and security code using your keypad.
+   - Press * once to delete the last digit entered.
+   - Press * twice to start card entry over.
+7. Membership is activated immediately upon successful payment.
+8. For first-time buyers: a membership card number is automatically issued and read out to you — write it down.
+
+PAYMENT:
+- Phone purchases use a Stripe Pay connector. Your card is processed securely by Stripe.
+- The charge appears on your statement as "Toby Media".
+- No automatic renewals. You are only charged when you choose to purchase.
+- Online purchases can be made at the website using Stripe or PayPal.
+
+PROMO CODES:
+- Promo codes can be entered when purchasing to receive a discount or bonus time.
+- They are entered from the phone (press 1 when prompted at the purchase menu) or at checkout on the website.
+
+PIN (PERSONAL IDENTIFICATION NUMBER)
+--------------------------------------
+- Your 4-digit PIN is optional but strongly recommended.
+- With a PIN set, you can call in from ANY phone (not just your registered number).
+- When calling from an unregistered phone, the system asks for your membership number and PIN.
+- Set or change your PIN: press 8 from the main menu → "Manage membership" → press 2 to set/change PIN.
+- Clearing your PIN means you can only use the system from your registered phone number.
+- Your PIN is the same as your mailbox passcode.
+
+MEMBERSHIP CARD NUMBER
+-----------------------
+- When you purchase a membership by phone for the first time, a unique 5-digit membership card number is issued.
+- This number is read to you during the purchase confirmation. Write it down — the system does not repeat it.
+- The membership card number can be used to link your phone account to a web (website) account.
+- You can hear your membership number at any time: press 8 from the main menu → press 3.
+
+MANAGING YOUR MEMBERSHIP (press 8 from main menu)
+----------------------------------------------------
+The manage membership menu tells you:
+- Your current membership status and tier
+- How many minutes remain on your membership
+- Whether you have a PIN set
+- Whether you have a membership number on file
+
+From this menu:
+  1 → Add time or purchase a new membership
+  2 → Set or change your 4-digit PIN
+  3 → Hear your membership card number
+  9 → Return to the main menu
+
+MEMBERSHIP PRICING INFO (press 4 from main menu)
+-------------------------------------------------
+From here, callers can:
+  1 → Learn how membership works
+  2 → Hear current pricing
+  3 → Go directly to purchase a membership
+
+WEB ACCOUNT (WEBSITE)
+----------------------
+The website is at the ${siteName} domain. Creating a web account is optional — callers can use the full phone system without one.
+
+REGISTERING:
+- Go to the website and click Sign Up or Register.
+- Enter your email address and create a password.
+- No phone number is required to register — but linking your phone allows you to see your balance and purchase time online.
+
+LINKING YOUR PHONE TO YOUR WEB ACCOUNT:
+Method 1 — Membership Card (MM system):
+  - On your dashboard, enter your 5-digit membership card number and 4-digit PIN.
+  - This links your phone account to your web account and shows your balance and call history.
+
+Method 2 — Phone number direct (MW system):
+  - Enter your 10-digit phone number and PIN to link your account.
+
+Method 3 — Link Code (IVR):
+  - In your web account dashboard, generate a short link code.
+  - Then call in on the phone and enter that code when prompted to link the accounts.
+
+DASHBOARD FEATURES:
+- See your current membership balance (minutes remaining)
+- See your linked phone number and membership card number
+- View your call history
+- Browse and purchase membership plans
+- Change your account password
+- View quick links to membership info
+
+PURCHASING ONLINE:
+- From the dashboard, click on a plan to purchase via the website.
+- Pay with credit card (Stripe) or PayPal.
+- Time is credited to your phone account immediately after a successful payment (if your phone is linked).
+
+WEBSITE PAGES
+-------------
+  /           → Home / Landing page — overview of the service, local access number
+  /faq        → Frequently Asked Questions
+  /membership → Purchase membership online (choose a plan and pay)
+  /dashboard  → Member account area (requires login)
+  /login      → Log in to your web account
+  /register   → Create a new web account
+  /forgot-password → Reset your password via email
+  /support    → Contact and support information
+  /safety-tips → Tips for staying safe on the chatline
+  /about      → About the service
+  /terms      → Terms of Service
+  /privacy-policy → Privacy Policy
+  /cities     → Local access numbers by city
+  /keypad-tips → Keypad shortcut guide for using the phone system
+
+PRIVACY & SAFETY
+-----------------
+- Your real phone number is NEVER shared with other callers. All connections are routed anonymously.
+- Other callers can only hear your recorded voice greeting. No personal information (name, number, location) is disclosed.
+- You can block any caller instantly by pressing 4 while listening to their profile. Blocked callers can no longer interact with you.
+- You can flag any profile or message for moderation review by pressing 7.
+- Moderators review all flagged content and remove callers who violate community guidelines.
+- For full anonymity, you can use a prepaid phone with no name attached.
+- All callers must be 18 or older.
+
+CALLER RESTRICTIONS
+--------------------
+- Blocked callers: cannot be heard by the caller who blocked them; cannot send messages to them; cannot invite them to live connect.
+- Restricted accounts: callers whose accounts have been restricted by a moderator can still browse profiles but cannot go live or post new content until the restriction is lifted.
+- Rejected recordings: if a caller's greeting has been rejected by a moderator, they must re-record before using the system.
+
+COMMON QUESTIONS & SCENARIOS
+-----------------------------
+
+Q: I called before and had a free trial. Can I get another one?
+A: No. The free trial is a one-time offer per phone number. Once your trial is used or has expired, you'll need to purchase a membership to continue.
+
+Q: I'm calling from a different phone. How do I access my account?
+A: You need your 5-digit membership card number and your 4-digit PIN. When calling from an unrecognized number, the system will ask you to enter these. If you don't have a PIN set, you must call from your original phone to set one first.
+
+Q: How do I know how many minutes I have left?
+A: Every time you enter the phone booth, the system announces your remaining minutes. You can also check at any time by pressing 8 (Manage Membership) from the main menu.
+
+Q: I'm not hearing any callers in the phone booth. Why?
+A: There may be no other callers online at that moment. The system will let you know if there are no profiles available. Try calling back at a different time — evenings and weekends tend to have more callers online.
+
+Q: Can I use the system without a membership?
+A: Yes, during your free trial (${trialMin} minutes for new callers). After that, a paid membership is required to use the phone booth and live connect features. Navigating menus does not require a membership.
+
+Q: My payment was declined. What do I do?
+A: Make sure your card details are entered correctly. Check that your card has not expired and has sufficient funds. If the problem persists, try a different card or contact your bank.
+
+Q: I forgot my PIN. How do I reset it?
+A: Call in from your registered (linked) phone number. From the main menu press 8, then press 2 to set a new PIN. If you can't call from your original number and don't remember your PIN, contact customer support.
+
+Q: I forgot my mailbox passcode. What do I do?
+A: Your mailbox passcode is the same as your membership PIN. If you know your PIN, that IS your passcode. If you've forgotten both, contact customer support for assistance.
+
+Q: I forgot my web account password. How do I reset it?
+A: Go to the website and click "Forgot Password." Enter your email address and you'll receive a password reset link.
+
+Q: How do I cancel my membership / get a refund?
+A: Memberships are non-refundable time blocks — there is no automatic renewal to cancel. Once purchased, the time is available until it's used or until you choose to stop using the service. For billing disputes, contact customer support.
+
+Q: The system said my recording was rejected. What happened?
+A: A moderator reviewed your greeting and it did not meet community guidelines (e.g., inappropriate content). You need to record a new greeting before you can use the system again. Re-record by calling in and following the prompts.
+
+Q: I got a membership card number but lost it. Can I get it again?
+A: Yes. Call in and press 8 from the main menu, then press 3 to hear your membership card number read back to you.
+
+CUSTOMER SERVICE
+-----------------
+Customer service can be reached by:
+- Phone: ${csPhone}
+- Email: ${csEmail}
+- By phone (IVR): press 0 from the main menu for customer service information.
+- Through the website: visit the /support page.
+
+TECHNICAL NOTES
+---------------
+- The system works with any type of phone: cell phone, landline, or VoIP (e.g., Google Voice, magicJack).
+- Caller ID must be enabled. "Private" or "Unknown" numbers cannot be identified and will not be accepted.
+- Call quality depends on your phone and carrier signal. If quality is poor, try from a different location or phone.
+- There is no app to download. The entire system is phone-based.
+- Purchases made online are reflected on the phone immediately after payment is confirmed.
+- The system does not automatically charge or renew. Every purchase is initiated by the caller.
+
+END OF KNOWLEDGE BASE
+`.trim();
+
+    res.type("text/plain").send(doc);
+  });
+
   return httpServer;
 }
