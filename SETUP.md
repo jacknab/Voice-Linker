@@ -20,6 +20,7 @@ A voice-based social network that runs over real phone calls using Twilio. Calle
 12. [Process Management (Production)](#process-management-production)
 13. [Nginx Reverse Proxy (Optional)](#nginx-reverse-proxy-optional)
 14. [Troubleshooting](#troubleshooting)
+15. [System Cleanup](#system-cleanup)
 
 ---
 
@@ -464,3 +465,127 @@ kill -9 <PID>
 ```
 
 Or change the `PORT` environment variable to a free port and update your Nginx proxy config accordingly.
+
+---
+
+## System Cleanup
+
+The cleanup script removes stale and orphaned data to keep the database lean. It should be run on a regular schedule — weekly is recommended for most deployments.
+
+**Location:** `scripts/cleanup.ts`
+
+### Running the Script
+
+Always do a dry run first. No data is written until you explicitly pass `--run`.
+
+```bash
+# Preview what would be removed (safe — no DB changes)
+npx tsx scripts/cleanup.ts
+
+# Execute for real
+npx tsx scripts/cleanup.ts --run
+```
+
+### Scheduling with Cron
+
+To run every Sunday at 2 AM:
+
+```bash
+crontab -e
+```
+
+Add the line (adjust the path to your project root):
+
+```
+0 2 * * 0 cd /home/youruser/phonebooth && npx tsx scripts/cleanup.ts --run >> /var/log/phonebooth-cleanup.log 2>&1
+```
+
+---
+
+### What Each Part Does
+
+#### Part 1 — Delete stale free-trial accounts
+
+**Trigger:** `membershipTier = 'free_trial'` AND account created **40+ days ago**
+
+Free-trial callers who never converted to a paid membership are fully removed after 40 days.
+
+Everything linked to the account is deleted:
+
+| Table | What is removed |
+|---|---|
+| `active_calls` | Any live session entry |
+| `seed_sessions` | Any seed broadcast history |
+| `moderation_logs` | All moderation events for this user |
+| `blocked_users` | All blocks they set and blocks set against them |
+| `promo_redemptions` | All promo codes they redeemed |
+| `flagged_content` | Content they flagged, plus any flags raised *against* their profile or messages |
+| `messages` | All voice messages sent and received |
+| `profiles` | Their voice greeting / personal ad recording |
+| `call_logs` | All inbound call records for their phone number |
+| `web_user_alt_phones` | Any web account alt-phone entries using their number |
+| `membership_cards` | `phoneNumber` is cleared (card is marked unactivated again) |
+| `web_users` | Linked phone number is cleared (web account itself is kept) |
+| `mailboxes` | Deleted automatically via `onDelete: cascade` when the user row is removed |
+
+---
+
+#### Part 2 — Reset expired memberships
+
+**Trigger:** `membershipTier IS NOT NULL` AND `remainingSeconds ≤ 0`
+
+When a paid membership reaches zero seconds, the three membership fields are nulled out:
+
+- `membershipTier → null`
+- `remainingSeconds → null`
+- `membershipStartedAt → null`
+
+The caller's account, greeting, mailbox, and call history are **not** deleted — only the membership status is cleared. They will be prompted to purchase again on their next call.
+
+---
+
+#### Part 3 — Purge inactive mailboxes and personal ads (MM system)
+
+**Trigger:** Mailbox not accessed in **21+ days** (based on `lastCheckedAt`, falling back to `createdAt` for mailboxes that were never visited)
+
+The caller's **account and membership are kept**. Only the mailbox slot and voice personal ad are removed:
+
+| Table | What is removed |
+|---|---|
+| `flagged_content` | Any flags pointing at their profile recording |
+| `profiles` | Their voice greeting / personal ad |
+| `mailboxes` | Their mailbox number, ad recording, and category |
+
+The `lastCheckedAt` timestamp is updated every time the member enters the `/voice/my-mailbox` IVR section. Members who regularly listen to their messages will never be affected.
+
+---
+
+#### Part 4 — Delete dormant paid-membership accounts
+
+**Trigger:** `membershipTier IS NOT NULL` AND `membershipTier != 'free_trial'` AND last inbound call was **61+ days ago** (or the account has never called at all)
+
+A SQL aggregate query (`MAX(call_logs.started_at)` grouped by user phone number) is used to find the most recent actual call for each paid member efficiently. Users who have never called are also included.
+
+Everything linked to the account is deleted using the same full-cascade logic as Part 1 (see the table above). This ensures no orphaned rows are left behind anywhere in the database.
+
+---
+
+### Data Safety Design
+
+The script is designed so that **no table is ever missed**. The deletion order is carefully chosen to avoid foreign-key constraint violations:
+
+1. `active_calls` — cleared first (no dependents)
+2. `seed_sessions` — cleared first
+3. `moderation_logs` — cleared first
+4. `blocked_users` — both blocker and blocked sides
+5. `promo_redemptions` — before user deletion (FK to `users.id`)
+6. `flagged_content` — deleted by three vectors: reporter, profile contentId, message contentId
+7. `messages` — both sender and recipient sides
+8. `profiles` — deleted after messages (messages may have been flagged by contentId)
+9. `call_logs` — matched by phone number (text field, no FK)
+10. `web_user_alt_phones` — matched by phone number
+11. `membership_cards` — phone number field cleared to null (card record is kept)
+12. `web_users` — phone link fields cleared (account is kept)
+13. `users` — deleted last; `mailboxes` cascade automatically via `onDelete: cascade`
+
+> **Note:** `audit_logs` are intentionally preserved. They are an administrative audit trail with no FK constraints and should not be purged by automated cleanup.
