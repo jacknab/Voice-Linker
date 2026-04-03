@@ -5332,6 +5332,8 @@ export async function registerRoutes(
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-payment-intro" });
     gather.say(
       "Your purchase, plus any applicable fees and taxes, will appear on your credit card statement as Toby Media. " +
+      "When entering your card information: to correct an incorrect number, press star to delete the last digit entered. " +
+      "To start over, press the star key twice. " +
       "If you're ready to enter your credit card information press 1."
     );
     twiml.redirect("/voice/payment-intro");
