@@ -744,6 +744,16 @@ export async function registerRoutes(
         console.warn("[admin] Could not read MP3 duration:", metaErr);
       }
 
+      // Auto-stamp the current siteCategory so this profile stays scoped to the right system
+      const uploadSiteConf = await getSiteSettingsCached();
+      const siteCategory = uploadSiteConf.siteCategory ?? "MM";
+
+      // For MW profiles, accept a gender tag (required for proper gender-filtered browsing)
+      const gender = (req.body?.gender as string)?.trim() || null;
+      if (siteCategory === "MW" && !gender) {
+        return res.status(400).json({ message: "Gender is required for MW profile greetings (male or female)" });
+      }
+
       const user = await storage.getOrCreateUser(phoneNumber);
       const recordingUrl = `/uploads/${req.file.filename}`;
       const profile = await storage.upsertProfile({
@@ -751,6 +761,8 @@ export async function registerRoutes(
         recordingUrl,
         recordingDuration,
         isAdminUploaded: true,
+        siteCategory,
+        gender: siteCategory === "MW" ? gender : null,
       });
 
       // Register this profile with the virtual caller simulator
@@ -3986,8 +3998,9 @@ export async function registerRoutes(
         : null;
 
       // Count available profiles: active callers + admin-uploaded greetings (region-scoped)
-      // On MW systems, only count opposite-gender profiles
-      const availableCount = await storage.getAvailableProfileCount(user.id, regionId, browseCallerGender);
+      // On MW systems, only count opposite-gender profiles scoped to the MW siteCategory
+      const browseSiteCategory = browseSiteConf.siteCategory ?? "MM";
+      const availableCount = await storage.getAvailableProfileCount(user.id, regionId, browseCallerGender, browseSiteCategory);
       // Caller count is system-wide (no region filter) so virtual callers with no region are included
       const activeCallerCount = await storage.getActiveCallerCount(user.id, undefined, browseCallerGender);
       console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, callerGender=${browseCallerGender}, activeOtherCallers=${activeCallerCount}, availableProfiles=${availableCount}`);
@@ -4047,7 +4060,7 @@ export async function registerRoutes(
         // Build the queue once per caller, then advance position on each visit
         let state = callerBrowseState.get(callSid);
         if (!state) {
-          const allProfiles = await storage.getAllActiveProfiles(user.id, regionId, browseCallerGender);
+          const allProfiles = await storage.getAllActiveProfiles(user.id, regionId, browseCallerGender, browseSiteCategory);
           const nearbySet = new Set<string>(
             callerLat != null && callerLon != null
               ? await storage.getNearbyProfileUserIds(user.id, regionId, callerLat, callerLon, 80)

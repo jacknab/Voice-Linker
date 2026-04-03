@@ -54,6 +54,8 @@ export const profiles = pgTable("profiles", {
   recordingUrl: text("recording_url").notNull(),
   recordingDuration: integer("recording_duration"),
   isAdminUploaded: boolean("is_admin_uploaded").default(false),
+  siteCategory: text("site_category"),  // 'MM' | 'MW' — stamped at upload time; null = legacy (treated as MM)
+  gender: text("gender"),               // 'male' | 'female' — MW admin-uploaded profiles only
   createdAt: timestamp("created_at").defaultNow(),
 });
 

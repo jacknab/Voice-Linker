@@ -95,8 +95,8 @@ export interface IStorage {
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
   finalizeOrphanedCallLogs(olderThanMinutes: number): Promise<void>;
   getActiveCallerCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number>;
-  getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number>;
-  getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<Profile[]>;
+  getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<number>;
+  getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<Profile[]>;
   getNearbyProfileUserIds(excludeUserId: string, regionId: string | undefined, callerLat: number, callerLon: number, thresholdKm: number): Promise<string[]>;
   getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined>;
   getZipEntryById(id: string): Promise<ZipCode | undefined>;
@@ -355,6 +355,12 @@ export class DatabaseStorage implements IStorage {
           }),
           recordingUrl: insertProfile.recordingUrl,
           recordingDuration: insertProfile.recordingDuration,
+          ...(insertProfile.siteCategory !== undefined && {
+            siteCategory: insertProfile.siteCategory,
+          }),
+          ...(insertProfile.gender !== undefined && {
+            gender: insertProfile.gender,
+          }),
         }
       })
       .returning();
@@ -370,6 +376,8 @@ export class DatabaseStorage implements IStorage {
         recordingUrl: profiles.recordingUrl,
         recordingDuration: profiles.recordingDuration,
         isAdminUploaded: profiles.isAdminUploaded,
+        siteCategory: profiles.siteCategory,
+        gender: profiles.gender,
         createdAt: profiles.createdAt,
         phoneNumber: users.phoneNumber,
       })
@@ -388,6 +396,8 @@ export class DatabaseStorage implements IStorage {
         recordingUrl: profiles.recordingUrl,
         recordingDuration: profiles.recordingDuration,
         isAdminUploaded: profiles.isAdminUploaded,
+        siteCategory: profiles.siteCategory,
+        gender: profiles.gender,
         createdAt: profiles.createdAt,
         phoneNumber: users.phoneNumber,
       })
@@ -539,11 +549,11 @@ export class DatabaseStorage implements IStorage {
     return result.count;
   }
 
-  async getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number> {
-    // Determine the opposite gender for MW filtering (real callers only)
+  async getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<number> {
     const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
+    const isMW = currentSiteCategory === 'MW';
 
-    // Real callers in this region — filtered by opposite gender on MW systems
+    // Real callers — filtered by region and opposite gender on MW
     const realCallerCondition = regionId
       ? and(
           not(eq(activeCalls.userId, excludeUserId)),
@@ -559,15 +569,33 @@ export class DatabaseStorage implements IStorage {
     const regionalUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(realCallerCondition);
-    // Virtual callers (admin-uploaded or real-caller seeds) — global, no gender filter (always shown)
+
+    // Virtual callers (seed sessions) — filter by siteCategory + gender for MW
     const virtualUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));
 
-    const ids = [...new Set([...regionalUserIds.map(r => r.userId), ...virtualUserIds.map(r => r.userId)])];
-    const conditions = ids.length > 0
-      ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
-      : eq(profiles.isAdminUploaded, true);
+    const realIds = regionalUserIds.map(r => r.userId);
+    const virtualIds = virtualUserIds.map(r => r.userId);
+
+    // Profile condition for virtual callers: siteCategory-scoped + gender-filtered for MW
+    const virtualProfileCondition = virtualIds.length > 0
+      ? and(
+          inArray(profiles.userId, virtualIds),
+          isMW && oppositeGender
+            ? and(eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
+            : or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM'))
+        )
+      : sql`false`;
+
+    // Admin-uploaded profiles: same siteCategory + gender scoping
+    const adminUploadedCondition = isMW && oppositeGender
+      ? and(eq(profiles.isAdminUploaded, true), eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
+      : and(eq(profiles.isAdminUploaded, true), or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM')));
+
+    const conditions = realIds.length > 0
+      ? or(inArray(profiles.userId, realIds), virtualProfileCondition, adminUploadedCondition)
+      : or(virtualProfileCondition, adminUploadedCondition);
 
     const [result] = await db.select({ count: count() })
       .from(profiles)
@@ -575,11 +603,11 @@ export class DatabaseStorage implements IStorage {
     return result.count;
   }
 
-  async getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<Profile[]> {
-    // Determine the opposite gender for MW filtering (real callers only)
+  async getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<Profile[]> {
     const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
+    const isMW = currentSiteCategory === 'MW';
 
-    // Real callers in this region — filtered by opposite gender on MW systems
+    // Real callers — filtered by region and opposite gender on MW
     const realCallerCondition = regionId
       ? and(
           not(eq(activeCalls.userId, excludeUserId)),
@@ -595,15 +623,33 @@ export class DatabaseStorage implements IStorage {
     const regionalUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(realCallerCondition);
-    // Virtual callers (admin-uploaded seeds + real-caller seed sessions) — global, no gender filter
+
+    // Virtual callers (seed sessions) — filter by siteCategory + gender for MW
     const virtualUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
       .where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));
 
-    const ids = [...new Set([...regionalUserIds.map(r => r.userId), ...virtualUserIds.map(r => r.userId)])];
-    const conditions = ids.length > 0
-      ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
-      : eq(profiles.isAdminUploaded, true);
+    const realIds = regionalUserIds.map(r => r.userId);
+    const virtualIds = virtualUserIds.map(r => r.userId);
+
+    // Profile condition for virtual callers: siteCategory-scoped + gender-filtered for MW
+    const virtualProfileCondition = virtualIds.length > 0
+      ? and(
+          inArray(profiles.userId, virtualIds),
+          isMW && oppositeGender
+            ? and(eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
+            : or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM'))
+        )
+      : sql`false`;
+
+    // Admin-uploaded profiles: same siteCategory + gender scoping
+    const adminUploadedCondition = isMW && oppositeGender
+      ? and(eq(profiles.isAdminUploaded, true), eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
+      : and(eq(profiles.isAdminUploaded, true), or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM')));
+
+    const conditions = realIds.length > 0
+      ? or(inArray(profiles.userId, realIds), virtualProfileCondition, adminUploadedCondition)
+      : or(virtualProfileCondition, adminUploadedCondition);
 
     // Collect all user IDs blocked in either direction so we can exclude them
     const blockedByMe = await db.select({ blockedUserId: blockedUsers.blockedUserId })

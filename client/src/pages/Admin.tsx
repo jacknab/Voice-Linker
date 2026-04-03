@@ -22,6 +22,8 @@ interface ProfileWithUser {
   userId: string;
   recordingUrl: string;
   recordingDuration: number | null;
+  siteCategory: string | null;
+  gender: string | null;
   createdAt: string;
   phoneNumber: string;
 }
@@ -161,15 +163,21 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
   const { toast } = useToast();
   const [phoneNumber, setPhoneNumber] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [gender, setGender] = useState<"male" | "female" | "">("");
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: siteSettings } = useQuery<{ siteCategory: string }>({ queryKey: ["/api/site-settings"] });
+  const isMW = siteSettings?.siteCategory === "MW";
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
       if (!phoneNumber.trim() || !file) throw new Error("Missing fields");
+      if (isMW && !gender) throw new Error("Gender is required for MW greetings");
       const form = new FormData();
       form.append("phoneNumber", phoneNumber.trim());
       form.append("audio", file);
+      if (isMW && gender) form.append("gender", gender);
       const res = await fetch("/api/admin/profiles/upload", { method: "POST", body: form });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: "Upload failed" }));
@@ -199,6 +207,8 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const isSubmitDisabled = !phoneNumber.trim() || !file || (isMW && !gender) || uploadMutation.isPending;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="relative w-full max-w-md mx-4 bg-white rounded-xl border border-gray-200 p-6 shadow-2xl">
@@ -206,12 +216,37 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
           <X size={18} />
         </button>
         <h2 className="text-gray-900 font-mono text-base font-bold mb-1 tracking-widest uppercase">Upload Profile Greeting</h2>
-        <p className="text-gray-500 text-xs font-mono mb-6">MP3 file will become the caller's live profile greeting</p>
+        <div className="flex items-center gap-2 mb-6">
+          <p className="text-gray-500 text-xs font-mono">MP3 file will become the caller's live profile greeting</p>
+          <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${isMW ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+            {isMW ? "MW" : "MM"}
+          </span>
+        </div>
         <div className="space-y-4">
           <div>
             <label className={C.label}>Caller Phone Number</label>
             <input data-testid="input-phone-number" type="tel" value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="+1 555 000 0000" className={C.input} />
           </div>
+
+          {isMW && (
+            <div>
+              <label className={C.label}>Greeting Gender <span className="text-red-500">*</span></label>
+              <p className="text-gray-400 text-xs font-mono mb-2">Who recorded this greeting? Male greetings play for women callers; female greetings play for men callers.</p>
+              <div className="flex gap-3">
+                <label data-testid="radio-gender-male" className={`flex-1 flex items-center gap-2.5 border rounded-lg p-3 cursor-pointer transition-colors ${gender === "male" ? "border-blue-400 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}>
+                  <input type="radio" name="gender" value="male" checked={gender === "male"} onChange={() => setGender("male")} className="accent-blue-500" />
+                  <span className="text-gray-800 font-mono text-sm font-medium">Male</span>
+                  <span className="text-gray-400 font-mono text-xs ml-auto">Women hear this</span>
+                </label>
+                <label data-testid="radio-gender-female" className={`flex-1 flex items-center gap-2.5 border rounded-lg p-3 cursor-pointer transition-colors ${gender === "female" ? "border-pink-400 bg-pink-50" : "border-gray-200 hover:border-gray-300"}`}>
+                  <input type="radio" name="gender" value="female" checked={gender === "female"} onChange={() => setGender("female")} className="accent-pink-500" />
+                  <span className="text-gray-800 font-mono text-sm font-medium">Female</span>
+                  <span className="text-gray-400 font-mono text-xs ml-auto">Men hear this</span>
+                </label>
+              </div>
+            </div>
+          )}
+
           <div>
             <label className={C.label}>MP3 Audio File</label>
             <div
@@ -238,7 +273,7 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex gap-3 pt-2">
             <button data-testid="btn-cancel-upload" onClick={onClose} className={C.btnSecondary + " flex-1 justify-center py-2.5"}>Cancel</button>
-            <button data-testid="btn-submit-upload" onClick={() => uploadMutation.mutate()} disabled={!phoneNumber.trim() || !file || uploadMutation.isPending} className={C.btnPrimary + " flex-1 justify-center py-2.5"}>
+            <button data-testid="btn-submit-upload" onClick={() => uploadMutation.mutate()} disabled={isSubmitDisabled} className={C.btnPrimary + " flex-1 justify-center py-2.5"}>
               {uploadMutation.isPending ? "Uploading..." : "Upload & Save"}
             </button>
           </div>
@@ -521,6 +556,7 @@ function VoiceProfilesTab() {
           <thead>
             <tr>
               <th className={C.th}>Phone</th>
+              <th className={C.th}>System</th>
               <th className={C.th}>Audio</th>
               <th className={C.th}>Duration</th>
               <th className={C.th}>Status</th>
@@ -529,33 +565,49 @@ function VoiceProfilesTab() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING PROFILES...</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING PROFILES...</td></tr>
             ) : !profiles || profiles.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">NO PROFILES FOUND — UPLOAD ONE TO BEGIN</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">NO PROFILES FOUND — UPLOAD ONE TO BEGIN</td></tr>
             ) : (
-              profiles.map(profile => (
-                <tr key={profile.id} data-testid={`row-profile-${profile.id}`} className={C.row}>
-                  <td className={C.td}>
-                    <div className="flex items-center gap-2">
-                      <Phone size={12} className="text-gray-400" />
-                      <span data-testid={`text-phone-${profile.id}`} className="text-gray-800 font-mono text-sm">{profile.phoneNumber}</span>
-                    </div>
-                  </td>
-                  <td className={C.td}><AudioPlayer src={profile.recordingUrl} /></td>
-                  <td className={C.td}><span className="text-gray-500 font-mono text-xs">{profile.recordingDuration != null ? `${profile.recordingDuration}s` : "—"}</span></td>
-                  <td className={C.td}>
-                    <span className={`${C.badge} ${liveSet.has(profile.userId) ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${liveSet.has(profile.userId) ? "bg-emerald-500 animate-pulse" : "bg-gray-300"}`} />
-                      {liveSet.has(profile.userId) ? "Live" : "Offline"}
-                    </span>
-                  </td>
-                  <td className={C.td}>
-                    <button data-testid={`btn-delete-profile-${profile.id}`} onClick={() => { if (confirm(`Delete profile for ${profile.phoneNumber}?`)) deleteMutation.mutate(profile.id); }} disabled={deleteMutation.isPending} className={C.btnDanger}>
-                      <Trash2 size={12} /> Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
+              profiles.map(profile => {
+                const cat = profile.siteCategory ?? "MM";
+                const isMW = cat === "MW";
+                return (
+                  <tr key={profile.id} data-testid={`row-profile-${profile.id}`} className={C.row}>
+                    <td className={C.td}>
+                      <div className="flex items-center gap-2">
+                        <Phone size={12} className="text-gray-400" />
+                        <span data-testid={`text-phone-${profile.id}`} className="text-gray-800 font-mono text-sm">{profile.phoneNumber}</span>
+                      </div>
+                    </td>
+                    <td className={C.td}>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span data-testid={`badge-system-${profile.id}`} className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${isMW ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                          {cat}
+                        </span>
+                        {isMW && profile.gender && (
+                          <span data-testid={`badge-gender-${profile.id}`} className={`text-xs font-mono px-1.5 py-0.5 rounded border ${profile.gender === "female" ? "border-pink-200 bg-pink-50 text-pink-700" : "border-blue-200 bg-blue-50 text-blue-700"}`}>
+                            {profile.gender === "female" ? "♀ Female" : "♂ Male"}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className={C.td}><AudioPlayer src={profile.recordingUrl} /></td>
+                    <td className={C.td}><span className="text-gray-500 font-mono text-xs">{profile.recordingDuration != null ? `${profile.recordingDuration}s` : "—"}</span></td>
+                    <td className={C.td}>
+                      <span className={`${C.badge} ${liveSet.has(profile.userId) ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${liveSet.has(profile.userId) ? "bg-emerald-500 animate-pulse" : "bg-gray-300"}`} />
+                        {liveSet.has(profile.userId) ? "Live" : "Offline"}
+                      </span>
+                    </td>
+                    <td className={C.td}>
+                      <button data-testid={`btn-delete-profile-${profile.id}`} onClick={() => { if (confirm(`Delete profile for ${profile.phoneNumber}?`)) deleteMutation.mutate(profile.id); }} disabled={deleteMutation.isPending} className={C.btnDanger}>
+                        <Trash2 size={12} /> Delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
