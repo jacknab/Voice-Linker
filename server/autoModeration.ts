@@ -226,7 +226,7 @@ export function containsPhoneNumber(text: string): boolean {
 
   let digitBuffer = "";
   let gapCount = 0;         // consecutive non-digit, non-filler tokens seen since last digit token
-  const MAX_GAP = 1;        // allow at most 1 filler word between digit groups
+  const MAX_GAP = 0;        // only filler words (uh, um, and, dash) can bridge digit groups; any real word resets
 
   for (const token of tokens) {
     // Check if this token is purely digits
@@ -261,30 +261,64 @@ export function containsPhoneNumber(text: string): boolean {
 // ─── Repeated-word / low-quality detection ────────────────────────────────────
 
 /**
+ * Words excluded from the repetition check because they appear naturally
+ * multiple times in normal speech ("I'm looking... and I'm into... and I'm...").
+ * NOTE: greeting words like "hey" and "hello" are intentionally NOT in this list
+ * so that "hey hey hey boys" is still caught by the repetition check.
+ */
+const STOP_WORDS = new Set([
+  "i", "im", "a", "an", "the", "and", "or", "but", "if", "for", "in", "on",
+  "at", "to", "is", "are", "was", "were", "be", "been", "being", "have",
+  "has", "had", "do", "does", "did", "will", "would", "could", "should",
+  "may", "might", "my", "me", "you", "your", "we", "they", "their", "this",
+  "that", "what", "who", "how", "so", "as", "with", "from", "about",
+  "just", "get", "go", "come", "know", "want", "good", "can", "looking",
+  "of", "not", "it", "its", "up", "out", "he", "she", "by", "into",
+  "more", "some", "any", "than", "then", "also", "too", "very",
+  "here", "there", "when", "where", "which", "all", "other", "new",
+  "no", "yeah", "yes", "ok", "okay", "hi", "hello", "well", "um", "uh", "oh",
+  "us", "am", "really", "like", "love", "enjoy", "need", "feel",
+  "think", "see", "try", "give", "take", "make", "let", "put", "say",
+]);
+
+/**
  * Returns true if the recording appears to be low-quality or meaningless:
- *  - Fewer than 6 distinct words total
- *  - Any single word repeats 3+ times (e.g. "hey hey hey boys")
- *  - More than 50% of words are the same word
+ *  - Fewer than 4 words total
+ *  - All content (non-filler) words are the same word repeated 3+ times
+ *    (e.g. "hey hey hey boys" — "hey" x3 in 4 words)
+ *  - Content words are 80%+ the same single word
+ *
+ * Common words ("I'm", "and", "like", etc.) are excluded from the repetition
+ * analysis so natural speech doesn't get flagged.
  */
 export function isLowQualityTranscription(text: string): boolean {
   if (!text || text.trim().length === 0) return true;
 
   const words = text.toLowerCase().replace(/[^a-z\s]/g, "").trim().split(/\s+/).filter(Boolean);
 
-  if (words.length < 6) return true;
+  // Too few words total — clearly not a real greeting
+  if (words.length < 4) return true;
 
+  // Filter out stop words to get meaningful "content" words
+  const contentWords = words.filter(w => !STOP_WORDS.has(w));
+
+  // If nothing is left after filtering, it's just filler noise
+  if (contentWords.length === 0) return true;
+
+  // Count frequency of each content word
   const freq: Record<string, number> = {};
-  for (const w of words) {
+  for (const w of contentWords) {
     freq[w] = (freq[w] ?? 0) + 1;
   }
 
   const maxCount = Math.max(...Object.values(freq));
 
-  // Any word repeated 3+ times is suspicious
+  // A non-stop word repeated 3+ times in the content is a red flag
+  // e.g. "hey hey hey boys" → contentWords=["hey","hey","hey","boys"], maxCount=3
   if (maxCount >= 3) return true;
 
-  // More than half the words are the same word
-  if (maxCount / words.length > 0.5) return true;
+  // More than 80% of content words are the same single word
+  if (contentWords.length >= 3 && maxCount / contentWords.length > 0.8) return true;
 
   return false;
 }
