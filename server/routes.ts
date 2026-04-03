@@ -320,6 +320,10 @@ const billingCheckpoints = new Map<string, BillingCheckpoint>(); // CallSid → 
 // phone, this maps callSid → the membership holder's phone number for billing purposes.
 const callMembershipOverride = new Map<string, string>(); // callSid → membership holder phone
 
+// MW gender selection — tracks female callers so they can bypass membership checks and
+// go directly to the phone booth. Women are always free on MW systems.
+const femaleCallers = new Set<string>(); // CallSids identified as female
+
 // Temporary store for a membership number mid-entry (between the 10-digit gather and account lookup)
 const pendingMembershipEntries = new Map<string, string>(); // callSid → membership number
 
@@ -1760,7 +1764,7 @@ export async function registerRoutes(
       } catch (err) {
         console.error(`[status] Error removing active call ${callSid}:`, err);
       }
-      // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, region mapping, and membership override
+      // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, region mapping, membership override, and gender selection
       callerBrowseState.delete(callSid);
       categoryBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
@@ -1773,6 +1777,7 @@ export async function registerRoutes(
       pendingMembershipEntries.delete(callSid);
       pendingPinAuth.delete(callSid);
       pendingNewPinSetup.delete(callSid);
+      femaleCallers.delete(callSid);
 
       // Clean up any live connect invite that this caller initiated
       for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
@@ -1845,12 +1850,61 @@ export async function registerRoutes(
         playPrompt(twiml, req, "motd.mp3", motdCfg.motdText);
       }
 
-      // Prompt caller for optional membership number entry
-      twiml.redirect("/voice/membership-entry");
+      // MW systems prompt for gender before membership — women are always free.
+      // MM systems go straight to optional membership number entry.
+      const entrySiteConf = await getSiteSettingsCached();
+      if (entrySiteConf.siteCategory === "MW") {
+        twiml.redirect("/voice/gender-select");
+      } else {
+        twiml.redirect("/voice/membership-entry");
+      }
     } catch (error) {
       console.error("[voice] /voice/entry error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
       twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b-i-MW. Gender Selection (MW systems only) ──────────────────────────
+  // On MW systems, callers identify their gender before reaching the membership
+  // check. Women are always free and go directly to the phone booth.
+  app.post("/voice/gender-select", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 1,
+      finishOnKey: "",
+      action: "/voice/handle-gender-select",
+      timeout: 10,
+    });
+    playPrompt(gather, req, "gender_select.mp3",
+      "If you're a man press 1. If you're a woman press 2.");
+    // No input / timeout → loop back and ask again
+    twiml.redirect("/voice/gender-select");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-gender-select", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = (req.body?.Digits as string) ?? "";
+    const callSid = req.body?.CallSid as string;
+
+    if (digit === "1") {
+      // Male caller — proceed through the normal membership / free-trial flow
+      console.log(`[voice] gender-select: male caller callSid=${callSid}`);
+      twiml.redirect("/voice/membership-entry");
+    } else if (digit === "2") {
+      // Female caller — always free on MW systems, go straight to the phone booth
+      console.log(`[voice] gender-select: female caller callSid=${callSid} — bypassing membership`);
+      femaleCallers.add(callSid);
+      twiml.redirect("/voice/phone-booth");
+    } else {
+      // Invalid input — ask again
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect("/voice/gender-select");
     }
 
     res.type("text/xml");
