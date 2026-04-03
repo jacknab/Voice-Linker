@@ -7200,6 +7200,223 @@ TECHNICAL NOTES
 - The system does not automatically charge or renew. Every purchase is initiated by the caller.
 
 ============================================================
+HOW WE USE ZIP CODES — WHY THE SYSTEM ASKS FOR IT
+============================================================
+
+When a member calls in for the first time (or if they have not yet entered one), the IVR asks them to enter their 5-digit zip code. This is not optional — it is an important part of how the system connects people. Here is exactly what it is used for and why:
+
+PURPOSE 1 — LOCATION-BASED BROWSING
+When members browse other callers, the system displays each member's general area
+(neighborhood name or city and state). This helps callers find people nearby and
+decide who they want to connect with. Without a zip code on file, the system cannot
+show a caller's area to others, which reduces their chances of being selected.
+
+PURPOSE 2 — LOCAL FILTERING
+The browsing menu allows callers to filter by area. The system groups members by
+neighborhood and city so that callers who want to meet or connect locally can find
+each other more easily. A member without a zip code on file is excluded from this
+local filtering, making them effectively invisible to callers searching their area.
+
+PURPOSE 3 — NEIGHBORHOOD IDENTITY
+When a member's profile is read out loud to someone browsing, the system includes
+their neighborhood or city as part of their listing. For example: "Next caller is
+from the Castro area of San Francisco." This is a core part of the browsing
+experience on a phone-based chatline — it gives callers context about who they are
+listening to before they decide to connect.
+
+PURPOSE 4 — COMMUNITY MATCHING (MM SITES)
+On MM (men seeking men) chatlines, neighborhood identity is especially important
+because callers often want to find men in their own city or district. The system
+uses the zip-code-to-neighborhood mapping (configured by the admin) to cluster
+callers into named local communities.
+
+WHAT THE SYSTEM STORES
+- The raw 5-digit zip code (never shown to other members)
+- The city and state derived from that zip code
+- The neighborhood name as configured by the admin (this IS shown when browsing)
+- Latitude and longitude (used only for distance sorting, not shown to callers)
+
+PRIVACY
+The exact zip code and coordinates are never read out or shown to any member.
+Only the neighborhood name or city/state is shared when someone browses another
+member's listing. If a member asks "why does the system want my zip code?", explain:
+"We use your zip code to show callers in your area who you are, and to help you
+find other members near you when you browse. Only your general neighborhood or city
+is ever shown to others — your exact address is never stored or shared."
+
+IF A MEMBER HAS NO ZIP CODE ON FILE
+- Their location section in the API will be null
+- They will not appear in location-based browsing filters
+- Other callers browsing by area will not see them
+- When their profile is read out, no location will be announced
+- They should be encouraged to call in and enter their zip code from the main menu
+
+============================================================
+THE AUTOMATED MODERATION SYSTEM — HOW IT WORKS
+============================================================
+
+The system uses an automated moderator (auto-mod) that runs in the background
+24/7 without any human involvement. Its job is to catch problems quickly and protect
+the community from inappropriate content, harassment, and spam. Here is exactly
+how it works so you can explain it clearly to members.
+
+─────────────────────────────────────────────────────────
+PART 1: RECORDING AUTO-MODERATION (transcription-based)
+─────────────────────────────────────────────────────────
+
+Every time a member records a new greeting or a mailbox personal ad, Twilio
+transcribes the audio to text. As soon as the transcription comes in, the
+auto-mod scans it immediately. Three checks are run:
+
+CHECK 1 — BLANK OR FAILED TRANSCRIPTION
+  If the transcription comes back empty or blank, the recording is automatically
+  rejected with reason "unclear". This usually means the member did not say
+  anything audible, their line was too noisy, or the recording did not capture
+  their voice. The member must re-record.
+
+CHECK 2 — PHONE NUMBER DETECTION
+  The auto-mod scans for phone numbers using multiple methods:
+  - Formatted numbers: 303-430-2099 / (303) 430-2099 / 303.430.2099
+  - Raw digit strings: 10 consecutive digits
+  - Spoken-word numbers: "three oh three, four three oh, two oh nine nine"
+  - Numbers bridged by filler words: "three oh three uh four three oh two oh nine nine"
+  If a phone number is detected anywhere in the recording, it is automatically
+  rejected with reason "phone_number". The system does not allow members to share
+  phone numbers in their greetings or personal ads because this bypasses the
+  platform entirely and is against the terms of service.
+
+CHECK 3 — LOW QUALITY OR REPETITIVE RECORDING
+  Recordings that are too short or contain meaningless repeated content are
+  automatically rejected with reason "unclear". Specific triggers:
+  - Fewer than 4 total words spoken
+  - A non-common word repeated 3 or more times (e.g. "hey hey hey hey")
+  - More than 80% of meaningful words are the same single word
+  Common filler words (I, and, the, is, like, you, etc.) are excluded from
+  this check so normal speech does not get flagged unfairly.
+
+WHAT HAPPENS WHEN A RECORDING IS REJECTED
+  1. The recording is deleted from the system immediately.
+  2. A rejection flag is set on the member's account.
+  3. A moderation event is logged (visible in the moderationLog via the API).
+  4. The next time the member calls in, the IVR intercepts them and plays a
+     message explaining their recording was rejected and asking them to re-record.
+  5. The member's account is NOT automatically restricted for a first recording
+     rejection — they just need to re-record a compliant greeting to continue.
+
+WHAT TO TELL A MEMBER WHOSE RECORDING WAS REJECTED
+  - If rejected for "phone_number": "Your greeting was removed because our system
+    detected a phone number in it. Sharing phone numbers in your greeting is against
+    our terms of service. Please re-record your greeting without mentioning any
+    phone numbers."
+  - If rejected for "unclear": "Your greeting was removed because our system could
+    not understand it clearly. This can happen if there was background noise, the
+    recording was too quiet, or the greeting was too short. Please call in, re-record
+    your greeting, and speak clearly."
+
+─────────────────────────────────────────────────────────
+PART 2: COMMUNITY FLAG AUTO-MODERATION (behavior-based)
+─────────────────────────────────────────────────────────
+
+Members can flag or block other callers they find offensive or inappropriate.
+The auto-mod watches these signals and escalates automatically when patterns emerge.
+
+RULE 1 — FLAG THRESHOLD (3 unique flaggers)
+  When 3 or more different members flag the same content (a greeting or personal ad),
+  the auto-mod automatically escalates the item to the admin review queue. A moderation
+  event is logged with eventType "auto_flag" and triggeredByRule "threshold_flag".
+  At this point a human moderator will review and take action.
+
+RULE 2 — BLOCK SPIKE (3+ unique blockers within 24 hours)
+  When 3 or more different members block the same person within a 24-hour window,
+  the auto-mod automatically flags that member's profile for admin review.
+  If 5 or more different members block the same person within 24 hours, the auto-mod
+  immediately bans the account without waiting for human review.
+  EventType logged: "auto_flag" (triggeredByRule "block_count") or "auto_ban".
+
+RULE 3 — AUTO-REMOVE THRESHOLD (5 unique flaggers)
+  When 5 or more different members flag the same content, the auto-mod removes the
+  content immediately without waiting for admin review. After removal:
+  - First removal: the member's account is automatically restricted.
+  - Second removal: the member's account is automatically banned.
+  EventTypes logged: "auto_remove", then "auto_restrict" or "auto_ban".
+
+RULE 4 — REPEAT FLAGGING (content removed twice)
+  If a piece of content (greeting or personal ad) has been removed and re-flagged
+  two or more times, the auto-mod removes it immediately on the next flag and
+  restricts or bans the account. This prevents members from re-recording the same
+  inappropriate content after a removal.
+  EventType logged: "auto_remove" (triggeredByRule "repeat_flag").
+
+RULE 5 — NEW ACCOUNT FAST-FLAG
+  If a brand-new account (less than 10 minutes old) gets flagged by any member,
+  the auto-mod immediately restricts the account. This is designed to stop
+  spammers and trolls who create fresh accounts and immediately post inappropriate
+  content.
+  EventType logged: "auto_restrict" (triggeredByRule "new_account_flag").
+
+─────────────────────────────────────────────────────────
+COMPLETE LIST OF moderation eventType VALUES
+─────────────────────────────────────────────────────────
+
+When you look at a member's moderationLog via the /caller/ API, the eventType
+field will be one of these values. Here is what each means:
+
+  "auto_flag"          Content was automatically escalated to the admin review queue
+                       because it crossed a flag or block threshold. No action has been
+                       taken yet — a human moderator must review.
+
+  "auto_remove"        Content (a greeting or personal ad recording) was automatically
+                       deleted without human review because too many members flagged it,
+                       or it was flagged repeatedly. The triggeredByRule field will say
+                       which rule caused the removal.
+
+  "auto_restrict"      The member's account was automatically set to "restricted" status
+                       by the auto-mod. This is triggered when content is removed or when
+                       certain flag/block thresholds are crossed. The member can still call
+                       in but cannot browse or connect until the issue is resolved.
+
+  "auto_ban"           The member's account was automatically banned without human review.
+                       This happens on a second content removal or when 5+ members block
+                       them within 24 hours.
+
+  "recording_rejected" A human moderator (or the system above) manually rejected the
+                       member's recording. The member needs to re-record.
+
+  "recording_approved" A human moderator reviewed and approved the member's recording.
+                       The account should be active.
+
+  "account_restricted" A human moderator manually restricted the account.
+
+  "account_banned"     A human moderator manually banned the account.
+
+  "account_reinstated" A previous restriction or ban was lifted by a human moderator.
+                       The member's account is active again.
+
+  "warning_issued"     A formal warning was added to the member's record without
+                       restricting access. The member can still use the system but
+                       has a warning on file.
+
+  "content_removed"    A specific piece of content (message, recording, personal ad)
+                       was manually removed by a moderator.
+
+─────────────────────────────────────────────────────────
+WHAT TO TELL MEMBERS ABOUT THE AUTO-MODERATOR
+─────────────────────────────────────────────────────────
+
+Members are generally not told that an automated system exists. When explaining
+account restrictions or content removals, you can say:
+
+  - "Our system detected that your greeting did not meet our guidelines and removed it."
+  - "Your account was flagged by multiple other members. A moderator reviewed the
+    reports and restricted your access."
+  - "Your greeting was removed because it appeared to contain a phone number."
+  - "Your account was restricted because your greeting did not meet our content standards."
+
+Do NOT explain the specific thresholds (e.g., "3 people flagged you") or the
+mechanics of how the rules work. Keep explanations simple and factual. If the
+member disputes the action, tell them to contact customer support.
+
+============================================================
 AI ASSISTANT INTERNAL TOOL — MEMBER LOOKUP API
 ============================================================
 
