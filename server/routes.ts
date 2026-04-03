@@ -5385,7 +5385,7 @@ export async function registerRoutes(
 
     console.log(`[voice] run-payment: launching <Pay> connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
 
-    twiml.pay({
+    const pay = twiml.pay({
       action: `${baseUrl(req)}/voice/handle-payment-complete`,
       chargeAmount,
       currency: "usd",
@@ -5395,7 +5395,22 @@ export async function registerRoutes(
       securityCode: true,
       timeout: 30,
       maxAttempts: 2,
-    } as any);
+    } as any) as any;
+
+    // Custom prompts for each payment field — tell callers to press pound when done
+    pay.prompt({ ["for"]: "cardNumber" })
+      .say("Please enter your 16-digit card number, then press pound.");
+
+    pay.prompt({ ["for"]: "expirationDate" })
+      .say(
+        "Enter your expiration date, then press pound. " +
+        "Enter the 2-digit month, followed by the year. " +
+        "If your card shows a 4-digit year, enter only the last 2 digits. " +
+        "For example, for February 2027 enter 0 2 2 7, then press pound."
+      );
+
+    pay.prompt({ ["for"]: "securityCode" })
+      .say("Enter your 3 or 4 digit security code, then press pound.");
 
     res.type("text/xml");
     res.send(twiml.toString());
