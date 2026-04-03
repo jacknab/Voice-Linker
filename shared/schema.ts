@@ -210,6 +210,9 @@ export const membershipSettings = pgTable("membership_settings", {
   motdPostPurchaseText: text("motd_post_purchase_text"),
   // Billing mode: 'per_minute' deducts during calls; 'per_day' deducts 1 day nightly at 23:59
   billingMode: text("billing_mode").notNull().default("per_minute"),
+  // PayPal Standard integration
+  paypalEmail: text("paypal_email"),
+  paypalSandbox: boolean("paypal_sandbox").notNull().default(false),
 });
 
 export const promoCodes = pgTable("promo_codes", {

@@ -1414,9 +1414,11 @@ export async function registerRoutes(
         plan3Name, plan3Minutes, plan3PriceCents,
         bonusPlanKey,
         billingMode,
+        paypalEmail,
+        paypalSandbox,
       } = req.body;
 
-      const data: Record<string, number | string | null> = {};
+      const data: Record<string, number | string | boolean | null> = {};
       if (freeTrialMinutes !== undefined) data.freeTrialMinutes = parseInt(freeTrialMinutes);
       if (plan1Name !== undefined) data.plan1Name = String(plan1Name).trim();
       if (plan1Minutes !== undefined) data.plan1Minutes = parseInt(plan1Minutes);
@@ -1429,6 +1431,8 @@ export async function registerRoutes(
       if (plan3PriceCents !== undefined) data.plan3PriceCents = parseInt(plan3PriceCents);
       if (bonusPlanKey !== undefined) data.bonusPlanKey = bonusPlanKey || null;
       if (billingMode !== undefined) data.billingMode = billingMode === "per_day" ? "per_day" : "per_minute";
+      if (paypalEmail !== undefined) data.paypalEmail = paypalEmail ? String(paypalEmail).trim() : null;
+      if (paypalSandbox !== undefined) data.paypalSandbox = Boolean(paypalSandbox);
 
       const updated = await storage.updateMembershipSettings(data);
       invalidateMembershipSettingsCache();
@@ -5325,6 +5329,169 @@ export async function registerRoutes(
 
     res.type("text/xml");
     res.send(twiml.toString());
+  });
+
+  // ─── PayPal Standard IPN ────────────────────────────────────────────────────
+  // In-memory set to prevent double-crediting from duplicate IPN deliveries
+  const processedIpnTxns = new Set<string>();
+
+  // IPN endpoint — PayPal POSTs here on payment events
+  app.post("/api/paypal/ipn", express.urlencoded({ extended: false }), async (req: Request, res: Response) => {
+    // Respond 200 immediately (PayPal requires this)
+    res.status(200).send("OK");
+
+    try {
+      const body: Record<string, string> = req.body || {};
+      const paymentStatus = body["payment_status"];
+      const txnId = body["txn_id"] || "";
+      const custom = body["custom"] || "";
+
+      if (paymentStatus !== "Completed") {
+        console.log(`[paypal] IPN received: payment_status=${paymentStatus} — skipping`);
+        return;
+      }
+
+      // Verify with PayPal IPN verification endpoint
+      const ms = await storage.getMembershipSettings();
+      const sandboxMode = ms.paypalSandbox ?? false;
+      const verifyHost = sandboxMode
+        ? "ipnpb.sandbox.paypal.com"
+        : "ipnpb.paypal.com";
+
+      const rawBody = Object.entries(body)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join("&");
+
+      const verifyRes = await fetch(`https://${verifyHost}/cgi-bin/webscr`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `cmd=_notify-validate&${rawBody}`,
+      });
+      const verifyText = await verifyRes.text();
+
+      if (verifyText !== "VERIFIED") {
+        console.warn(`[paypal] IPN verification failed: ${verifyText}`);
+        return;
+      }
+
+      // Decode custom field: base64(webUserId|planKey|linkedPhone|planMinutes|planName)
+      let webUserId = "", planKey = "", linkedPhone = "", planMinutes = 0, planName = "";
+      try {
+        const decoded = Buffer.from(custom, "base64").toString("utf8");
+        const parts = decoded.split("|");
+        [webUserId, planKey, linkedPhone] = parts;
+        planMinutes = parseInt(parts[3] || "0", 10);
+        planName = parts[4] || "";
+      } catch {
+        console.error("[paypal] IPN: failed to decode custom field");
+        return;
+      }
+
+      if (processedIpnTxns.has(txnId)) {
+        console.log(`[paypal] IPN: txn ${txnId} already processed — skipping`);
+        return;
+      }
+      processedIpnTxns.add(txnId);
+
+      if (linkedPhone && planMinutes > 0) {
+        const phoneUser = await storage.getUserByPhone(linkedPhone);
+        if (phoneUser) {
+          const addedSeconds = planMinutes * 60;
+          const currentSeconds = phoneUser.remainingSeconds ?? 0;
+          await storage.updateUserMembership(phoneUser.id, {
+            membershipTier: planName.toLowerCase(),
+            remainingSeconds: currentSeconds + addedSeconds,
+            membershipStartedAt: phoneUser.membershipStartedAt ?? new Date(),
+          });
+          console.log(`[paypal] IPN applied ${planName} to phone=${linkedPhone}, txn=${txnId}, added ${addedSeconds}s`);
+        } else {
+          console.warn(`[paypal] IPN: no phone user found for ${linkedPhone}`);
+        }
+      }
+    } catch (err) {
+      console.error("[paypal] IPN processing error:", err);
+    }
+  });
+
+  // Create PayPal Standard checkout redirect URL
+  app.post("/api/paypal/create-web-checkout", async (req: Request, res: Response) => {
+    if (!req.session.webUserId) {
+      return res.status(401).json({ error: "You must be logged in to purchase a membership." });
+    }
+    const planKey = req.body?.planKey as string;
+    if (!["plan1", "plan2", "plan3"].includes(planKey)) {
+      return res.status(400).json({ error: "Invalid plan selected." });
+    }
+
+    try {
+      const webUser = await storage.getWebUserById(req.session.webUserId);
+      if (!webUser) return res.status(401).json({ error: "Session expired." });
+
+      if (!webUser.linkedPhoneNumber) {
+        return res.status(400).json({ error: "You must link a phone number before purchasing. Please visit your dashboard." });
+      }
+
+      const settings = await storage.getMembershipSettings();
+
+      if (!settings.paypalEmail) {
+        return res.status(503).json({ error: "PayPal payments are not configured. Please use Stripe or contact support." });
+      }
+
+      const planNames: Record<string, string> = {
+        plan1: settings.plan1Name,
+        plan2: settings.plan2Name,
+        plan3: settings.plan3Name,
+      };
+      const planMinutes: Record<string, number> = {
+        plan1: settings.plan1Minutes,
+        plan2: settings.plan2Minutes,
+        plan3: settings.plan3Minutes,
+      };
+      const planPriceCents: Record<string, number> = {
+        plan1: settings.plan1PriceCents,
+        plan2: settings.plan2PriceCents,
+        plan3: settings.plan3PriceCents,
+      };
+
+      const name = planNames[planKey];
+      const minutes = planMinutes[planKey];
+      const priceCents = planPriceCents[planKey];
+      const amount = (priceCents / 100).toFixed(2);
+
+      const proto = req.headers["x-forwarded-proto"] || req.protocol;
+      const host = req.headers["x-forwarded-host"] || req.get("host");
+      const baseUrl = `${proto}://${host}`;
+
+      // Encode payload in the custom field (base64 for URL safety)
+      const customPayload = Buffer.from(
+        [webUser.id, planKey, webUser.linkedPhoneNumber, String(minutes), name].join("|")
+      ).toString("base64");
+
+      const paypalBase = settings.paypalSandbox
+        ? "https://www.sandbox.paypal.com/cgi-bin/webscr"
+        : "https://www.paypal.com/cgi-bin/webscr";
+
+      const params = new URLSearchParams({
+        cmd: "_xclick",
+        business: settings.paypalEmail,
+        item_name: `${name} Membership`,
+        item_number: planKey,
+        amount,
+        currency_code: "USD",
+        no_shipping: "1",
+        no_note: "1",
+        notify_url: `${baseUrl}/api/paypal/ipn`,
+        return: `${baseUrl}/membership/success?method=paypal`,
+        cancel_return: `${baseUrl}/membership`,
+        custom: customPayload,
+      });
+
+      const url = `${paypalBase}?${params.toString()}`;
+      return res.json({ url });
+    } catch (err: any) {
+      console.error("[paypal] create-web-checkout error:", err);
+      return res.status(500).json({ error: "Failed to create PayPal checkout. Please try again." });
+    }
   });
 
   // ─── Web Stripe Checkout ────────────────────────────────────────────────────

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Phone, Star, Zap, Clock, CheckCircle, ArrowRight, Loader2, Lock, Shield, AlertTriangle } from "lucide-react";
+import { Phone, Star, Zap, Clock, CheckCircle, ArrowRight, Loader2, Lock, Shield, AlertTriangle, CreditCard } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { SiPaypal } from "react-icons/si";
 
 const DEFAULT_SITE_NAME = "Phone Booth";
 
@@ -19,6 +20,7 @@ interface MembershipSettings {
   plan3Name: string; plan3Minutes: number; plan3PriceCents: number;
   bonusPlanKey: string | null;
   billingMode: string;
+  paypalEmail: string | null;
 }
 
 interface WebUser {
@@ -73,6 +75,7 @@ export default function Membership() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [purchasingPlan, setPurchasingPlan] = useState<string | null>(null);
+  const [purchasingMethod, setPurchasingMethod] = useState<"stripe" | "paypal" | null>(null);
 
   const { data: siteData } = useQuery<SiteSettings>({
     queryKey: ["/api/site-settings"],
@@ -90,7 +93,9 @@ export default function Membership() {
     retry: false,
   });
 
-  const checkoutMutation = useMutation({
+  const paypalEnabled = !!(settings?.paypalEmail);
+
+  const stripeMutation = useMutation({
     mutationFn: async (planKey: string) => {
       const res = await apiRequest("POST", "/api/stripe/create-web-checkout", { planKey });
       return res.json() as Promise<{ url: string; error?: string }>;
@@ -101,29 +106,57 @@ export default function Membership() {
       } else {
         toast({ title: "Error", description: data.error || "Unable to start checkout.", variant: "destructive" });
         setPurchasingPlan(null);
+        setPurchasingMethod(null);
       }
     },
     onError: async (err: any) => {
       let message = "Failed to start checkout. Please try again.";
-      try {
-        const b = await err.response?.json?.();
-        if (b?.error) message = b.error;
-      } catch {}
+      try { const b = await err.response?.json?.(); if (b?.error) message = b.error; } catch {}
       toast({ title: "Error", description: message, variant: "destructive" });
       setPurchasingPlan(null);
+      setPurchasingMethod(null);
     },
   });
 
-  const handlePurchase = (planKey: string) => {
+  const paypalMutation = useMutation({
+    mutationFn: async (planKey: string) => {
+      const res = await apiRequest("POST", "/api/paypal/create-web-checkout", { planKey });
+      return res.json() as Promise<{ url: string; error?: string }>;
+    },
+    onSuccess: (data) => {
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast({ title: "Error", description: data.error || "Unable to start PayPal checkout.", variant: "destructive" });
+        setPurchasingPlan(null);
+        setPurchasingMethod(null);
+      }
+    },
+    onError: async (err: any) => {
+      let message = "Failed to start PayPal checkout. Please try again.";
+      try { const b = await err.response?.json?.(); if (b?.error) message = b.error; } catch {}
+      toast({ title: "Error", description: message, variant: "destructive" });
+      setPurchasingPlan(null);
+      setPurchasingMethod(null);
+    },
+  });
+
+  const handlePurchase = (planKey: string, method: "stripe" | "paypal") => {
     if (!me) {
       setLocation(`/login?redirect=/membership`);
       return;
     }
     setPurchasingPlan(planKey);
-    checkoutMutation.mutate(planKey);
+    setPurchasingMethod(method);
+    if (method === "stripe") {
+      stripeMutation.mutate(planKey);
+    } else {
+      paypalMutation.mutate(planKey);
+    }
   };
 
   const isLoading = settingsLoading || authLoading;
+  const isBusy = stripeMutation.isPending || paypalMutation.isPending;
 
   const plans = settings
     ? [
@@ -132,6 +165,8 @@ export default function Membership() {
         { ...PLAN_CONFIG[2], name: settings.plan3Name, minutes: settings.plan3Minutes, priceCents: settings.plan3PriceCents },
       ]
     : [];
+
+  const canBuy = !!me && !!me.linkedPhoneNumber;
 
   return (
     <div
@@ -146,74 +181,22 @@ export default function Membership() {
     >
       {/* Nav */}
       <nav style={{ background: "#000", borderBottom: "1px solid #1a1a1a", position: "sticky", top: 0, zIndex: 10 }}>
-        <div
-          style={{
-            maxWidth: "1100px",
-            margin: "0 auto",
-            padding: "0 1.5rem",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            minHeight: "64px",
-          }}
-        >
+        <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "64px" }}>
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}>
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                background: "#1d4ed8",
-                borderRadius: "8px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
+            <div style={{ width: 36, height: 36, background: "#1d4ed8", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Phone size={16} color="#fff" />
             </div>
             <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff" }}>{siteName}</span>
           </Link>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             {me ? (
-              <Link
-                href="/dashboard"
-                data-testid="link-dashboard"
-                style={{
-                  background: "#1d4ed8",
-                  color: "#fff",
-                  borderRadius: "8px",
-                  padding: "0.45rem 1rem",
-                  fontSize: "0.82rem",
-                  fontWeight: 600,
-                  textDecoration: "none",
-                }}
-              >
+              <Link href="/dashboard" data-testid="link-dashboard" style={{ background: "#1d4ed8", color: "#fff", borderRadius: "8px", padding: "0.45rem 1rem", fontSize: "0.82rem", fontWeight: 600, textDecoration: "none" }}>
                 My Dashboard
               </Link>
             ) : (
               <>
-                <Link
-                  href="/login"
-                  data-testid="link-login"
-                  style={{ color: "#aaa", fontSize: "0.875rem", textDecoration: "none" }}
-                >
-                  Log in
-                </Link>
-                <Link
-                  href="/register"
-                  data-testid="link-register"
-                  style={{
-                    background: "#1d4ed8",
-                    color: "#fff",
-                    borderRadius: "8px",
-                    padding: "0.45rem 1rem",
-                    fontSize: "0.82rem",
-                    fontWeight: 600,
-                    textDecoration: "none",
-                  }}
-                >
-                  Register
-                </Link>
+                <Link href="/login" data-testid="link-login" style={{ color: "#aaa", fontSize: "0.875rem", textDecoration: "none" }}>Log in</Link>
+                <Link href="/register" data-testid="link-register" style={{ background: "#1d4ed8", color: "#fff", borderRadius: "8px", padding: "0.45rem 1rem", fontSize: "0.82rem", fontWeight: 600, textDecoration: "none" }}>Register</Link>
               </>
             )}
           </div>
@@ -223,33 +206,11 @@ export default function Membership() {
       <div style={{ flex: 1, maxWidth: "1100px", margin: "0 auto", padding: "4rem 1.5rem 5rem", width: "100%", boxSizing: "border-box" }}>
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "3.5rem" }}>
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.4rem",
-              background: "#1d4ed815",
-              border: "1px solid #1d4ed830",
-              borderRadius: "100px",
-              padding: "0.3rem 0.9rem",
-              marginBottom: "1.25rem",
-            }}
-          >
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "#1d4ed815", border: "1px solid #1d4ed830", borderRadius: "100px", padding: "0.3rem 0.9rem", marginBottom: "1.25rem" }}>
             <Shield size={12} color="#60a5fa" />
-            <span style={{ color: "#60a5fa", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.04em" }}>
-              SECURE CHECKOUT
-            </span>
+            <span style={{ color: "#60a5fa", fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.04em" }}>SECURE CHECKOUT</span>
           </div>
-          <h1
-            style={{
-              color: "#fff",
-              fontSize: "clamp(2rem, 5vw, 3rem)",
-              fontWeight: 900,
-              margin: "0 0 1rem",
-              letterSpacing: "-0.03em",
-              lineHeight: 1.1,
-            }}
-          >
+          <h1 style={{ color: "#fff", fontSize: "clamp(2rem, 5vw, 3rem)", fontWeight: 900, margin: "0 0 1rem", letterSpacing: "-0.03em", lineHeight: 1.1 }}>
             Choose Your Membership
           </h1>
           <p style={{ color: "#666", fontSize: "1.05rem", margin: 0, maxWidth: "520px", marginInline: "auto", lineHeight: 1.6 }}>
@@ -257,31 +218,15 @@ export default function Membership() {
           </p>
         </div>
 
-        {/* Auth / phone notice */}
+        {/* Auth notices */}
         {!authLoading && me && !me.linkedPhoneNumber && (
-          <div
-            data-testid="notice-link-phone"
-            style={{
-              background: "#1c1a00",
-              border: "1px solid #fbbf2440",
-              borderRadius: "12px",
-              padding: "1rem 1.25rem",
-              marginBottom: "2.5rem",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "0.75rem",
-            }}
-          >
+          <div data-testid="notice-link-phone" style={{ background: "#1c1a00", border: "1px solid #fbbf2440", borderRadius: "12px", padding: "1rem 1.25rem", marginBottom: "2.5rem", display: "flex", alignItems: "flex-start", gap: "0.75rem" }}>
             <AlertTriangle size={18} color="#fbbf24" style={{ flexShrink: 0, marginTop: "0.1rem" }} />
             <div>
-              <p style={{ color: "#fbbf24", fontSize: "0.875rem", fontWeight: 700, margin: "0 0 0.2rem" }}>
-                Phone number required before purchase
-              </p>
+              <p style={{ color: "#fbbf24", fontSize: "0.875rem", fontWeight: 700, margin: "0 0 0.2rem" }}>Phone number required before purchase</p>
               <p style={{ color: "#92783a", fontSize: "0.82rem", margin: 0, lineHeight: 1.5 }}>
                 You need to link a phone number to your account first.{" "}
-                <Link href="/dashboard" style={{ color: "#fbbf24", textDecoration: "underline" }}>
-                  Go to your dashboard
-                </Link>{" "}
+                <Link href="/dashboard" style={{ color: "#fbbf24", textDecoration: "underline" }}>Go to your dashboard</Link>{" "}
                 to link your phone, then come back to purchase.
               </p>
             </div>
@@ -289,28 +234,12 @@ export default function Membership() {
         )}
 
         {!authLoading && !me && (
-          <div
-            data-testid="notice-login"
-            style={{
-              background: "#0d1a2e",
-              border: "1px solid #1e3a5f",
-              borderRadius: "12px",
-              padding: "1rem 1.25rem",
-              marginBottom: "2.5rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.75rem",
-            }}
-          >
+          <div data-testid="notice-login" style={{ background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "12px", padding: "1rem 1.25rem", marginBottom: "2.5rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <Lock size={16} color="#60a5fa" />
             <p style={{ color: "#93c5fd", fontSize: "0.875rem", margin: 0 }}>
-              <Link href="/login" style={{ color: "#60a5fa", fontWeight: 700, textDecoration: "underline" }}>
-                Log in
-              </Link>{" "}
+              <Link href="/login" style={{ color: "#60a5fa", fontWeight: 700, textDecoration: "underline" }}>Log in</Link>{" "}
               or{" "}
-              <Link href="/register" style={{ color: "#60a5fa", fontWeight: 700, textDecoration: "underline" }}>
-                create an account
-              </Link>{" "}
+              <Link href="/register" style={{ color: "#60a5fa", fontWeight: 700, textDecoration: "underline" }}>create an account</Link>{" "}
               to purchase a membership.
             </p>
           </div>
@@ -322,20 +251,12 @@ export default function Membership() {
             <Loader2 size={36} color="#1d4ed8" className="animate-spin" />
           </div>
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: "1.25rem",
-              alignItems: "stretch",
-            }}
-          >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "1.25rem", alignItems: "stretch" }}>
             {plans.map((plan) => {
               const Icon = plan.icon;
               const timeDisplay = formatTime(plan.minutes);
-              const isBuying = purchasingPlan === plan.key;
               const isHighlighted = plan.key === "plan1";
-              const canBuy = !!me && !!me.linkedPhoneNumber;
+              const isBuyingThis = purchasingPlan === plan.key;
 
               return (
                 <div
@@ -361,70 +282,28 @@ export default function Membership() {
                     e.currentTarget.style.boxShadow = isHighlighted ? `0 0 40px ${plan.glowColor}` : "none";
                   }}
                 >
-                  {/* Badge */}
                   {plan.badge && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "-1px",
-                        left: "50%",
-                        transform: "translateX(-50%)",
-                        background: plan.gradient,
-                        borderRadius: "0 0 8px 8px",
-                        padding: "0.2rem 0.85rem",
-                        fontSize: "0.68rem",
-                        fontWeight: 800,
-                        color: "#fff",
-                        letterSpacing: "0.06em",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <div style={{ position: "absolute", top: "-1px", left: "50%", transform: "translateX(-50%)", background: plan.gradient, borderRadius: "0 0 8px 8px", padding: "0.2rem 0.85rem", fontSize: "0.68rem", fontWeight: 800, color: "#fff", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>
                       {plan.badge.toUpperCase()}
                     </div>
                   )}
 
-                  {/* Icon */}
-                  <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      background: `${plan.accentColor}18`,
-                      border: `1px solid ${plan.accentColor}30`,
-                      borderRadius: "12px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginBottom: "1.25rem",
-                      marginTop: plan.badge ? "0.75rem" : "0",
-                    }}
-                  >
+                  <div style={{ width: 48, height: 48, background: `${plan.accentColor}18`, border: `1px solid ${plan.accentColor}30`, borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.25rem", marginTop: plan.badge ? "0.75rem" : "0" }}>
                     <Icon size={22} color={plan.accentColor} />
                   </div>
 
-                  {/* Plan name */}
-                  <h2 style={{ color: "#fff", fontSize: "1.15rem", fontWeight: 800, margin: "0 0 0.35rem", letterSpacing: "-0.01em" }}>
-                    {plan.name}
-                  </h2>
+                  <h2 style={{ color: "#fff", fontSize: "1.15rem", fontWeight: 800, margin: "0 0 0.35rem", letterSpacing: "-0.01em" }}>{plan.name}</h2>
 
-                  {/* Time */}
                   <div style={{ marginBottom: "1.25rem" }}>
-                    <span style={{ color: plan.accentColor, fontSize: "2.25rem", fontWeight: 900, lineHeight: 1, letterSpacing: "-0.03em" }}>
-                      {timeDisplay.value}
-                    </span>
-                    <span style={{ color: "#666", fontSize: "0.95rem", marginLeft: "0.4rem" }}>
-                      {timeDisplay.unit} of talk time
-                    </span>
+                    <span style={{ color: plan.accentColor, fontSize: "2.25rem", fontWeight: 900, lineHeight: 1, letterSpacing: "-0.03em" }}>{timeDisplay.value}</span>
+                    <span style={{ color: "#666", fontSize: "0.95rem", marginLeft: "0.4rem" }}>{timeDisplay.unit} of talk time</span>
                   </div>
 
-                  {/* Price */}
                   <div style={{ marginBottom: "1.5rem" }}>
-                    <span style={{ color: "#fff", fontSize: "2rem", fontWeight: 900, letterSpacing: "-0.03em" }}>
-                      {formatPrice(plan.priceCents)}
-                    </span>
+                    <span style={{ color: "#fff", fontSize: "2rem", fontWeight: 900, letterSpacing: "-0.03em" }}>{formatPrice(plan.priceCents)}</span>
                     <span style={{ color: "#555", fontSize: "0.82rem", marginLeft: "0.4rem" }}>one-time</span>
                   </div>
 
-                  {/* Perks */}
                   <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1.75rem", display: "flex", flexDirection: "column", gap: "0.55rem", flex: 1 }}>
                     {plan.perks.map((perk) => (
                       <li key={perk} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -434,46 +313,74 @@ export default function Membership() {
                     ))}
                   </ul>
 
-                  {/* CTA button */}
-                  <button
-                    data-testid={`button-buy-${plan.key}`}
-                    onClick={() => handlePurchase(plan.key)}
-                    disabled={isBuying || checkoutMutation.isPending}
-                    style={{
-                      background: canBuy ? plan.gradient : "#1a1a1a",
-                      color: canBuy ? "#fff" : "#555",
-                      border: canBuy ? "none" : "1px solid #2a2a2a",
-                      borderRadius: "10px",
-                      padding: "0.825rem 1.25rem",
-                      fontWeight: 700,
-                      fontSize: "0.9rem",
-                      cursor: canBuy && !checkoutMutation.isPending ? "pointer" : "not-allowed",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "0.5rem",
-                      width: "100%",
-                      opacity: isBuying || (checkoutMutation.isPending && purchasingPlan !== plan.key) ? 0.6 : 1,
-                      transition: "opacity 0.15s",
-                    }}
-                  >
-                    {isBuying ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        Redirecting…
-                      </>
-                    ) : canBuy ? (
-                      <>
-                        Get {plan.name}
-                        <ArrowRight size={16} />
-                      </>
-                    ) : (
-                      <>
-                        <Lock size={14} />
-                        {me ? "Link phone to buy" : "Log in to buy"}
-                      </>
+                  {/* Payment buttons */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                    {/* Stripe / Card button */}
+                    <button
+                      data-testid={`button-buy-stripe-${plan.key}`}
+                      onClick={() => handlePurchase(plan.key, "stripe")}
+                      disabled={isBusy}
+                      style={{
+                        background: canBuy ? plan.gradient : "#1a1a1a",
+                        color: canBuy ? "#fff" : "#555",
+                        border: canBuy ? "none" : "1px solid #2a2a2a",
+                        borderRadius: "10px",
+                        padding: "0.75rem 1.25rem",
+                        fontWeight: 700,
+                        fontSize: "0.875rem",
+                        cursor: canBuy && !isBusy ? "pointer" : "not-allowed",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.5rem",
+                        width: "100%",
+                        opacity: (isBuyingThis && purchasingMethod === "stripe") || (!isBuyingThis && isBusy) ? 0.6 : 1,
+                        transition: "opacity 0.15s",
+                      }}
+                    >
+                      {isBuyingThis && purchasingMethod === "stripe" ? (
+                        <><Loader2 size={15} className="animate-spin" />Redirecting…</>
+                      ) : canBuy ? (
+                        <><CreditCard size={15} />Pay with Card<ArrowRight size={14} /></>
+                      ) : (
+                        <><Lock size={14} />{me ? "Link phone to buy" : "Log in to buy"}</>
+                      )}
+                    </button>
+
+                    {/* PayPal button — only shown when PayPal is configured */}
+                    {paypalEnabled && (
+                      <button
+                        data-testid={`button-buy-paypal-${plan.key}`}
+                        onClick={() => handlePurchase(plan.key, "paypal")}
+                        disabled={isBusy}
+                        style={{
+                          background: canBuy ? "#ffc439" : "#1a1a1a",
+                          color: canBuy ? "#003087" : "#555",
+                          border: canBuy ? "none" : "1px solid #2a2a2a",
+                          borderRadius: "10px",
+                          padding: "0.75rem 1.25rem",
+                          fontWeight: 800,
+                          fontSize: "0.875rem",
+                          cursor: canBuy && !isBusy ? "pointer" : "not-allowed",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "0.5rem",
+                          width: "100%",
+                          opacity: (isBuyingThis && purchasingMethod === "paypal") || (!isBuyingThis && isBusy) ? 0.6 : 1,
+                          transition: "opacity 0.15s",
+                        }}
+                      >
+                        {isBuyingThis && purchasingMethod === "paypal" ? (
+                          <><Loader2 size={15} className="animate-spin" style={{ color: "#003087" }} />Redirecting…</>
+                        ) : canBuy ? (
+                          <><SiPaypal size={16} />Pay with PayPal</>
+                        ) : (
+                          <><Lock size={14} />Pay with PayPal</>
+                        )}
+                      </button>
                     )}
-                  </button>
+                  </div>
                 </div>
               );
             })}
@@ -481,19 +388,10 @@ export default function Membership() {
         )}
 
         {/* Trust badges */}
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            gap: "2rem",
-            marginTop: "3rem",
-            paddingTop: "2rem",
-            borderTop: "1px solid #1a1a1a",
-          }}
-        >
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "2rem", marginTop: "3rem", paddingTop: "2rem", borderTop: "1px solid #1a1a1a" }}>
           {[
             { icon: Shield, label: "Secure payment via Stripe" },
+            ...(paypalEnabled ? [{ icon: SiPaypal as any, label: "PayPal accepted" }] : []),
             { icon: Lock, label: "256-bit SSL encryption" },
             { icon: CheckCircle, label: "Instant activation" },
           ].map(({ icon: Icon, label }) => (

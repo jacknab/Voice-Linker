@@ -980,7 +980,7 @@ function TTSTab() {
 // ── MembershipsTab ────────────────────────────────────────────────────────────
 function MembershipsTab() {
   const { toast } = useToast();
-  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; }
+  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; paypalEmail: string | null; paypalSandbox: boolean; }
 
   const { data: ms, isLoading } = useQuery<MembershipSettings>({ queryKey: ["/api/admin/membership-settings"] });
 
@@ -990,6 +990,8 @@ function MembershipsTab() {
   const [plan3Name, setPlan3Name] = useState(""); const [plan3Minutes, setPlan3Minutes] = useState(""); const [plan3Price, setPlan3Price] = useState("");
   const [bonusPlanKey, setBonusPlanKey] = useState<string | null>(null);
   const [billingMode, setBillingMode] = useState<"per_minute" | "per_day">("per_minute");
+  const [paypalEmail, setPaypalEmail] = useState("");
+  const [paypalSandbox, setPaypalSandbox] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   if (ms && !initialized) {
@@ -999,6 +1001,8 @@ function MembershipsTab() {
     setPlan3Name(ms.plan3Name); setPlan3Minutes(String(ms.plan3Minutes)); setPlan3Price((ms.plan3PriceCents / 100).toFixed(2));
     setBonusPlanKey(ms.bonusPlanKey ?? null);
     setBillingMode((ms.billingMode ?? "per_minute") as "per_minute" | "per_day");
+    setPaypalEmail(ms.paypalEmail ?? "");
+    setPaypalSandbox(ms.paypalSandbox ?? false);
     setInitialized(true);
   }
 
@@ -1013,6 +1017,8 @@ function MembershipsTab() {
         plan3Name: plan3Name.trim() || "Plan 3", plan3Minutes: toMinutes(plan3Minutes), plan3PriceCents: toCents(plan3Price),
         bonusPlanKey: bonusPlanKey || "",
         billingMode,
+        paypalEmail: paypalEmail.trim() || null,
+        paypalSandbox,
       });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-settings"] }); toast({ title: "Membership settings saved" }); },
@@ -1238,11 +1244,95 @@ function MembershipsTab() {
             </button>
           </div>
           <p className="mt-2 font-mono text-xs text-gray-400 leading-relaxed">
-            Recommended Stripe events to listen for:{" "}
-            <code className="bg-gray-100 px-1 rounded text-gray-600">payment_intent.succeeded</code>{" "}
-            and{" "}
-            <code className="bg-gray-100 px-1 rounded text-gray-600">payment_intent.payment_failed</code>.
+            Recommended Stripe events:{" "}
+            <code className="bg-gray-100 px-1 rounded text-gray-600">checkout.session.completed</code>,{" "}
+            <code className="bg-gray-100 px-1 rounded text-gray-600">payment_intent.succeeded</code>.
           </p>
+        </div>
+      </div>
+
+      {/* ── PayPal Setup ─────────────────────────────────────────────────────── */}
+      <div className={C.card}>
+        <div className="flex items-center gap-2 mb-1">
+          <CreditCard size={14} className="text-blue-500" />
+          <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">PayPal Setup</h3>
+        </div>
+        <p className="text-gray-400 font-mono text-xs mb-4 leading-relaxed">
+          Enable PayPal as a payment method on the membership page. Enter your PayPal business email below, then
+          configure your PayPal account to send IPN notifications to the URL shown below.
+        </p>
+
+        {/* PayPal Business Email */}
+        <div className="mb-4">
+          <label className={C.label}>PayPal Business Email</label>
+          <input
+            data-testid="input-paypal-email"
+            type="email"
+            value={paypalEmail}
+            onChange={e => setPaypalEmail(e.target.value)}
+            placeholder="payments@yourdomain.com"
+            className={C.input}
+          />
+          <p className="mt-1 font-mono text-xs text-gray-400">
+            The email address associated with your PayPal Business account. Leave blank to disable PayPal.
+          </p>
+        </div>
+
+        {/* Sandbox toggle */}
+        <div className="mb-5">
+          <button
+            data-testid="btn-paypal-sandbox-toggle"
+            type="button"
+            onClick={() => setPaypalSandbox(v => !v)}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm transition-colors ${paypalSandbox ? "border-amber-300 bg-amber-50" : "border-gray-200 bg-gray-50 hover:border-gray-300"}`}
+          >
+            <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${paypalSandbox ? "border-amber-500 bg-amber-500" : "border-gray-300"}`}>
+              {paypalSandbox && <span className="w-2 h-2 rounded-full bg-white" />}
+            </span>
+            <div className="text-left">
+              <div className={`font-mono font-bold tracking-widest uppercase text-xs ${paypalSandbox ? "text-amber-700" : "text-gray-500"}`}>
+                Sandbox Mode {paypalSandbox ? "(ON)" : "(OFF)"}
+              </div>
+              <div className="text-xs font-normal text-gray-500 mt-0.5">
+                Enable for testing with PayPal Sandbox accounts. Disable for live payments.
+              </div>
+            </div>
+          </button>
+        </div>
+
+        {/* IPN URL */}
+        <div>
+          <label className={C.label}>PayPal IPN URL</label>
+          <div className="flex items-center gap-2">
+            <code
+              data-testid="text-paypal-ipn-url"
+              className="flex-1 font-mono text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-gray-700 break-all select-all"
+            >
+              {typeof window !== "undefined" ? window.location.origin : ""}/api/paypal/ipn
+            </code>
+            <button
+              type="button"
+              data-testid="btn-copy-paypal-ipn"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/api/paypal/ipn`);
+                toast({ title: "PayPal IPN URL copied to clipboard" });
+              }}
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors font-mono text-xs"
+            >
+              <Copy size={13} />
+              Copy
+            </button>
+          </div>
+          <div className="mt-3 px-3 py-3 rounded-lg bg-blue-50 border border-blue-200 space-y-1.5">
+            <p className="font-mono text-xs font-bold text-blue-800 tracking-widest uppercase">PayPal IPN Setup Steps</p>
+            <ol className="list-decimal list-inside space-y-1 text-blue-700 text-xs leading-relaxed">
+              <li>Log in to your PayPal Business account</li>
+              <li>Go to <strong>Account Settings → Notifications → Instant payment notifications</strong></li>
+              <li>Click <strong>Update</strong> and enter the IPN URL above</li>
+              <li>Set <strong>IPN messages</strong> to <em>Receive IPN messages (Enabled)</em></li>
+              <li>Save. PayPal will now notify this server when payments complete.</li>
+            </ol>
+          </div>
         </div>
       </div>
 
