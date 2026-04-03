@@ -3498,8 +3498,9 @@ export async function registerRoutes(
       const tierMsg = tier === "free_trial" ? "You are on a free trial." : tier !== "none" ? `Your membership type is ${tier}.` : "You do not have an active membership.";
 
       const pinStatus = user.membershipPin ? "You have a PIN set." : "You do not have a PIN set.";
+      const membershipNumberStatus = user.membershipNumber ? "You have a membership number on file." : "You do not yet have a membership number.";
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-manage-membership" });
-      gather.say(`${tierMsg} ${timeMsg} ${pinStatus} Press 1 to add time or purchase a new membership. Press 2 to set or change your access PIN. Press 9 to return to the main menu.`);
+      gather.say(`${tierMsg} ${timeMsg} ${pinStatus} ${membershipNumberStatus} Press 1 to add time or purchase a new membership. Press 2 to set or change your access PIN. Press 3 to hear your membership number. Press 9 to return to the main menu.`);
       twiml.redirect("/voice/manage-membership");
     } catch (error) {
       console.error("[voice] /voice/manage-membership error:", error);
@@ -3514,11 +3515,27 @@ export async function registerRoutes(
   app.post("/voice/handle-manage-membership", async (req, res) => {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits;
+    const fromNumber = req.body?.From as string;
 
     if (digit === "1") {
       twiml.redirect("/voice/purchase-pre-menu");
     } else if (digit === "2") {
       twiml.redirect("/voice/set-pin");
+    } else if (digit === "3") {
+      // Read out the caller's membership number digit by digit
+      try {
+        const user = await storage.getUserByPhone(fromNumber);
+        if (user?.membershipNumber) {
+          const spaced = user.membershipNumber.replace(/\D/g, "").split("").join(". ");
+          twiml.say(`Your membership number is: ${spaced}.`);
+        } else {
+          twiml.say("You do not have a membership number on file yet. Please purchase a membership first.");
+        }
+      } catch (err) {
+        console.error("[voice] membership number lookup error:", err);
+        twiml.say("An error occurred looking up your membership number. Please try again.");
+      }
+      twiml.redirect("/voice/manage-membership");
     } else if (digit === "9") {
       twiml.redirect("/voice/main-menu");
     } else {
