@@ -1,611 +1,538 @@
-# VOICE_PROTOCOL — VPS Setup & Operations Guide
+# Phone Booth — VPS Setup & Operations Guide
 
-A voice-based social network that runs over real phone calls using Twilio. Callers record a profile, browse other users' profiles, and exchange voice messages — all through a touch-tone phone menu.
+This guide covers everything needed to deploy Phone Booth on a fresh Ubuntu VPS using the included `setup.sh` automation script.
 
 ---
 
 ## Table of Contents
 
-1. [How It Works](#how-it-works)
-2. [Prerequisites](#prerequisites)
-3. [Server Setup](#server-setup)
-4. [Database Setup](#database-setup)
-5. [Environment Variables](#environment-variables)
-6. [Building & Running](#building--running)
-7. [Twilio Configuration](#twilio-configuration)
-8. [Exposing Your Server to the Internet](#exposing-your-server-to-the-internet)
-9. [Phone Menu Reference](#phone-menu-reference)
-10. [API Endpoints](#api-endpoints)
-11. [Database Schema](#database-schema)
-12. [Process Management (Production)](#process-management-production)
-13. [Nginx Reverse Proxy (Optional)](#nginx-reverse-proxy-optional)
-14. [Troubleshooting](#troubleshooting)
-15. [System Cleanup](#system-cleanup)
+1. [Before You Begin — Prerequisites](#1-before-you-begin--prerequisites)
+2. [Running setup.sh — The Interactive Menu](#2-running-setupsh--the-interactive-menu)
+3. [What Each Step Does](#3-what-each-step-does)
+4. [After Setup — Fill in Your API Keys](#4-after-setup--fill-in-your-api-keys)
+5. [Twilio Configuration](#5-twilio-configuration)
+6. [Obtaining an SSL Certificate](#6-obtaining-an-ssl-certificate)
+7. [Day-to-Day Operations](#7-day-to-day-operations)
+8. [Troubleshooting](#8-troubleshooting)
+9. [Database Maintenance](#9-database-maintenance)
 
 ---
 
-## How It Works
+## 1. Before You Begin — Prerequisites
 
-1. You buy a Twilio phone number and point its webhook at your server.
-2. When someone calls that number, Twilio sends a POST request to `POST /voice` on your server.
-3. Your server responds with TwiML (XML instructions) telling Twilio what to say, record, or play.
-4. Recordings are stored by Twilio and your server saves only the URL to the recording — no audio files are stored locally.
-5. A web dashboard is served at the root URL (`/`) showing live stats (total users, profiles, messages).
+### Server Requirements
 
----
+| Requirement | Minimum | Recommended |
+|---|---|---|
+| OS | Ubuntu 20.04 | Ubuntu 22.04 or 24.04 |
+| RAM | 1 GB | 2 GB+ |
+| Disk | 10 GB | 20 GB+ |
+| CPU | 1 vCPU | 2 vCPU |
 
-## Prerequisites
+> **Note:** The script automatically creates a 2 GB swap file on servers with less than 512 MB of swap, which prevents out-of-memory errors during the build.
 
-- A Linux VPS (Ubuntu 22.04+ recommended)
-- Node.js 20+
-- PostgreSQL 14+
-- A Twilio account with a purchased phone number
-- A publicly accessible domain name or static IP (Twilio must be able to reach your server)
+### DNS
 
----
+Before running the script, your domain's **A record** must already point to your server's IP address. SSL certificate issuance (Step 6) will fail if DNS is not propagated.
 
-## Server Setup
-
-### 1. Install Node.js 20
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt-get install -y nodejs
-node -v   # should print v20.x.x
+```
+yourdomain.com     A    YOUR_VPS_IP
+www.yourdomain.com A    YOUR_VPS_IP
 ```
 
-### 2. Install PostgreSQL
+### Accounts You Will Need
+
+| Service | Purpose | Where to sign up |
+|---|---|---|
+| **Twilio** | Phone numbers + voice calls | twilio.com |
+| **ElevenLabs** | Text-to-speech audio generation | elevenlabs.io |
+| **Stripe** | Membership payments | stripe.com |
+
+### Upload the Project to Your Server
+
+If you purchased this system as a zip file, copy it to your server first:
 
 ```bash
-sudo apt-get install -y postgresql postgresql-contrib
-sudo systemctl start postgresql
-sudo systemctl enable postgresql
+# On your local machine — copy the project folder to the server
+scp -r phonebooth/ youruser@YOUR_VPS_IP:~/phonebooth
+
+# Then SSH in
+ssh youruser@YOUR_VPS_IP
+cd ~/phonebooth
 ```
 
-### 3. Clone the Repository
+Alternatively, if deploying from git:
 
 ```bash
-git clone <your-repo-url> voice_protocol
-cd voice_protocol
-```
-
-### 4. Install Dependencies
-
-```bash
-npm install
+git clone <your-repo-url> ~/phonebooth
+cd ~/phonebooth
 ```
 
 ---
 
-## Database Setup
+## 2. Running setup.sh — The Interactive Menu
 
-### Create a Database and User
-
-```bash
-sudo -u postgres psql
-```
-
-Inside the psql prompt:
-
-```sql
-CREATE USER voice_user WITH PASSWORD 'choose_a_strong_password';
-CREATE DATABASE voice_protocol OWNER voice_user;
-GRANT ALL PRIVILEGES ON DATABASE voice_protocol TO voice_user;
-\q
-```
-
-### Push the Schema
-
-Once your `.env` file is configured (see next section), run:
+### Basic Usage (Recommended)
 
 ```bash
-npm run db:push
+bash setup.sh
 ```
 
-This creates all three tables (`users`, `profiles`, `messages`) automatically. You never need to write SQL migrations manually.
+You will be prompted for your domain name, then the setup menu appears:
+
+```
+  ╔══════════════════════════════════════════════════════════╗
+  ║          Phone Booth  –  VPS Setup Menu                 ║
+  ╠══════════════════════════════════════════════════════════╣
+  ║                                                          ║
+  ║   Domain : yourdomain.com                                ║
+  ║                                                          ║
+  ║   1)  Full Setup  (run all steps from the beginning)     ║
+  ║                                                          ║
+  ║   ── Resume / re-run from a specific step ──             ║
+  ║   2)  Step  1  –  Swap space                            ║
+  ║   3)  Step  2  –  System packages & Node.js             ║
+  ║   4)  Step  3  –  Firewall  (UFW + fail2ban)            ║
+  ║   5)  Step  4  –  npm install                           ║
+  ║   6)  Step  5  –  PostgreSQL database & user            ║
+  ║   7)  Step  6  –  .env configuration                    ║
+  ║   8)  Step  7  –  Uploads directory                     ║
+  ║   9)  Step  8  –  Database schema + admin account       ║
+  ║  10)  Step  9  –  Production build                      ║
+  ║  11)  Step 10  –  systemd service + Nginx + SSL         ║
+  ║                                                          ║
+  ║   0)  Exit                                               ║
+  ╚══════════════════════════════════════════════════════════╝
+```
+
+**For a first-time install:** choose **1 — Full Setup**. The script runs all 10 steps sequentially and prints a summary when finished.
+
+**If a step fails:** fix the underlying issue (see [Troubleshooting](#8-troubleshooting)), then re-run `bash setup.sh` and choose the matching step number to resume from that point. Steps that already completed are skipped automatically — no work is repeated unnecessarily.
+
+After each run the script asks `Return to menu? [Y/n]` so you can immediately pick another step without restarting.
 
 ---
 
-## Environment Variables
+### Domain as an Argument
 
-Create a `.env` file in the project root:
-
-```env
-# Required — PostgreSQL connection string
-DATABASE_URL=postgres://voice_user:choose_a_strong_password@localhost:5432/voice_protocol
-
-# Optional — defaults to 5000
-PORT=5000
-
-# Required in production
-NODE_ENV=production
-```
-
-**Never commit `.env` to version control.**
-
-### Loading `.env` at runtime
-
-The app does not auto-load a `.env` file. Export the variables in your shell before running, or use a process manager like PM2 (see below) which has built-in `.env` support.
+Pass the domain directly to skip the initial prompt:
 
 ```bash
-export $(cat .env | xargs)
+bash setup.sh yourdomain.com
+```
+
+### Fully Unattended (No Prompts at All)
+
+Use the `--yes` flag to run all steps automatically — useful for scripted or CI-based deployments:
+
+```bash
+bash setup.sh yourdomain.com --yes
 ```
 
 ---
 
-## Building & Running
+### Re-running the Script Is Always Safe
 
-### Development (hot-reload, no build step)
+Every step checks whether the work is already done before acting:
 
-```bash
-NODE_ENV=development npx tsx server/index.ts
-```
+- Packages that are already installed are skipped
+- A database that already exists is kept — its data is never dropped
+- An existing `.env` is updated in-place, with API keys preserved
+- The swap file is only created if swap is below 512 MB
+- Firewall rules are added without resetting existing rules
 
-The server and frontend both run on port 5000 in development via Vite.
+You can safely re-run the full setup or any individual step at any time.
 
-### Production Build
+---
 
-```bash
-npm run build
-```
+## 3. What Each Step Does
 
-This command:
-1. Builds the React frontend with Vite → `dist/public/`
+### Step 1 — Swap Space
+
+Creates a 2 GB swap file if the server has less than 512 MB of swap. This prevents the `npm install` and production build from being killed by the OS on low-memory servers. Sets `vm.swappiness=10` for server-appropriate behaviour. The swap file is made permanent via `/etc/fstab`.
+
+### Step 2 — System Packages & Node.js
+
+Installs and verifies all required system software:
+
+| Package | Purpose |
+|---|---|
+| **Node.js 20.x LTS** | Runs the application server |
+| **PostgreSQL** | Database server; auto-detects installed version |
+| **Nginx** | Reverse proxy — handles HTTPS and forwards requests to the app |
+| **Certbot** | Obtains and auto-renews Let's Encrypt SSL certificates |
+| **build-essential** | C/C++ compiler needed by some npm native modules |
+| **curl, wget, git, openssl** | General-purpose utilities |
+
+Also configures PostgreSQL:
+- Detects the version-specific systemd service name (`postgresql@16-main`, etc.)
+- Waits until the database is accepting connections before continuing
+- Patches `pg_hba.conf` to allow TCP password authentication on `127.0.0.1` (required for the app to connect)
+
+### Step 3 — Firewall
+
+Configures **UFW** (Uncomplicated Firewall):
+
+- Allows **SSH (port 22)** — this is added *before* enabling the firewall so you cannot be locked out
+- Allows **HTTP (port 80)** and **HTTPS (port 443)** for Nginx
+- Blocks all other inbound traffic
+
+Configures **fail2ban** to automatically ban IP addresses that fail SSH authentication 5 times within 10 minutes. The ban duration is 1 hour.
+
+Enables **unattended-upgrades** so the OS automatically applies security patches.
+
+### Step 4 — npm install
+
+Removes any existing `node_modules` and does a clean `npm install`. Runs after `build-essential` is confirmed present so native packages (e.g. `bcrypt`) compile correctly.
+
+### Step 5 — PostgreSQL Database & User
+
+- Creates the `phonebooth_user` database role if it does not exist
+- Syncs the role's password with the value in `.env` (or the newly generated password)
+- Creates the `phonebooth_db` database if it does not exist — existing data is never dropped on re-runs
+- Grants full privileges on the database and public schema
+
+### Step 6 — .env Configuration
+
+Creates `.env` in the project root if it does not exist, or updates only the database and app settings if it does. Your API keys (Twilio, ElevenLabs, Stripe) are never overwritten.
+
+Sets `chmod 600` on `.env` so only the app owner can read the credentials.
+
+The generated file includes placeholder lines for every required key — see [Section 4](#4-after-setup--fill-in-your-api-keys).
+
+### Step 7 — Uploads Directory
+
+Creates `uploads/`, `uploads/mm/`, and `uploads/mw/` if they do not exist. These directories store ElevenLabs-generated MP3 audio files used by the IVR phone system. The app crashes silently on first audio generation if these are missing.
+
+### Step 8 — Database Schema + Admin Account
+
+- Runs `npx drizzle-kit push --force` to create or update all database tables to match the current schema
+- Runs `scripts/reset-admin.ts` to create the admin account (or reset it if it already exists)
+
+### Step 9 — Production Build
+
+Runs `npm run build`, which:
+
+1. Compiles the React frontend with Vite → `dist/public/`
 2. Bundles the Express server with esbuild → `dist/index.cjs`
 
-### Production Start
+### Step 10 — systemd Service + Nginx + SSL
 
-```bash
-NODE_ENV=production node dist/index.cjs
-```
+**systemd service:**
 
-The server will serve the compiled frontend at `/` and all API/webhook routes on the same port.
+- Writes `/etc/systemd/system/phonebooth.service`
+- Sets `LimitNOFILE=65536` (needed for many concurrent call connections)
+- Enables the service to start automatically on reboot
+- Starts the service immediately
+
+**Nginx:**
+
+- Writes a full production Nginx config with:
+  - HTTP → HTTPS redirect
+  - TLS 1.2/1.3 with strong cipher suites
+  - HSTS, X-Frame-Options, X-Content-Type-Options headers
+  - Separate location blocks for `/voice/`, `/api/`, `/uploads/`, and `/` (React SPA)
+  - Appropriate timeouts for Twilio webhooks (15 s) and API calls (30 s)
+  - Gzip compression and `server_tokens off`
+- Auto-detects the Let's Encrypt certificate path for your domain
+- If no certificate is found yet, prints instructions and skips SSL configuration — re-run Step 10 after obtaining the certificate
 
 ---
 
-## Twilio Configuration
+## 4. After Setup — Fill in Your API Keys
 
-### Step 1 — Get a Twilio Account
+Open `.env` with a text editor:
 
-1. Sign up at [twilio.com](https://www.twilio.com)
-2. Go to the **Phone Numbers** section and purchase a number with Voice capability
+```bash
+nano ~/phonebooth/.env
+```
 
-### Step 2 — Point the Webhook at Your Server
-
-1. In the Twilio Console, navigate to **Phone Numbers → Manage → Active Numbers**
-2. Click your number
-3. Under **Voice & Fax → A Call Comes In**, set:
-   - **Webhook**: `https://yourdomain.com/voice`
-   - **HTTP Method**: `POST`
-4. Click **Save**
-
-That is the only webhook you need to configure. All other routes (`/voice/main-menu`, `/voice/save-profile`, etc.) are called internally by the server redirecting Twilio — Twilio does not need to know about them directly.
-
-### Step 3 — Test the Connection
-
-Call your Twilio number. If your server is running and reachable, you should hear the welcome prompt asking you to record a profile.
-
-### Twilio Credentials (Optional)
-
-The app does not currently validate Twilio request signatures. If you want to add that security layer in the future, you will need:
+Fill in every blank value:
 
 ```env
+# ─── Twilio ──────────────────────────────────────────────────────────────────
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_AUTH_TOKEN=your_auth_token_here
+TWILIO_PHONE_NUMBER=+12125550100
+
+# ─── ElevenLabs ──────────────────────────────────────────────────────────────
+ELEVENLABS_API_KEY=your_elevenlabs_api_key
+ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
+
+# ─── Stripe ──────────────────────────────────────────────────────────────────
+STRIPE_SECRET_KEY=sk_live_xxxxxxxxxxxxxxxxxxxx
+STRIPE_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxxxxxxxxx
 ```
 
-These are available in the Twilio Console under **Account Info**.
+Save the file, then restart the service:
+
+```bash
+sudo systemctl restart phonebooth
+```
+
+Where to find each key:
+
+| Key | Location |
+|---|---|
+| `TWILIO_ACCOUNT_SID` | Twilio Console → Account Info |
+| `TWILIO_AUTH_TOKEN` | Twilio Console → Account Info |
+| `TWILIO_PHONE_NUMBER` | Twilio Console → Phone Numbers → Active Numbers |
+| `ELEVENLABS_API_KEY` | elevenlabs.io → Profile → API Key |
+| `ELEVENLABS_VOICE_ID` | elevenlabs.io → Voices → click a voice → copy Voice ID |
+| `STRIPE_SECRET_KEY` | Stripe Dashboard → Developers → API Keys |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Developers → Webhooks → signing secret |
 
 ---
 
-## Exposing Your Server to the Internet
+## 5. Twilio Configuration
 
-Twilio must be able to reach your server over a public URL. You have two options:
+### Point Your Twilio Number at the Server
 
-### Option A — Direct VPS with a Domain (Recommended for Production)
+1. Log in to [console.twilio.com](https://console.twilio.com)
+2. Go to **Phone Numbers → Manage → Active Numbers**
+3. Click your phone number
+4. Under **Voice & Fax → A Call Comes In**, set:
+   - **Webhook**: `https://yourdomain.com/voice`
+   - **HTTP Method**: `POST`
+5. Click **Save**
 
-1. Point your domain's DNS A record to your VPS IP address
-2. Use Nginx as a reverse proxy (see the Nginx section below)
-3. Obtain a free TLS certificate with Certbot:
+That is the only webhook Twilio needs. All other routes (`/voice/main-menu`, `/voice/save-profile`, etc.) are called by the server internally.
 
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d yourdomain.com
-```
+### Register the Stripe Webhook
 
-Your webhook URL will be: `https://yourdomain.com/voice`
-
-### Option B — Direct IP (No Domain)
-
-You can use `http://YOUR_VPS_IP:5000/voice` as the Twilio webhook, but:
-- Twilio strongly prefers HTTPS
-- HTTP webhooks are not recommended for production
-
-### Option C — Ngrok (For Local Testing Only)
-
-```bash
-ngrok http 5000
-```
-
-Use the generated `https://xxxx.ngrok.io/voice` URL as the Twilio webhook temporarily. Ngrok URLs change every restart on the free plan.
+1. In the Stripe Dashboard go to **Developers → Webhooks → Add endpoint**
+2. Set the URL to: `https://yourdomain.com/api/stripe/webhook`
+3. Select events: `checkout.session.completed` and `payment_intent.succeeded`
+4. Copy the **Signing Secret** into `STRIPE_WEBHOOK_SECRET` in `.env`
 
 ---
 
-## Phone Menu Reference
+## 6. Obtaining an SSL Certificate
 
-### Entry Point — Any Inbound Call
-
-```
-Caller dials your Twilio number
-    │
-    ├─ First-time caller (no profile)
-    │       └─ Prompt to record a 30-second profile
-    │               └─ Profile saved → Main Menu
-    │
-    └─ Returning caller (has a profile)
-            └─ Main Menu
-```
-
-### Main Menu
-
-```
-Press 1 → Browse Profiles
-Press 2 → Re-record your profile (30 seconds)
-(no input) → Loops back to Main Menu
-```
-
-### Browse Profiles
-
-```
-You have unread messages?
-    YES → Play the message recording
-          ├─ Press 1 → Reply (60 seconds) → message sent → Browse Profiles
-          ├─ Press 2 → Hear the sender's profile
-          │               ├─ Press 1 → Send a message to the sender
-          │               ├─ Press 2 → Continue browsing
-          │               └─ Press 9 → Main Menu
-          ├─ Press 3 → Skip, continue browsing
-          └─ Press 9 → Main Menu
-
-    NO → Play a random other user's profile
-          ├─ Press 1 → Send them a message (60 seconds)
-          ├─ Press 2 → Play the next random profile
-          └─ Press 9 → Main Menu
-```
-
-**Note:** Messages are marked as read when the caller presses 1, 3, or 9 from the message menu. If a caller hangs up mid-message without pressing anything, the message stays unread and will play again on the next call.
-
----
-
-## API Endpoints
-
-These are used by the web dashboard.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/stats` | Returns `{ users, profiles, messages }` counts |
-
-All Twilio webhook endpoints are POST and return `text/xml` (TwiML):
-
-| Method | Path | Triggered By |
-|--------|------|-------------|
-| `POST` | `/voice` | Twilio — inbound call |
-| `POST` | `/voice/save-profile` | Twilio — after profile recording ends |
-| `POST` | `/voice/main-menu` | Internal redirect |
-| `POST` | `/voice/handle-main-menu` | Twilio — digit press in main menu |
-| `POST` | `/voice/browse-profiles` | Internal redirect |
-| `POST` | `/voice/handle-message-menu` | Twilio — digit press while reviewing a message |
-| `POST` | `/voice/handle-sender-profile-menu` | Twilio — digit press after hearing sender profile |
-| `POST` | `/voice/handle-profile-menu` | Twilio — digit press while browsing random profiles |
-| `POST` | `/voice/save-message` | Twilio — after voice message recording ends |
-
----
-
-## Database Schema
-
-Three tables are created automatically by `npm run db:push`.
-
-### `users`
-
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | UUID | Primary key, auto-generated |
-| `phone_number` | TEXT | Unique. Twilio sends this as the `From` field (E.164 format, e.g. `+12125550100`) |
-| `created_at` | TIMESTAMP | Auto-set |
-
-### `profiles`
-
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | UUID | Primary key |
-| `user_id` | UUID | One-to-one with `users` |
-| `recording_url` | TEXT | Twilio-hosted URL to the audio file |
-| `recording_duration` | INTEGER | Duration in seconds (may be null) |
-| `created_at` | TIMESTAMP | Auto-set |
-
-Recording a new profile overwrites the existing one (`upsert` on `user_id`).
-
-### `messages`
-
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | UUID | Primary key |
-| `from_user_id` | UUID | Sender |
-| `to_user_id` | UUID | Recipient |
-| `recording_url` | TEXT | Twilio-hosted URL to the audio file |
-| `is_read` | BOOLEAN | `false` until the recipient listens and acts on it |
-| `created_at` | TIMESTAMP | Auto-set |
-
----
-
-## Process Management (Production)
-
-Use PM2 to keep the app running after you close your terminal and to auto-restart it on crashes.
-
-### Install PM2
+If Step 10 skipped Nginx SSL because no certificate was found, obtain one now:
 
 ```bash
-sudo npm install -g pm2
+sudo certbot certonly --nginx \
+    -d yourdomain.com \
+    -d www.yourdomain.com \
+    --non-interactive \
+    --agree-tos \
+    -m admin@yourdomain.com
 ```
 
-### Create an ecosystem file
-
-Create `ecosystem.config.cjs` in the project root:
-
-```js
-module.exports = {
-  apps: [
-    {
-      name: "voice_protocol",
-      script: "./dist/index.cjs",
-      env: {
-        NODE_ENV: "production",
-        PORT: 5000,
-        DATABASE_URL: "postgres://voice_user:choose_a_strong_password@localhost:5432/voice_protocol"
-      }
-    }
-  ]
-};
-```
-
-### Start, Save, and Enable Auto-start
+Then re-run the Nginx step:
 
 ```bash
-npm run build             # build first
-pm2 start ecosystem.config.cjs
-pm2 save                  # persist process list
-pm2 startup               # prints a command — run that command to enable auto-start on reboot
+bash setup.sh yourdomain.com
+# Choose: 11) Step 10 – systemd service + Nginx + SSL
 ```
 
-### Useful PM2 Commands
+Certificates auto-renew via the `certbot.timer` systemd unit (enabled by the script). Check renewal status with:
 
 ```bash
-pm2 status                # show running processes
-pm2 logs voice_protocol   # stream logs
-pm2 restart voice_protocol
-pm2 stop voice_protocol
+sudo systemctl status certbot.timer
+sudo certbot renew --dry-run
 ```
 
 ---
 
-## Nginx Reverse Proxy (Optional)
+## 7. Day-to-Day Operations
 
-If you want to serve the app on port 80/443 and use a domain name, set up Nginx as a reverse proxy.
-
-### Install Nginx
+### Service Management
 
 ```bash
-sudo apt install nginx
+# View live logs
+sudo journalctl -u phonebooth -f
+
+# Restart the app (required after editing .env)
+sudo systemctl restart phonebooth
+
+# Stop / start
+sudo systemctl stop phonebooth
+sudo systemctl start phonebooth
+
+# Check service status
+sudo systemctl status phonebooth
 ```
 
-### Create a Site Config
-
-Create `/etc/nginx/sites-available/voice_protocol`:
-
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
-
-    location / {
-        proxy_pass http://localhost:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-### Enable and Reload
+### Nginx
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/voice_protocol /etc/nginx/sites-enabled/
-sudo nginx -t          # test config
+# View error log
+sudo tail -f /var/log/nginx/phonebooth_error.log
+
+# View access log
+sudo tail -f /var/log/nginx/phonebooth_access.log
+
+# Test config before reloading
+sudo nginx -t
+
+# Reload (no downtime)
 sudo systemctl reload nginx
 ```
 
-### Add HTTPS with Certbot
+### Firewall
 
 ```bash
-sudo certbot --nginx -d yourdomain.com
+# View current rules
+sudo ufw status verbose
+
+# View blocked IPs (fail2ban)
+sudo fail2ban-client status sshd
+
+# Unban an IP
+sudo fail2ban-client set sshd unbanip 1.2.3.4
 ```
 
-Certbot will automatically edit your Nginx config to handle HTTPS and redirect HTTP → HTTPS. Your Twilio webhook URL will then be `https://yourdomain.com/voice`.
+### Updating the App
+
+After pulling new code or making changes:
+
+```bash
+cd ~/phonebooth
+bash setup.sh yourdomain.com
+# Choose: 10) Step 9 – Production build
+# Then:  11) Step 10 – systemd service + Nginx + SSL
+```
+
+Or run steps 9–10 from the command line in one go:
+
+```bash
+npm run build && sudo systemctl restart phonebooth
+```
 
 ---
 
-## Troubleshooting
+## 8. Troubleshooting
 
-### "tsx: not found"
-Run `npm install` — the `tsx` package is a dev dependency required to start the server in development mode.
+### App Fails to Start
 
-### "DATABASE_URL must be set"
-You have not exported your environment variables. Run `export $(cat .env | xargs)` or use PM2's `env` block.
-
-### Twilio shows "Application Error" when calling
-- Confirm your server is publicly reachable: `curl -X POST https://yourdomain.com/voice` should return XML
-- Check PM2 logs: `pm2 logs voice_protocol`
-- Verify the webhook URL in the Twilio console has no trailing slash and uses `POST`
-
-### Schema changes not reflecting
-Run `npm run db:push` after any changes to `shared/schema.ts`. You do not need to restart the server separately — `db:push` only updates the database structure.
-
-### Twilio recordings not playing / 404 on recording URLs
-Twilio recordings take a few seconds to become available after a call ends. If `RecordingUrl` is sometimes empty, Twilio may have sent the webhook before processing finished. You can add `.mp3` to the end of any Twilio recording URL to force audio playback in a browser: `https://api.twilio.com/.../<RecordingSid>.mp3`.
-
-### Port already in use
 ```bash
-sudo lsof -i :5000
-kill -9 <PID>
+sudo journalctl -u phonebooth -n 50 --no-pager
 ```
 
-Or change the `PORT` environment variable to a free port and update your Nginx proxy config accordingly.
+Common causes:
+
+| Error | Fix |
+|---|---|
+| `DATABASE_URL must be set` | `.env` file is missing or not readable — check `ls -la .env` |
+| `ECONNREFUSED 127.0.0.1:5432` | PostgreSQL is not running — `sudo systemctl start postgresql` |
+| `password authentication failed` | DB password in `.env` doesn't match the Postgres role — re-run Step 5 |
+| `EADDRINUSE :5050` | Another process is using port 5050 — `sudo lsof -i :5050` |
+| `Cannot find module` | `dist/` is missing — run Step 9 (build) |
+
+### Twilio Shows "Application Error" on Calls
+
+1. Confirm the app is running: `sudo systemctl status phonebooth`
+2. Test the webhook endpoint directly:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" -X POST https://yourdomain.com/voice
+   ```
+   Should return `200`.
+3. Check Nginx is forwarding correctly: `sudo tail -20 /var/log/nginx/phonebooth_error.log`
+4. Verify the webhook URL in Twilio has no trailing slash and uses `POST`
+
+### Nginx Returns 502 Bad Gateway
+
+The app is not running or is crashed. Check:
+
+```bash
+sudo systemctl status phonebooth
+sudo journalctl -u phonebooth -n 30 --no-pager
+```
+
+### SSL Certificate Error in Browser
+
+```bash
+sudo certbot certificates           # list all certs and expiry dates
+sudo certbot renew --dry-run        # test renewal
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### npm install Fails with Out-of-Memory
+
+The server ran out of RAM. Re-run Step 1 to create a swap file, then re-run Step 4.
+
+### Port Already in Use
+
+```bash
+sudo lsof -i :5050
+sudo kill -9 <PID>
+```
+
+### Database Schema Out of Date
+
+After any app update that changes the database schema:
+
+```bash
+cd ~/phonebooth
+npx drizzle-kit push --force
+sudo systemctl restart phonebooth
+```
 
 ---
 
-## System Cleanup
+## 9. Database Maintenance
 
-The cleanup script removes stale and orphaned data to keep the database lean. It should be run on a regular schedule — weekly is recommended for most deployments.
+### Automated Cleanup Script
 
-**Location:** `scripts/cleanup.ts`
-
-### Running the Script
-
-Always do a dry run first. No data is written until you explicitly pass `--run`.
+Run periodically to remove stale free-trial accounts, reset expired memberships, and purge dormant data. Always do a dry run first.
 
 ```bash
-# Preview what would be removed (safe — no DB changes)
+# Dry run — previews removals, no changes made
 npx tsx scripts/cleanup.ts
 
-# Execute for real
+# Live run — applies all deletions
 npx tsx scripts/cleanup.ts --run
 ```
 
-### Scheduling with Cron
-
-To run every Sunday at 2 AM:
+### Schedule Weekly Cleanup via Cron
 
 ```bash
 crontab -e
 ```
 
-Add the line (adjust the path to your project root):
+Add this line (adjust the path to your install directory):
 
 ```
 0 2 * * 0 cd /home/youruser/phonebooth && npx tsx scripts/cleanup.ts --run >> /var/log/phonebooth-cleanup.log 2>&1
 ```
 
----
+### Manual Database Access
 
-### What Each Part Does
+```bash
+# Connect as the app user
+psql postgresql://phonebooth_user@127.0.0.1/phonebooth_db
 
-#### Part 1 — Delete stale free-trial accounts
+# Or connect as the postgres superuser
+sudo -u postgres psql -d phonebooth_db
+```
 
-**Trigger:** `membershipTier = 'free_trial'` AND account created **40+ days ago**
+### Backup
 
-Free-trial callers who never converted to a paid membership are fully removed after 40 days.
+```bash
+sudo -u postgres pg_dump phonebooth_db > ~/phonebooth_backup_$(date +%Y%m%d).sql
+```
 
-Everything linked to the account is deleted:
+### Restore
 
-| Table | What is removed |
-|---|---|
-| `active_calls` | Any live session entry |
-| `seed_sessions` | Any seed broadcast history |
-| `moderation_logs` | All moderation events for this user |
-| `blocked_users` | All blocks they set and blocks set against them |
-| `promo_redemptions` | All promo codes they redeemed |
-| `flagged_content` | Content they flagged, plus any flags raised *against* their profile or messages |
-| `messages` | All voice messages sent and received |
-| `profiles` | Their voice greeting / personal ad recording |
-| `call_logs` | All inbound call records for their phone number |
-| `web_user_alt_phones` | Any web account alt-phone entries using their number |
-| `membership_cards` | `phoneNumber` is cleared (card is marked unactivated again) |
-| `web_users` | Linked phone number is cleared (web account itself is kept) |
-| `mailboxes` | Deleted automatically via `onDelete: cascade` when the user row is removed |
+```bash
+sudo -u postgres psql phonebooth_db < ~/phonebooth_backup_20240101.sql
+```
 
 ---
 
-#### Part 2 — Reset expired memberships
+## Admin Panel
 
-**Trigger:** `membershipTier IS NOT NULL` AND `remainingSeconds ≤ 0`
+Once the app is running, access the admin panel at:
 
-When a paid membership reaches zero seconds, the three membership fields are nulled out:
+```
+https://yourdomain.com/admin
+```
 
-- `membershipTier → null`
-- `remainingSeconds → null`
-- `membershipStartedAt → null`
+The admin panel is protected by a secure numeric keypad sequence. Use the on-screen keypad to enter the sequence. If you need to reset the admin credentials, re-run Step 8:
 
-The caller's account, greeting, mailbox, and call history are **not** deleted — only the membership status is cleared. They will be prompted to purchase again on their next call.
-
----
-
-#### Part 3 — Purge inactive mailboxes and personal ads (MM system)
-
-**Trigger:** Mailbox not accessed in **21+ days** (based on `lastCheckedAt`, falling back to `createdAt` for mailboxes that were never visited)
-
-The caller's **account and membership are kept**. Only the mailbox slot and voice personal ad are removed:
-
-| Table | What is removed |
-|---|---|
-| `flagged_content` | Any flags pointing at their profile recording |
-| `profiles` | Their voice greeting / personal ad |
-| `mailboxes` | Their mailbox number, ad recording, and category |
-
-The `lastCheckedAt` timestamp is updated every time the member enters the `/voice/my-mailbox` IVR section. Members who regularly listen to their messages will never be affected.
-
----
-
-#### Part 4 — Delete dormant paid-membership accounts
-
-**Trigger:** `membershipTier IS NOT NULL` AND `membershipTier != 'free_trial'` AND last inbound call was **61+ days ago** (or the account has never called at all)
-
-A SQL aggregate query (`MAX(call_logs.started_at)` grouped by user phone number) is used to find the most recent actual call for each paid member efficiently. Users who have never called are also included.
-
-Everything linked to the account is deleted using the same full-cascade logic as Part 1 (see the table above). This ensures no orphaned rows are left behind anywhere in the database.
-
----
-
-### Data Safety Design
-
-The script is designed so that **no table is ever missed**. The deletion order is carefully chosen to avoid foreign-key constraint violations:
-
-1. `active_calls` — cleared first (no dependents)
-2. `seed_sessions` — cleared first
-3. `moderation_logs` — cleared first
-4. `blocked_users` — both blocker and blocked sides
-5. `promo_redemptions` — before user deletion (FK to `users.id`)
-6. `flagged_content` — deleted by three vectors: reporter, profile contentId, message contentId
-7. `messages` — both sender and recipient sides
-8. `profiles` — deleted after messages (messages may have been flagged by contentId)
-9. `call_logs` — matched by phone number (text field, no FK)
-10. `web_user_alt_phones` — matched by phone number
-11. `membership_cards` — phone number field cleared to null (card record is kept)
-12. `web_users` — phone link fields cleared (account is kept)
-13. `users` — deleted last; `mailboxes` cascade automatically via `onDelete: cascade`
-
----
-
-#### Part 5 — Delete inactive web accounts
-
-**Trigger:** `lastLoginAt ≤ 61 days ago` OR (`lastLoginAt IS NULL` AND `createdAt ≤ 61 days ago`)
-
-Web (email/password) accounts that have gone 61 days without a login are deleted. This mirrors the 61-day dormancy rule applied to phone-side accounts.
-
-`lastLoginAt` is stamped automatically on every successful login and on initial registration, so any member who visits the dashboard resets their clock.
-
-| Table | What happens |
-|---|---|
-| `web_users` | Row is deleted |
-| `web_user_alt_phones` | Cascade-deleted automatically via `onDelete: cascade` |
-| `membership_link_codes` | Cascade-deleted automatically via `onDelete: cascade` |
-
-The linked phone-side account (if any) is **not** affected — only the web account is removed. The phone account follows its own dormancy rule via Part 4.
-
----
-
-> **Note:** `audit_logs` are intentionally preserved. They are an administrative audit trail with no FK constraints and should not be purged by automated cleanup.
+```bash
+bash setup.sh yourdomain.com
+# Choose: 9) Step 8 – Database schema + admin account
+```
