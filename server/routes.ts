@@ -3528,6 +3528,8 @@ export async function registerRoutes(
         if (user?.membershipNumber) {
           const spaced = user.membershipNumber.replace(/\D/g, "").split("").join(". ");
           twiml.say(`Your membership number is: ${spaced}.`);
+          twiml.pause({ length: 2 });
+          twiml.say(`Again, your membership number is: ${spaced}.`);
         } else {
           twiml.say("You do not have a membership number on file yet. Please purchase a membership first.");
         }
