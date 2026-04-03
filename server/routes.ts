@@ -3535,6 +3535,9 @@ export async function registerRoutes(
     const fromNumber = req.body?.From as string;
 
     try {
+      const siteConf = await getSiteSettingsCached();
+      const isMW = siteConf.siteCategory === "MW";
+
       const user = await getOrCreateUser(fromNumber);
       const remainingSeconds = user.remainingSeconds ?? 0;
       const minutes = Math.floor(remainingSeconds / 60);
@@ -3553,10 +3556,14 @@ export async function registerRoutes(
       const tier = user.membershipTier ?? "none";
       const tierMsg = tier === "free_trial" ? "You are on a free trial." : tier !== "none" ? `Your membership type is ${tier}.` : "You do not have an active membership.";
 
-      const pinStatus = user.membershipPin ? "You have a PIN set." : "You do not have a PIN set.";
-      const membershipNumberStatus = user.membershipNumber ? "You have a membership number on file." : "You do not yet have a membership number.";
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-manage-membership" });
-      gather.say(`${tierMsg} ${timeMsg} ${pinStatus} ${membershipNumberStatus} Press 1 to add time or purchase a new membership. Press 2 to set or change your access PIN. Press 3 to hear your membership number. Press 9 to return to the main menu.`);
+      if (isMW) {
+        gather.say(`${tierMsg} ${timeMsg} Press 1 to add time or purchase a new membership. Press 9 to return to the main menu.`);
+      } else {
+        const pinStatus = user.membershipPin ? "You have a PIN set." : "You do not have a PIN set.";
+        const membershipNumberStatus = user.membershipNumber ? "You have a membership number on file." : "You do not yet have a membership number.";
+        gather.say(`${tierMsg} ${timeMsg} ${pinStatus} ${membershipNumberStatus} Press 1 to add time or purchase a new membership. Press 2 to set or change your access PIN. Press 3 to hear your membership number. Press 9 to return to the main menu.`);
+      }
       twiml.redirect("/voice/manage-membership");
     } catch (error) {
       console.error("[voice] /voice/manage-membership error:", error);
@@ -3573,11 +3580,14 @@ export async function registerRoutes(
     const digit = req.body?.Digits;
     const fromNumber = req.body?.From as string;
 
+    const siteConf = await getSiteSettingsCached();
+    const isMW = siteConf.siteCategory === "MW";
+
     if (digit === "1") {
       twiml.redirect("/voice/purchase-pre-menu");
-    } else if (digit === "2") {
+    } else if (digit === "2" && !isMW) {
       twiml.redirect("/voice/set-pin");
-    } else if (digit === "3") {
+    } else if (digit === "3" && !isMW) {
       // Read out the caller's membership number digit by digit
       try {
         const user = await storage.getUserByPhone(fromNumber);
@@ -5441,10 +5451,13 @@ export async function registerRoutes(
         await storage.updateUserMembership(user.id, membershipUpdate);
         await storage.getOrCreateMailbox(user.id);
 
+        const siteConf = await getSiteSettingsCached();
+        const isMWPurchase = siteConf.siteCategory === "MW";
+
         const bonusMsg = bonusMinutes > 0
           ? ` Plus your first purchase bonus doubles your minutes — enjoy ${totalMinutes.toLocaleString()} minutes total!`
           : "";
-        const cardMsg = issuedCardNumber
+        const cardMsg = (!isMWPurchase && issuedCardNumber)
           ? ` Your new membership card number is: ${issuedCardNumber.split("").join(", ")}. Please save this number — you can use it to access your membership from any phone.`
           : "";
         const successText =
