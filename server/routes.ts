@@ -365,16 +365,22 @@ function getRecordingSid(url: string): string | null {
 }
 
 // Play a pre-recorded prompt from uploads/ if the file exists, otherwise fall back to TTS.
-// Automatically checks the site category subfolder (uploads/mm/ or uploads/mw/) first,
-// then falls back to the shared uploads/ root, then falls back to TTS.
+//
+// Audio path lookup order:
+//   MM systems: uploads/mm/<file>  →  uploads/<file>  →  TTS (male voice, Twilio default)
+//   MW systems: uploads/mw/<file>  →  TTS (female voice, Polly.Joanna)
+//              ↳ MW intentionally skips the shared uploads/ root so MM audio never bleeds in.
+//
+// The admin Audio Manager exposes separate Shared / MM / MW folders to match this logic.
 function playPrompt(
-  node: { say: (text: string) => void; play: (url: string) => void },
+  node: { say: (...args: any[]) => any; play: (url: string) => void },
   req: Request,
   filename: string,
   fallbackText: string
 ): void {
-  // Check the active site category subfolder first
   const category = _cachedSiteSettings?.siteCategory?.toLowerCase();
+
+  // Check the category-specific subfolder first (uploads/mm/ or uploads/mw/)
   if (category) {
     const catPath = path.join(UPLOADS_DIR, category, filename);
     if (fs.existsSync(catPath)) {
@@ -382,6 +388,15 @@ function playPrompt(
       return;
     }
   }
+
+  // MW systems use a separate audio path — do not fall back to the shared uploads/ root.
+  // If no MW-specific file was found above, fall back to TTS with a female voice.
+  if (category === "mw") {
+    if (fallbackText) node.say({ voice: "Polly.Joanna" }, fallbackText);
+    return;
+  }
+
+  // MM / unset — fall back to shared uploads/ root, then TTS with the default voice.
   const filePath = path.join(UPLOADS_DIR, filename);
   if (fs.existsSync(filePath)) {
     node.play(`${baseUrl(req)}/uploads/${filename}`);
