@@ -43,11 +43,13 @@ import {
   moderationLogs,
   flaggedContent,
   webUsers,
+  webUserAltPhones,
+  membershipCards,
   mailboxes,
   callLogs,
 } from "../shared/schema";
 import {
-  eq, lte, and, isNotNull, or, inArray, isNull, not, sql,
+  eq, lte, and, isNotNull, or, inArray, isNull, sql,
 } from "drizzle-orm";
 
 const DRY_RUN = !process.argv.includes("--run");
@@ -65,10 +67,30 @@ function indent(msg: string) {
   console.log(`  ${msg}`);
 }
 
+function rows(result: unknown): number {
+  return (result as any).rowCount ?? 0;
+}
+
 // ─── Shared: fully delete users and all associated data ───────────────────────
 //
 // Handles both Part 1 and Part 4. Deletes in dependency order so no FK
 // violations occur, then unlinks any web accounts tied to these phone numbers.
+//
+// Every table that references users (directly or by phone number) is covered:
+//
+//   active_calls          userId
+//   seed_sessions         userId
+//   moderation_logs       targetUserId
+//   blocked_users         blockerId / blockedUserId  (both sides)
+//   promo_redemptions     userId
+//   messages              fromUserId / toUserId      (both sides)
+//   flagged_content       contentId → profile/message ids  +  reportedByUserId
+//   profiles              userId
+//   call_logs             fromPhoneNumber
+//   web_user_alt_phones   phoneNumber
+//   membership_cards      phoneNumber  (cleared, not deleted — card still exists)
+//   web_users             linkedPhoneNumber  (unlinked, not deleted)
+//   users                 id           (mailboxes cascade via FK onDelete: "cascade")
 
 interface UserStub {
   id: string;
@@ -81,45 +103,71 @@ async function deleteUsersAndAllData(targets: UserStub[]): Promise<void> {
   const userIds   = targets.map(u => u.id);
   const phoneNums = targets.map(u => u.phoneNumber);
 
-  const ac = await db.delete(activeCalls).where(inArray(activeCalls.userId, userIds));
-  indent(`  Deleted active_calls            : ${(ac as any).rowCount ?? "?"}`);
+  // ── 1. Active calls ────────────────────────────────────────────────────────
+  indent(`  Deleted active_calls            : ${rows(await db.delete(activeCalls).where(inArray(activeCalls.userId, userIds)))}`);
 
-  const ss = await db.delete(seedSessions).where(inArray(seedSessions.userId, userIds));
-  indent(`  Deleted seed_sessions           : ${(ss as any).rowCount ?? "?"}`);
+  // ── 2. Seed sessions ───────────────────────────────────────────────────────
+  indent(`  Deleted seed_sessions           : ${rows(await db.delete(seedSessions).where(inArray(seedSessions.userId, userIds)))}`);
 
-  const ml = await db.delete(moderationLogs).where(inArray(moderationLogs.targetUserId, userIds));
-  indent(`  Deleted moderation_logs         : ${(ml as any).rowCount ?? "?"}`);
+  // ── 3. Moderation logs ─────────────────────────────────────────────────────
+  indent(`  Deleted moderation_logs         : ${rows(await db.delete(moderationLogs).where(inArray(moderationLogs.targetUserId, userIds)))}`);
 
-  const buA = await db.delete(blockedUsers).where(inArray(blockedUsers.blockerId, userIds));
-  const buB = await db.delete(blockedUsers).where(inArray(blockedUsers.blockedUserId, userIds));
-  indent(`  Deleted blocked_users           : ${((buA as any).rowCount ?? 0) + ((buB as any).rowCount ?? 0)}`);
+  // ── 4. Block relationships — both sides ────────────────────────────────────
+  const buA = rows(await db.delete(blockedUsers).where(inArray(blockedUsers.blockerId, userIds)));
+  const buB = rows(await db.delete(blockedUsers).where(inArray(blockedUsers.blockedUserId, userIds)));
+  indent(`  Deleted blocked_users           : ${buA + buB}`);
 
-  const msgA = await db.delete(messages).where(inArray(messages.fromUserId, userIds));
-  const msgB = await db.delete(messages).where(inArray(messages.toUserId, userIds));
-  indent(`  Deleted messages                : ${((msgA as any).rowCount ?? 0) + ((msgB as any).rowCount ?? 0)}`);
+  // ── 5. Promo redemptions ───────────────────────────────────────────────────
+  indent(`  Deleted promo_redemptions       : ${rows(await db.delete(promoRedemptions).where(inArray(promoRedemptions.userId, userIds)))}`);
 
-  const fc = await db.delete(flaggedContent).where(inArray(flaggedContent.reportedByUserId, userIds));
-  indent(`  Deleted flagged_content         : ${(fc as any).rowCount ?? "?"}`);
+  // ── 6. Collect profile + message IDs before deletion (needed for flagged_content)
+  const userProfiles = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(inArray(profiles.userId, userIds));
+  const profileIds = userProfiles.map(p => p.id);
 
-  const pr = await db.delete(promoRedemptions).where(inArray(promoRedemptions.userId, userIds));
-  indent(`  Deleted promo_redemptions       : ${(pr as any).rowCount ?? "?"}`);
+  const userMessages = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(or(inArray(messages.fromUserId, userIds), inArray(messages.toUserId, userIds)));
+  const messageIds = userMessages.map(m => m.id);
 
-  const pf = await db.delete(profiles).where(inArray(profiles.userId, userIds));
-  indent(`  Deleted profiles                : ${(pf as any).rowCount ?? "?"}`);
+  // ── 7. Flagged content — three vectors:
+  //       a) reported by this user
+  //       b) content IS this user's profile
+  //       c) content IS a message sent/received by this user
+  const contentIds = [...profileIds, ...messageIds];
+  let fcCount = rows(await db.delete(flaggedContent).where(inArray(flaggedContent.reportedByUserId, userIds)));
+  if (contentIds.length > 0) {
+    fcCount += rows(await db.delete(flaggedContent).where(inArray(flaggedContent.contentId, contentIds)));
+  }
+  indent(`  Deleted flagged_content         : ${fcCount}`);
 
-  // Delete call log entries where the user was the caller
-  const cl = await db.delete(callLogs).where(inArray(callLogs.fromPhoneNumber, phoneNums));
-  indent(`  Deleted call_logs               : ${(cl as any).rowCount ?? "?"}`);
+  // ── 8. Messages — both sides ───────────────────────────────────────────────
+  const msgA = rows(await db.delete(messages).where(inArray(messages.fromUserId, userIds)));
+  const msgB = rows(await db.delete(messages).where(inArray(messages.toUserId, userIds)));
+  indent(`  Deleted messages                : ${msgA + msgB}`);
 
-  const wu = await db
-    .update(webUsers)
-    .set({ linkedPhoneNumber: null, linkedMembershipNumber: null })
-    .where(inArray(webUsers.linkedPhoneNumber, phoneNums));
-  indent(`  Unlinked web_users              : ${(wu as any).rowCount ?? "?"}`);
+  // ── 9. Profiles (voice greeting / personal ad) ─────────────────────────────
+  indent(`  Deleted profiles                : ${rows(await db.delete(profiles).where(inArray(profiles.userId, userIds)))}`);
 
-  // Delete users last (mailboxes cascade via FK)
-  const du = await db.delete(users).where(inArray(users.id, userIds));
-  indent(`  Deleted users                   : ${(du as any).rowCount ?? "?"}`);
+  // ── 10. Call logs (by phone number — no FK, purely text match) ─────────────
+  indent(`  Deleted call_logs               : ${rows(await db.delete(callLogs).where(inArray(callLogs.fromPhoneNumber, phoneNums)))}`);
+
+  // ── 11. Alt phone entries that use these phone numbers ─────────────────────
+  //        (another web user may have added this number as an alternate)
+  indent(`  Deleted web_user_alt_phones     : ${rows(await db.delete(webUserAltPhones).where(inArray(webUserAltPhones.phoneNumber, phoneNums)))}`);
+
+  // ── 12. Membership cards — clear the phone binding so the card reads as
+  //         unactivated again rather than pointing at a deleted user.
+  indent(`  Cleared membership_cards.phone  : ${rows(await db.update(membershipCards).set({ phoneNumber: null }).where(inArray(membershipCards.phoneNumber, phoneNums)))}`);
+
+  // ── 13. Web accounts — unlink the phone number (web account itself stays)
+  indent(`  Unlinked web_users              : ${rows(await db.update(webUsers).set({ linkedPhoneNumber: null, linkedMembershipNumber: null }).where(inArray(webUsers.linkedPhoneNumber, phoneNums)))}`);
+
+  // ── 14. Delete users — mailboxes cascade automatically via FK onDelete: "cascade"
+  indent(`  Deleted users (+mailboxes)      : ${rows(await db.delete(users).where(inArray(users.id, userIds)))}`);
 }
 
 // ─── Part 1: Delete stale free-trial accounts ─────────────────────────────────
@@ -131,12 +179,7 @@ async function cleanupStaleFreeTrialUsers(): Promise<number> {
   indent(`Criteria : membershipTier = 'free_trial'  AND  createdAt ≤ ${cutoff.toISOString().slice(0, 10)}`);
 
   const staleUsers = await db
-    .select({
-      id: users.id,
-      phoneNumber: users.phoneNumber,
-      remainingSeconds: users.remainingSeconds,
-      createdAt: users.createdAt,
-    })
+    .select({ id: users.id, phoneNumber: users.phoneNumber, remainingSeconds: users.remainingSeconds, createdAt: users.createdAt })
     .from(users)
     .where(and(eq(users.membershipTier, "free_trial"), lte(users.createdAt, cutoff)));
 
@@ -150,10 +193,7 @@ async function cleanupStaleFreeTrialUsers(): Promise<number> {
     indent(`  • ${u.phoneNumber}  created=${u.createdAt?.toISOString().slice(0, 10)}  remaining=${u.remainingSeconds ?? 0}s`);
   }
 
-  if (DRY_RUN) {
-    indent("[DRY RUN] No changes written.");
-    return staleUsers.length;
-  }
+  if (DRY_RUN) { indent("[DRY RUN] No changes written."); return staleUsers.length; }
 
   await deleteUsersAndAllData(staleUsers);
   indent(`✓ Removed ${staleUsers.length} stale free-trial account(s).`);
@@ -167,12 +207,7 @@ async function resetExpiredMemberships(): Promise<number> {
   indent("Criteria : membershipTier IS NOT NULL  AND  remainingSeconds ≤ 0");
 
   const expired = await db
-    .select({
-      id: users.id,
-      phoneNumber: users.phoneNumber,
-      membershipTier: users.membershipTier,
-      remainingSeconds: users.remainingSeconds,
-    })
+    .select({ id: users.id, phoneNumber: users.phoneNumber, membershipTier: users.membershipTier, remainingSeconds: users.remainingSeconds })
     .from(users)
     .where(and(isNotNull(users.membershipTier), isNotNull(users.remainingSeconds), lte(users.remainingSeconds, 0)));
 
@@ -186,22 +221,22 @@ async function resetExpiredMemberships(): Promise<number> {
     indent(`  • ${u.phoneNumber}  tier=${u.membershipTier}  remaining=${u.remainingSeconds}s`);
   }
 
-  if (DRY_RUN) {
-    indent("[DRY RUN] No changes written.");
-    return expired.length;
-  }
+  if (DRY_RUN) { indent("[DRY RUN] No changes written."); return expired.length; }
 
-  const expiredIds = expired.map(u => u.id);
   await db
     .update(users)
     .set({ membershipTier: null, remainingSeconds: null, membershipStartedAt: null })
-    .where(inArray(users.id, expiredIds));
+    .where(inArray(users.id, expired.map(u => u.id)));
 
-  indent(`✓ Reset membership for ${expiredIds.length} user(s).`);
-  return expiredIds.length;
+  indent(`✓ Reset membership for ${expired.length} user(s).`);
+  return expired.length;
 }
 
 // ─── Part 3: Purge inactive mailboxes & personal ads (MM system) ───────────────
+//
+// User account + membership are preserved. Only the mailbox and profile
+// (voice greeting / personal ad) are removed. Any flagged_content rows whose
+// contentId pointed at those now-deleted profiles are also cleaned up.
 
 async function purgeInactiveMailboxes(): Promise<number> {
   banner("Part 3: Purge inactive mailboxes & personal ads (MM system)");
@@ -211,13 +246,7 @@ async function purgeInactiveMailboxes(): Promise<number> {
   indent(`Cutoff   : ${cutoff.toISOString().slice(0, 10)}`);
 
   const staleMailboxes = await db
-    .select({
-      id: mailboxes.id,
-      userId: mailboxes.userId,
-      mailboxNumber: mailboxes.mailboxNumber,
-      lastCheckedAt: mailboxes.lastCheckedAt,
-      createdAt: mailboxes.createdAt,
-    })
+    .select({ id: mailboxes.id, userId: mailboxes.userId, mailboxNumber: mailboxes.mailboxNumber, lastCheckedAt: mailboxes.lastCheckedAt, createdAt: mailboxes.createdAt })
     .from(mailboxes)
     .where(
       or(
@@ -239,19 +268,29 @@ async function purgeInactiveMailboxes(): Promise<number> {
     indent(`  • mailbox #${m.mailboxNumber}  (${lastSeen})`);
   }
 
-  if (DRY_RUN) {
-    indent("[DRY RUN] No changes written.");
-    return staleMailboxes.length;
-  }
+  if (DRY_RUN) { indent("[DRY RUN] No changes written."); return staleMailboxes.length; }
 
   const staleUserIds    = staleMailboxes.map(m => m.userId);
   const staleMailboxIds = staleMailboxes.map(m => m.id);
 
-  const pf = await db.delete(profiles).where(inArray(profiles.userId, staleUserIds));
-  indent(`  Deleted profiles (personal ads) : ${(pf as any).rowCount ?? "?"}`);
+  // Collect profile IDs before deletion so we can clean flagged_content
+  const userProfiles = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(inArray(profiles.userId, staleUserIds));
+  const profileIds = userProfiles.map(p => p.id);
 
-  const mb = await db.delete(mailboxes).where(inArray(mailboxes.id, staleMailboxIds));
-  indent(`  Deleted mailboxes               : ${(mb as any).rowCount ?? "?"}`);
+  // Delete flagged_content rows whose contentId points to these profiles
+  if (profileIds.length > 0) {
+    const fc = rows(await db.delete(flaggedContent).where(inArray(flaggedContent.contentId, profileIds)));
+    indent(`  Deleted flagged_content         : ${fc}`);
+  }
+
+  // Delete profiles (personal ads / greetings)
+  indent(`  Deleted profiles (personal ads) : ${rows(await db.delete(profiles).where(inArray(profiles.userId, staleUserIds)))}`);
+
+  // Delete mailboxes
+  indent(`  Deleted mailboxes               : ${rows(await db.delete(mailboxes).where(inArray(mailboxes.id, staleMailboxIds)))}`);
 
   indent(`✓ Purged ${staleMailboxes.length} inactive mailbox(es) and their personal ads.`);
   indent("  Note: member accounts and memberships are preserved.");
@@ -262,7 +301,7 @@ async function purgeInactiveMailboxes(): Promise<number> {
 //
 // Targets: non-free-trial users whose most recent inbound call is older than
 // 61 days, or who have never called at all. Deletes the full account and
-// everything linked to it (greeting, mailbox, messages, personal ads, etc.).
+// everything linked to it via deleteUsersAndAllData.
 
 async function deleteDormantMembershipAccounts(): Promise<number> {
   banner("Part 4: Delete dormant paid-membership accounts");
@@ -270,9 +309,8 @@ async function deleteDormantMembershipAccounts(): Promise<number> {
   const cutoff = new Date(Date.now() - DORMANT_ACCOUNT_DAYS * 24 * 60 * 60 * 1000);
   indent(`Criteria : non-free-trial membershipTier IS NOT NULL  AND  last call ≤ ${cutoff.toISOString().slice(0, 10)} (or never called)`);
 
-  // Use a raw SQL aggregate to find the last call per phone number efficiently.
-  // We LEFT JOIN so users who have never called also appear (last_call_at = null).
-  const rows = await db.execute<{
+  // LEFT JOIN so users who have never called also appear (last_call_at = null).
+  const rows2 = await db.execute<{
     id: string;
     phone_number: string;
     membership_tier: string;
@@ -296,7 +334,8 @@ async function deleteDormantMembershipAccounts(): Promise<number> {
       OR MAX(cl.started_at) IS NULL
   `);
 
-  const dormant = rows.rows ?? (rows as any);
+  const dormant: { id: string; phone_number: string; membership_tier: string; remaining_seconds: number | null; last_call_at: Date | null }[] =
+    (rows2 as any).rows ?? rows2;
 
   if (!dormant.length) {
     indent("Found 0 dormant accounts — nothing to do.");
@@ -305,23 +344,16 @@ async function deleteDormantMembershipAccounts(): Promise<number> {
 
   indent(`Found ${dormant.length} dormant account(s):`);
   for (const u of dormant) {
-    const lastCall = u.last_call_at
-      ? new Date(u.last_call_at).toISOString().slice(0, 10)
-      : "never";
+    const lastCall = u.last_call_at ? new Date(u.last_call_at).toISOString().slice(0, 10) : "never";
     indent(`  • ${u.phone_number}  tier=${u.membership_tier}  remaining=${u.remaining_seconds ?? 0}s  last_call=${lastCall}`);
   }
 
-  if (DRY_RUN) {
-    indent("[DRY RUN] No changes written.");
-    return dormant.length;
-  }
+  if (DRY_RUN) { indent("[DRY RUN] No changes written."); return dormant.length; }
 
-  const targets: UserStub[] = dormant.map((u: any) => ({
-    id: u.id,
-    phoneNumber: u.phone_number,
-  }));
+  await deleteUsersAndAllData(
+    dormant.map(u => ({ id: u.id, phoneNumber: u.phone_number })),
+  );
 
-  await deleteUsersAndAllData(targets);
   indent(`✓ Deleted ${dormant.length} dormant paid-membership account(s) and all linked data.`);
   return dormant.length;
 }
