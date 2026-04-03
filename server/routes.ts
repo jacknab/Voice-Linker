@@ -256,18 +256,36 @@ const MAILBOX_CATEGORIES: Record<string, string> = {
   quick_hot_talk: "Quick and Hot Talk",
   bicurious: "Bicurious",
   kink: "Kink",
-  total_top_strictly_bottoms: "Total Top and Strictly Bottoms",
+  total_tops: "Total Tops",
+  strictly_bottoms: "Strictly Bottoms",
   trans: "Trans",
+  cock_suckers: "Cock Suckers",
+  hung_cocks: "Hung Cocks",
+  uncut_cocks: "Uncut Cocks",
+  twinks: "Twinks",
+  bears: "Bears",
+  daddys: "Daddys",
 };
 
-// Digit → category slug
-const DIGIT_TO_CATEGORY: Record<string, string> = {
+// Digit → category slug (page 1 and page 2)
+const DIGIT_TO_CATEGORY_PAGE1: Record<string, string> = {
   "1": "quick_hot_talk",
   "2": "bicurious",
   "3": "kink",
-  "4": "total_top_strictly_bottoms",
-  "5": "trans",
+  "4": "total_tops",
+  "5": "strictly_bottoms",
+  "6": "trans",
 };
+const DIGIT_TO_CATEGORY_PAGE2: Record<string, string> = {
+  "1": "cock_suckers",
+  "2": "hung_cocks",
+  "3": "uncut_cocks",
+  "4": "twinks",
+  "5": "bears",
+  "6": "daddys",
+};
+// Legacy alias so any existing code referencing DIGIT_TO_CATEGORY keeps working
+const DIGIT_TO_CATEGORY: Record<string, string> = { ...DIGIT_TO_CATEGORY_PAGE1 };
 
 // ─── Live 1-on-1 Connect State ─────────────────────────────────────────────
 // Invite stored by targetUserId so the invitee can find it when they next browse
@@ -3097,22 +3115,43 @@ export async function registerRoutes(
 
   // ─── 4a4. Ad Category Menu (shared for listen & record modes) ────────────
   // mode query param: "listen" | "record"
+  // page query param: "1" | "2"  (defaults to "1")
   app.post("/voice/ad-category-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const mode = (req.query.mode as string) || "listen";
-    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-ad-category?mode=${mode}` });
-    playPrompt(gather, req, "ad_category_menu.mp3",
-      "Please select the category. " +
-      "For Quick and Hot Talk press one. " +
-      "For Bicurious press two. " +
-      "For Kink press three. " +
-      "For Total Top and Strictly Bottoms press four. " +
-      "For Trans press five. " +
-      "To look up a specific mailbox press six. " +
-      "For definitions of these categories press eight. " +
-      "To return to the mailbox menu press pound."
-    );
-    twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+    const page = (req.query.page as string) || "1";
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-ad-category?mode=${mode}&page=${page}` });
+
+    if (page === "2") {
+      playPrompt(gather, req, "ad_category_menu_p2.mp3",
+        "More categories. " +
+        "For Cock Suckers press one. " +
+        "For Hung Cocks press two. " +
+        "For Uncut Cocks press three. " +
+        "For Twinks press four. " +
+        "For Bears press five. " +
+        "For Daddys press six. " +
+        "To look up a specific mailbox press seven. " +
+        "For definitions press nine. " +
+        "To go back to the previous categories press pound."
+      );
+    } else {
+      playPrompt(gather, req, "ad_category_menu.mp3",
+        "Please select a category. " +
+        "For Quick and Hot Talk press one. " +
+        "For Bicurious press two. " +
+        "For Kink press three. " +
+        "For Total Tops press four. " +
+        "For Strictly Bottoms press five. " +
+        "For Trans press six. " +
+        "To look up a specific mailbox press seven. " +
+        "For more categories press eight. " +
+        "For definitions press nine. " +
+        "To return to the mailbox menu press pound."
+      );
+    }
+
+    twiml.redirect(`/voice/ad-category-menu?mode=${mode}&page=${page}`);
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -3121,7 +3160,10 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
     const mode = (req.query.mode as string) || "listen";
-    const category = DIGIT_TO_CATEGORY[digit];
+    const page = (req.query.page as string) || "1";
+
+    const categoryMap = page === "2" ? DIGIT_TO_CATEGORY_PAGE2 : DIGIT_TO_CATEGORY_PAGE1;
+    const category = categoryMap[digit];
 
     if (category) {
       if (mode === "record") {
@@ -3129,15 +3171,22 @@ export async function registerRoutes(
       } else {
         twiml.redirect(`/voice/browse-category-ads?category=${category}`);
       }
-    } else if (digit === "6") {
+    } else if (digit === "7") {
       twiml.redirect(`/voice/mailbox-lookup?mode=${mode}`);
-    } else if (digit === "8") {
+    } else if (digit === "8" && page === "1") {
+      // Page 2 of categories
+      twiml.redirect(`/voice/ad-category-menu?mode=${mode}&page=2`);
+    } else if (digit === "9") {
       twiml.redirect(`/voice/ad-category-definitions?mode=${mode}`);
     } else if (digit === "#") {
-      twiml.redirect("/voice/mailbox-menu");
+      if (page === "2") {
+        twiml.redirect(`/voice/ad-category-menu?mode=${mode}&page=1`);
+      } else {
+        twiml.redirect("/voice/mailbox-menu");
+      }
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
-      twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
+      twiml.redirect(`/voice/ad-category-menu?mode=${mode}&page=${page}`);
     }
 
     res.type("text/xml");
@@ -3356,8 +3405,15 @@ export async function registerRoutes(
       "Quick and Hot Talk: guys looking for fast, explicit, no-strings chat. " +
       "Bicurious: men exploring attraction to other men for the first time or occasionally. " +
       "Kink: callers into fetishes, role play, or specific kinks. " +
-      "Total Top and Strictly Bottoms: guys who define themselves by a specific role. " +
+      "Total Tops: guys who are exclusively tops and looking for a bottom. " +
+      "Strictly Bottoms: guys who are exclusively bottoms and looking for a top. " +
       "Trans: trans men and women connecting with other callers. " +
+      "Cock Suckers: guys who love giving oral and want to connect with like-minded men. " +
+      "Hung Cocks: well-endowed guys and the men who want them. " +
+      "Uncut Cocks: uncircumcised guys and the men who seek them out. " +
+      "Twinks: younger slender guys and the men who are into them. " +
+      "Bears: bigger, hairier guys and those who are into the bear scene. " +
+      "Daddys: older, mature men and younger guys looking for that connection. " +
       "Returning to the category menu."
     );
     twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);

@@ -1414,8 +1414,17 @@ const MAILBOX_CATEGORY_LABELS: Record<string, string> = {
   quick_hot_talk: "Quick Hot Talk",
   bicurious: "Bi-Curious",
   kink: "Kink",
-  total_top_strictly_bottoms: "Total Tops / Strict Bottoms",
+  total_tops: "Total Tops",
+  strictly_bottoms: "Strictly Bottoms",
   trans: "Trans",
+  cock_suckers: "Cock Suckers",
+  hung_cocks: "Hung Cocks",
+  uncut_cocks: "Uncut Cocks",
+  twinks: "Twinks",
+  bears: "Bears",
+  daddys: "Daddys",
+  // legacy slug still in DB
+  total_top_strictly_bottoms: "Total Tops / Strict Bottoms",
 };
 
 interface MailboxStats {
