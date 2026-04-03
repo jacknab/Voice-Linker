@@ -811,6 +811,17 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: List caller-recorded profiles with their transcriptions ---
+  app.get("/api/admin/transcriptions", async (_req, res) => {
+    try {
+      const data = await storage.getAllProfilesWithTranscriptions();
+      res.json(data);
+    } catch (e) {
+      console.error("[admin] Failed to list transcriptions:", e);
+      res.status(500).json({ message: "Failed to fetch transcriptions" });
+    }
+  });
+
   // --- Admin: All messages inbox ---
   app.get("/api/admin/messages", async (_req, res) => {
     try {
@@ -2451,7 +2462,7 @@ export async function registerRoutes(
     pendingNameRecordings.set(callSid, nameRecordingUrl);
 
     playPrompt(twiml, req, "name_saved_record_greeting.mp3", "Great. Now record your greeting for other callers. After the tone, record at least 8 seconds. Press pound when you are finished.");
-    twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-profile" });
+    twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-profile", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -2475,7 +2486,7 @@ export async function registerRoutes(
       // Reject greetings shorter than 3 seconds — play error audio and re-prompt
       if (recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That greeting was too short. Please try again after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" });
+        twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -2492,6 +2503,9 @@ export async function registerRoutes(
         recordingUrl,
         recordingDuration,
       });
+      // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
+      const saved = await storage.getProfile(user.id);
+      if (saved) await storage.setProfileTranscriptionPending(saved.id);
       console.log(`[voice] Profile saved immediately for userId=${user.id} (dur=${recordingDuration}s)`);
 
       twiml.redirect("/voice/review-greeting");
@@ -2951,7 +2965,7 @@ export async function registerRoutes(
         twiml.redirect("/voice/my-mailbox");
       } else {
         twiml.say("Record your mailbox greeting after the tone. Press pound when finished.");
-        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting" });
+        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
       }
     } catch (err) {
       console.error("[voice] /voice/record-mailbox-greeting error:", err);
@@ -2974,7 +2988,7 @@ export async function registerRoutes(
 
       if (digit === "1") {
         twiml.say("Record your mailbox greeting after the tone. Press pound when finished.");
-        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting" });
+        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
       } else if (digit === "2") {
         if (mailbox?.adRecordingUrl) {
           safePlayRecording(twiml, mailbox.adRecordingUrl, req, "Your greeting is not available for playback.");
@@ -3006,7 +3020,7 @@ export async function registerRoutes(
 
       if (!recordingUrl || recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone.");
-        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting" });
+        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -3016,6 +3030,8 @@ export async function registerRoutes(
       // Keep the existing category if set, otherwise use a default
       const category = mailbox?.category || "quick_hot_talk";
       await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
+      // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
+      await storage.updateMailboxTranscription(recordingUrl, null, "pending");
 
       twiml.say("Your mailbox greeting has been saved. Callers who enter your mailbox number will now hear this greeting.");
       twiml.redirect("/voice/my-mailbox");
@@ -3446,7 +3462,7 @@ export async function registerRoutes(
         playPrompt(twiml, req, "mailbox_ad_record.mp3",
           `Record your ${categoryLabel} mailbox ad after the tone. Tell guys about yourself. Press pound when finished.`
         );
-        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}` });
+        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
       }
     } catch (err) {
       console.error("[voice] /voice/record-category-ad error:", err);
@@ -3469,7 +3485,7 @@ export async function registerRoutes(
         playPrompt(twiml, req, "mailbox_ad_record.mp3",
           "Record your mailbox ad after the tone. Press pound when finished."
         );
-        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}` });
+        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
       } else if (digit === "2") {
         const user = await getOrCreateUser(fromNumber);
         const mailbox = await storage.getMailboxByUserId(user.id);
@@ -3507,13 +3523,15 @@ export async function registerRoutes(
 
       if (!recordingUrl || recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}` });
+        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
       const user = await getOrCreateUser(fromNumber);
       await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
+      // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
+      await storage.updateMailboxTranscription(recordingUrl, null, "pending");
 
       playPrompt(twiml, req, "mailbox_ad_saved.mp3",
         `Your ${categoryLabel} mailbox ad has been saved. Other guys can now find your ad.`
@@ -3527,6 +3545,31 @@ export async function registerRoutes(
 
     res.type("text/xml");
     res.send(twiml.toString());
+  });
+
+  // ─── Twilio Transcription Callback ───────────────────────────────────────
+  // Twilio posts here asynchronously after transcribing a <Record> recording.
+  app.post("/voice/transcription-callback", async (req, res) => {
+    const status = (req.body?.TranscriptionStatus as string) || "";
+    const text = (req.body?.TranscriptionText as string) || null;
+    const recordingUrl = (req.body?.RecordingUrl as string) || "";
+
+    console.log(`[transcription] callback: status=${status} recordingUrl=${recordingUrl}`);
+
+    if (!recordingUrl) {
+      return res.sendStatus(200);
+    }
+
+    try {
+      // Try to match to a profile first, then a mailbox
+      await storage.updateProfileTranscription(recordingUrl, status === "completed" ? text : null, status === "completed" ? "completed" : "failed");
+      await storage.updateMailboxTranscription(recordingUrl, status === "completed" ? text : null, status === "completed" ? "completed" : "failed");
+      console.log(`[transcription] stored for recordingUrl=${recordingUrl} status=${status}`);
+    } catch (err) {
+      console.error("[transcription] callback error:", err);
+    }
+
+    res.sendStatus(200);
   });
 
   // ─── 4a3. Manage Membership ───────────────────────────────────────────────

@@ -24,6 +24,8 @@ interface ProfileWithUser {
   recordingDuration: number | null;
   siteCategory: string | null;
   gender: string | null;
+  transcription: string | null;
+  transcriptionStatus: string | null;
   createdAt: string;
   phoneNumber: string;
 }
@@ -45,7 +47,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log";
+type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log";
 
 interface FlaggedItem {
   id: string;
@@ -4990,12 +4992,105 @@ function ModerationLogTab() {
   );
 }
 
+// ── TranscriptionsTab ─────────────────────────────────────────────────────────
+function TranscriptionsTab() {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const { data: profiles, isLoading } = useQuery<ProfileWithUser[]>({
+    queryKey: ["/api/admin/transcriptions"],
+  });
+
+  const statusBadge = (status: string | null) => {
+    if (!status) return <span className="text-gray-400 font-mono text-xs">No transcript</span>;
+    if (status === "pending") return <span className="inline-flex items-center gap-1 text-amber-600 font-mono text-xs"><Loader2 size={10} className="animate-spin" /> Pending</span>;
+    if (status === "completed") return <span className="inline-flex items-center gap-1 text-emerald-600 font-mono text-xs"><CheckCircle size={10} /> Done</span>;
+    return <span className="inline-flex items-center gap-1 text-red-500 font-mono text-xs"><AlertCircle size={10} /> Failed</span>;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className={`${C.heading} text-base`}>Greeting Transcriptions</h2>
+          <p className={`${C.subtext} mt-1`}>Auto-generated transcripts of caller-recorded greetings. New recordings are transcribed automatically.</p>
+        </div>
+      </div>
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className={C.th}>Phone</th>
+              <th className={C.th}>System</th>
+              <th className={C.th}>Duration</th>
+              <th className={C.th}>Audio</th>
+              <th className={C.th}>Status</th>
+              <th className={C.th}>Transcript</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING...</td></tr>
+            ) : !profiles || profiles.length === 0 ? (
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">NO CALLER RECORDINGS FOUND</td></tr>
+            ) : (
+              profiles.map(p => {
+                const isOpen = expanded[p.id];
+                return (
+                  <tr key={p.id} data-testid={`row-transcript-${p.id}`} className={C.row}>
+                    <td className={C.td}>
+                      <span data-testid={`text-phone-transcript-${p.id}`} className="font-mono text-sm text-gray-800">{p.phoneNumber}</span>
+                    </td>
+                    <td className={C.td}>
+                      <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${p.siteCategory === "MW" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+                        {p.siteCategory ?? "MM"}
+                      </span>
+                    </td>
+                    <td className={C.td}>
+                      <span className="text-gray-500 font-mono text-xs">{p.recordingDuration != null ? `${p.recordingDuration}s` : "—"}</span>
+                    </td>
+                    <td className={C.td}><AudioPlayer src={p.recordingUrl} /></td>
+                    <td className={C.td}>{statusBadge(p.transcriptionStatus)}</td>
+                    <td className={C.td}>
+                      {p.transcription ? (
+                        <div className="max-w-sm">
+                          <button
+                            data-testid={`btn-expand-transcript-${p.id}`}
+                            onClick={() => setExpanded(prev => ({ ...prev, [p.id]: !isOpen }))}
+                            className="flex items-center gap-1 text-xs font-mono text-amber-700 hover:text-amber-900 transition-colors"
+                          >
+                            {isOpen ? <EyeOff size={11} /> : <Eye size={11} />}
+                            {isOpen ? "Hide" : "View"}
+                          </button>
+                          {isOpen && (
+                            <p data-testid={`text-transcript-${p.id}`} className="mt-2 text-xs text-gray-700 font-mono leading-relaxed whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded p-2">
+                              {p.transcription}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 font-mono text-xs">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+      {profiles && profiles.length > 0 && (
+        <div className="text-gray-400 font-mono text-xs">{profiles.length} caller recording{profiles.length !== 1 ? "s" : ""} · {profiles.filter(p => p.transcriptionStatus === "completed").length} transcribed</div>
+      )}
+    </div>
+  );
+}
+
 const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boolean }[] = [
   // ── Main
   { id: "dashboard",      label: "Dashboard",        icon: <LayoutDashboard size={15} /> },
   { id: "callers",        label: "Callers",           icon: <Users size={15} /> },
   { id: "flagged",        label: "Flagged Content",   icon: <Flag size={15} /> },
   { id: "voice-profiles", label: "Voice Profiles",    icon: <Phone size={15} /> },
+  { id: "transcriptions", label: "Transcriptions",    icon: <MessageSquare size={15} /> },
   { id: "messages",       label: "Messages",          icon: <MessageSquare size={15} /> },
   { id: "memberships",    label: "$$ Memberships",    icon: <CreditCard size={15} /> },
   { id: "cards",          label: "Member Cards",      icon: <CreditCard size={15} /> },
@@ -5204,8 +5299,9 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "dashboard"      && <DashboardTab />}
           {activeTab === "callers"        && <CallersTab />}
           {activeTab === "flagged"        && <FlaggedContentTab />}
-          {activeTab === "voice-profiles" && <VoiceProfilesTab key={String(showUpload)} />}
-          {activeTab === "regions"        && <RegionsTab />}
+          {activeTab === "voice-profiles"  && <VoiceProfilesTab key={String(showUpload)} />}
+          {activeTab === "transcriptions"  && <TranscriptionsTab />}
+          {activeTab === "regions"         && <RegionsTab />}
           {activeTab === "memberships"    && <MembershipsTab />}
           {activeTab === "cards"          && <MembershipCardsTab />}
           {activeTab === "audio-gen"      && <TTSTab />}

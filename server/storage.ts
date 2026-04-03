@@ -7,6 +7,8 @@ const VIRTUAL_PREFIX = "VIRTUAL-";
 
 export interface ProfileWithUser extends Profile {
   phoneNumber: string;
+  transcription?: string | null;
+  transcriptionStatus?: string | null;
 }
 
 export interface CallerSummary {
@@ -168,6 +170,12 @@ export interface IStorage {
   getOrCreateMailbox(userId: string): Promise<Mailbox>;
   getMailboxesByCategory(category: string, excludeUserId: string): Promise<Mailbox[]>;
   updateMailboxAd(userId: string, category: string, adRecordingUrl: string, adRecordingDuration: number): Promise<Mailbox>;
+
+  // Transcription
+  updateProfileTranscription(recordingUrl: string, text: string | null, status: string): Promise<void>;
+  updateMailboxTranscription(adRecordingUrl: string, text: string | null, status: string): Promise<void>;
+  setProfileTranscriptionPending(profileId: string): Promise<void>;
+  getAllProfilesWithTranscriptions(): Promise<ProfileWithUser[]>;
 
   // Flagged content queue
   getAllFlaggedItems(status?: string): Promise<FlaggedItemWithDetails[]>;
@@ -1209,6 +1217,47 @@ export class DatabaseStorage implements IStorage {
       .returning();
     console.log(`[mailbox] Updated ad for mailbox ${mailbox.mailboxNumber} — category=${category}`);
     return updated;
+  }
+
+  async updateProfileTranscription(recordingUrl: string, text: string | null, status: string): Promise<void> {
+    await db.update(profiles)
+      .set({ transcription: text, transcriptionStatus: status })
+      .where(eq(profiles.recordingUrl, recordingUrl));
+  }
+
+  async updateMailboxTranscription(adRecordingUrl: string, text: string | null, status: string): Promise<void> {
+    await db.update(mailboxes)
+      .set({ adTranscription: text, adTranscriptionStatus: status })
+      .where(eq(mailboxes.adRecordingUrl, adRecordingUrl));
+  }
+
+  async setProfileTranscriptionPending(profileId: string): Promise<void> {
+    await db.update(profiles)
+      .set({ transcriptionStatus: "pending" })
+      .where(eq(profiles.id, profileId));
+  }
+
+  async getAllProfilesWithTranscriptions(): Promise<ProfileWithUser[]> {
+    const rows = await db
+      .select({
+        id: profiles.id,
+        userId: profiles.userId,
+        nameRecordingUrl: profiles.nameRecordingUrl,
+        recordingUrl: profiles.recordingUrl,
+        recordingDuration: profiles.recordingDuration,
+        isAdminUploaded: profiles.isAdminUploaded,
+        siteCategory: profiles.siteCategory,
+        gender: profiles.gender,
+        transcription: profiles.transcription,
+        transcriptionStatus: profiles.transcriptionStatus,
+        createdAt: profiles.createdAt,
+        phoneNumber: users.phoneNumber,
+      })
+      .from(profiles)
+      .innerJoin(users, eq(profiles.userId, users.id))
+      .where(eq(profiles.isAdminUploaded, false))
+      .orderBy(profiles.createdAt);
+    return rows as ProfileWithUser[];
   }
 
   async getAllFlaggedItems(status?: string): Promise<FlaggedItemWithDetails[]> {

@@ -56,6 +56,8 @@ export const profiles = pgTable("profiles", {
   isAdminUploaded: boolean("is_admin_uploaded").default(false),
   siteCategory: text("site_category"),  // 'MM' | 'MW' — stamped at upload time; null = legacy (treated as MM)
   gender: text("gender"),               // 'male' | 'female' — MW admin-uploaded profiles only
+  transcription: text("transcription"), // auto-generated transcript of the greeting audio
+  transcriptionStatus: text("transcription_status"), // null | 'pending' | 'completed' | 'failed'
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -312,6 +314,8 @@ export const mailboxes = pgTable("mailboxes", {
   category: text("category"),
   adRecordingUrl: text("ad_recording_url"),
   adRecordingDuration: integer("ad_recording_duration"),
+  adTranscription: text("ad_transcription"), // auto-generated transcript of the mailbox ad audio
+  adTranscriptionStatus: text("ad_transcription_status"), // null | 'pending' | 'completed' | 'failed'
   createdAt: timestamp("created_at").defaultNow(),
 });
 
