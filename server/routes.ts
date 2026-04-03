@@ -5052,8 +5052,21 @@ export async function registerRoutes(
       return res.send(twiml.toString());
     }
 
+    // Pre-flight: ensure Stripe is configured before launching <Pay>.
+    // Without STRIPE_SECRET_KEY the connector cannot process the charge.
+    if (!process.env.STRIPE_SECRET_KEY) {
+      console.error("[voice] run-payment: STRIPE_SECRET_KEY is not set — cannot process payment");
+      playPrompt(twiml, req, "payment_failed.mp3",
+        "Our payment system is not currently configured. Please contact customer support to complete your purchase.");
+      twiml.redirect("/voice/main-menu");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
     const connectorName = process.env.TWILIO_PAY_CONNECTOR || "stripe";
     const chargeAmount = (session.packagePriceCents / 100).toFixed(2);
+
+    console.log(`[voice] run-payment: launching <Pay> connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
 
     twiml.pay({
       action: `${baseUrl(req)}/voice/handle-payment-complete`,
@@ -5079,6 +5092,10 @@ export async function registerRoutes(
     const result = (req.body?.Result as string) || "";
     const fromNumber = req.body?.From as string;
     const errorCode = req.body?.ErrorCode as string;
+    const paymentError = req.body?.PaymentError as string | undefined;
+
+    // Log all Twilio Pay response fields to aid debugging
+    console.log(`[voice] handle-payment-complete: callSid=${callSid} Result=${result} ErrorCode=${errorCode ?? "—"} PaymentError=${paymentError ?? "—"} From=${fromNumber}`);
 
     const session = paymentSessions.get(callSid);
     paymentSessions.delete(callSid);
@@ -5156,11 +5173,17 @@ export async function registerRoutes(
         playPrompt(twiml, req, "payment_activation_error.mp3", "Your payment was received but there was an error activating your membership. Please contact support.");
       }
     } else {
-      console.warn(`[voice] payment failed — CallSid=${callSid} ErrorCode=${errorCode}`);
-      // Error code 22001 = card declined; 22002 = processing failure
-      if (errorCode === "22001") {
+      console.warn(`[voice] payment not successful — CallSid=${callSid} Result=${result} ErrorCode=${errorCode ?? "—"} PaymentError=${paymentError ?? "—"}`);
+      if (result === "failed" || result === "call-interrupted") {
+        // "failed" = Pay connector misconfigured or Twilio couldn't reach the connector
+        // "call-interrupted" = caller hung up during card entry
+        playPrompt(twiml, req, "payment_failed.mp3",
+          "We were unable to process your payment at this time. Please contact customer support.");
+      } else if (errorCode === "22001") {
+        // Card explicitly declined by the payment processor
         playPrompt(twiml, req, "payment_declined.mp3", "Your card was declined. Please check your details and try again later.");
       } else {
+        // Generic processing error (errorCode 22002 etc.)
         playPrompt(twiml, req, "payment_failed.mp3", "Your payment could not be completed at this time. Please try again later.");
       }
     }

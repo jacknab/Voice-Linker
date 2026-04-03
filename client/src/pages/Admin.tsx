@@ -1207,6 +1207,45 @@ function MembershipsTab() {
         </div>
       </div>
 
+      {/* ── Stripe Webhook Setup ─────────────────────────────────────────────── */}
+      <div className={C.card}>
+        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase mb-1">Stripe Webhook Setup</h3>
+        <p className="text-gray-400 font-mono text-xs mb-4">
+          Paste this URL into your Stripe Dashboard under <strong className="text-gray-500">Developers → Webhooks → Add endpoint</strong>.
+          After creating the endpoint, copy the generated Signing Secret and save it as{" "}
+          <code className="bg-gray-100 px-1 rounded text-gray-600">STRIPE_WEBHOOK_SECRET</code> in your environment secrets.
+        </p>
+        <div>
+          <label className={C.label}>Stripe Webhook URL</label>
+          <div className="flex items-center gap-2">
+            <code
+              data-testid="text-stripe-webhook-url"
+              className="flex-1 font-mono text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-gray-700 break-all select-all"
+            >
+              {typeof window !== "undefined" ? window.location.origin : ""}/api/stripe/webhook
+            </code>
+            <button
+              type="button"
+              data-testid="btn-copy-stripe-webhook"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/api/stripe/webhook`);
+                toast({ title: "Webhook URL copied to clipboard" });
+              }}
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors font-mono text-xs"
+            >
+              <Copy size={13} />
+              Copy
+            </button>
+          </div>
+          <p className="mt-2 font-mono text-xs text-gray-400 leading-relaxed">
+            Recommended Stripe events to listen for:{" "}
+            <code className="bg-gray-100 px-1 rounded text-gray-600">payment_intent.succeeded</code>{" "}
+            and{" "}
+            <code className="bg-gray-100 px-1 rounded text-gray-600">payment_intent.payment_failed</code>.
+          </p>
+        </div>
+      </div>
+
       {/* ── Save ─────────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between pt-2 border-t border-gray-100">
         <p className="font-mono text-xs text-gray-400">
