@@ -1,28 +1,31 @@
-# Voice Protocol — Automated Telephone Switchboard System
+# Phone Booth — Adult Voice-Line IVR Chat Service
 
 ## Overview
 
-A Twilio-powered voice party line where callers can record profiles, browse other callers' voice profiles, exchange voice messages, and purchase memberships via phone keypad IVR.
+A Twilio-powered voice party line where callers can record profiles, browse other callers' voice profiles, exchange voice messages, and purchase memberships via phone keypad IVR or the web. The web layer supports account creation, phone number linking, and a full membership purchase flow (Stripe + PayPal).
 
 ## Architecture
 
-- **Frontend**: React + Vite + TailwindCSS + shadcn/ui (admin dashboard)
+- **Frontend**: React + Vite + TailwindCSS + shadcn/ui (admin dashboard, public membership page, web auth)
 - **Backend**: Express (TypeScript) + Drizzle ORM + PostgreSQL
 - **Voice**: Twilio TwiML IVR system
-- **Payments**: Stripe (credit card collection over IVR)
+- **Payments**: Stripe (web checkout + IVR card entry) + PayPal Standard (web checkout via IPN)
 
 ## Key Files
 
-- `server/routes.ts` — All TwiML voice routes and IVR logic
+- `server/routes.ts` — All TwiML voice routes, IVR logic, web API routes (auth, membership, Stripe, PayPal)
 - `server/storage.ts` — Database access layer
 - `server/simulator.ts` — Virtual caller simulator
 - `server/stripeClient.ts` — Stripe SDK client (uses `STRIPE_SECRET_KEY`)
-- `server/webhookHandlers.ts` — Stripe webhook handler
-- `shared/schema.ts` — Drizzle ORM schema (includes `callLogs` table for per-number stats)
+- `server/webhookHandlers.ts` — Stripe webhook handler (`checkout.session.completed`, `payment_intent.succeeded`)
+- `shared/schema.ts` — Drizzle ORM schema
 - `scripts/seed-membership.ts` — Seeds Bronze/Silver/Gold products in Stripe
-- `client/src/pages/Landing.tsx` — Public-facing customer marketing page ("TalkSpark" brand, `/` route)
+- `client/src/pages/Landing.tsx` — Public-facing customer marketing page (`/` route)
 - `client/src/pages/Home.tsx` — System status & Twilio setup page (`/setup` route)
 - `client/src/pages/Admin.tsx` — Full admin dashboard (`/admin` route)
+- `client/src/pages/Membership.tsx` — Public web membership purchase page (`/membership` route)
+- `client/src/pages/MembershipSuccess.tsx` — Post-purchase confirmation page (`/membership/success` route)
+- `client/src/pages/Dashboard.tsx` — Logged-in web user dashboard (link phone, view plan)
 
 ## Voice Menu Structure
 
@@ -58,14 +61,65 @@ The project uses a `.env` file for all credentials. `dotenv` is loaded at the ve
 | `ELEVENLABS_API_KEY` | ElevenLabs → Profile → API Key |
 | `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID (default: `21m00Tcm4TlvDq8ikWAM`) |
 | `STRIPE_SECRET_KEY` | Stripe Dashboard → Developers → API Keys |
-| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Webhooks |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Webhooks signing secret |
 
-## Stripe Integration
+## Stripe Integration (Web)
 
 - **NOTE**: The Replit native Stripe integration was dismissed by the user. Stripe is connected via the `STRIPE_SECRET_KEY` env var in `.env`.
-- Do NOT attempt to use the Replit Stripe connector (`ccfg_stripe_01K611P4YQR0SZM11XFRQJC44Y`) — use `STRIPE_SECRET_KEY` in `.env` instead.
-- Membership products (Bronze/Silver/Gold) are seeded via `npx tsx scripts/seed-membership.ts`
-- Stripe webhook endpoint: `POST /api/stripe/webhook` (registered before `express.json()`)
+- Do NOT attempt to use the Replit Stripe connector — use `STRIPE_SECRET_KEY` in `.env` instead.
+- Web checkout: `POST /api/stripe/create-web-checkout` — creates a Stripe Checkout Session and returns the hosted URL
+- Session verification: `GET /api/stripe/verify-checkout/:sessionId` — verifies session and applies plan credits to the linked phone user
+- Webhook endpoint: `POST /api/stripe/webhook` — listens for `checkout.session.completed` and `payment_intent.succeeded`
+- Stripe webhook URL to register: `https://<yourdomain>/api/stripe/webhook`
+- IVR membership products (Bronze/Silver/Gold) are seeded via `npx tsx scripts/seed-membership.ts`
+- In-memory idempotency guard: `processedCheckoutSessions` Set prevents double-crediting
+
+## PayPal Integration (Web)
+
+PayPal Standard is supported as an alternative payment method for web membership purchases. It is enabled by setting a PayPal business email in the Admin → Memberships tab.
+
+### How it works
+
+1. User clicks "Pay with PayPal" on `/membership`
+2. Frontend calls `POST /api/paypal/create-web-checkout` with `{ planKey }`
+3. Backend builds a PayPal Standard button URL (hosted payment page) encoding plan details in the `custom` field as base64: `webUserId|planKey|linkedPhone|planMinutes|planName`
+4. User is redirected to PayPal to complete payment
+5. PayPal sends an IPN POST to `POST /api/paypal/ipn`
+6. Server verifies the IPN with PayPal's IPN validation endpoint (`ipnpb.paypal.com` or `ipnpb.sandbox.paypal.com`)
+7. On `payment_status=Completed`, the custom field is decoded and credits are applied to the linked phone user via `storage.updateUserMembership`
+8. User lands on `/membership/success?method=paypal` which shows a "Payment Received" confirmation (PayPal activation is async via IPN, not instant like Stripe)
+
+### PayPal admin configuration
+
+In Admin → Memberships tab, there is a "PayPal Setup" card with:
+- **PayPal Business Email** — the email on the PayPal Business account (leave blank to disable PayPal on the purchase page)
+- **Sandbox Mode toggle** — when ON, directs payments to `www.sandbox.paypal.com` and verifies IPNs against `ipnpb.sandbox.paypal.com`
+- **IPN URL display** — copyable URL (`/api/paypal/ipn`) to configure in PayPal account settings
+
+### PayPal IPN setup (in PayPal account)
+
+1. Log in to PayPal Business account
+2. Go to Account Settings → Notifications → Instant payment notifications
+3. Enter the IPN URL: `https://<yourdomain>/api/paypal/ipn`
+4. Set IPN messages to "Enabled"
+
+### PayPal idempotency
+
+In-memory Set `processedIpnTxns` prevents duplicate IPN deliveries from double-crediting the same transaction. This resets on server restart; for production persistence, consider storing processed `txn_id` values in the database.
+
+## Web Membership Purchase Flow
+
+The web layer provides a full self-service membership purchase flow for web users:
+
+1. **Register / Log in** — web users authenticate at `/register` and `/login`; session stored in `req.session.webUserId`
+2. **Link phone number** — user links their phone at `/dashboard`; required before purchasing (credits go to the phone-based `users` record)
+3. **Choose plan** — `/membership` shows 3 dynamic plan cards (plan1/plan2/plan3 from `membershipSettings`)
+   - "Pay with Card" button → Stripe Checkout
+   - "Pay with PayPal" button → PayPal Standard (only shown when PayPal email is configured)
+   - Un-authenticated or un-linked users see contextual warning banners instead of active buy buttons
+4. **Post-purchase** — `/membership/success`
+   - `?method=stripe&session_id=xxx` → verifies Stripe session and shows "Membership Activated!" with plan details
+   - `?method=paypal` → shows "Payment Received!" with a note that activation follows via IPN (within minutes)
 
 ## Live 1-on-1 Connect Feature
 
@@ -176,13 +230,17 @@ Members can set a 4-digit PIN that allows them to call in from **any phone** by 
 
 ## Database Schema
 
-- `users` — phone number, stripeCustomerId, membershipTier, remainingMinutes, membershipPin (4-digit), `accountStatus` (active/restricted/banned)
+- `users` — phone number, stripeCustomerId, membershipTier, remainingSeconds, membershipPin (4-digit), `accountStatus` (active/restricted/banned), membershipStartedAt
+- `webUsers` — web account (email, passwordHash, linkedPhoneNumber, sessionId)
+- `membershipSettings` — dynamic plan config (plan1/plan2/plan3 names, minutes, prices), billingMode, Stripe keys, `paypalEmail`, `paypalSandbox`
 - `moderation_logs` — auto-moderation event log (event type, rule, reason, target user, content ref)
 - `profiles` — voice recording URLs (Twilio or local uploads)
 - `messages` — voice messages between users
 - `active_calls` — real-time tracking of callers on the line
 - `blocked_users` — blockerId + blockedUserId pairs for live connect access control; includes `created_at` for 24h window queries
 - `regions` — regional phone markets; includes `linkedRegionId` (nullable UUID) for cross-region overflow
+- `promoCodes` — promotional codes for discounts or free access
+- `callLogs` — per-call log records for reporting and stats
 
 ## Running
 
