@@ -7076,6 +7076,348 @@ From here, callers can:
   2 → Hear current pricing
   3 → Go directly to purchase a membership
 
+============================================================
+HOW THE PHONE SYSTEM WORKS — COMPLETE MEMBER GUIDE
+============================================================
+
+This section covers everything a member needs to know about how the phone system
+actually works — including traveling, calling from different phones, and what
+happens in every situation they might encounter.
+
+─────────────────────────────────────────────────────────
+YOUR MEMBERSHIP — WHAT IT IS AND HOW IT TRAVELS WITH YOU
+─────────────────────────────────────────────────────────
+
+Your membership is tied to your PHONE NUMBER, not to a specific phone or location.
+This means:
+
+  ✓ Your membership balance (remaining minutes) goes wherever you go.
+  ✓ You can call in from a different city and use your full balance.
+  ✓ You can call the system from any access number — local or national — and reach
+    the same system with the same account.
+  ✓ You can pause a call, hang up, and call back later — your balance is preserved
+    exactly where you left off.
+
+Your minutes do NOT expire on a fixed date. They expire only when used. The only
+exception is the free trial (which expires 7 days after first activation even if
+unused). Paid membership time has no expiration date.
+
+─────────────────────────────────────────────────────────
+ACCESS NUMBERS — LOCAL AND NATIONAL
+─────────────────────────────────────────────────────────
+
+The system has multiple phone numbers — one national number and potentially
+several local numbers for specific cities or regions.
+
+NATIONAL (TOLL-FREE) NUMBER
+  The national fallback number (e.g., 800-730-2508) works from anywhere in the
+  United States. Calling this number from a cell phone is always free (no long
+  distance). From a landline, it is also toll-free.
+
+LOCAL NUMBERS
+  Local access numbers are assigned to specific regions (cities or metro areas).
+  These look like a regular local phone number (e.g., with a 415 area code for
+  San Francisco). Calling a local number may incur long-distance charges on your
+  carrier's plan if you are calling from a different area code.
+  There is no functional difference between calling a local number or the national
+  number — you reach the same system, the same account, and the same phone booth.
+
+WHICH NUMBER SHOULD A MEMBER USE?
+  - If they are at home in the system's primary market: use their local number
+    (shown on the website based on their location).
+  - If they are traveling and don't want to worry about long distance: use the
+    national 800 number — it is always free to call from any US phone.
+  - If they are traveling and want to see local callers in the new city: call the
+    local number for that city if one exists, OR call any number and enter the
+    new city's zip code when the system asks.
+
+─────────────────────────────────────────────────────────
+USING YOUR MEMBERSHIP WHILE TRAVELING
+─────────────────────────────────────────────────────────
+
+SCENARIO: A member is visiting another city and wants to use the chatline.
+
+The system fully supports this. Here is exactly what happens:
+
+STEP 1 — DIALING IN
+  The member calls the national 800 number (or any access number) from their
+  cell phone. Their cell phone number is still recognized by the system — Caller
+  ID follows the phone, not the city. Their account is found immediately.
+
+STEP 2 — BALANCE
+  Their membership balance (remaining minutes) is exactly the same as when they
+  last called from home. Nothing changes when you travel.
+
+STEP 3 — LOCATION
+  If the member enters a new zip code while in the new city, the system will
+  update their location to the new city. This means:
+  - When others browse them, they will appear as being from the new city.
+  - They will see local callers from the new city when they browse.
+  This is fine and expected. When the member returns home, they can update their
+  zip code back to their home zip.
+  If they press # to skip the zip code step, their stored home location remains
+  unchanged and they will browse the full pool of callers without local filtering.
+
+STEP 4 — BROWSING
+  Everything works the same. The phone booth, live connect, mailbox, and messaging
+  all function identically regardless of physical location.
+
+WHAT TO TELL A MEMBER WHO ASKS ABOUT TRAVELING:
+  "Your membership travels with you. Just call the same number (or the national
+  800 number if you're worried about long distance) from your cell phone and
+  your account and balance will be right there. If you want to meet callers in the
+  city you're visiting, enter the local zip code when the system asks and it will
+  show you callers in that area."
+
+─────────────────────────────────────────────────────────
+CALLING FROM A DIFFERENT PHONE
+─────────────────────────────────────────────────────────
+
+The system identifies callers by their phone number. If a member calls from a
+phone number that is NOT their registered number, the system will not recognize them.
+
+WHAT HAPPENS:
+  - The system sees an unknown number.
+  - It treats it as a brand-new caller.
+  - It offers the free trial (if the new number has never called before).
+  - It does NOT automatically connect to the member's existing account.
+
+HOW TO ACCESS YOUR ACCOUNT FROM A DIFFERENT PHONE:
+  The member must have a MEMBERSHIP NUMBER and a PIN set up in advance.
+  1. Call the system from the different phone.
+  2. When the system offers the free trial (for unknown number), decline it or
+     the system will detect they are trying to use an existing account.
+     Actually: the system asks if they want the free trial. They should wait —
+     the system also gives the option to enter a membership number.
+  3. Enter their 10-digit membership number when prompted.
+  4. Enter their 4-digit PIN when prompted.
+  5. The system links this call to their existing account and their full balance
+     is available.
+
+IMPORTANT: If a member does NOT have a PIN set, they can ONLY call from their
+registered phone number. They cannot access their account from a hotel phone,
+a friend's phone, or any other device. This is by design for security.
+
+COMMON SITUATIONS:
+  - Hotel room phone: Member must have PIN. They call the 800 number (toll-free),
+    enter membership number + PIN. Works perfectly.
+  - Friend's cell phone: Same as above. Membership number + PIN required.
+  - Borrowed phone / temporary phone: Same. Membership number + PIN.
+  - New cell phone (same number, same carrier): No change needed. The phone number
+    is the same so the system recognizes them normally.
+  - New cell phone (new number, ported): Member needs to contact support to update
+    their registered number, OR use membership number + PIN.
+  - International roaming (using US cell abroad): The US cell number still comes
+    through Caller ID normally, so the system recognizes them. However, the caller
+    will pay international call rates to their carrier. The system itself does not
+    charge extra.
+
+─────────────────────────────────────────────────────────
+HOW TIME (MINUTES) IS ACTUALLY DEDUCTED
+─────────────────────────────────────────────────────────
+
+Understanding exactly when minutes are deducted prevents confusion about balances.
+
+TIME IS DEDUCTED:
+  ✓ While actively listening to caller profiles in the phone booth (browsing)
+  ✓ While in a live one-on-one connected call with another caller
+  ✓ While being connected to another caller (the "ringing" period)
+
+TIME IS NOT DEDUCTED:
+  ✗ While navigating the main menu
+  ✗ While in the membership management menu (press 8)
+  ✗ While in the mailbox or messaging menus
+  ✗ While purchasing a membership
+  ✗ While the system is playing welcome messages or instructions
+  ✗ While on hold waiting for the system to respond
+  ✗ When the call is disconnected (balance is preserved)
+
+BILLING METHOD:
+  The system uses one of two billing modes (set by the admin):
+  - Per-minute: minutes are deducted in real time as the member browses or connects.
+  - Per-day: a nightly deduction is made at the end of each day the member uses the system.
+  Most systems use per-minute billing. If a member asks why their balance went down,
+  it is because they were actively in the phone booth or a live connect.
+
+LOW BALANCE WARNINGS:
+  - When a member has less than 15 minutes remaining, the system announces this
+    once per call at the start of the phone booth session.
+  - When a member has less than 5 minutes remaining, a warning plays at the
+    main menu before they enter the phone booth.
+  - When balance reaches zero while in the phone booth, the session ends
+    automatically and the member is returned to the purchase menu.
+
+─────────────────────────────────────────────────────────
+WHAT HAPPENS WHEN A CALL DROPS OR GETS DISCONNECTED
+─────────────────────────────────────────────────────────
+
+Call drops happen for many reasons: poor signal, carrier issues, accidentally
+hanging up, running out of battery, etc.
+
+WHAT IS PRESERVED:
+  ✓ The member's remaining balance — exactly as it was when the call ended.
+  ✓ Their profile and greeting recording.
+  ✓ Their mailbox and any pending messages.
+  ✓ Their location (zip code).
+  ✓ Their block list.
+
+WHAT IS NOT PRESERVED:
+  ✗ Their position in the browsing queue — they start fresh from the beginning
+    of the phone booth next time they call.
+  ✗ Any pending live connect request — if they were waiting for someone to accept
+    a live connect, that invitation is cancelled when either party hangs up.
+  ✗ An active live connect call — if disconnected mid-conversation, the live
+    connect ends and both callers are returned to the phone booth.
+
+WHAT TO TELL A MEMBER WHO CALLS BACK AFTER A DROP:
+  "Your balance is preserved — any minutes you had remaining are still there.
+  Just call back in and you can pick up right where you left off browsing."
+
+─────────────────────────────────────────────────────────
+LIVE CONNECT — HOW IT WORKS IN FULL DETAIL
+─────────────────────────────────────────────────────────
+
+The live connect is the heart of the chatline. Here is the complete flow:
+
+INITIATING:
+  1. While browsing a profile in the phone booth, press 3.
+  2. The system checks that both callers have enough time (at least 5 minutes each).
+  3. A connect request is sent to the other caller. The other caller hears a chime.
+  4. The requesting caller hears a brief hold tone while waiting for acceptance.
+
+ACCEPTING / DECLINING:
+  - The receiving caller presses 1 to accept or 2 to decline.
+  - If declined: the requesting caller is told the caller is not available and
+    continues browsing where they left off.
+  - If no response within a timeout: the request is automatically cancelled.
+
+ONCE CONNECTED:
+  - Both callers are in a private, two-way voice call.
+  - No other callers can hear the conversation.
+  - Real phone numbers are never shared with either party.
+  - Time is deducted from BOTH callers' balances simultaneously.
+  - Either caller can press # at any time to end the live connect.
+  - After the live connect ends, both callers return to the phone booth.
+
+IF ONE CALLER RUNS OUT OF TIME:
+  - The call is ended for that caller immediately.
+  - The other caller is informed that the connection ended.
+  - They are returned to the phone booth to continue browsing.
+
+─────────────────────────────────────────────────────────
+VOICE MESSAGES — HOW THEY WORK
+─────────────────────────────────────────────────────────
+
+Members can send and receive private voice messages without being in a live connect.
+
+SENDING A MESSAGE:
+  1. While browsing a profile in the phone booth, press 1 to send a message.
+  2. Record your message after the beep (up to ~60 seconds).
+  3. Press # or wait for the recording to auto-stop.
+  4. The message is delivered to the recipient's mailbox immediately.
+  5. The recipient will be notified next time they enter the phone booth.
+
+RECEIVING MESSAGES:
+  - When a new unread message is waiting, the system announces it when entering
+    the phone booth: "You have X new message(s)."
+  - Press 1 to listen to messages before browsing, or press # to browse first.
+  - Messages can be listened to from the mailbox menu (press 1 from main menu).
+
+MESSAGE PRIVACY:
+  - Neither sender nor recipient ever hears the other's real phone number.
+  - The message is identified only by the sender's greeting voice and profile info.
+
+─────────────────────────────────────────────────────────
+CALLER ID — WHY IT MUST NOT BE BLOCKED
+─────────────────────────────────────────────────────────
+
+The system uses Caller ID (the phone number transmitted automatically when you call)
+to identify who is calling. This is the only way the system knows who you are.
+
+WHAT HAPPENS IF CALLER ID IS BLOCKED:
+  - "Private Number", "Unknown", "Restricted", or "No Caller ID" calls are
+    rejected immediately.
+  - The system plays a message explaining it cannot accept anonymous calls.
+  - The call ends. The member cannot use the system from a blocked-ID phone.
+
+HOW TO UN-BLOCK CALLER ID:
+  - On most cell phones: dial *82 before the access number to temporarily un-block
+    Caller ID for that one call. Example: *82 + 800-730-2508.
+  - On landlines: the same *82 prefix typically works.
+  - Permanently un-block: go to your phone's settings (or contact your carrier)
+    to disable the "Show as Unknown" setting.
+
+WHAT TO TELL A MEMBER WHOSE CALL IS REJECTED FOR PRIVATE NUMBER:
+  "The system needs to see your phone number to find your account. If your Caller
+  ID is blocked, try dialing *82 first, then the access number. For example:
+  *82 then 800-730-2508. This temporarily shows your number for just that call."
+
+─────────────────────────────────────────────────────────
+REGIONAL SYSTEM — HOW MULTIPLE ACCESS NUMBERS WORK
+─────────────────────────────────────────────────────────
+
+The system can be configured with multiple regional phone numbers pointing to the
+same platform. Each region can have:
+  - Its own local phone number (e.g., a New York number and a Los Angeles number)
+  - Its own active caller pool (callers who dialed the local number are grouped together)
+  - Its own capacity limits
+
+A "linked region" means two regional numbers share the same browsing pool. For example,
+if the New York and New Jersey numbers are linked, callers from both numbers browse
+each other in the same phone booth. This increases the pool of available callers
+and reduces wait times.
+
+FROM A MEMBER'S PERSPECTIVE:
+  - They dial their local number and are placed in that region's browsing pool.
+  - If the region has a linked partner region, they may also see callers from the
+    partner region in the phone booth.
+  - They can always use the national 800 number instead, which routes to the
+    default/primary region.
+
+WHAT TO TELL A MEMBER ABOUT REGIONS:
+  "The system has local numbers for different cities. You can call whichever
+  number is most convenient. If you're traveling, use the national toll-free
+  number and you'll connect to the system the same way."
+
+─────────────────────────────────────────────────────────
+COMMON SCENARIOS AND WHAT TO TELL MEMBERS
+─────────────────────────────────────────────────────────
+
+"I'm traveling to [city] — can I still use my account?"
+  → Yes. Call the national 800 number from your cell phone. Your balance is unchanged.
+    If you want to meet local guys in that city, enter the local zip code when asked.
+
+"I'm at a hotel and want to call from the room phone."
+  → You need your membership number and PIN. Call the 800 number (it's toll-free).
+    When the system starts, enter your membership number + PIN when prompted.
+    If you haven't set a PIN yet, you'll need to call from your own cell phone first,
+    set a PIN (press 8, then 2), then try again from the hotel phone.
+
+"My call keeps dropping — am I being charged for disconnected time?"
+  → No. When a call drops, billing stops immediately. Your balance is preserved.
+    Just call back — everything will be exactly where you left it.
+
+"I got a new phone / new phone number. What happens to my account?"
+  → If you have the same phone number (just a new device), nothing changes.
+    If you have a new phone number, your old account won't be automatically found.
+    Set up your membership number + PIN before switching so you can still access
+    your account. Contact support if you've already switched and need help.
+
+"I moved to a new city. Should I update my zip code?"
+  → Yes, if you want local callers in your new city to find you. Call in,
+    enter the phone booth, and enter your new zip code when asked. Your profile
+    will update to show your new location.
+
+"My balance went down but I barely used the system."
+  → Time is deducted any time you are actively in the phone booth (browsing profiles)
+    or in a live connect. Even just listening to profiles counts. If you were in the
+    phone booth for 10 minutes listening to greetings, that's 10 minutes deducted.
+
+"Can two people share one membership / phone number?"
+  → The membership is tied to one phone number. Two people using the same phone
+    and number would share the same account and balance. This is not recommended
+    as both people's activity would appear on the same account.
+
 WEB ACCOUNT (WEBSITE)
 ----------------------
 The website is at the ${siteName} domain. Creating a web account is optional — callers can use the full phone system without one.
