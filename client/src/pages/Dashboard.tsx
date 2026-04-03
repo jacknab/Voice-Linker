@@ -678,7 +678,7 @@ export default function Dashboard() {
           <div>
             {/* Phone linking or membership info */}
             {!me.linkedPhoneNumber ? (
-              siteData?.siteCategory === "MM" ? (
+              siteData?.siteCategory === "MW" ? (
                 <LinkPhoneMWModal
                   onSuccess={() => queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] })}
                 />
