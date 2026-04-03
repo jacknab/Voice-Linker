@@ -6610,6 +6610,161 @@ export async function registerRoutes(
     }
   });
 
+  // ─── /caller/:phoneNumber — Full caller record for chatbot lookups ──────────
+  // Accepts a 10-digit US phone number (with or without formatting / leading 1).
+  // Returns the same full CallerDetail payload the admin /callers panel shows,
+  // plus moderation logs, presented as a structured JSON document.
+  // No authentication required — intended for internal chatbot use only.
+  app.get("/caller/:phoneNumber", async (req, res) => {
+    // Normalize: strip everything except digits, then strip leading 1 if 11-digit
+    let digits = req.params.phoneNumber.replace(/\D/g, "");
+    if (digits.length === 11 && digits.startsWith("1")) digits = digits.slice(1);
+
+    if (digits.length !== 10) {
+      return res.status(400).json({
+        error: "Invalid phone number. Please supply a 10-digit US phone number.",
+        provided: req.params.phoneNumber,
+      });
+    }
+
+    try {
+      const user = await storage.getUserByPhone(digits);
+      if (!user) {
+        return res.status(404).json({
+          error: "No account found for this phone number.",
+          phoneNumber: digits,
+        });
+      }
+
+      const [detail, modLogs] = await Promise.all([
+        storage.getCallerDetailById(user.id),
+        storage.getModerationLogs({ targetUserId: user.id, limit: 50 }),
+      ]);
+
+      if (!detail) {
+        return res.status(404).json({ error: "Caller detail unavailable.", phoneNumber: digits });
+      }
+
+      // Format remaining time as a human-readable string
+      const remainingSeconds = detail.user.remainingSeconds ?? 0;
+      const remainingHours   = Math.floor(remainingSeconds / 3600);
+      const remainingMinutes = Math.floor((remainingSeconds % 3600) / 60);
+      const remainingFormatted = remainingHours > 0
+        ? `${remainingHours}h ${remainingMinutes}m`
+        : `${remainingMinutes}m`;
+
+      const payload = {
+        _meta: {
+          generatedAt: new Date().toISOString(),
+          description: "Full caller record — all fields visible in the admin Callers panel.",
+        },
+
+        account: {
+          userId:           detail.user.id,
+          phoneNumber:      detail.user.phoneNumber,
+          accountStatus:    detail.user.accountStatus ?? "active",
+          memberSince:      detail.user.createdAt,
+          membershipTier:   detail.user.membershipTier ?? null,
+          membershipNumber: detail.user.membershipNumber ?? null,
+          membershipPin:    detail.user.membershipPin ? "SET" : "NOT SET",
+          remainingSeconds: remainingSeconds,
+          remainingTime:    remainingFormatted,
+          stripeCustomerId: detail.user.stripeCustomerId ?? null,
+        },
+
+        profile: detail.profile
+          ? {
+              profileId:       detail.profile.id,
+              recordingUrl:    detail.profile.recordingUrl,
+              durationSeconds: detail.profile.recordingDuration ?? null,
+              createdAt:       detail.profile.createdAt,
+              transcription:   detail.profile.transcription ?? null,
+              transcriptionStatus: detail.profile.transcriptionStatus ?? null,
+            }
+          : null,
+
+        mailbox: detail.mailbox
+          ? {
+              mailboxId:     detail.mailbox.id,
+              mailboxNumber: detail.mailbox.mailboxNumber,
+              category:      detail.mailbox.category ?? null,
+              hasAdRecording: !!detail.mailbox.adRecordingUrl,
+              setupComplete:  detail.mailbox.setupComplete ?? null,
+              dateOfBirth:    detail.mailbox.dateOfBirth ?? null,
+              bodyType:       detail.mailbox.bodyType ?? null,
+              ethnicity:      detail.mailbox.ethnicity ?? null,
+              lastCheckedAt:  detail.mailbox.lastCheckedAt ?? null,
+              createdAt:      detail.mailbox.createdAt,
+            }
+          : null,
+
+        location: detail.zipCode
+          ? {
+              zipCode:      detail.zipCode.code,
+              city:         detail.zipCode.city ?? null,
+              state:        detail.zipCode.state ?? null,
+              neighborhood: detail.zipCode.neighborhood ?? null,
+            }
+          : null,
+
+        activity: {
+          totalCalls:       detail.callHistory.length,
+          messagesSent:     detail.sentMessages.length,
+          messagesReceived: detail.receivedMessages.length,
+          blocksMade:       detail.blockedByUser.length,
+          blockedByOthers:  detail.blockedByOthers.length,
+        },
+
+        callHistory: detail.callHistory.map(c => ({
+          callSid:         c.callSid,
+          durationSeconds: c.durationSeconds ?? null,
+          startedAt:       c.startedAt,
+          completedAt:     c.completedAt,
+          dialedNumber:    c.toPhoneNumber ?? null,
+        })),
+
+        sentMessages: detail.sentMessages.map(m => ({
+          messageId:  m.id,
+          toPhone:    m.toPhoneNumber,
+          createdAt:  m.createdAt,
+          isRead:     m.isRead ?? false,
+        })),
+
+        receivedMessages: detail.receivedMessages.map(m => ({
+          messageId:  m.id,
+          fromPhone:  m.fromPhoneNumber,
+          createdAt:  m.createdAt,
+          isRead:     m.isRead ?? false,
+        })),
+
+        blockedByUser: detail.blockedByUser.map(b => ({
+          userId:    b.id,
+          phone:     b.phoneNumber,
+          blockedAt: b.blockedAt,
+        })),
+
+        blockedByOthers: detail.blockedByOthers.map(b => ({
+          userId:    b.id,
+          phone:     b.phoneNumber,
+          blockedAt: b.blockedAt,
+        })),
+
+        moderationLog: modLogs.map(l => ({
+          eventType:       l.eventType,
+          reason:          l.reason,
+          triggeredByRule: l.triggeredByRule ?? null,
+          contentType:     l.contentType ?? null,
+          createdAt:       l.createdAt,
+        })),
+      };
+
+      res.json(payload);
+    } catch (err) {
+      console.error("[caller-lookup] error:", err);
+      res.status(500).json({ error: "Internal server error during caller lookup." });
+    }
+  });
+
   // ─── /everything — Plain-text knowledge base for chatbot training ─────────
   // Returns a comprehensive plain-text document describing every aspect of the
   // system. No authentication required (content is general knowledge only).
