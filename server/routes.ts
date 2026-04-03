@@ -1900,7 +1900,7 @@ export async function registerRoutes(
       timeout: 10,
     });
     playPrompt(gather, req, "gender_select.mp3",
-      "If you're a man press 1. If you're a woman press 2.");
+      "Guys, press one to talk to women. Women, press two to talk to guys.");
     // No input / timeout → loop back and ask again
     twiml.redirect("/voice/gender-select");
     res.type("text/xml");
