@@ -354,6 +354,7 @@ export const webUsers = pgTable("web_users", {
   linkedMembershipNumber: text("linked_membership_number"),
   linkAttempts: integer("link_attempts").notNull().default(0),
   isLocked: boolean("is_locked").notNull().default(false),
+  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

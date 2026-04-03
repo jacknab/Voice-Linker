@@ -23,6 +23,12 @@
  *   Removes everything: greeting, mailbox, messages, personal ads,
  *   call logs, blocks, promo redemptions, and unlinks web accounts.
  *
+ * Part 5 — Delete inactive web accounts:
+ *   Deletes any web (email/password) account that has not logged in for
+ *   61+ days. alt phone entries and membership link codes cascade
+ *   automatically via FK. New accounts that have never logged in and
+ *   are 61+ days old are also removed.
+ *
  * Usage:
  *   npx tsx scripts/cleanup.ts          → dry run (preview only, no DB writes)
  *   npx tsx scripts/cleanup.ts --run    → live run (commits changes)
@@ -358,6 +364,62 @@ async function deleteDormantMembershipAccounts(): Promise<number> {
   return dormant.length;
 }
 
+// ─── Part 5: Delete inactive web accounts ─────────────────────────────────────
+//
+// Web accounts that have not logged in for 61+ days are deleted.
+// New accounts that were created 61+ days ago but never logged in are
+// also removed. alt phone entries and membership link codes cascade
+// automatically via their FK onDelete: cascade constraints.
+
+async function deleteInactiveWebAccounts(): Promise<number> {
+  banner("Part 5: Delete inactive web accounts");
+
+  const cutoff = new Date(Date.now() - DORMANT_ACCOUNT_DAYS * 24 * 60 * 60 * 1000);
+  indent(`Criteria : lastLoginAt ≤ ${cutoff.toISOString().slice(0, 10)} (or never logged in and createdAt ≤ same cutoff)`);
+
+  const stale = await db
+    .select({
+      id: webUsers.id,
+      email: webUsers.email,
+      lastLoginAt: webUsers.lastLoginAt,
+      createdAt: webUsers.createdAt,
+      linkedPhoneNumber: webUsers.linkedPhoneNumber,
+    })
+    .from(webUsers)
+    .where(
+      or(
+        and(isNotNull(webUsers.lastLoginAt), lte(webUsers.lastLoginAt, cutoff)),
+        and(isNull(webUsers.lastLoginAt),    lte(webUsers.createdAt, cutoff)),
+      ),
+    );
+
+  if (stale.length === 0) {
+    indent("Found 0 inactive web accounts — nothing to do.");
+    return 0;
+  }
+
+  indent(`Found ${stale.length} inactive web account(s):`);
+  for (const u of stale) {
+    const lastSeen = u.lastLoginAt
+      ? `last login ${u.lastLoginAt.toISOString().slice(0, 10)}`
+      : `never logged in, created ${u.createdAt?.toISOString().slice(0, 10)}`;
+    const linked = u.linkedPhoneNumber ? `  linked=${u.linkedPhoneNumber}` : "";
+    indent(`  • ${u.email}  (${lastSeen})${linked}`);
+  }
+
+  if (DRY_RUN) { indent("[DRY RUN] No changes written."); return stale.length; }
+
+  const staleIds = stale.map(u => u.id);
+
+  // membershipLinkCodes and webUserAltPhones cascade automatically via FK.
+  // We delete the web_users rows; the DB handles the rest.
+  const deleted = rows(await db.delete(webUsers).where(inArray(webUsers.id, staleIds)));
+  indent(`  Deleted web_users (+ alt phones + link codes via cascade) : ${deleted}`);
+
+  indent(`✓ Deleted ${stale.length} inactive web account(s).`);
+  return stale.length;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -376,12 +438,14 @@ async function main() {
     const reset    = await resetExpiredMemberships();
     const purged   = await purgeInactiveMailboxes();
     const deleted4 = await deleteDormantMembershipAccounts();
+    const deleted5 = await deleteInactiveWebAccounts();
 
     banner("Summary");
     indent(`Stale free-trial accounts deleted : ${deleted1}${DRY_RUN ? " (dry run)" : ""}`);
     indent(`Expired memberships reset         : ${reset}${DRY_RUN ? " (dry run)" : ""}`);
     indent(`Inactive mailboxes purged         : ${purged}${DRY_RUN ? " (dry run)" : ""}`);
     indent(`Dormant paid accounts deleted     : ${deleted4}${DRY_RUN ? " (dry run)" : ""}`);
+    indent(`Inactive web accounts deleted     : ${deleted5}${DRY_RUN ? " (dry run)" : ""}`);
     console.log("\n  Done.\n");
   } catch (err) {
     console.error("\n❌ Cleanup failed:", err);

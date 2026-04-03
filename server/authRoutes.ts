@@ -73,6 +73,7 @@ router.post("/api/auth/register", async (req: Request, res: Response) => {
 
     req.session.webUserId = user.id;
     await saveSession(req);
+    await storage.touchWebUserLastLogin(user.id);
     return res.status(201).json({ id: user.id, email: user.email });
   } catch (err) {
     console.error("[auth] register error:", err);
@@ -109,6 +110,7 @@ router.post("/api/auth/login", async (req: Request, res: Response) => {
 
     req.session.webUserId = user.id;
     await saveSession(req);
+    await storage.touchWebUserLastLogin(user.id);
     return res.json({ id: user.id, email: user.email });
   } catch (err) {
     console.error("[auth] login error:", err);

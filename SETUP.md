@@ -588,4 +588,24 @@ The script is designed so that **no table is ever missed**. The deletion order i
 12. `web_users` — phone link fields cleared (account is kept)
 13. `users` — deleted last; `mailboxes` cascade automatically via `onDelete: cascade`
 
+---
+
+#### Part 5 — Delete inactive web accounts
+
+**Trigger:** `lastLoginAt ≤ 61 days ago` OR (`lastLoginAt IS NULL` AND `createdAt ≤ 61 days ago`)
+
+Web (email/password) accounts that have gone 61 days without a login are deleted. This mirrors the 61-day dormancy rule applied to phone-side accounts.
+
+`lastLoginAt` is stamped automatically on every successful login and on initial registration, so any member who visits the dashboard resets their clock.
+
+| Table | What happens |
+|---|---|
+| `web_users` | Row is deleted |
+| `web_user_alt_phones` | Cascade-deleted automatically via `onDelete: cascade` |
+| `membership_link_codes` | Cascade-deleted automatically via `onDelete: cascade` |
+
+The linked phone-side account (if any) is **not** affected — only the web account is removed. The phone account follows its own dormancy rule via Part 4.
+
+---
+
 > **Note:** `audit_logs` are intentionally preserved. They are an administrative audit trail with no FK constraints and should not be purged by automated cleanup.

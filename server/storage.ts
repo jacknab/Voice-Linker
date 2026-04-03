@@ -223,6 +223,7 @@ export interface IStorage {
   linkWebUserPhone(id: string, phoneNumber: string, membershipNumber?: string): Promise<void>;
   incrementWebUserLinkAttempts(id: string): Promise<number>;
   lockWebUser(id: string): Promise<void>;
+  touchWebUserLastLogin(id: string): Promise<void>;
   getCallHistoryByPhone(phoneNumber: string, limit?: number): Promise<{ id: string; callSid: string; durationSeconds: number; startedAt: Date | null; completedAt: Date | null; toPhoneNumber: string | null }[]>;
   // Alt phone numbers
   getAltPhonesForWebUser(webUserId: string): Promise<WebUserAltPhone[]>;
@@ -1600,6 +1601,10 @@ export class DatabaseStorage implements IStorage {
 
   async lockWebUser(id: string): Promise<void> {
     await db.update(webUsers).set({ isLocked: true }).where(eq(webUsers.id, id));
+  }
+
+  async touchWebUserLastLogin(id: string): Promise<void> {
+    await db.update(webUsers).set({ lastLoginAt: new Date() }).where(eq(webUsers.id, id));
   }
 
   async getAltPhonesForWebUser(webUserId: string): Promise<WebUserAltPhone[]> {
