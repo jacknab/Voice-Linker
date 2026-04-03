@@ -810,10 +810,23 @@ function TTSTab() {
   const { toast } = useToast();
   const [customText, setCustomText] = useState("");
   const [customFilename, setCustomFilename] = useState("");
-  const [editingText, setEditingText] = useState<Record<string, string>>({});
+  const [editingText, setEditingText] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem("admin_prompt_texts");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [generating, setGenerating] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [categoryFolder, setCategoryFolder] = useState<"shared" | "mm" | "mw">("shared");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("admin_prompt_texts", JSON.stringify(editingText));
+    } catch {}
+  }, [editingText]);
 
   const { data: settings } = useQuery<{ voiceId: string }>({ queryKey: ["/api/admin/tts/settings"] });
   const { data: existingFiles } = useQuery<{ filename: string; url: string; size: number; folder: string }[]>({ queryKey: ["/api/admin/tts/prompts"] });
