@@ -70,12 +70,31 @@ export function SiteNav({ siteName, onMenuToggle, mobileOpen }: {
       </div>
 
       {mobileOpen && (
-        <div style={{ background: "#111", borderTop: "1px solid #222", padding: "1rem 1.5rem 1.5rem" }}>
-          <Link href="/membership" style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
-            Buy Time
+        <div style={{ background: "#111", borderTop: "1px solid #222", padding: "0.5rem 1.5rem 1.25rem" }}>
+          <Link href="/register" onClick={onMenuToggle}
+            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
+            data-testid="mobile-nav-register">
+            Create Account
           </Link>
-          <Link href="/dashboard" style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
-            My Account
+          <Link href="/membership" onClick={onMenuToggle}
+            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
+            data-testid="mobile-nav-free-trial">
+            Free Trial
+          </Link>
+          <Link href="/membership" onClick={onMenuToggle}
+            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
+            data-testid="mobile-nav-memberships">
+            Memberships
+          </Link>
+          <Link href="/faq" onClick={onMenuToggle}
+            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
+            data-testid="mobile-nav-faq">
+            FAQ
+          </Link>
+          <Link href="/support" onClick={onMenuToggle}
+            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0" }}
+            data-testid="mobile-nav-support">
+            Support
           </Link>
         </div>
       )}
