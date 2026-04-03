@@ -571,12 +571,16 @@ export default function FAQ() {
               {
                 heading: "Help",
                 links: [
+                  { label: "Customer Support", href: "/support" },
                   { label: "FAQ", href: "/faq" },
+                  { label: "Keypad Tips", href: "/keypad-tips" },
+                  { label: "Cities Coverage", href: "/cities" },
+                  { label: "Safety Tips", href: "/safety-tips" },
                   ...(csPhone ? [{ label: "Call: " + formatPhone(csPhone), href: "tel:" + csPhone.replace(/\D/g, "") }] : []),
                   ...(csEmail ? [{ label: "Email: " + csEmail, href: "mailto:" + csEmail }] : []),
                 ],
               },
-              { heading: "Company", links: [{ label: "About Us", href: "#" }, { label: "Privacy Policy", href: "#" }, { label: "Terms of Use", href: "#" }] },
+              { heading: "Company", links: [{ label: "About Us", href: "/about" }, { label: "Privacy Policy", href: "/privacy-policy" }, { label: "Terms of Use", href: "/terms" }] },
             ].map(col => (
               <div key={col.heading}>
                 <h4 style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", marginBottom: "0.75rem" }}>

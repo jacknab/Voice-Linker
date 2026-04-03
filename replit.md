@@ -26,6 +26,15 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - `client/src/pages/Membership.tsx` — Public web membership purchase page (`/membership` route)
 - `client/src/pages/MembershipSuccess.tsx` — Post-purchase confirmation page (`/membership/success` route)
 - `client/src/pages/Dashboard.tsx` — Logged-in web user dashboard (link phone, view plan)
+- `client/src/pages/FAQ.tsx` — Frequently asked questions, MM/MW aware (`/faq`)
+- `client/src/pages/KeypadTips.tsx` — Interactive keypad reference guide, 4 screen modes (`/keypad-tips`)
+- `client/src/pages/Support.tsx` — Customer support contacts + common topic links (`/support`)
+- `client/src/pages/Cities.tsx` — Live regions list from `/api/regions` with dial buttons (`/cities`)
+- `client/src/pages/SafetyTips.tsx` — Safety guidelines, MM/MW aware (`/safety-tips`)
+- `client/src/pages/About.tsx` — About the service, MM/MW aware (`/about`)
+- `client/src/pages/PrivacyPolicy.tsx` — Full privacy policy (`/privacy-policy`)
+- `client/src/pages/Terms.tsx` — Full terms of use (`/terms`)
+- `client/src/components/SiteLayout.tsx` — Shared nav, footer, page header, and helpers used by all content pages
 
 ## Voice Menu Structure
 

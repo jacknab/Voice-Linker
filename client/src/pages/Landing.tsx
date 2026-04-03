@@ -315,34 +315,48 @@ export default function Landing() {
                 {footerBlurb}
               </p>
             </div>
-            {[
-              { heading: "Account", links: ["Buy Time", "Free Trial", "Memberships"] },
+            {([
+              {
+                heading: "Account",
+                links: [
+                  { label: "Buy Time", href: "/membership" },
+                  { label: "Free Trial", href: "/membership" },
+                  { label: "Memberships", href: "/membership" },
+                ],
+              },
               {
                 heading: "Help",
                 links: [
-                  "Customer Support",
-                  "FAQ",
-                  "Keypad Tips",
-                  "Cities Coverage",
-                  "Safety Tips",
-                  ...(csPhone ? [`Call: ${formatPhone(csPhone)}`] : []),
-                  ...(csEmail ? [`Email: ${csEmail}`] : []),
+                  { label: "Customer Support", href: "/support" },
+                  { label: "FAQ", href: "/faq" },
+                  { label: "Keypad Tips", href: "/keypad-tips" },
+                  { label: "Cities Coverage", href: "/cities" },
+                  { label: "Safety Tips", href: "/safety-tips" },
+                  ...(csPhone ? [{ label: `Call: ${formatPhone(csPhone)}`, href: `tel:${csPhone.replace(/\D/g, "")}` }] : []),
+                  ...(csEmail ? [{ label: `Email: ${csEmail}`, href: `mailto:${csEmail}` }] : []),
                 ],
               },
-              { heading: "Company", links: ["About Us", "Privacy Policy", "Terms of Use"] },
-            ].map(col => (
+              {
+                heading: "Company",
+                links: [
+                  { label: "About Us", href: "/about" },
+                  { label: "Privacy Policy", href: "/privacy-policy" },
+                  { label: "Terms of Use", href: "/terms" },
+                ],
+              },
+            ] as { heading: string; links: { label: string; href: string }[] }[]).map(col => (
               <div key={col.heading}>
                 <h4 style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", marginBottom: "0.75rem" }}>
                   {col.heading}
                 </h4>
                 <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.45rem" }}>
                   {col.links.map(link => (
-                    <li key={link}>
-                      <a href={link === "FAQ" ? "/faq" : link === "Keypad Tips" ? "/keypad-tips" : "#"} style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.45)", textDecoration: "none", transition: "color 0.15s" }}
+                    <li key={link.label}>
+                      <a href={link.href} style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.45)", textDecoration: "none", transition: "color 0.15s" }}
                         onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
                         onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.45)")}
                       >
-                        {link}
+                        {link.label}
                       </a>
                     </li>
                   ))}

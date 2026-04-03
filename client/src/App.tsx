@@ -18,6 +18,12 @@ import Membership from "@/pages/Membership";
 import MembershipSuccess from "@/pages/MembershipSuccess";
 import FAQ from "@/pages/FAQ";
 import KeypadTips from "@/pages/KeypadTips";
+import Support from "@/pages/Support";
+import Cities from "@/pages/Cities";
+import SafetyTips from "@/pages/SafetyTips";
+import About from "@/pages/About";
+import PrivacyPolicy from "@/pages/PrivacyPolicy";
+import Terms from "@/pages/Terms";
 import { useEffect } from "react";
 
 function Router() {
@@ -33,6 +39,12 @@ function Router() {
       <Route path="/membership" component={Membership} />
       <Route path="/faq" component={FAQ} />
       <Route path="/keypad-tips" component={KeypadTips} />
+      <Route path="/support" component={Support} />
+      <Route path="/cities" component={Cities} />
+      <Route path="/safety-tips" component={SafetyTips} />
+      <Route path="/about" component={About} />
+      <Route path="/privacy-policy" component={PrivacyPolicy} />
+      <Route path="/terms" component={Terms} />
       <Route path="/setup" component={Home} />
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/secure-login" component={SecureAdminLogin} />

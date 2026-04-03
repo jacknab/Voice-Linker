@@ -473,9 +473,20 @@ export default function KeypadTips() {
               <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.3)", lineHeight: 1.65 }}>{footerBlurb}</p>
             </div>
             {[
-              { heading: "Account", links: [{ label: "Buy Time", href: "/membership" }, { label: "Free Trial", href: "/membership" }] },
-              { heading: "Help", links: [{ label: "FAQ", href: "/faq" }, { label: "Keypad Tips", href: "/keypad-tips" }, ...(csPhone ? [{ label: "Call: " + formatPhone(csPhone), href: "tel:" + csPhone.replace(/\D/g, "") }] : []), ...(csEmail ? [{ label: csEmail, href: "mailto:" + csEmail }] : [])] },
-              { heading: "Company", links: [{ label: "About Us", href: "#" }, { label: "Privacy Policy", href: "#" }, { label: "Terms of Use", href: "#" }] },
+              { heading: "Account", links: [{ label: "Buy Time", href: "/membership" }, { label: "Free Trial", href: "/membership" }, { label: "Memberships", href: "/membership" }] },
+              {
+                heading: "Help",
+                links: [
+                  { label: "Customer Support", href: "/support" },
+                  { label: "FAQ", href: "/faq" },
+                  { label: "Keypad Tips", href: "/keypad-tips" },
+                  { label: "Cities Coverage", href: "/cities" },
+                  { label: "Safety Tips", href: "/safety-tips" },
+                  ...(csPhone ? [{ label: "Call: " + formatPhone(csPhone), href: "tel:" + csPhone.replace(/\D/g, "") }] : []),
+                  ...(csEmail ? [{ label: "Email: " + csEmail, href: "mailto:" + csEmail }] : []),
+                ],
+              },
+              { heading: "Company", links: [{ label: "About Us", href: "/about" }, { label: "Privacy Policy", href: "/privacy-policy" }, { label: "Terms of Use", href: "/terms" }] },
             ].map(col => (
               <div key={col.heading}>
                 <h4 style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", marginBottom: "0.75rem" }}>
