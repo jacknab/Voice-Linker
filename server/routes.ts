@@ -7023,17 +7023,20 @@ HOW TO PURCHASE BY PHONE:
 3. Select your plan (press the number shown in the menu).
 4. Confirm your selection: press 1 to confirm, press 2 to change.
 5. Read the billing disclosure, then press 1 to proceed to card entry.
-6. Enter your credit card number, expiration date, and security code using your keypad.
+6. Enter your card number, expiration date, and security code using your keypad.
    - Press * once to delete the last digit entered.
    - Press * twice to start card entry over.
 7. Membership is activated immediately upon successful payment.
 8. For first-time buyers: a membership card number is automatically issued and read out to you — write it down.
 
 PAYMENT:
-- Phone purchases use a Stripe Pay connector. Your card is processed securely by Stripe.
+- By phone (easiest): we accept credit cards, debit cards, and prepaid cards.
+  To purchase by phone, press 2 from the main menu. Follow the prompts, enter your
+  card number, expiration date, and security code using the keypad. That's it.
 - The charge appears on your statement as "Toby Media".
 - No automatic renewals. You are only charged when you choose to purchase.
-- Online purchases can be made at the website using Stripe or PayPal.
+- Online: you may also create a free web account on our website. Online purchases
+  accept credit card or PayPal as payment methods.
 
 PROMO CODES:
 - Promo codes can be entered when purchasing to receive a discount or bonus time.
@@ -7449,7 +7452,7 @@ DASHBOARD FEATURES:
 
 PURCHASING ONLINE:
 - From the dashboard, click on a plan to purchase via the website.
-- Pay with credit card (Stripe) or PayPal.
+- Pay with a credit card, debit card, or PayPal.
 - Time is credited to your phone account immediately after a successful payment (if your phone is linked).
 
 WEBSITE PAGES
