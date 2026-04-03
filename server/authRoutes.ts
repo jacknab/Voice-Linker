@@ -444,6 +444,89 @@ router.delete("/api/auth/alt-phones/:id", async (req: Request, res: Response) =>
   }
 });
 
+// ─── Link by Phone Number (MW mode) ──────────────────────────────────────────
+// MW systems don't issue membership cards. Instead, the caller enters their
+// 10-digit phone number and the system verifies they have an active membership
+// with time remaining (and, for per_day billing, a non-expired activation).
+router.post("/api/auth/link-phone-mw", async (req: Request, res: Response) => {
+  if (!req.session.webUserId) return res.status(401).json({ error: "Not authenticated." });
+
+  try {
+    const webUser = await storage.getWebUserById(req.session.webUserId);
+    if (!webUser) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ error: "Session expired." });
+    }
+    if (webUser.isLocked) {
+      req.session.destroy(() => {});
+      return res.status(403).json({ error: "Your account has been locked. Please contact support." });
+    }
+    if (webUser.linkedPhoneNumber) {
+      return res.status(400).json({ error: "A phone number is already linked to this account." });
+    }
+
+    const rawPhone = String(req.body?.phoneNumber ?? "").trim();
+    const normalized = normalizePhone(rawPhone);
+    if (!normalized) {
+      return res.status(400).json({ error: "Please enter a valid 10-digit phone number." });
+    }
+
+    const phoneUser = await storage.getUserByPhone(normalized);
+    const membershipSettings = await storage.getMembershipSettings();
+    const billingMode = membershipSettings.billingMode ?? "per_minute";
+
+    let valid = false;
+    let failReason = "No active membership found for that phone number.";
+
+    if (phoneUser && phoneUser.membershipTier) {
+      const remaining = phoneUser.remainingSeconds ?? 0;
+      if (billingMode === "per_day") {
+        // Per-day: must have at least one day remaining and a valid activation date
+        if (remaining > 0 && phoneUser.membershipStartedAt !== null) {
+          valid = true;
+        } else if (remaining <= 0) {
+          failReason = "Your membership has expired. Please call the access number to renew.";
+        } else {
+          failReason = "Your membership has not been fully activated yet. Please call the access number first.";
+        }
+      } else {
+        // Per-minute: must have at least 1 minute remaining
+        if (remaining >= 60) {
+          valid = true;
+        } else {
+          failReason = "Your membership balance is too low to link. Please call the access number to add more time.";
+        }
+      }
+    }
+
+    if (!valid) {
+      const attempts = await storage.incrementWebUserLinkAttempts(webUser.id);
+      const remaining = Math.max(0, 3 - attempts);
+      if (attempts >= 3) {
+        await storage.lockWebUser(webUser.id);
+        req.session.destroy(() => {});
+        console.log(`[auth] link-phone-mw: account locked for web user ${webUser.id} after 3 failed attempts`);
+        return res.status(403).json({
+          error: "Your account has been locked after 3 failed attempts. Please contact support.",
+          locked: true,
+        });
+      }
+      console.log(`[auth] link-phone-mw: failed attempt ${attempts}/3 for web user ${webUser.id} (phone=${normalized})`);
+      return res.status(404).json({
+        error: `${failReason} ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`,
+        attemptsRemaining: remaining,
+      });
+    }
+
+    await storage.linkWebUserPhone(webUser.id, normalized);
+    console.log(`[auth] link-phone-mw: linked ${normalized} to web user ${webUser.id}`);
+    return res.json({ ok: true, phoneNumber: normalized });
+  } catch (err) {
+    console.error("[auth] link-phone-mw error:", err);
+    return res.status(500).json({ error: "Failed to link phone number. Please try again." });
+  }
+});
+
 // ─── Link Membership Card ─────────────────────────────────────────────────────
 // Validates a physical membership card (5-digit number + 4-digit PIN) and links
 // the card's phone record to this web account.
