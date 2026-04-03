@@ -720,6 +720,75 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "num_700.mp3", label: "Number — 700", text: "seven hundred" },
   { filename: "num_800.mp3", label: "Number — 800", text: "eight hundred" },
   { filename: "num_900.mp3", label: "Number — 900", text: "nine hundred" },
+
+  // ── Entry & Onboarding ────────────────────────────────────────────────────
+  { filename: "disclaimer.mp3", label: "Disclaimer", text: "Interactive Mail assumes no responsibility for personal meetings. This service is for adults only. If you are under 18, please hang up now." },
+  { filename: "gender_select.mp3", label: "Gender / Category Select", text: "Guys, press one to talk to women. Women, press two to talk to guys." },
+  { filename: "membership_entry_prompt.mp3", label: "Membership Entry Prompt", text: "If you have a membership press 1 now. Otherwise press the pound key." },
+  { filename: "link_code_invalid.mp3", label: "Link Code Invalid", text: "That code is invalid or has expired. Please generate a new code from your web account and try again." },
+  { filename: "membership_invalid.mp3", label: "Membership Number Invalid", text: "We could not find a membership card with that number. Please check your card and try again." },
+  { filename: "membership_linked.mp3", label: "Membership Linked / Verified", text: "Your membership card has been activated and linked to this phone number. Welcome." },
+
+  // ── MW System ─────────────────────────────────────────────────────────────
+  { filename: "mw_main_menu.mp3", label: "MW Main Menu", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+
+  // ── MOTD — Main Menu, Phone Booth, Post Purchase ──────────────────────────
+  { filename: "motd_main_menu.mp3", label: "MOTD — Main Menu", text: "Welcome back! Check out the latest callers on the line right now." },
+  { filename: "motd_phone_booth.mp3", label: "MOTD — Phone Booth", text: "Special announcement for Phone Booth callers." },
+  { filename: "motd_post_purchase.mp3", label: "MOTD — After Purchase", text: "Thank you for your purchase! Enjoy your time on the line." },
+
+  // ── Phone Booth / Live Connector ──────────────────────────────────────────
+  { filename: "phone_booth_welcome.mp3", label: "Phone Booth Welcome", text: "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." },
+  { filename: "live_connect_disclaimer.mp3", label: "Live Connect — Disclaimer", text: "Please be respectful and kind. You are about to request a live one on one connection." },
+  { filename: "live_connect_chime.mp3", label: "Live Connect — Chime (sound effect)", text: "" },
+  { filename: "live_invite_options.mp3", label: "Live Invite — Options", text: "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4." },
+  { filename: "live_connect_no_minutes.mp3", label: "Live Connect — Not Enough Minutes", text: "You need at least 5 minutes remaining on your membership to connect live. Please add more time and try again." },
+  { filename: "live_connect_unavailable.mp3", label: "Live Connect — Caller Unavailable", text: "This caller is not available for a live connection." },
+  { filename: "live_connect_left_line.mp3", label: "Live Connect — Caller Left Line", text: "Sorry, that caller has left the line." },
+  { filename: "live_connect_busy.mp3", label: "Live Connect — Caller Busy", text: "That caller is already connected with someone else. Please try again later." },
+  { filename: "live_connect_failed.mp3", label: "Live Connect — Failed", text: "We were unable to connect your call. Returning you to the phone booth." },
+  { filename: "live_connect_connecting.mp3", label: "Live Connect — Connecting", text: "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!" },
+  { filename: "live_connect_ringing.mp3", label: "Live Connect — Ringing (sound effect)", text: "" },
+  { filename: "live_invite_expired.mp3", label: "Live Invite — Expired", text: "That live connection invitation has expired. Returning to profiles." },
+  { filename: "live_connect_ended.mp3", label: "Live Connect — Ended", text: "Your live connection has ended. Returning you to the phone booth." },
+
+  // ── Profile Browsing ──────────────────────────────────────────────────────
+  { filename: "new_caller_close_to_you.mp3", label: "New Caller — Close To You", text: "New caller close to you." },
+  { filename: "new_caller_closest_to_you.mp3", label: "New Caller — Closest To You", text: "New caller closest to you." },
+  { filename: "nearby_callers_offer.mp3", label: "Nearby Callers — Offer", text: "You've heard all the callers in your area. Press 1 to hear callers close to you from a nearby area. Press 2 to start over from the beginning." },
+  { filename: "nearby_callers_intro.mp3", label: "Nearby Callers — Intro", text: "Now playing callers from a nearby area. Enjoy!" },
+  { filename: "nearby_callers_none.mp3", label: "Nearby Callers — None Available", text: "There are no callers online in that area right now. Starting your area over." },
+  { filename: "no_previous_profile.mp3", label: "No Previous Profile", text: "There is no previous profile. Continuing to the next." },
+  { filename: "caller_blocked.mp3", label: "Caller Blocked", text: "Caller blocked. You will no longer hear this caller's profile." },
+  { filename: "profile_flagged.mp3", label: "Profile Flagged", text: "This profile has been flagged for review. Thank you." },
+
+  // ── Zip Code ──────────────────────────────────────────────────────────────
+  { filename: "zip_code_prompt.mp3", label: "Zip Code — Prompt", text: "Optional: enter your 5-digit zip code and we'll play callers closest to you first. Press pound to skip." },
+  { filename: "zip_code_saved.mp3", label: "Zip Code — Saved", text: "Got it. We'll use your zip code to show you nearby callers." },
+
+  // ── Mailbox & Ad System ───────────────────────────────────────────────────
+  { filename: "mailbox_menu.mp3", label: "Mailbox Menu", text: "To go to your mailbox press one. To record a new mailbox ad press two. To listen to ads from other guys press three. To repeat these choices press nine. For the phone booth press star. To go to the main menu press pound." },
+  { filename: "mailbox_lookup.mp3", label: "Mailbox — Lookup Prompt", text: "Enter the five digit mailbox number you'd like to look up, followed by pound. Or press pound alone to return to the mailbox menu." },
+  { filename: "mailbox_not_found.mp3", label: "Mailbox — Not Found", text: "That mailbox number was not found. Please check the number and try again." },
+  { filename: "mailbox_no_ad.mp3", label: "Mailbox — No Ad Recorded", text: "That mailbox has not recorded an ad yet." },
+  { filename: "mailbox_ad_existing.mp3", label: "Mailbox Ad — Existing Ad Options", text: "You already have an ad in this category. Press 1 to record a new one. Press 2 to hear your current ad. Press 9 to return to the category menu." },
+  { filename: "mailbox_ad_record.mp3", label: "Mailbox Ad — Record Prompt", text: "Record your mailbox ad after the tone. Tell guys about yourself. Press pound when finished." },
+  { filename: "mailbox_ad_saved.mp3", label: "Mailbox Ad — Saved", text: "Your mailbox ad has been saved. Other guys can now find your ad." },
+  { filename: "ad_category_menu.mp3", label: "Ad Category Menu (Page 1)", text: "Please select a category. For Quick and Hot Talk press one. For Bicurious press two. For Kink press three. For Total Tops press four. For Strictly Bottoms press five. For Trans press six. To look up a specific mailbox press seven. For more categories press eight. For definitions press nine. To return to the mailbox menu press pound." },
+  { filename: "ad_category_menu_p2.mp3", label: "Ad Category Menu (Page 2)", text: "More categories. For Cock Suckers press one. For Hung Cocks press two. For Uncut Cocks press three. For Twinks press four. For Bears press five. For Daddys press six. To look up a specific mailbox press seven. For definitions press nine. To go back to the previous categories press pound." },
+  { filename: "ad_category_definitions.mp3", label: "Ad Category Definitions", text: "Quick and Hot Talk: guys looking for fast, explicit, no-strings chat. Bicurious: men exploring attraction to other men for the first time or occasionally. Kink: callers into fetishes, role play, or specific kinks. Total Tops: guys who are exclusively tops and looking for a bottom. Strictly Bottoms: guys who are exclusively bottoms and looking for a top. Trans: trans men and women connecting with other callers." },
+  { filename: "no_ads_category.mp3", label: "Ad Category — No Ads Available", text: "No ads available in this category yet. Try another category." },
+  { filename: "ads_end_of_list.mp3", label: "Ad Category — End of List", text: "You have heard all the ads in this category. Returning to categories." },
+
+  // ── Messaging ─────────────────────────────────────────────────────────────
+  { filename: "review_your_message.mp3", label: "Review Your Message", text: "Here is your recorded message." },
+  { filename: "message_cancelled.mp3", label: "Message Cancelled", text: "Message cancelled." },
+  { filename: "message_flagged.mp3", label: "Message Flagged", text: "This message has been flagged for review. Thank you." },
+  { filename: "no_recording.mp3", label: "No Recording Detected", text: "No recording was detected." },
+
+  // ── Time & Billing ────────────────────────────────────────────────────────
+  { filename: "time_deduction_start.mp3", label: "Time Deduction — Started", text: "Time is now being deducted from your membership." },
+  { filename: "time_deduction_stop.mp3", label: "Time Deduction — Stopped", text: "Time is no longer being deducted from your membership." },
 ];
 
 // ── TTSTab ────────────────────────────────────────────────────────────────────
