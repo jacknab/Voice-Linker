@@ -216,9 +216,10 @@ Members can set a 4-digit PIN that allows them to call in from **any phone** by 
 
 ## Auto-Moderation System
 
-**Service:** `server/autoModeration.ts` — runs asynchronously after every flag and block event.
+**Service:** `server/autoModeration.ts` — runs asynchronously after every flag, block, and recording transcription event.
 
-**Rules implemented:**
+### Flag & Block Rules
+
 - **Rule 1 — Flag Threshold:** 3+ distinct callers flag the same content → auto-escalate to admin queue (auto-flag)
 - **Rule 2 — Block Count:** 3+ distinct callers block the same person within 24 hours → auto-flag their profile
 - **Rule 4 — Repeat Flagging:** Content removed before and flagged again (2+ prior removals) → auto-remove + restrict
@@ -228,6 +229,65 @@ Members can set a 4-digit PIN that allows them to call in from **any phone** by 
 **Account status enforcement in IVR:**
 - `banned` → rejected at `/voice/entry-check` with hangup
 - `restricted` → blocked from going live at `/voice/go-live`; can still browse
+
+### Recording Auto-Moderation (Transcription Checks)
+
+Every caller greeting and personal ad recording is automatically transcribed by Twilio. After each transcription arrives at `/voice/transcription-callback`, `runTranscriptionAutoChecks()` runs the following three checks in order:
+
+**Check 1 — No Audio / Blank Transcription**
+- Triggered when: transcription text is null, empty, or only whitespace
+- Rejection reason: `"unclear"`
+
+**Check 2 — Phone Number Detected**
+- Triggered when: the transcription contains a 7- or 10-digit phone number in any format
+- Detection covers:
+  - Standard formatted numbers: `303-430-2099`, `(303) 430-2099`, `303.430.2099`
+  - Compact digit sequences: `3034302099`
+  - Filler-separated spoken numbers: `303 uh 430 2099` (only explicit filler words like "uh", "um", "and" can bridge digit groups — regular words reset the accumulator)
+  - Spoken digit words: "three zero three four three zero two zero nine nine"
+- False positive protection: real-world descriptors like "I'm 25, 6 foot 2, 210 pounds" do NOT trigger this — regular words between numbers reset the digit accumulator immediately
+- Rejection reason: `"phone_number"`
+
+**Check 3 — Low Quality / Repeated Words**
+- Triggered when any of the following are true:
+  - Fewer than 4 total words in the transcription
+  - A non-common content word (not in the stop word list) repeats 3 or more times — e.g. "hey hey hey boys" → "hey" repeats 3×
+  - More than 80% of content words are the same single word
+- Stop word list: common English words that naturally repeat in speech (I, I'm, and, the, or, looking, like, etc.) are excluded from the repetition analysis so natural greetings aren't penalised
+- "hey" and "hello" are intentionally NOT in the stop word list so greeting-word spam is still caught
+- Rejection reason: `"unclear"`
+
+**When a recording is rejected:**
+1. The recording is deleted from the system (`deleteProfileByUserId` for greetings, `clearMailboxAdByUserId` for personal ads)
+2. A rejection flag is set on the user's database record: `recordingRejectionReason` ("unclear" or "phone_number") and `recordingRejectionType` ("greeting" or "personal_ad")
+3. A moderation event is written to `moderation_logs`
+4. When the caller next calls in, the IVR intercepts them before they reach the main menu
+
+**When the caller calls back (IVR interception):**
+- **Greeting rejection** → intercepted at `/voice/entry-check` before going to the main menu
+- **Personal ad rejection** → intercepted at `/voice/my-mailbox` before seeing the mailbox menu
+
+**Rejection IVR Menus:**
+
+*Reject 1 — Unclear recording* (`/voice/recording-rejected-unclear` + `/voice/handle-recording-rejected-unclear`):
+> "You need to re-record your [greeting/personal ad] because we can't understand it. Please speak clearly into the phone so that everyone can hear what you have to say about yourself and what you're looking for. Be sure to turn down loud music or the television before you record. To re-record your [greeting/personal ad], press 1."
+- Press 1 → routes to re-record flow (name + greeting for greetings; `/voice/record-mailbox-greeting` for personal ads); clears the rejection flag
+
+*Reject 2 — Phone number in recording* (`/voice/recording-rejected-phone-number` + `/voice/handle-recording-rejected-phone-number`):
+> "You need to re-record your [greeting/personal ad]. Please do not include your phone number in your [greeting/personal ad] or it will not be approved. To re-record your [greeting/personal ad], press 1."
+- Press 1 → routes to re-record flow; clears the rejection flag
+
+**Rejection flag lifecycle:**
+- Set: by `runTranscriptionAutoChecks()` after a failed transcription check
+- Cleared: automatically when the caller saves a new recording via `save-profile`, `save-mailbox-greeting`, or `save-category-ad` — the new recording then goes through auto-mod again
+- Also cleared: when the caller presses 1 on either rejection menu before being routed to re-record
+
+**New storage methods added:**
+- `getUserByProfileRecordingUrl(url)` — look up user by their greeting recording URL
+- `getUserByMailboxAdRecordingUrl(url)` — look up user by their mailbox ad recording URL
+- `setUserRecordingRejection(userId, reason, type)` — set rejection flag
+- `clearUserRecordingRejection(userId)` — clear rejection flag
+- `clearMailboxAdByUserId(userId)` — clear a mailbox ad recording without deleting the mailbox record
 
 **Admin panel additions:**
 - **Callers tab:** Status badge column (Active/Restricted/Banned); Restrict/Ban/Restore buttons in caller detail view
@@ -239,7 +299,7 @@ Members can set a 4-digit PIN that allows them to call in from **any phone** by 
 
 ## Database Schema
 
-- `users` — phone number, stripeCustomerId, membershipTier, remainingSeconds, membershipPin (4-digit), `accountStatus` (active/restricted/banned), membershipStartedAt
+- `users` — phone number, stripeCustomerId, membershipTier, remainingSeconds, membershipPin (4-digit), `accountStatus` (active/restricted/banned), membershipStartedAt, `recordingRejectionReason` (null/"unclear"/"phone_number"), `recordingRejectionType` (null/"greeting"/"personal_ad")
 - `webUsers` — web account (email, passwordHash, linkedPhoneNumber, sessionId)
 - `membershipSettings` — dynamic plan config (plan1/plan2/plan3 names, minutes, prices), billingMode, Stripe keys, `paypalEmail`, `paypalSandbox`
 - `moderation_logs` — auto-moderation event log (event type, rule, reason, target user, content ref)
