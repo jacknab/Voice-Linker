@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, membershipLinkCodes, membershipCards, seedSessions, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount, type MembershipLinkCode, type MembershipCard, type SeedSession } from "@shared/schema";
+import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, adminAccounts, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type AdminAccount, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -19,6 +19,7 @@ export interface CallerSummary {
   callCount: number;
   messageCount: number;
   blockCount: number;
+  accountStatus: string;
 }
 
 export interface CallerDetail {
@@ -172,6 +173,17 @@ export interface IStorage {
   createFlaggedItem(data: InsertFlaggedContent): Promise<FlaggedContent>;
   resolveFlaggedItem(id: string, status: string): Promise<void>;
   deleteFlaggedItem(id: string): Promise<void>;
+
+  // Auto-moderation helpers
+  countDistinctFlaggers(contentType: string, contentId: string): Promise<number>;
+  countDistinctBlockersInWindow(blockedUserId: string, windowMs: number): Promise<number>;
+  countFlagRemoveCycles(contentType: string, contentId: string): Promise<number>;
+  countAutoRemovesForUser(userId: string): Promise<number>;
+  setUserAccountStatus(userId: string, status: string): Promise<void>;
+  getUserById(userId: string): Promise<User | null>;
+  deleteProfileByUserId(userId: string): Promise<void>;
+  logModerationEvent(data: InsertModerationLog): Promise<ModerationLog>;
+  getModerationLogs(opts?: { targetUserId?: string; limit?: number }): Promise<(ModerationLog & { targetPhone: string })[]>;
 
   // Promo codes
   getAllPromoCodes(): Promise<(PromoCode & { redemptionCount: number })[]>;
@@ -946,6 +958,7 @@ export class DatabaseStorage implements IStorage {
         u.membership_tier   AS "membershipTier",
         u.remaining_seconds AS "remainingSeconds",
         u.created_at        AS "createdAt",
+        COALESCE(u.account_status, 'active') AS "accountStatus",
         (p.id IS NOT NULL)::boolean AS "hasProfile",
         COALESCE(cl.call_count, 0)::int    AS "callCount",
         COALESCE(mc.msg_count, 0)::int     AS "messageCount",
@@ -1561,6 +1574,85 @@ export class DatabaseStorage implements IStorage {
 
     const byCategory = (byCategoryResult.rows as { category: string | null; count: number }[]);
     return { total, byCategory };
+  }
+
+  // ── Auto-moderation implementations ──────────────────────────────────────────
+
+  async countDistinctFlaggers(contentType: string, contentId: string): Promise<number> {
+    const result = await db.execute(sql`
+      SELECT COUNT(DISTINCT reported_by_user_id)::int AS cnt
+      FROM flagged_content
+      WHERE content_type = ${contentType}
+        AND content_id = ${contentId}::uuid
+        AND reported_by_user_id IS NOT NULL
+    `);
+    return Number((result.rows[0] as { cnt: number })?.cnt ?? 0);
+  }
+
+  async countDistinctBlockersInWindow(blockedUserId: string, windowMs: number): Promise<number> {
+    const since = new Date(Date.now() - windowMs);
+    const result = await db.execute(sql`
+      SELECT COUNT(DISTINCT blocker_id)::int AS cnt
+      FROM blocked_users
+      WHERE blocked_user_id = ${blockedUserId}::uuid
+        AND created_at >= ${since}
+    `);
+    return Number((result.rows[0] as { cnt: number })?.cnt ?? 0);
+  }
+
+  async countFlagRemoveCycles(contentType: string, contentId: string): Promise<number> {
+    const result = await db.execute(sql`
+      SELECT COUNT(*)::int AS cnt
+      FROM flagged_content
+      WHERE content_type = ${contentType}
+        AND content_id = ${contentId}::uuid
+        AND status = 'removed'
+    `);
+    return Number((result.rows[0] as { cnt: number })?.cnt ?? 0);
+  }
+
+  async countAutoRemovesForUser(userId: string): Promise<number> {
+    const result = await db.execute(sql`
+      SELECT COUNT(*)::int AS cnt
+      FROM moderation_logs
+      WHERE target_user_id = ${userId}::uuid
+        AND event_type = 'auto_remove'
+    `);
+    return Number((result.rows[0] as { cnt: number })?.cnt ?? 0);
+  }
+
+  async setUserAccountStatus(userId: string, status: string): Promise<void> {
+    await db.update(users).set({ accountStatus: status }).where(eq(users.id, userId));
+  }
+
+  async getUserById(userId: string): Promise<User | null> {
+    const [row] = await db.select().from(users).where(eq(users.id, userId));
+    return row ?? null;
+  }
+
+  async deleteProfileByUserId(userId: string): Promise<void> {
+    await db.delete(profiles).where(eq(profiles.userId, userId));
+  }
+
+  async logModerationEvent(data: InsertModerationLog): Promise<ModerationLog> {
+    const [row] = await db.insert(moderationLogs).values(data).returning();
+    return row;
+  }
+
+  async getModerationLogs(opts?: { targetUserId?: string; limit?: number }): Promise<(ModerationLog & { targetPhone: string })[]> {
+    const limitVal = opts?.limit ?? 200;
+    const whereClause = opts?.targetUserId
+      ? sql`WHERE ml.target_user_id = ${opts.targetUserId}::uuid`
+      : sql``;
+    const result = await db.execute(sql`
+      SELECT ml.*, u.phone_number AS "targetPhone"
+      FROM moderation_logs ml
+      LEFT JOIN users u ON u.id = ml.target_user_id
+      ${whereClause}
+      ORDER BY ml.created_at DESC
+      LIMIT ${limitVal}
+    `);
+    return result.rows as (ModerationLog & { targetPhone: string })[];
   }
 }
 

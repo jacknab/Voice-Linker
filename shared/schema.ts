@@ -42,6 +42,8 @@ export const users = pgTable("users", {
   // Set when a membership is first activated; used by per_day billing to enforce
   // the 24-hour grace period before the first nightly deduction.
   membershipStartedAt: timestamp("membership_started_at"),
+  // Moderation status: "active" | "restricted" (no go-live) | "banned" (rejected at entry)
+  accountStatus: text("account_status").notNull().default("active"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -398,3 +400,21 @@ export const membershipLinkCodes = pgTable("membership_link_codes", {
 });
 
 export type MembershipLinkCode = typeof membershipLinkCodes.$inferSelect;
+
+// ─── Moderation Logs — audit trail of all auto and manual moderation events ────
+export const moderationLogs = pgTable("moderation_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  targetUserId: uuid("target_user_id").notNull(),
+  // event types: auto_flag | auto_remove | auto_restrict | auto_ban | admin_restrict | admin_ban | admin_unban | admin_remove_content
+  eventType: text("event_type").notNull(),
+  reason: text("reason").notNull(),
+  // which auto-rule triggered this: threshold_flag | block_count | repeat_flag | new_account_flag | threshold_remove
+  triggeredByRule: text("triggered_by_rule"),
+  contentType: text("content_type"),
+  contentId: uuid("content_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertModerationLogSchema = createInsertSchema(moderationLogs).omit({ id: true, createdAt: true });
+export type ModerationLog = typeof moderationLogs.$inferSelect;
+export type InsertModerationLog = z.infer<typeof insertModerationLogSchema>;

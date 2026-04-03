@@ -11,6 +11,7 @@ import path from "path";
 import fs from "fs";
 import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
+import { runFlagAutoChecks, runBlockAutoChecks } from "./autoModeration";
 import { generateTTS, listVoices } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 
@@ -826,6 +827,37 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[admin] /api/admin/flagged POST error:", e);
       res.status(500).json({ message: "Failed to create flag" });
+    }
+  });
+
+  // ── Account-status management ───────────────────────────────────────────────
+  app.patch("/api/admin/users/:id/account-status", async (req, res) => {
+    try {
+      const { status } = req.body as { status: string };
+      if (!["active", "restricted", "banned"].includes(status))
+        return res.status(400).json({ message: "status must be 'active', 'restricted', or 'banned'" });
+      await storage.setUserAccountStatus(req.params.id, status);
+      const actionMap: Record<string, string> = { active: "user_unban", restricted: "user_restrict", banned: "user_ban" };
+      logAudit(actionMap[status] ?? "user_status_change", { targetType: "user", targetId: req.params.id, targetLabel: status });
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] account-status PATCH error:", e);
+      res.status(500).json({ message: "Failed to update account status" });
+    }
+  });
+
+  // ── Moderation log viewer ───────────────────────────────────────────────────
+  app.get("/api/admin/moderation-logs", async (req, res) => {
+    try {
+      const { targetUserId, limit } = req.query as { targetUserId?: string; limit?: string };
+      const logs = await storage.getModerationLogs({
+        targetUserId: targetUserId || undefined,
+        limit: limit ? parseInt(limit, 10) : 200,
+      });
+      res.json(logs);
+    } catch (e) {
+      console.error("[admin] moderation-logs GET error:", e);
+      res.status(500).json({ message: "Failed to fetch moderation logs" });
     }
   });
 
@@ -2112,6 +2144,14 @@ export async function registerRoutes(
     try {
       const user = await getOrCreateUser(fromNumber);
       const remainingSeconds = user.remainingSeconds ?? 0;
+
+      // ── Moderation gate ─────────────────────────────────────────────────────
+      if (user.accountStatus === "banned") {
+        twiml.say("We're sorry, your access to this service has been suspended. If you believe this is an error, please contact customer support. Goodbye.");
+        twiml.hangup();
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
 
       if (!user.membershipTier) {
         // Brand new — never had an account, offer the free trial
@@ -3630,6 +3670,14 @@ export async function registerRoutes(
       const user = await getOrCreateUser(fromNumber);
       const regionId = callRegion.get(callSid);
 
+      // Restricted users cannot go live
+      if (user.accountStatus === "restricted") {
+        twiml.say("We're sorry, your account has been restricted and you are not able to go live at this time. You may still listen to profiles and use other features. Please contact customer support if you have questions.");
+        twiml.redirect("/voice/main-menu");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       // Announce how many callers are currently on the line
       const activeCallerCount = await storage.getActiveCallerCount(user.id, regionId);
       playCallerCount(twiml, req, activeCallerCount);
@@ -4004,6 +4052,7 @@ export async function registerRoutes(
           await storage.blockUser(user.id, senderId);
           removeFromBrowseQueue(callSid, senderId);
           console.log(`[voice] handle-message-menu: userId=${user.id} blocked senderId=${senderId}`);
+          runBlockAutoChecks(senderId).catch(console.error);
         }
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
         twiml.redirect("/voice/browse-profiles");
@@ -4021,6 +4070,7 @@ export async function registerRoutes(
             reportedByUserId: user.id,
           });
           console.log(`[voice] handle-message-menu: userId=${user.id} flagged msgId=${msgId}`);
+          runFlagAutoChecks("message", msgId, senderId).catch(console.error);
         }
         playPrompt(twiml, req, "message_flagged.mp3", "This message has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
@@ -4184,6 +4234,7 @@ export async function registerRoutes(
           await storage.blockUser(user.id, profileUserId);
           removeFromBrowseQueue(callSid, profileUserId);
           console.log(`[voice] handle-profile-menu: userId=${user.id} blocked profileUserId=${profileUserId}`);
+          runBlockAutoChecks(profileUserId).catch(console.error);
         }
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
         twiml.redirect("/voice/browse-profiles");
@@ -4260,6 +4311,7 @@ export async function registerRoutes(
             reportedByUserId: user.id,
           });
           console.log(`[voice] handle-profile-menu: userId=${user.id} flagged profileUserId=${profileUserId}`);
+          runFlagAutoChecks("profile", profileUserId, profileUserId).catch(console.error);
         }
         playPrompt(twiml, req, "profile_flagged.mp3", "This profile has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
@@ -4473,6 +4525,7 @@ export async function registerRoutes(
         await storage.blockUser(user.id, initiatorUserId);
         removeFromBrowseQueue(callSid, initiatorUserId);
         console.log(`[live-connect] handle-live-invite: userId=${user.id} blocked initiatorUserId=${initiatorUserId}`);
+        runBlockAutoChecks(initiatorUserId).catch(console.error);
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
         twiml.redirect("/voice/browse-profiles");
 

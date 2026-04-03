@@ -151,13 +151,37 @@ Members can set a 4-digit PIN that allows them to call in from **any phone** by 
 
 **IVR routes:** `/voice/membership-pin-entry`, `/voice/handle-membership-pin-entry`, `/voice/set-pin`, `/voice/handle-set-pin`, `/voice/handle-confirm-pin`
 
+## Auto-Moderation System
+
+**Service:** `server/autoModeration.ts` — runs asynchronously after every flag and block event.
+
+**Rules implemented:**
+- **Rule 1 — Flag Threshold:** 3+ distinct callers flag the same content → auto-escalate to admin queue (auto-flag)
+- **Rule 2 — Block Count:** 3+ distinct callers block the same person within 24 hours → auto-flag their profile
+- **Rule 4 — Repeat Flagging:** Content removed before and flagged again (2+ prior removals) → auto-remove + restrict
+- **Rule 5 — New Account Flag:** Account flagged within 10 minutes of creation → auto-restrict
+- **Auto-remove Threshold:** 5+ unique flaggers → auto-remove content; restricted user gets banned on 2nd auto-remove
+
+**Account status enforcement in IVR:**
+- `banned` → rejected at `/voice/entry-check` with hangup
+- `restricted` → blocked from going live at `/voice/go-live`; can still browse
+
+**Admin panel additions:**
+- **Callers tab:** Status badge column (Active/Restricted/Banned); Restrict/Ban/Restore buttons in caller detail view
+- **Moderation Log tab:** Full event history with timestamp, phone, event type, rule triggered, content type, reason
+
+**Admin API routes:**
+- `PATCH /api/admin/users/:id/account-status` — set `active`, `restricted`, or `banned`
+- `GET /api/admin/moderation-logs?targetUserId=&limit=` — fetch moderation event history
+
 ## Database Schema
 
-- `users` — phone number, stripeCustomerId, membershipTier, remainingMinutes, membershipPin (4-digit)
+- `users` — phone number, stripeCustomerId, membershipTier, remainingMinutes, membershipPin (4-digit), `accountStatus` (active/restricted/banned)
+- `moderation_logs` — auto-moderation event log (event type, rule, reason, target user, content ref)
 - `profiles` — voice recording URLs (Twilio or local uploads)
 - `messages` — voice messages between users
 - `active_calls` — real-time tracking of callers on the line
-- `blocked_users` — blockerId + blockedUserId pairs for live connect access control
+- `blocked_users` — blockerId + blockedUserId pairs for live connect access control; includes `created_at` for 24h window queries
 - `regions` — regional phone markets; includes `linkedRegionId` (nullable UUID) for cross-region overflow
 
 ## Running

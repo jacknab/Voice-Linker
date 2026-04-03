@@ -10,7 +10,7 @@ import {
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ChevronRight, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
-  BarChart2, TrendingUp, RefreshCw, GitBranch,
+  BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import {
@@ -43,7 +43,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow";
+type Tab = "dashboard" | "voice-profiles" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log";
 
 interface FlaggedItem {
   id: string;
@@ -72,6 +72,19 @@ interface CallerSummary {
   callCount: number;
   messageCount: number;
   blockCount: number;
+  accountStatus: string;
+}
+
+interface ModerationLogEntry {
+  id: string;
+  targetUserId: string | null;
+  targetPhone: string | null;
+  eventType: string;
+  reason: string | null;
+  triggeredByRule: string | null;
+  contentType: string | null;
+  contentId: string | null;
+  createdAt: string | null;
 }
 
 interface CallerDetail {
@@ -79,7 +92,7 @@ interface CallerDetail {
     id: string; phoneNumber: string; membershipTier: string | null;
     remainingSeconds: number | null; stripeCustomerId: string | null;
     membershipNumber: string | null; membershipPin: string | null;
-    createdAt: string | null;
+    createdAt: string | null; accountStatus: string | null;
   };
   mailbox: { id: string; mailboxNumber: string; createdAt: string | null } | null;
   profile: { id: string; recordingUrl: string; recordingDuration: number | null; createdAt: string | null } | null;
@@ -2274,6 +2287,17 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
     onError: () => toast({ title: "Failed to update PIN", variant: "destructive" }),
   });
 
+  const accountStatusMutation = useMutation({
+    mutationFn: async (status: "active" | "restricted" | "banned") =>
+      apiRequest("PATCH", `/api/admin/users/${callerId}/account-status`, { status }),
+    onSuccess: () => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/callers"] });
+      toast({ title: "Account status updated" });
+    },
+    onError: () => toast({ title: "Failed to update account status", variant: "destructive" }),
+  });
+
   // Build options for adding a new block — exclude self and already-blocked users
   const blockedIds = new Set(detail?.blockedByUser.map(b => b.phoneNumber) ?? []);
   const blockableCallers = allCallers.filter(c => c.id !== callerId && !blockedIds.has(c.phoneNumber));
@@ -2310,6 +2334,44 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
           <div className={C.fieldRow}><span className={C.fieldLabel}>Phone Number</span><span className={C.fieldValue} data-testid="detail-phone">{user.phoneNumber}</span></div>
           <div className={C.fieldRow}><span className={C.fieldLabel}>Joined</span><span className={C.fieldValue}>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}</span></div>
           <div className={C.fieldRow}><span className={C.fieldLabel}>Membership Tier</span><span className={C.fieldValue}>{user.membershipTier ?? <span className="text-gray-400">None</span>}</span></div>
+          <div className={C.fieldRow}>
+            <span className={C.fieldLabel}>Account Status</span>
+            <span className={C.fieldValue}>
+              <span className="inline-flex items-center gap-2 flex-wrap">
+                {user.accountStatus === "banned" ? (
+                  <span data-testid="status-badge-banned" className={`${C.badge} border-red-200 bg-red-50 text-red-600`}>Banned</span>
+                ) : user.accountStatus === "restricted" ? (
+                  <span data-testid="status-badge-restricted" className={`${C.badge} border-orange-200 bg-orange-50 text-orange-600`}>Restricted</span>
+                ) : (
+                  <span data-testid="status-badge-active" className={`${C.badge} border-emerald-200 bg-emerald-50 text-emerald-600`}>Active</span>
+                )}
+                {user.accountStatus !== "restricted" && (
+                  <button
+                    data-testid="btn-restrict-user"
+                    onClick={() => accountStatusMutation.mutate("restricted")}
+                    disabled={accountStatusMutation.isPending}
+                    className={C.btnGhost + " text-orange-600 border-orange-200 bg-orange-50 hover:bg-orange-100"}
+                  >Restrict</button>
+                )}
+                {user.accountStatus !== "banned" && (
+                  <button
+                    data-testid="btn-ban-user"
+                    onClick={() => accountStatusMutation.mutate("banned")}
+                    disabled={accountStatusMutation.isPending}
+                    className={C.btnDanger}
+                  >Ban</button>
+                )}
+                {user.accountStatus !== "active" && (
+                  <button
+                    data-testid="btn-unban-user"
+                    onClick={() => accountStatusMutation.mutate("active")}
+                    disabled={accountStatusMutation.isPending}
+                    className={C.btnSecondary}
+                  >Restore Active</button>
+                )}
+              </span>
+            </span>
+          </div>
           <div className={C.fieldRow}>
             <span className={C.fieldLabel}>Mailbox Number</span>
             <span className={C.fieldValue} data-testid="detail-mailbox-number">
@@ -2716,6 +2778,7 @@ function CallersTab() {
               <th className={C.th}>Phone Number</th>
               <th className={C.th}>Joined</th>
               <th className={C.th}>Tier</th>
+              <th className={C.th}>Status</th>
               <th className={C.th}>Credits</th>
               <th className={C.th}>Profile</th>
               <th className={C.th}>Calls</th>
@@ -2726,9 +2789,9 @@ function CallersTab() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING CALLERS…</td></tr>
+              <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING CALLERS…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">
+              <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">
                 {search ? "NO MATCHES FOUND" : "NO CALLERS REGISTERED"}
               </td></tr>
             ) : (
@@ -2746,6 +2809,15 @@ function CallersTab() {
                       <span className={`${C.badge} border-amber-200 bg-amber-50 text-amber-700`}>{caller.membershipTier}</span>
                     ) : (
                       <span className="text-gray-400 font-mono text-xs">—</span>
+                    )}
+                  </td>
+                  <td className={C.td}>
+                    {caller.accountStatus === "banned" ? (
+                      <span data-testid={`status-banned-${caller.id}`} className={`${C.badge} border-red-200 bg-red-50 text-red-600`}>Banned</span>
+                    ) : caller.accountStatus === "restricted" ? (
+                      <span data-testid={`status-restricted-${caller.id}`} className={`${C.badge} border-orange-200 bg-orange-50 text-orange-600`}>Restricted</span>
+                    ) : (
+                      <span className={`${C.badge} border-emerald-200 bg-emerald-50 text-emerald-600`}>Active</span>
                     )}
                   </td>
                   <td className={C.td + " text-gray-600 text-xs"}>{fmtMins(caller.remainingSeconds)}</td>
@@ -4561,7 +4633,104 @@ function MembershipCardsTab() {
   );
 }
 
-// ── Tab definitions ───────────────────────────────────────────────────────────
+// ── ModerationLogTab ──────────────────────────────────────────────────────────
+function ModerationLogTab() {
+  const [search, setSearch] = useState("");
+  const { data: logs, isLoading, refetch } = useQuery<ModerationLogEntry[]>({
+    queryKey: ["/api/admin/moderation-logs"],
+    refetchInterval: 30000,
+  });
+
+  const EVENT_LABELS: Record<string, string> = {
+    auto_flag: "Auto-Flagged",
+    auto_remove: "Auto-Removed",
+    auto_restrict: "Auto-Restricted",
+    auto_ban: "Auto-Banned",
+  };
+
+  const RULE_LABELS: Record<string, string> = {
+    threshold_flag: "Rule 1 — Flag Threshold",
+    threshold_remove: "Flag Threshold Remove",
+    block_count: "Rule 2 — Block Count",
+    repeat_flag: "Rule 4 — Repeat Flagging",
+    new_account_flag: "Rule 5 — New Account",
+  };
+
+  const filtered = (logs ?? []).filter(l =>
+    !search.trim() ||
+    (l.targetPhone ?? "").includes(search.trim()) ||
+    (l.eventType ?? "").includes(search.toLowerCase()) ||
+    (l.triggeredByRule ?? "").includes(search.toLowerCase()),
+  );
+
+  const EVENT_COLORS: Record<string, string> = {
+    auto_flag: "border-amber-200 bg-amber-50 text-amber-700",
+    auto_remove: "border-red-200 bg-red-50 text-red-600",
+    auto_restrict: "border-orange-200 bg-orange-50 text-orange-600",
+    auto_ban: "border-red-300 bg-red-100 text-red-700",
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <input
+          data-testid="input-modlog-search"
+          type="text"
+          placeholder="Search by phone, event type, rule…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="border border-gray-200 rounded px-3 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none w-64 focus:border-[#f5a623]"
+        />
+        <button data-testid="btn-refresh-modlog" onClick={() => refetch()} className={C.btnSecondary + " !py-1.5"}>
+          <RefreshCw size={12} /> Refresh
+        </button>
+        <span className="ml-auto text-gray-400 font-mono text-xs">{filtered.length} event{filtered.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className={C.th}>Timestamp</th>
+              <th className={C.th}>Phone</th>
+              <th className={C.th}>Event</th>
+              <th className={C.th}>Rule</th>
+              <th className={C.th}>Content</th>
+              <th className={C.th}>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING…</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">
+                {search ? "NO MATCHES" : "NO MODERATION EVENTS YET"}
+              </td></tr>
+            ) : filtered.map(log => (
+              <tr key={log.id} data-testid={`row-modlog-${log.id}`} className={C.row}>
+                <td className={C.td + " text-gray-400 text-xs whitespace-nowrap"}>
+                  {log.createdAt ? new Date(log.createdAt).toLocaleString() : "—"}
+                </td>
+                <td className={C.td + " font-mono text-xs"}>{log.targetPhone ?? <span className="text-gray-400">—</span>}</td>
+                <td className={C.td}>
+                  <span className={`${C.badge} ${EVENT_COLORS[log.eventType] ?? "border-gray-200 bg-gray-50 text-gray-500"}`}>
+                    {EVENT_LABELS[log.eventType] ?? log.eventType}
+                  </span>
+                </td>
+                <td className={C.td + " text-gray-500 text-xs"}>{RULE_LABELS[log.triggeredByRule ?? ""] ?? log.triggeredByRule ?? "—"}</td>
+                <td className={C.td + " text-gray-400 text-xs font-mono"}>
+                  {log.contentType ? `${log.contentType}` : "—"}
+                </td>
+                <td className={C.td + " text-gray-600 text-xs max-w-xs truncate"}>{log.reason ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boolean }[] = [
   // ── Main
   { id: "dashboard",      label: "Dashboard",        icon: <LayoutDashboard size={15} /> },
@@ -4577,6 +4746,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   // ── System Settings
   { id: "analytics",      label: "Analytics",         icon: <BarChart2 size={15} />,  dividerBefore: true },
   { id: "audit-log",      label: "Audit Log",         icon: <TrendingUp size={15} /> },
+  { id: "mod-log",        label: "Moderation Log",    icon: <ShieldAlert size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",     icon: <PhoneCall size={15} /> },
   { id: "ivr-flow",       label: "IVR Flow Map",      icon: <GitBranch size={15} /> },
   { id: "phone-numbers",  label: "Phone Numbers",     icon: <Phone size={15} /> },
@@ -4788,6 +4958,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "announcements"  && <AnnouncementsTab />}
           {activeTab === "analytics"      && <AnalyticsTab />}
           {activeTab === "audit-log"      && <AuditLogTab />}
+          {activeTab === "mod-log"        && <ModerationLogTab />}
           {activeTab === "phone-testing"  && <IVRTesterTab />}
           {activeTab === "ivr-flow"       && <IvrFlowMap />}
           {activeTab === "site-settings"  && <WebsiteSettingsTab />}
