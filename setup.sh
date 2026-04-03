@@ -3,8 +3,9 @@
 #  setup.sh  –  Full production VPS setup
 #
 #  Usage:
-#    bash setup.sh              # prompts for domain (defaults to assicrentals.com)
+#    bash setup.sh              # prompts for domain
 #    bash setup.sh mydomain.com # domain as argument
+#    bash setup.sh mydomain.com --yes  # skip confirmation prompt
 #
 #  Requirements:
 #    - Ubuntu 20.04 / 22.04 / 24.04
@@ -13,6 +14,7 @@
 # =============================================================================
 
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 
 # ─── COLOUR HELPERS ───────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -27,18 +29,31 @@ step()    { echo -e "\n${BOLD}${CYAN}━━━  $*  ━━━━━━━━━�
 APP_PORT=5050                           # internal Node.js port (nginx proxies to this)
 DB_USER="phonebooth_user"              # PostgreSQL role
 DB_NAME="phonebooth_db"                # PostgreSQL database
-DB_PASSWORD="1825Logan305"
 SERVICE_NAME="phonebooth"              # systemd service name
-CERT_DIR="assicrentals.com-0001"       # Let's Encrypt cert folder (already issued)
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Generate a secure random DB password (or reuse existing one from .env)
+if [ -f "${APP_DIR}/.env" ] && grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
+    EXISTING_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d= -f2-)
+    DB_PASSWORD=$(echo "${EXISTING_URL}" | grep -oP '(?<=:)[^@]+(?=@)' || true)
+fi
+if [ -z "${DB_PASSWORD:-}" ]; then
+    DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 28)
+fi
 # ──────────────────────────────────────────────────────────────────────────────
 
-# ─── DOMAIN ───────────────────────────────────────────────────────────────────
-if [ -n "${1-}" ]; then
-    DOMAIN="$1"
-else
-    read -rp "$(echo -e "${BOLD}Domain name${RESET} [assicrentals.com]: ")" DOMAIN
-    DOMAIN="${DOMAIN:-assicrentals.com}"
+# ─── ARGUMENTS ────────────────────────────────────────────────────────────────
+AUTO_YES=false
+DOMAIN=""
+for ARG in "$@"; do
+    case "$ARG" in
+        --yes|-y) AUTO_YES=true ;;
+        *)        [[ -z "$DOMAIN" ]] && DOMAIN="$ARG" ;;
+    esac
+done
+
+if [ -z "$DOMAIN" ]; then
+    read -rp "$(echo -e "${BOLD}Domain name${RESET} [example.com]: ")" DOMAIN
 fi
 DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN%/}"
 [[ -z "$DOMAIN" ]] && error "Domain name cannot be empty."
@@ -53,15 +68,19 @@ echo -e "  App port : ${APP_PORT} (internal)"
 echo -e "  App dir  : ${APP_DIR}"
 echo -e "${BOLD}=================================================${RESET}"
 echo ""
-read -rp "Continue? [y/N] " CONFIRM
-[[ "${CONFIRM,,}" == "y" ]] || { echo "Aborted."; exit 0; }
+if [ "$AUTO_YES" = false ]; then
+    read -rp "Continue? [y/N] " CONFIRM
+    [[ "${CONFIRM,,}" == "y" ]] || { echo "Aborted."; exit 0; }
+else
+    info "Auto-confirming (--yes flag set)."
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 step "1/9  System packages"
 # ═══════════════════════════════════════════════════════════════════════════════
 sudo apt-get update -qq
 
-# Node.js 20.x
+# ── Node.js 20.x ──────────────────────────────────────────────────────────────
 NODE_VER=$(node --version 2>/dev/null | grep -oP '(?<=v)\d+' || echo "0")
 if (( NODE_VER < 20 )); then
     info "Installing Node.js 20.x..."
@@ -71,16 +90,107 @@ else
     info "Node.js ${NODE_VER} already present – skipping."
 fi
 
-# PostgreSQL
-if ! command -v psql &>/dev/null; then
-    info "Installing PostgreSQL..."
+# ── PostgreSQL ─────────────────────────────────────────────────────────────────
+#
+#  Detection strategy:
+#    1. Check dpkg for any installed postgresql-XX package to get the version.
+#    2. If not installed → install postgresql + postgresql-contrib.
+#    3. Determine the correct systemd service name (version-specific on Ubuntu).
+#    4. Ensure the service is enabled and running.
+#    5. Wait up to 30 s for pg_isready before proceeding.
+#    6. Verify pg_hba.conf allows TCP password auth on 127.0.0.1 (the method
+#       the app uses) — patch it to md5 if it is set to peer/ident/trust.
+#
+PG_VERSION=$(dpkg -l 'postgresql-[0-9]*' 2>/dev/null \
+    | awk '/^ii/{print $2}' \
+    | grep -oP '(?<=postgresql-)\d+' \
+    | sort -n | tail -1 || true)
+
+if [[ -z "$PG_VERSION" ]]; then
+    info "PostgreSQL not found — installing..."
     sudo apt-get install -y postgresql postgresql-contrib -qq
-    sudo systemctl enable postgresql --now
+    # Re-detect version after install
+    PG_VERSION=$(dpkg -l 'postgresql-[0-9]*' 2>/dev/null \
+        | awk '/^ii/{print $2}' \
+        | grep -oP '(?<=postgresql-)\d+' \
+        | sort -n | tail -1 || true)
+    [[ -z "$PG_VERSION" ]] && error "PostgreSQL installation failed — version not detected."
+    success "PostgreSQL ${PG_VERSION} installed."
 else
-    info "PostgreSQL already present – skipping."
+    info "PostgreSQL ${PG_VERSION} already installed."
 fi
 
-# Nginx
+# ── Determine the correct service name ────────────────────────────────────────
+# Ubuntu uses versioned units like postgresql@14-main; the alias "postgresql"
+# also exists but may not always be the active unit.
+PG_SERVICE="postgresql"
+if sudo systemctl list-units --type=service --all 2>/dev/null \
+        | grep -q "postgresql@${PG_VERSION}-main.service"; then
+    PG_SERVICE="postgresql@${PG_VERSION}-main"
+fi
+
+# ── Enable and start ──────────────────────────────────────────────────────────
+if ! sudo systemctl is-active --quiet "${PG_SERVICE}" 2>/dev/null; then
+    info "Starting PostgreSQL service (${PG_SERVICE})..."
+    sudo systemctl enable "${PG_SERVICE}" --now
+    sleep 2
+else
+    info "PostgreSQL service (${PG_SERVICE}) is already running."
+fi
+
+# ── Wait for PostgreSQL to be ready to accept connections ─────────────────────
+info "Waiting for PostgreSQL to accept connections..."
+PG_WAIT_MAX=30; PG_WAITED=0
+until sudo -u postgres pg_isready -q 2>/dev/null; do
+    sleep 1
+    PG_WAITED=$((PG_WAITED + 1))
+    (( PG_WAITED >= PG_WAIT_MAX )) && \
+        error "PostgreSQL did not become ready within ${PG_WAIT_MAX}s — check: sudo journalctl -u ${PG_SERVICE}"
+done
+success "PostgreSQL ${PG_VERSION} is running and accepting connections."
+
+# ── Verify pg_hba.conf allows password auth for TCP connections ───────────────
+# The app connects via TCP (postgresql://user:pass@localhost/db) so the relevant
+# pg_hba.conf lines are the "host" entries for 127.0.0.1 and ::1.
+# If those are set to "trust" we patch them to "md5"; if they don't exist we
+# insert an explicit entry.  We never touch the "local all postgres peer" line
+# so that sudo -u postgres psql continues to work normally.
+PG_HBA="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
+if [[ -f "$PG_HBA" ]]; then
+    PATCHED=false
+
+    # Replace "trust" on host lines (insecure — should never be left as-is)
+    if sudo grep -qP '^host\s+all\s+all\s+(127\.0\.0\.1/32|::1/128)\s+trust' "$PG_HBA" 2>/dev/null; then
+        info "pg_hba.conf: patching 'trust' → 'md5' for TCP connections..."
+        sudo sed -i -E \
+            's/^(host\s+all\s+all\s+(127\.0\.0\.1\/32|::1\/128)\s+)trust$/\1md5/' \
+            "$PG_HBA"
+        PATCHED=true
+    fi
+
+    # Add an explicit host entry for our DB user if no host line covers 127.0.0.1
+    if ! sudo grep -qP '^host\s+all\s+all\s+127\.0\.0\.1/32' "$PG_HBA" 2>/dev/null; then
+        info "pg_hba.conf: adding host md5 entry for 127.0.0.1..."
+        echo "host    all             all             127.0.0.1/32            md5" \
+            | sudo tee -a "$PG_HBA" > /dev/null
+        PATCHED=true
+    fi
+
+    if [ "$PATCHED" = true ]; then
+        sudo systemctl reload "${PG_SERVICE}" 2>/dev/null \
+            || sudo systemctl restart "${PG_SERVICE}"
+        # Wait again after reload
+        until sudo -u postgres pg_isready -q 2>/dev/null; do sleep 1; done
+        success "pg_hba.conf updated and PostgreSQL reloaded."
+    else
+        info "pg_hba.conf already configured correctly — no changes needed."
+    fi
+else
+    warn "pg_hba.conf not found at ${PG_HBA} — skipping auth configuration."
+    warn "If the app cannot connect, manually ensure 127.0.0.1 uses md5 or scram-sha-256."
+fi
+
+# ── Nginx ──────────────────────────────────────────────────────────────────────
 if ! command -v nginx &>/dev/null; then
     info "Installing Nginx..."
     sudo apt-get install -y nginx -qq
@@ -89,7 +199,7 @@ else
     info "Nginx already present – skipping."
 fi
 
-# Certbot (for auto-renewal of existing certificate)
+# ── Certbot ───────────────────────────────────────────────────────────────────
 if ! command -v certbot &>/dev/null; then
     info "Installing Certbot..."
     sudo apt-get install -y certbot python3-certbot-nginx -qq
@@ -105,7 +215,7 @@ step "2/9  Node.js dependencies"
 cd "${APP_DIR}"
 info "Cleaning node_modules for a fresh install..."
 rm -rf node_modules
-npm install
+npm install --silent
 success "npm install complete."
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -125,7 +235,8 @@ if [ "${DB_EXISTS}" = "1" ]; then
 else
     info "Creating database '${DB_NAME}'..."
     sudo systemctl stop "${SERVICE_NAME}" 2>/dev/null || true
-    sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
+    sudo -u postgres psql -v ON_ERROR_STOP=1 \
+        -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};"
 fi
 
 # Always ensure correct privileges (safe to run multiple times)
@@ -137,7 +248,7 @@ success "Database '${DB_NAME}' and user '${DB_USER}' are ready."
 # ═══════════════════════════════════════════════════════════════════════════════
 step "4/9  .env file"
 # ═══════════════════════════════════════════════════════════════════════════════
-NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@localhost/${DB_NAME}?sslmode=disable"
+NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1/${DB_NAME}?sslmode=disable"
 
 # Use Python for reliable key=value upsert — avoids sed special-character issues
 upsert_env() {
@@ -145,7 +256,7 @@ upsert_env() {
     local val="$2"
     local file="${APP_DIR}/.env"
     python3 - <<PYEOF
-import re, sys
+import re
 key = """${key}"""
 val = """${val}"""
 path = """${file}"""
@@ -206,7 +317,6 @@ success "Schema pushed."
 # ═══════════════════════════════════════════════════════════════════════════════
 step "6/9  Admin account"
 # ═══════════════════════════════════════════════════════════════════════════════
-# reset-admin.ts creates the account if missing, resets the password if it exists
 npx tsx scripts/reset-admin.ts
 success "Admin account ready."
 
@@ -252,28 +362,43 @@ success "Service '${SERVICE_NAME}' enabled and started."
 step "9/9  Nginx + SSL"
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Verify the SSL cert (already issued by certbot) is in place
-CERT_BASE="/etc/letsencrypt/live/${CERT_DIR}"
-for CERT_FILE in fullchain.pem privkey.pem chain.pem; do
-    [ -f "${CERT_BASE}/${CERT_FILE}" ] \
-        || error "SSL cert missing: ${CERT_BASE}/${CERT_FILE}  — run: sudo certbot certificates"
-done
-info "SSL certificate verified at ${CERT_BASE}/"
-
-# Remove default site so it does not intercept requests
-[ -L /etc/nginx/sites-enabled/default ] && sudo rm -f /etc/nginx/sites-enabled/default && info "Removed default nginx site."
-
-# Remove any broken symlinks in sites-enabled (leftover from previous app installs)
-for LINK in /etc/nginx/sites-enabled/*; do
-    if [ -L "${LINK}" ] && [ ! -e "${LINK}" ]; then
-        sudo rm -f "${LINK}"
-        warn "Removed broken nginx symlink: ${LINK}"
+# Auto-detect the Let's Encrypt certificate directory for this domain.
+# Certbot names them <domain>, <domain>-0001, <domain>-0002, etc.
+CERT_BASE=""
+for CANDIDATE in \
+    "/etc/letsencrypt/live/${DOMAIN}" \
+    "/etc/letsencrypt/live/${DOMAIN}-0001" \
+    "/etc/letsencrypt/live/${DOMAIN}-0002"; do
+    if [ -f "${CANDIDATE}/fullchain.pem" ] && [ -f "${CANDIDATE}/privkey.pem" ]; then
+        CERT_BASE="$CANDIDATE"
+        break
     fi
 done
 
-# Write nginx site config
-NGINX_SITE="/etc/nginx/sites-available/${SERVICE_NAME}"
-sudo tee "${NGINX_SITE}" > /dev/null <<NGINXEOF
+if [ -z "$CERT_BASE" ]; then
+    warn "No SSL certificate found for '${DOMAIN}' under /etc/letsencrypt/live/"
+    warn "Run the following to obtain one, then re-run this script:"
+    warn "  sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN} --non-interactive --agree-tos -m admin@${DOMAIN}"
+    warn "Skipping Nginx SSL configuration."
+else
+    info "SSL certificate found at ${CERT_BASE}/"
+
+    # Remove default site so it does not intercept requests
+    [ -L /etc/nginx/sites-enabled/default ] \
+        && sudo rm -f /etc/nginx/sites-enabled/default \
+        && info "Removed default nginx site."
+
+    # Remove any broken symlinks in sites-enabled
+    for LINK in /etc/nginx/sites-enabled/*; do
+        if [ -L "${LINK}" ] && [ ! -e "${LINK}" ]; then
+            sudo rm -f "${LINK}"
+            warn "Removed broken nginx symlink: ${LINK}"
+        fi
+    done
+
+    # Write nginx site config
+    NGINX_SITE="/etc/nginx/sites-available/${SERVICE_NAME}"
+    sudo tee "${NGINX_SITE}" > /dev/null <<NGINXEOF
 # HTTP → HTTPS redirect
 server {
     listen 80;
@@ -288,9 +413,9 @@ server {
     listen [::]:443 ssl http2;
     server_name ${DOMAIN} www.${DOMAIN};
 
-    ssl_certificate     /etc/letsencrypt/live/${CERT_DIR}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${CERT_DIR}/privkey.pem;
-    ssl_trusted_certificate /etc/letsencrypt/live/${CERT_DIR}/chain.pem;
+    ssl_certificate     ${CERT_BASE}/fullchain.pem;
+    ssl_certificate_key ${CERT_BASE}/privkey.pem;
+    ssl_trusted_certificate ${CERT_BASE}/chain.pem;
 
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
@@ -363,17 +488,18 @@ server {
 }
 NGINXEOF
 
-# Enable site
-sudo ln -sf "${NGINX_SITE}" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
+    # Enable site
+    sudo ln -sf "${NGINX_SITE}" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
 
-# Test and reload
-sudo nginx -t
-sudo systemctl reload nginx
+    # Test and reload
+    sudo nginx -t
+    sudo systemctl reload nginx
 
-# Enable cert auto-renewal
-sudo systemctl enable certbot.timer 2>/dev/null || true
+    # Enable cert auto-renewal
+    sudo systemctl enable certbot.timer 2>/dev/null || true
 
-success "Nginx configured and reloaded."
+    success "Nginx configured and reloaded."
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 echo ""
@@ -383,6 +509,7 @@ echo ""
 echo -e "  ${BOLD}Site       :${RESET} ${CYAN}https://${DOMAIN}${RESET}"
 echo -e "  ${BOLD}Admin      :${RESET} https://${DOMAIN}/admin/login"
 echo -e "  ${BOLD}Database   :${RESET} ${DB_NAME} (user: ${DB_USER})"
+echo -e "  ${BOLD}PostgreSQL :${RESET} version ${PG_VERSION}, service: ${PG_SERVICE}"
 echo -e "  ${BOLD}Service    :${RESET} ${SERVICE_NAME}"
 echo ""
 echo -e "  ${BOLD}Useful commands:${RESET}"
@@ -391,6 +518,8 @@ echo -e "    Restart : sudo systemctl restart ${SERVICE_NAME}"
 echo -e "    Nginx   : sudo tail -f /var/log/nginx/phonebooth_error.log"
 echo ""
 echo -e "  ${BOLD}${YELLOW}Fill in your API keys in .env then restart the service:${RESET}"
+echo -e "    nano ${APP_DIR}/.env"
+echo -e ""
 echo -e "    TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER"
 echo -e "    ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID"
 echo -e "    STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET"
