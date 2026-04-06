@@ -166,12 +166,12 @@ export default function Landing() {
       </nav>
 
       {/* ── HERO ── */}
-      <section id="hero" className="relative overflow-hidden min-h-[260px] md:min-h-[480px]">
+      <section id="hero" className="relative overflow-hidden min-h-[260px] md:min-h-[480px] border-0 outline-none" style={{ backgroundColor: "#0d0d0d" }}>
         {/* Background image */}
         <img
           src={heroImg}
           alt={heroAlt}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: isMM ? "right 20%" : "center 20%", filter: "saturate(0.9) brightness(0.95)" }}
+          style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: isMM ? "right 20%" : "center 20%", filter: "saturate(0.9) brightness(0.95)", border: "none", outline: "none" }}
         />
         {/* Dark overlay — uniform for centered text readability */}
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} />
