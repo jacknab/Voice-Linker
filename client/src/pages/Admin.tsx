@@ -5439,7 +5439,7 @@ export default function Admin({ onLogout }: AdminProps) {
         </div>
 
         {/* Content */}
-        <div className={`flex-1 min-h-0 ${activeTab === "ivr-flow" ? "overflow-hidden p-0" : "overflow-y-auto p-6"}`}>
+        <div className={`flex-1 min-h-0 ${activeTab === "ivr-flow" ? "overflow-auto p-0" : "overflow-y-auto p-6"}`}>
           {showUpload && <UploadDialog onClose={() => setShowUpload(false)} />}
           {showAddRegion && <RegionDialog onClose={() => setShowAddRegion(false)} />}
 
