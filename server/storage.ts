@@ -595,7 +595,10 @@ export class DatabaseStorage implements IStorage {
     const realIds = regionalUserIds.map(r => r.userId);
     const virtualIds = virtualUserIds.map(r => r.userId);
 
-    // Profile condition for virtual callers: siteCategory-scoped + gender-filtered for MW
+    // Profile condition for virtual callers (including admin-uploaded seeds): siteCategory-scoped + gender-filtered for MW.
+    // Admin-uploaded profiles are included here via activeCalls when their seed session is running,
+    // which naturally scopes them to their assigned regionId and prevents them from appearing
+    // simultaneously in both halves of a linked region pair.
     const virtualProfileCondition = virtualIds.length > 0
       ? and(
           inArray(profiles.userId, virtualIds),
@@ -605,14 +608,9 @@ export class DatabaseStorage implements IStorage {
         )
       : sql`false`;
 
-    // Admin-uploaded profiles: same siteCategory + gender scoping
-    const adminUploadedCondition = isMW && oppositeGender
-      ? and(eq(profiles.isAdminUploaded, true), eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
-      : and(eq(profiles.isAdminUploaded, true), or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM')));
-
     const conditions = realIds.length > 0
-      ? or(inArray(profiles.userId, realIds), virtualProfileCondition, adminUploadedCondition)
-      : or(virtualProfileCondition, adminUploadedCondition);
+      ? or(inArray(profiles.userId, realIds), virtualProfileCondition)
+      : virtualProfileCondition;
 
     const [result] = await db.select({ count: count() })
       .from(profiles)
@@ -653,7 +651,10 @@ export class DatabaseStorage implements IStorage {
     const realIds = regionalUserIds.map(r => r.userId);
     const virtualIds = virtualUserIds.map(r => r.userId);
 
-    // Profile condition for virtual callers: siteCategory-scoped + gender-filtered for MW
+    // Profile condition for virtual callers (including admin-uploaded seeds): siteCategory-scoped + gender-filtered for MW.
+    // Admin-uploaded profiles are included here via activeCalls when their seed session is running,
+    // which naturally scopes them to their assigned regionId and prevents them from appearing
+    // simultaneously in both halves of a linked region pair.
     const virtualProfileCondition = virtualIds.length > 0
       ? and(
           inArray(profiles.userId, virtualIds),
@@ -663,14 +664,9 @@ export class DatabaseStorage implements IStorage {
         )
       : sql`false`;
 
-    // Admin-uploaded profiles: same siteCategory + gender scoping
-    const adminUploadedCondition = isMW && oppositeGender
-      ? and(eq(profiles.isAdminUploaded, true), eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
-      : and(eq(profiles.isAdminUploaded, true), or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM')));
-
     const conditions = realIds.length > 0
-      ? or(inArray(profiles.userId, realIds), virtualProfileCondition, adminUploadedCondition)
-      : or(virtualProfileCondition, adminUploadedCondition);
+      ? or(inArray(profiles.userId, realIds), virtualProfileCondition)
+      : virtualProfileCondition;
 
     // Collect all user IDs blocked in either direction so we can exclude them
     const blockedByMe = await db.select({ blockedUserId: blockedUsers.blockedUserId })

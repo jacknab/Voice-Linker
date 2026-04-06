@@ -795,7 +795,9 @@ export async function registerRoutes(
       });
 
       // Register this profile with the virtual caller simulator
-      addVirtualCaller(user.id);
+      addVirtualCaller(user.id).catch(err =>
+        console.error(`[simulator] addVirtualCaller error userId=${user.id}: ${err}`)
+      );
 
       logAudit("profile_uploaded", { targetType: "profile", targetId: profile.id, targetLabel: user.phoneNumber });
       res.json({ profile, phoneNumber: user.phoneNumber });
