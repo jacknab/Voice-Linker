@@ -822,7 +822,6 @@ function TTSTab() {
   const [previewing, setPreviewing] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const [filter, setFilter] = useState("");
-  const [categoryFolder, setCategoryFolder] = useState<"shared" | "mm" | "mw">("shared");
   const [generateAllProgress, setGenerateAllProgress] = useState<{ done: number; total: number; currentLabel: string } | null>(null);
   const generateAllAbortRef = useRef(false);
 
@@ -832,7 +831,10 @@ function TTSTab() {
     } catch {}
   }, [editingText]);
 
-  const { data: settings } = useQuery<{ voiceId: string }>({ queryKey: ["/api/admin/tts/settings"] });
+  const { data: settings } = useQuery<{ voiceIdMM: string; voiceIdMW: string }>({ queryKey: ["/api/admin/tts/settings"] });
+  const { data: siteSettings } = useQuery<{ siteCategory: string }>({ queryKey: ["/api/site-settings"] });
+  // Active folder is always determined by the site category — not manually selectable
+  const categoryFolder: "mm" | "mw" = (siteSettings?.siteCategory ?? "MM").toLowerCase() === "mw" ? "mw" : "mm";
   const { data: existingFiles } = useQuery<{ filename: string; url: string; size: number; folder: string }[]>({ queryKey: ["/api/admin/tts/prompts"] });
   const { data: zipEntries = [] } = useQuery<ZipEntry[]>({ queryKey: ["/api/admin/zip-codes"] });
   const neighborhoodEntries = zipEntries.filter(e => e.audioFile && e.neighborhood);
@@ -852,7 +854,7 @@ function TTSTab() {
       const res = await fetch("/api/admin/tts/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, filename, folder: folder && folder !== "shared" ? folder : undefined }),
+        body: JSON.stringify({ text, filename, folder: folder ?? undefined }),
       });
       if (!res.ok) { const err = await res.json().catch(() => ({ message: "Generation failed" })); throw new Error(err.message); }
       return res.json() as Promise<{ filename: string; url: string; folder: string }>;
@@ -902,7 +904,7 @@ function TTSTab() {
       const res = await fetch("/api/admin/tts/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: customText.trim() }),
+        body: JSON.stringify({ text: customText.trim(), folder: categoryFolder }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: "Preview failed" }));
@@ -940,7 +942,7 @@ function TTSTab() {
         const res = await fetch("/api/admin/tts/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: text.trim(), filename: prompt.filename, folder: categoryFolder !== "shared" ? categoryFolder : undefined }),
+          body: JSON.stringify({ text: text.trim(), filename: prompt.filename, folder: categoryFolder }),
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ message: "Failed" }));
@@ -957,7 +959,7 @@ function TTSTab() {
     generateAllAbortRef.current = false;
     queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
     if (!wasCancelled) {
-      toast({ title: "Generate All complete", description: `${done} of ${prompts.length} prompts generated into ${categoryFolder === "shared" ? "Shared" : categoryFolder.toUpperCase()} folder.` });
+      toast({ title: "Generate All complete", description: `${done} of ${prompts.length} prompts generated into ${categoryFolder.toUpperCase()} folder.` });
     }
   }
 
@@ -968,44 +970,53 @@ function TTSTab() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <div className={C.cardAlt}>
-          <div className={C.label}>Current Voice ID</div>
-          <div className="text-[#f5a623] font-mono text-sm break-all">{settings?.voiceId ?? "Loading..."}</div>
-          <div className="text-gray-400 font-mono text-xs">Change via ELEVENLABS_VOICE_ID in .env</div>
+          <div className={C.label}>Active Mode</div>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={`px-3 py-1 rounded font-mono text-sm font-bold text-white ${categoryFolder === "mw" ? "bg-purple-600" : "bg-blue-600"}`}>
+              {categoryFolder.toUpperCase()}
+            </span>
+            <span className="text-gray-400 text-xs">Set in Website Settings</span>
+          </div>
         </div>
         <div className={C.cardAlt}>
-          <div className={C.label}>Prompts Generated</div>
-          <div className={C.statValue}>{generatedCount}<span className="text-gray-400 text-lg">/{SYSTEM_PROMPTS.length}</span></div>
+          <div className={C.label}>MM Voice ID</div>
+          <div className="text-[#f5a623] font-mono text-sm break-all">{settings?.voiceIdMM ?? "Loading..."}</div>
+          <div className="text-gray-400 font-mono text-xs">Set via ELEVENLABS_VOICE_ID_MM in .env</div>
+        </div>
+        <div className={C.cardAlt}>
+          <div className={C.label}>MW Voice ID</div>
+          <div className="text-[#f5a623] font-mono text-sm break-all">{settings?.voiceIdMW ?? "Loading..."}</div>
+          <div className="text-gray-400 font-mono text-xs">Set via ELEVENLABS_VOICE_ID_MW in .env</div>
         </div>
       </div>
 
       <div className={C.card}>
         <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
-          <Settings size={14} className="text-[#f5a623]" /> Audio Category Folder
+          <Settings size={14} className="text-[#f5a623]" /> Active Audio Folder
         </h3>
         <p className="text-gray-400 font-mono text-xs -mt-1">
-          Select which folder to generate audio into. MM and MW each have their own set of prompts that override the shared (default) files. The phone system automatically plays the correct version based on the Site Category setting.
+          Audio is generated into the <span className="text-[#f5a623] font-bold">{categoryFolder.toUpperCase()}</span> folder based on your Website Settings. To switch between MM and MW, change the Site Category under Website Settings.
         </p>
-        <div className="flex gap-2 mt-1">
+        <div className="flex gap-2 mt-2">
           {([
-            { id: "shared", label: "Shared", hint: "Used by both MM & MW if no category override exists" },
-            { id: "mm",     label: "MM",     hint: "Men seeking Men — overrides shared prompts" },
-            { id: "mw",     label: "MW",     hint: "Men seeking Women — overrides shared prompts" },
+            { id: "mm", label: "MM", hint: "Men seeking Men" },
+            { id: "mw", label: "MW", hint: "Men seeking Women" },
           ] as const).map(opt => (
-            <button
+            <div
               key={opt.id}
-              data-testid={`btn-category-${opt.id}`}
-              onClick={() => setCategoryFolder(opt.id)}
+              data-testid={`indicator-category-${opt.id}`}
               title={opt.hint}
-              className={`px-3 py-1.5 rounded text-xs font-mono font-bold border transition-colors ${
+              className={`px-3 py-1.5 rounded text-xs font-mono font-bold border cursor-default select-none ${
                 categoryFolder === opt.id
                   ? "bg-[#f5a623] border-[#f5a623] text-white"
-                  : "bg-white border-gray-300 text-gray-500 hover:border-[#f5a623] hover:text-[#f5a623]"
+                  : "bg-gray-100 border-gray-200 text-gray-400"
               }`}
             >
               {opt.label}
-            </button>
+              {categoryFolder === opt.id && <span className="ml-1.5 text-[10px] opacity-80">← active</span>}
+            </div>
           ))}
         </div>
       </div>

@@ -3,9 +3,20 @@ import path from "path";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
+// Returns the correct ElevenLabs voice ID for a given folder (mm/mw) or falls back to the legacy var.
+export function getVoiceIdForFolder(folder?: string | null): string {
+  if (folder === "mm") {
+    return process.env.ELEVENLABS_VOICE_ID_MM || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+  }
+  if (folder === "mw") {
+    return process.env.ELEVENLABS_VOICE_ID_MW || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+  }
+  return process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+}
+
 export async function generateTTS(text: string, outputFilename: string, subfolder?: string): Promise<string> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+  const voiceId = getVoiceIdForFolder(subfolder ?? null);
 
   if (!apiKey) {
     throw new Error("ELEVENLABS_API_KEY is not configured");

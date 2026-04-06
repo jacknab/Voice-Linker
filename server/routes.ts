@@ -12,7 +12,7 @@ import fs from "fs";
 import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
-import { generateTTS, listVoices } from "./elevenlabs";
+import { generateTTS, listVoices, getVoiceIdForFolder } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
@@ -1357,11 +1357,13 @@ export async function registerRoutes(
   // Preview TTS audio — generates via ElevenLabs and streams audio back without saving to disk
   app.post("/api/admin/tts/preview", async (req, res) => {
     try {
-      const { text } = req.body as { text?: string };
+      const { text, folder } = req.body as { text?: string; folder?: string };
       if (!text?.trim()) return res.status(400).json({ message: "text is required" });
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      const voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+      const validFolders = ["mm", "mw"];
+      const resolvedFolder = folder && validFolders.includes(folder.toLowerCase()) ? folder.toLowerCase() : null;
+      const voiceId = getVoiceIdForFolder(resolvedFolder);
       if (!apiKey) return res.status(500).json({ message: "ELEVENLABS_API_KEY is not configured" });
 
       const elRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
@@ -1424,9 +1426,12 @@ export async function registerRoutes(
     }
   });
 
-  // Return current voice ID setting
+  // Return current voice ID settings for MM and MW
   app.get("/api/admin/tts/settings", (_req, res) => {
-    res.json({ voiceId: process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM" });
+    res.json({
+      voiceIdMM: getVoiceIdForFolder("mm"),
+      voiceIdMW: getVoiceIdForFolder("mw"),
+    });
   });
 
   // ─── Admin: Membership Settings ───────────────────────────────────────────
