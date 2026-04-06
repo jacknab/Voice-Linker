@@ -583,10 +583,14 @@ export class DatabaseStorage implements IStorage {
       .from(activeCalls)
       .where(realCallerCondition);
 
-    // Virtual callers (seed sessions) — filter by siteCategory + gender for MW
+    // Virtual callers (seed sessions) — scoped to the same region when one is provided
+    // so the same seed profile doesn't appear simultaneously in two connected regions.
+    const virtualCondition = regionId
+      ? and(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`), eq(activeCalls.regionId, regionId))
+      : like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`);
     const virtualUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
-      .where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));
+      .where(virtualCondition);
 
     const realIds = regionalUserIds.map(r => r.userId);
     const virtualIds = virtualUserIds.map(r => r.userId);
@@ -637,10 +641,14 @@ export class DatabaseStorage implements IStorage {
       .from(activeCalls)
       .where(realCallerCondition);
 
-    // Virtual callers (seed sessions) — filter by siteCategory + gender for MW
+    // Virtual callers (seed sessions) — scoped to the same region when one is provided
+    // so the same seed profile doesn't appear simultaneously in two connected regions.
+    const virtualCondition2 = regionId
+      ? and(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`), eq(activeCalls.regionId, regionId))
+      : like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`);
     const virtualUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
-      .where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));
+      .where(virtualCondition2);
 
     const realIds = regionalUserIds.map(r => r.userId);
     const virtualIds = virtualUserIds.map(r => r.userId);
