@@ -2154,8 +2154,14 @@ export async function registerRoutes(
             if (!phoneUser) {
               phoneUser = await storage.getOrCreateUser(fromNumber);
             }
-            await storage.updateUserMembership(phoneUser.id, { membershipNumber: card.cardNumber });
-            console.log(`[voice] Card ${digits} first use (no PIN) — linked to ${fromNumber}`);
+            const currentSeconds = phoneUser.remainingSeconds ?? 0;
+            await storage.updateUserMembership(phoneUser.id, {
+              membershipNumber: card.cardNumber,
+              membershipTier: "card",
+              remainingSeconds: currentSeconds + card.valueSeconds,
+              membershipStartedAt: phoneUser.membershipStartedAt ?? new Date(),
+            });
+            console.log(`[voice] Card ${digits} first use (no PIN) — linked to ${fromNumber}, credited ${card.valueSeconds}s`);
             playPrompt(twiml, req, "membership_linked.mp3",
               "Your membership card has been activated and linked to this phone number. Welcome.");
             twiml.redirect("/voice/entry-check");
@@ -2365,14 +2371,20 @@ export async function registerRoutes(
       const card = await storage.getMembershipCardByNumber(cardNumber);
       if (card && card.pin && card.pin === digits) {
         pendingCardFirstUse.delete(callSid);
-        // PIN correct — activate and link the card
+        // PIN correct — activate and link the card, then credit the user's balance
         await storage.linkCardToPhone(card.id, fromNumber);
         let phoneUser = await storage.getUserByPhone(fromNumber);
         if (!phoneUser) {
           phoneUser = await storage.getOrCreateUser(fromNumber);
         }
-        await storage.updateUserMembership(phoneUser.id, { membershipNumber: card.cardNumber });
-        console.log(`[voice] Card ${cardNumber} first use PIN accepted — linked to ${fromNumber}`);
+        const currentSeconds = phoneUser.remainingSeconds ?? 0;
+        await storage.updateUserMembership(phoneUser.id, {
+          membershipNumber: card.cardNumber,
+          membershipTier: "card",
+          remainingSeconds: currentSeconds + card.valueSeconds,
+          membershipStartedAt: phoneUser.membershipStartedAt ?? new Date(),
+        });
+        console.log(`[voice] Card ${cardNumber} first use PIN accepted — linked to ${fromNumber}, credited ${card.valueSeconds}s`);
         playPrompt(twiml, req, "membership_linked.mp3",
           "Your membership card has been activated and linked to this phone number. Welcome.");
         twiml.redirect("/voice/entry-check");
