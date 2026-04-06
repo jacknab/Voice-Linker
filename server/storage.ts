@@ -192,7 +192,6 @@ export interface IStorage {
   countFlagRemoveCycles(contentType: string, contentId: string): Promise<number>;
   countAutoRemovesForUser(userId: string): Promise<number>;
   setUserAccountStatus(userId: string, status: string): Promise<void>;
-  getUserById(userId: string): Promise<User | null>;
   getUserByProfileRecordingUrl(url: string): Promise<User | null>;
   getUserByMailboxAdRecordingUrl(url: string): Promise<User | null>;
   setUserRecordingRejection(userId: string, reason: string, type: string): Promise<void>;
@@ -1788,11 +1787,6 @@ export class DatabaseStorage implements IStorage {
 
   async setUserAccountStatus(userId: string, status: string): Promise<void> {
     await db.update(users).set({ accountStatus: status }).where(eq(users.id, userId));
-  }
-
-  async getUserById(userId: string): Promise<User | null> {
-    const [row] = await db.select().from(users).where(eq(users.id, userId));
-    return row ?? null;
   }
 
   async deleteProfileByUserId(userId: string): Promise<void> {
