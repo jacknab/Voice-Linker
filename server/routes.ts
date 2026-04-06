@@ -328,6 +328,10 @@ const pendingMembershipEntries = new Map<string, string>(); // callSid → membe
 // awaiting 4-digit PIN to confirm identity.
 const pendingPinAuth = new Map<string, string>(); // callSid → membership holder phone number
 
+// Pending first-use card activation: caller entered a valid 5-digit card number for the first time,
+// awaiting 4-digit PIN to confirm ownership before linking.
+const pendingCardFirstUse = new Map<string, string>(); // callSid → card number
+
 // Pending new PIN setup: the caller is confirming a newly entered PIN
 const pendingNewPinSetup = new Map<string, string>(); // callSid → first PIN entry (4 digits)
 
@@ -1880,6 +1884,7 @@ export async function registerRoutes(
       pendingMembershipEntries.delete(callSid);
       pendingPinAuth.delete(callSid);
       pendingNewPinSetup.delete(callSid);
+      pendingCardFirstUse.delete(callSid);
       femaleCallers.delete(callSid);
 
       // Clean up any live connect invite that this caller initiated
@@ -2137,18 +2142,24 @@ export async function registerRoutes(
             "We could not find a membership card with that number. Please check your card and try again.");
           twiml.redirect("/voice/entry-check");
         } else if (!card.phoneNumber) {
-          // First use — link this caller's phone to the card
-          await storage.linkCardToPhone(card.id, fromNumber);
-          // Ensure a users record exists for this phone and set the card's number as their membership
-          let phoneUser = await storage.getUserByPhone(fromNumber);
-          if (!phoneUser) {
-            phoneUser = await storage.getOrCreateUser(fromNumber);
+          // First use — require PIN before activating and linking
+          if (card.pin) {
+            console.log(`[voice] Card ${digits} first use — PIN required before activation`);
+            pendingCardFirstUse.set(callSid, card.cardNumber);
+            twiml.redirect("/voice/membership-card-pin-entry");
+          } else {
+            // No PIN on card (shouldn't happen) — activate directly
+            await storage.linkCardToPhone(card.id, fromNumber);
+            let phoneUser = await storage.getUserByPhone(fromNumber);
+            if (!phoneUser) {
+              phoneUser = await storage.getOrCreateUser(fromNumber);
+            }
+            await storage.updateUserMembership(phoneUser.id, { membershipNumber: card.cardNumber });
+            console.log(`[voice] Card ${digits} first use (no PIN) — linked to ${fromNumber}`);
+            playPrompt(twiml, req, "membership_linked.mp3",
+              "Your membership card has been activated and linked to this phone number. Welcome.");
+            twiml.redirect("/voice/entry-check");
           }
-          await storage.updateUserMembership(phoneUser.id, { membershipNumber: card.cardNumber });
-          console.log(`[voice] Card ${digits} first use — linked to ${fromNumber}`);
-          playPrompt(twiml, req, "membership_linked.mp3",
-            "Your membership card has been activated and linked to this phone number. Welcome.");
-          twiml.redirect("/voice/entry-check");
         } else if (card.phoneNumber === fromNumber) {
           // Returning member using their card number
           console.log(`[voice] Card ${digits} recognized for ${fromNumber}`);
@@ -2304,6 +2315,76 @@ export async function registerRoutes(
     } catch (err) {
       console.error("[voice] PIN auth error:", err);
       pendingPinAuth.delete(callSid);
+      twiml.redirect("/voice/entry-check");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1c-card-pin. First-Use Card PIN Entry ────────────────────────────────
+  // Prompted after a caller enters a valid 5-digit card number for the very first time.
+  // They must enter the card's 4-digit PIN to prove ownership before the card activates.
+  app.post("/voice/membership-card-pin-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    if (!pendingCardFirstUse.has(callSid)) {
+      twiml.redirect("/voice/entry-check");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-membership-card-pin-entry",
+      timeout: 10,
+    });
+    gather.say("Please enter your 4-digit PIN.");
+    // No input / timeout → skip membership and continue
+    twiml.redirect("/voice/entry-check");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-membership-card-pin-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) ?? "";
+    const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
+
+    const cardNumber = pendingCardFirstUse.get(callSid);
+    if (!cardNumber) {
+      twiml.redirect("/voice/entry-check");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const card = await storage.getMembershipCardByNumber(cardNumber);
+      if (card && card.pin && card.pin === digits) {
+        pendingCardFirstUse.delete(callSid);
+        // PIN correct — activate and link the card
+        await storage.linkCardToPhone(card.id, fromNumber);
+        let phoneUser = await storage.getUserByPhone(fromNumber);
+        if (!phoneUser) {
+          phoneUser = await storage.getOrCreateUser(fromNumber);
+        }
+        await storage.updateUserMembership(phoneUser.id, { membershipNumber: card.cardNumber });
+        console.log(`[voice] Card ${cardNumber} first use PIN accepted — linked to ${fromNumber}`);
+        playPrompt(twiml, req, "membership_linked.mp3",
+          "Your membership card has been activated and linked to this phone number. Welcome.");
+        twiml.redirect("/voice/entry-check");
+      } else {
+        pendingCardFirstUse.delete(callSid);
+        console.log(`[voice] Card ${cardNumber} first use PIN rejected for callSid=${callSid}`);
+        twiml.say("Incorrect PIN. Please check your card details and try again.");
+        twiml.redirect("/voice/entry-check");
+      }
+    } catch (err) {
+      console.error("[voice] Card first-use PIN error:", err);
+      pendingCardFirstUse.delete(callSid);
       twiml.redirect("/voice/entry-check");
     }
 
