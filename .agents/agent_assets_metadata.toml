@@ -42,6 +42,12 @@ uri = "file://attached_assets/hero_girl_chatline_hq.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "3b_dv5K39LYbR3i6gVAgL"
+uri = "file://attached_assets/hero_mm_guy_phone.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "A94LSjLMF5S8MgWI0l6Vb"
 uri = "file://SETUP.md"
@@ -65,3 +71,63 @@ id = "X0Fk7Wb4SRKhRnlD_cpUi"
 uri = "file://IVR_Customization_Guide.md"
 type = "text"
 title = "IVR Customization Guide"
+
+[[outputs]]
+id = "Tr3K6ksFffmuIfyn9Q-wZ"
+uri = "file://attached_assets/stock_images/guy_phone_call_1.jpg"
+type = "image"
+title = "young man smiling talking on mobile phone"
+
+[[outputs]]
+id = "Bd4SFY4Il7QEJbt0CcQz9"
+uri = "file://attached_assets/stock_images/guy_phone_call_2.jpg"
+type = "image"
+title = "young man smiling talking on mobile phone"
+
+[[outputs]]
+id = "nSsB6_3lPlYwrbXL2bFMk"
+uri = "file://attached_assets/stock_images/guy_phone_call_3.jpg"
+type = "image"
+title = "young man smiling talking on mobile phone"
+
+[[outputs]]
+id = "jZjaj2Nv0YuvVp7z-UrDc"
+uri = "file://attached_assets/stock_images/guy_phone_call_4.jpg"
+type = "image"
+title = "young man smiling talking on mobile phone"
+
+[[outputs]]
+id = "_xuADenwQV-7E-WJ2jbxY"
+uri = "file://attached_assets/stock_images/guy_phone_call_5.jpg"
+type = "image"
+title = "young man smiling talking on mobile phone"
+
+[[outputs]]
+id = "qeGSPGu5W2Ha4pBVaKjY9"
+uri = "file://attached_assets/stock_images/man_phone_smile_1.jpg"
+type = "image"
+title = "man smiling phone call outdoor"
+
+[[outputs]]
+id = "347gteC_BUolVrO2AlXZz"
+uri = "file://attached_assets/stock_images/man_phone_smile_2.jpg"
+type = "image"
+title = "man smiling phone call outdoor"
+
+[[outputs]]
+id = "Ac6vWFF2iZgqQ_2uAmQ71"
+uri = "file://attached_assets/stock_images/man_phone_smile_3.jpg"
+type = "image"
+title = "man smiling phone call outdoor"
+
+[[outputs]]
+id = "MZ2rUL2_APhfaUvWdh20o"
+uri = "file://attached_assets/stock_images/man_phone_smile_4.jpg"
+type = "image"
+title = "man smiling phone call outdoor"
+
+[[outputs]]
+id = "vkonZScf1cXMroy6Uls_j"
+uri = "file://attached_assets/stock_images/man_phone_smile_5.jpg"
+type = "image"
+title = "man smiling phone call outdoor"

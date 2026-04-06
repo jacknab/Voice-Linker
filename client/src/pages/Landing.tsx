@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Phone, Loader2, Menu, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import heroImgMM from "@assets/hero_guy_1.png";
+import heroImgMM from "@assets/hero_mm_guy_phone.png";
 import heroImgMW from "@assets/image_1775035245108.png";
 
 const DEFAULT_PHONE = "000-000-0000";
@@ -171,7 +171,7 @@ export default function Landing() {
         <img
           src={heroImg}
           alt={heroAlt}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 20%", filter: "saturate(0.9) brightness(0.95)" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: isMM ? "right 20%" : "center 20%", filter: "saturate(0.9) brightness(0.95)" }}
         />
         {/* Dark overlay — uniform for centered text readability */}
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} />
@@ -179,7 +179,7 @@ export default function Landing() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
         {/* Content */}
-        <div className={`relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-start px-8 md:px-16 pt-10 md:pt-14 pb-10 ${isMM ? "justify-end" : "justify-start"}`}>
+        <div className={`relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-start px-8 md:px-16 pt-10 md:pt-14 pb-10 justify-start`}>
           <div style={{ maxWidth: "560px" }}>
 
             {/* Age disclaimer */}
