@@ -241,8 +241,10 @@ export interface IStorage {
   // Membership cards (5-digit pre-created cards for events/distribution)
   createMembershipCard(cardNumber: string, pin: string, valueSeconds: number, notes?: string): Promise<MembershipCard>;
   getMembershipCardByNumber(cardNumber: string): Promise<MembershipCard | undefined>;
+  getMembershipCardById(id: string): Promise<MembershipCard | undefined>;
   getMembershipCardByPhone(phoneNumber: string): Promise<MembershipCard | undefined>;
   linkCardToPhone(cardId: string, phoneNumber: string): Promise<void>;
+  deductCardSeconds(cardId: string, seconds: number): Promise<MembershipCard>;
   getAllMembershipCards(): Promise<MembershipCard[]>;
   deleteMembershipCard(id: string): Promise<void>;
   updateMembershipCardNotes(id: string, notes: string): Promise<void>;
@@ -1699,6 +1701,11 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async getMembershipCardById(id: string): Promise<MembershipCard | undefined> {
+    const [row] = await db.select().from(membershipCards).where(eq(membershipCards.id, id));
+    return row;
+  }
+
   async getMembershipCardByPhone(phoneNumber: string): Promise<MembershipCard | undefined> {
     const [row] = await db.select().from(membershipCards).where(eq(membershipCards.phoneNumber, phoneNumber));
     return row;
@@ -1706,6 +1713,15 @@ export class DatabaseStorage implements IStorage {
 
   async linkCardToPhone(cardId: string, phoneNumber: string): Promise<void> {
     await db.update(membershipCards).set({ phoneNumber, firstUsedAt: new Date() }).where(eq(membershipCards.id, cardId));
+  }
+
+  async deductCardSeconds(cardId: string, seconds: number): Promise<MembershipCard> {
+    const [row] = await db
+      .update(membershipCards)
+      .set({ valueSeconds: sql`GREATEST(0, ${membershipCards.valueSeconds} - ${seconds})` })
+      .where(eq(membershipCards.id, cardId))
+      .returning();
+    return row;
   }
 
   async getAllMembershipCards(): Promise<MembershipCard[]> {

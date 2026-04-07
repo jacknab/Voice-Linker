@@ -328,9 +328,12 @@ const pendingMembershipEntries = new Map<string, string>(); // callSid → membe
 // awaiting 4-digit PIN to confirm identity.
 const pendingPinAuth = new Map<string, string>(); // callSid → membership holder phone number
 
-// Pending first-use card activation: caller entered a valid 5-digit card number for the first time,
-// awaiting 4-digit PIN to confirm ownership before linking.
+// Pending card PIN entry: caller entered a valid 5-digit card number and is awaiting PIN verification.
 const pendingCardFirstUse = new Map<string, string>(); // callSid → card number
+
+// Calling card override: tracks which card a caller is using for the duration of the call.
+// Billing deducts directly from the card's value_seconds; no phone linkage occurs.
+const callCardOverride = new Map<string, string>(); // callSid → cardId
 
 // Pending new PIN setup: the caller is confirming a newly entered PIN
 const pendingNewPinSetup = new Map<string, string>(); // callSid → first PIN entry (4 digits)
@@ -1664,11 +1667,17 @@ export async function registerRoutes(
     checkpoint.accumulatedSeconds -= secondsToDeduct;
 
     try {
-      const overridePhone = callMembershipOverride.get(callSid);
-      const billingPhone = overridePhone ?? checkpoint.fromNumber;
-      const user = await storage.getOrCreateUser(billingPhone);
-      await storage.deductSeconds(user.id, secondsToDeduct);
-      console.log(`[billing] syncBilling: deducted ${secondsToDeduct}s (${minutesToDeduct} min) from userId=${user.id}${overridePhone ? " (membership override)" : ""}`);
+      const cardId = callCardOverride.get(callSid);
+      if (cardId) {
+        await storage.deductCardSeconds(cardId, secondsToDeduct);
+        console.log(`[billing] syncBilling: deducted ${secondsToDeduct}s (${minutesToDeduct} min) from cardId=${cardId}`);
+      } else {
+        const overridePhone = callMembershipOverride.get(callSid);
+        const billingPhone = overridePhone ?? checkpoint.fromNumber;
+        const user = await storage.getOrCreateUser(billingPhone);
+        await storage.deductSeconds(user.id, secondsToDeduct);
+        console.log(`[billing] syncBilling: deducted ${secondsToDeduct}s (${minutesToDeduct} min) from userId=${user.id}${overridePhone ? " (membership override)" : ""}`);
+      }
     } catch (err) {
       console.error("[billing] syncBilling error:", err);
     }
@@ -1688,11 +1697,17 @@ export async function registerRoutes(
     if (checkpoint && checkpoint.accumulatedSeconds > 0) {
       // Partial minute remaining — charge a full minute (round up)
       try {
-        const overridePhone = callMembershipOverride.get(callSid);
-        const billingPhone = overridePhone ?? checkpoint.fromNumber;
-        const user = await storage.getOrCreateUser(billingPhone);
-        await storage.deductSeconds(user.id, 60);
-        console.log(`[billing] finalizeCallBilling: rounded up ${checkpoint.accumulatedSeconds}s remainder to 1 min for userId=${user.id}`);
+        const cardId = callCardOverride.get(callSid);
+        if (cardId) {
+          await storage.deductCardSeconds(cardId, 60);
+          console.log(`[billing] finalizeCallBilling: rounded up ${checkpoint.accumulatedSeconds}s remainder to 1 min for cardId=${cardId}`);
+        } else {
+          const overridePhone = callMembershipOverride.get(callSid);
+          const billingPhone = overridePhone ?? checkpoint.fromNumber;
+          const user = await storage.getOrCreateUser(billingPhone);
+          await storage.deductSeconds(user.id, 60);
+          console.log(`[billing] finalizeCallBilling: rounded up ${checkpoint.accumulatedSeconds}s remainder to 1 min for userId=${user.id}`);
+        }
       } catch (err) {
         console.error("[billing] finalizeCallBilling roundup error:", err);
       }
@@ -1888,6 +1903,7 @@ export async function registerRoutes(
       callWarningShown.delete(callSid);
       callRegion.delete(callSid);
       callMembershipOverride.delete(callSid);
+      callCardOverride.delete(callSid);
       pendingMembershipEntries.delete(callSid);
       pendingPinAuth.delete(callSid);
       pendingNewPinSetup.delete(callSid);
@@ -2053,49 +2069,31 @@ export async function registerRoutes(
     }
 
     const gather = twiml.gather({
-      numDigits: 1,
-      finishOnKey: "",
-      action: "/voice/handle-membership-gateway",
-      timeout: 5,
-    });
-    playPrompt(gather, req, "membership_entry_prompt.mp3",
-      "If you have a membership press 1 now. Otherwise press the pound key.");
-    // No input / timeout → skip membership and continue
-    twiml.redirect("/voice/entry-check");
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  // ─── 1b-i-a. Handle Membership Gateway Choice ──────────────────────────────
-  app.post("/voice/handle-membership-gateway", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const digit = (req.body?.Digits as string) ?? "";
-
-    if (digit === "1") {
-      twiml.redirect("/voice/membership-number-entry");
-    } else {
-      // # or anything else → skip membership
-      twiml.redirect("/voice/entry-check");
-    }
-
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  // ─── 1b-i-b. Membership Number Entry ───────────────────────────────────────
-  // Collects the 5-digit membership number; auto-fires after the 5th digit.
-  app.post("/voice/membership-number-entry", async (req, res) => {
-    const twiml = new VoiceResponse();
-
-    const gather = twiml.gather({
       numDigits: 5,
       finishOnKey: "#",
       action: "/voice/handle-membership-entry",
       timeout: 10,
     });
-    gather.say("Please enter your 5-digit membership number.");
+    playPrompt(gather, req, "membership_entry_prompt.mp3",
+      "If you have a membership card, enter your card number now. Otherwise press the pound key.");
     // No input / timeout → skip membership and continue
     twiml.redirect("/voice/entry-check");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b-i-a. Handle Membership Gateway Choice (legacy route — kept for compatibility) ──
+  app.post("/voice/handle-membership-gateway", async (req, res) => {
+    const twiml = new VoiceResponse();
+    twiml.redirect("/voice/entry-check");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1b-i-b. Membership Number Entry (legacy route — kept for compatibility) ───────────
+  app.post("/voice/membership-number-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    twiml.redirect("/voice/membership-entry");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -2140,57 +2138,32 @@ export async function registerRoutes(
       }
       twiml.redirect("/voice/entry-check");
     } else if (digits.length === 5) {
-      // 5-digit membership card number
+      // 5-digit calling card number — always require PIN, never link to caller's phone
       try {
         const card = await storage.getMembershipCardByNumber(digits);
         if (!card) {
           console.log(`[voice] Card not found: ${digits}`);
           playPrompt(twiml, req, "membership_invalid.mp3",
-            "We could not find a membership card with that number. Please check your card and try again.");
+            "We could not find a card with that number. Please check your card and try again.");
           twiml.redirect("/voice/entry-check");
-        } else if (!card.phoneNumber) {
-          // First use — require PIN before activating and linking
-          if (card.pin) {
-            console.log(`[voice] Card ${digits} first use — PIN required before activation`);
-            pendingCardFirstUse.set(callSid, card.cardNumber);
-            twiml.redirect("/voice/membership-card-pin-entry");
-          } else {
-            // No PIN on card (shouldn't happen) — activate directly
-            await storage.linkCardToPhone(card.id, fromNumber);
-            let phoneUser = await storage.getUserByPhone(fromNumber);
-            if (!phoneUser) {
-              phoneUser = await storage.getOrCreateUser(fromNumber);
-            }
-            const currentSeconds = phoneUser.remainingSeconds ?? 0;
-            await storage.updateUserMembership(phoneUser.id, {
-              membershipNumber: card.cardNumber,
-              membershipTier: "card",
-              remainingSeconds: currentSeconds + card.valueSeconds,
-              membershipStartedAt: phoneUser.membershipStartedAt ?? new Date(),
-            });
-            console.log(`[voice] Card ${digits} first use (no PIN) — linked to ${fromNumber}, credited ${card.valueSeconds}s`);
-            playPrompt(twiml, req, "membership_linked.mp3",
-              "Your membership card has been activated and linked to this phone number. Welcome.");
-            twiml.redirect("/voice/entry-check");
-          }
-        } else if (card.phoneNumber === fromNumber) {
-          // Returning member using their card number
-          console.log(`[voice] Card ${digits} recognized for ${fromNumber}`);
-          playPrompt(twiml, req, "membership_linked.mp3", "Your membership has been verified. Welcome.");
+        } else if (card.valueSeconds <= 0) {
+          console.log(`[voice] Card ${digits} has no remaining time`);
+          playPrompt(twiml, req, "access_expired.mp3",
+            "That card has no remaining time. Please use a different card.");
           twiml.redirect("/voice/entry-check");
+        } else if (card.pin) {
+          // Card has a PIN — require it before granting access
+          console.log(`[voice] Card ${digits} — PIN required`);
+          pendingCardFirstUse.set(callSid, card.cardNumber);
+          twiml.redirect("/voice/membership-card-pin-entry");
         } else {
-          // Card already linked to a different phone — require PIN if one is set
-          let cardUser = await storage.getUserByPhone(card.phoneNumber);
-          if (cardUser?.membershipPin) {
-            console.log(`[voice] Card ${digits} on different phone — PIN required`);
-            pendingPinAuth.set(callSid, card.phoneNumber);
-            twiml.redirect("/voice/membership-pin-entry");
-          } else {
-            console.log(`[voice] Card ${digits} already claimed by a different number (no PIN set)`);
-            playPrompt(twiml, req, "membership_invalid.mp3",
-              "This card is already registered to a different phone number. To call from any phone, please set a 4-digit PIN by calling from your registered phone first.");
-            twiml.redirect("/voice/entry-check");
-          }
+          // No PIN set on card — grant access directly (announce time, no phone link)
+          console.log(`[voice] Card ${digits} — no PIN, granting access directly`);
+          callCardOverride.set(callSid, card.id);
+          const minutes = Math.floor(card.valueSeconds / 60);
+          playTimeRemaining(twiml, req, minutes);
+          callTimeAnnounced.add(callSid);
+          twiml.redirect("/voice/entry-check-card");
         }
       } catch (err) {
         console.error("[voice] Card lookup error:", err);
@@ -2365,7 +2338,6 @@ export async function registerRoutes(
     const twiml = new VoiceResponse();
     const digits = (req.body?.Digits as string) ?? "";
     const callSid = req.body?.CallSid as string;
-    const fromNumber = req.body?.From as string;
 
     const cardNumber = pendingCardFirstUse.get(callSid);
     if (!cardNumber) {
@@ -2378,32 +2350,57 @@ export async function registerRoutes(
       const card = await storage.getMembershipCardByNumber(cardNumber);
       if (card && card.pin && card.pin === digits) {
         pendingCardFirstUse.delete(callSid);
-        // PIN correct — activate and link the card, then credit the user's balance
-        await storage.linkCardToPhone(card.id, fromNumber);
-        let phoneUser = await storage.getUserByPhone(fromNumber);
-        if (!phoneUser) {
-          phoneUser = await storage.getOrCreateUser(fromNumber);
-        }
-        const currentSeconds = phoneUser.remainingSeconds ?? 0;
-        await storage.updateUserMembership(phoneUser.id, {
-          membershipNumber: card.cardNumber,
-          membershipTier: "card",
-          remainingSeconds: currentSeconds + card.valueSeconds,
-          membershipStartedAt: phoneUser.membershipStartedAt ?? new Date(),
-        });
-        console.log(`[voice] Card ${cardNumber} first use PIN accepted — linked to ${fromNumber}, credited ${card.valueSeconds}s`);
-        playPrompt(twiml, req, "membership_linked.mp3",
-          "Your membership card has been activated and linked to this phone number. Welcome.");
-        twiml.redirect("/voice/entry-check");
+        // PIN correct — grant calling card access without linking to caller's phone
+        callCardOverride.set(callSid, card.id);
+        const minutes = Math.floor(card.valueSeconds / 60);
+        console.log(`[voice] Card ${cardNumber} PIN accepted for callSid=${callSid} — ${minutes} min remaining, no phone link`);
+        playPrompt(twiml, req, "membership_linked.mp3", "Card accepted.");
+        playTimeRemaining(twiml, req, minutes);
+        callTimeAnnounced.add(callSid);
+        twiml.redirect("/voice/entry-check-card");
       } else {
         pendingCardFirstUse.delete(callSid);
-        console.log(`[voice] Card ${cardNumber} first use PIN rejected for callSid=${callSid}`);
-        twiml.say("Incorrect PIN. Please check your card details and try again.");
+        console.log(`[voice] Card ${cardNumber} PIN rejected for callSid=${callSid}`);
+        playPrompt(twiml, req, "membership_invalid.mp3",
+          "Incorrect PIN. Please check your card and try again.");
         twiml.redirect("/voice/entry-check");
       }
     } catch (err) {
-      console.error("[voice] Card first-use PIN error:", err);
+      console.error("[voice] Card PIN entry error:", err);
       pendingCardFirstUse.delete(callSid);
+      twiml.redirect("/voice/entry-check");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1c-card. Entry Check (Calling Card) ─────────────────────────────────
+  // Routes callers who authenticated via a calling card (callCardOverride) into the
+  // main experience. Time was already announced in the PIN handler.
+  app.post("/voice/entry-check-card", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    try {
+      const cardId = callCardOverride.get(callSid);
+      if (!cardId) {
+        twiml.redirect("/voice/entry-check");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const card = await storage.getMembershipCardById(cardId);
+      if (!card || card.valueSeconds <= 0) {
+        playPrompt(twiml, req, "access_expired.mp3",
+          "Your calling card has no remaining time. Please use a different card.");
+        twiml.hangup();
+      } else {
+        const siteConf = await getSiteSettingsCached();
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
+      }
+    } catch (error) {
+      console.error("[voice] /voice/entry-check-card error:", error);
       twiml.redirect("/voice/entry-check");
     }
 
@@ -2692,19 +2689,35 @@ export async function registerRoutes(
     } catch (_) { /* fall through to MM menu on error */ }
 
     try {
-      const user = await getOrCreateUser(fromNumber);
-      const remainingSeconds = user.remainingSeconds ?? 0;
+      const cardId = callCardOverride.get(callSid);
+      let hasMembership: boolean;
+      let remainingSeconds: number;
+
+      if (cardId) {
+        const card = await storage.getMembershipCardById(cardId);
+        hasMembership = true;
+        remainingSeconds = card?.valueSeconds ?? 0;
+      } else {
+        const user = await getOrCreateUser(fromNumber);
+        hasMembership = !!user.membershipTier;
+        remainingSeconds = user.remainingSeconds ?? 0;
+      }
 
       // ── Access expired ──────────────────────────────────────────────────
-      if (user.membershipTier && remainingSeconds <= 0) {
+      if (hasMembership && remainingSeconds <= 0) {
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
-        twiml.redirect("/voice/membership-purchase");
+        if (cardId) {
+          twiml.say("Please use a different calling card.");
+          twiml.hangup();
+        } else {
+          twiml.redirect("/voice/membership-purchase");
+        }
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
       // ── Under-5-minute warning at main menu (shown once per call) ──────
-      if (user.membershipTier && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
+      if (hasMembership && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
         callWarningShown.add(callSid);
         twiml.redirect("/voice/time-warning");
         res.type("text/xml");
@@ -2712,7 +2725,7 @@ export async function registerRoutes(
       }
 
       // ── First-visit balance announcement ────────────────────────────────
-      if (user.membershipTier && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
+      if (hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
         callTimeAnnounced.add(callSid);
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
       }
@@ -2790,19 +2803,35 @@ export async function registerRoutes(
     const fromNumber = req.body?.From as string;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
-      const remainingSeconds = user.remainingSeconds ?? 0;
+      const cardId = callCardOverride.get(callSid);
+      let hasMembership: boolean;
+      let remainingSeconds: number;
+
+      if (cardId) {
+        const card = await storage.getMembershipCardById(cardId);
+        hasMembership = true;
+        remainingSeconds = card?.valueSeconds ?? 0;
+      } else {
+        const user = await getOrCreateUser(fromNumber);
+        hasMembership = !!user.membershipTier;
+        remainingSeconds = user.remainingSeconds ?? 0;
+      }
 
       // Access expired
-      if (user.membershipTier && remainingSeconds <= 0 && !femaleCallers.has(callSid)) {
+      if (hasMembership && remainingSeconds <= 0 && !femaleCallers.has(callSid)) {
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
-        twiml.redirect("/voice/membership-purchase");
+        if (cardId) {
+          twiml.say("Please use a different calling card.");
+          twiml.hangup();
+        } else {
+          twiml.redirect("/voice/membership-purchase");
+        }
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
       // Under-5-minute warning (once per call)
-      if (user.membershipTier && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
+      if (hasMembership && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
         callWarningShown.add(callSid);
         twiml.redirect("/voice/time-warning");
         res.type("text/xml");
@@ -2810,7 +2839,7 @@ export async function registerRoutes(
       }
 
       // First-visit balance announcement
-      if (user.membershipTier && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
+      if (hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
         callTimeAnnounced.add(callSid);
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
       }
