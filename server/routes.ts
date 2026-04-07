@@ -85,8 +85,22 @@ function invalidateSiteSettingsCache(): void {
 }
 
 function centsToLabel(cents: number): string {
-  const dollars = cents / 100;
-  return Number.isInteger(dollars) ? `${dollars} dollars` : `${dollars.toFixed(2)} dollars`;
+  const dollars = Math.floor(cents / 100);
+  const remaining = cents % 100;
+  if (remaining === 0) return `${dollars} dollar${dollars !== 1 ? "s" : ""}`;
+  return `${dollars} dollar${dollars !== 1 ? "s" : ""} and ${remaining} cent${remaining !== 1 ? "s" : ""}`;
+}
+
+function minutesToDurationLabel(minutes: number): string {
+  if (minutes >= 1440 && minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return `${days} day${days !== 1 ? "s" : ""}`;
+  }
+  if (minutes >= 60 && minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours} hour${hours !== 1 ? "s" : ""}`;
+  }
+  return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
 }
 
 type MembershipPackage = { name: string; label: string; minutes: number; priceCents: number; priceLabel: string };
@@ -94,9 +108,9 @@ type MembershipPackage = { name: string; label: string; minutes: number; priceCe
 async function getMembershipPackages(): Promise<Record<string, MembershipPackage>> {
   const s = await getMembershipSettingsCached();
   return {
-    "2": { name: "plan1", label: `${s.plan1Minutes.toLocaleString()} Minute`, minutes: s.plan1Minutes, priceCents: s.plan1PriceCents, priceLabel: centsToLabel(s.plan1PriceCents) },
-    "3": { name: "plan2", label: `${s.plan2Minutes.toLocaleString()} Minute`, minutes: s.plan2Minutes, priceCents: s.plan2PriceCents, priceLabel: centsToLabel(s.plan2PriceCents) },
-    "4": { name: "plan3", label: `${s.plan3Minutes.toLocaleString()} Minute`, minutes: s.plan3Minutes, priceCents: s.plan3PriceCents, priceLabel: centsToLabel(s.plan3PriceCents) },
+    "2": { name: "plan1", label: minutesToDurationLabel(s.plan1Minutes), minutes: s.plan1Minutes, priceCents: s.plan1PriceCents, priceLabel: centsToLabel(s.plan1PriceCents) },
+    "3": { name: "plan2", label: minutesToDurationLabel(s.plan2Minutes), minutes: s.plan2Minutes, priceCents: s.plan2PriceCents, priceLabel: centsToLabel(s.plan2PriceCents) },
+    "4": { name: "plan3", label: minutesToDurationLabel(s.plan3Minutes), minutes: s.plan3Minutes, priceCents: s.plan3PriceCents, priceLabel: centsToLabel(s.plan3PriceCents) },
   };
 }
 
@@ -2877,45 +2891,37 @@ export async function registerRoutes(
   // ─── 4a. Purchase Pre-Menu ────────────────────────────────────────────────
   // Plays promo code option then membership packages in one single prompt.
   // All minutes and prices come live from admin membership settings.
-  // Digit 1 → promo code; 2/3/4 → package selection; 9 → repeat; # → cancel.
+  // Digit 1 → promo code; 2 → only active plan; 9 → repeat; # → cancel.
   app.post("/voice/purchase-pre-menu", async (req, res) => {
     const twiml = new VoiceResponse();
 
     try {
       const s = await getMembershipSettingsCached();
 
-      const p1Min = s.plan1Minutes;
-      const p1Price = centsToLabel(s.plan1PriceCents);
-      const p2Min = s.plan2Minutes;
-      const p2Price = centsToLabel(s.plan2PriceCents);
-      const p3Min = s.plan3Minutes;
-      const p3Price = centsToLabel(s.plan3PriceCents);
-      const bonusIsP2 = s.bonusPlanKey === "plan2";
-
-      // Build plan 2 (middle) description — include bonus text if it's the bonus plan
-      let plan2Line: string;
-      if (bonusIsP2) {
-        plan2Line =
-          `For only ${p2Price} you'll get ${p2Min} minutes, and if it's your first purchase ` +
-          `you'll get an extra ${p2Min} minutes absolutely free — ` +
-          `that's ${p2Min * 2} minutes for only ${p2Price}, so to buy press 3.`;
-      } else {
-        plan2Line = `To buy ${p2Min} minutes for ${p2Price} press 3.`;
+      // Build lines only for plans that are active (minutes and price > 0)
+      const planLines: string[] = [];
+      const planKeys: Array<[string, number, number]> = [
+        ["2", s.plan1Minutes, s.plan1PriceCents],
+        ["3", s.plan2Minutes, s.plan2PriceCents],
+        ["4", s.plan3Minutes, s.plan3PriceCents],
+      ];
+      for (const [digit, minutes, priceCents] of planKeys) {
+        if (minutes > 0 && priceCents > 0) {
+          const duration = minutesToDurationLabel(minutes);
+          const price = centsToLabel(priceCents);
+          planLines.push(`To purchase ${duration} of access for ${price} press ${digit}.`);
+        }
       }
 
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
       gather.say(
         "If you have a promotional code press 1. " +
-        `To buy ${p1Min} minutes for ${p1Price} press 2. ` +
-        plan2Line + " " +
-        `Or if you just need a little more time to close the deal or grab some digits, ` +
-        `our lowest price package is what you need, so to buy ${p3Min} minutes for ${p3Price} press 4. ` +
+        planLines.join(" ") + " " +
         "To repeat these choices press 9. " +
         "To cancel press pound."
       );
     } catch (err) {
       console.error("[voice] /voice/purchase-pre-menu settings error:", err);
-      // Fallback gather with no package details — just let them navigate away
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
       gather.say("We're having trouble loading package information. To return to the main menu press 9. To cancel press pound.");
     }
@@ -4414,21 +4420,15 @@ export async function registerRoutes(
       const isMW = siteConf.siteCategory === "MW";
 
       const user = await getOrCreateUser(fromNumber);
-      const remainingSeconds = user.remainingSeconds ?? 0;
-      const minutes = Math.floor(remainingSeconds / 60);
-      // Always report in minutes — the system is per-minute based.
-      const timeMsg = `You have ${minutes.toLocaleString()} minute${minutes !== 1 ? "s" : ""} remaining.`;
-
       const tier = user.membershipTier ?? "none";
-      const tierMsg = tier === "free_trial" ? "You are on a free trial." : tier !== "none" ? `Your membership type is ${tier}.` : "You do not have an active membership.";
+      const tierMsg = tier === "free_trial" ? "You are on a free trial." : tier !== "none" ? "You have an active membership." : "You do not have an active membership.";
 
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-manage-membership" });
       if (isMW) {
-        gather.say(`${tierMsg} ${timeMsg} Press 1 to add time or purchase a new membership. Press 9 to return to the main menu.`);
+        gather.say(`${tierMsg} Press 1 to purchase a membership. Press 9 to return to the main menu.`);
       } else {
         const pinStatus = user.membershipPin ? "You have a PIN set." : "You do not have a PIN set.";
-        const membershipNumberStatus = user.membershipNumber ? "You have a membership number on file." : "You do not yet have a membership number.";
-        gather.say(`${tierMsg} ${timeMsg} ${pinStatus} ${membershipNumberStatus} Press 1 to add time or purchase a new membership. Press 2 to set or change your access PIN. Press 3 to hear your membership number. Press 9 to return to the main menu.`);
+        gather.say(`${tierMsg} ${pinStatus} Press 1 to purchase a membership. Press 2 to set or change your access PIN. Press 9 to return to the main menu.`);
       }
       twiml.redirect("/voice/manage-membership");
     } catch (error) {
@@ -4453,23 +4453,6 @@ export async function registerRoutes(
       twiml.redirect("/voice/purchase-pre-menu");
     } else if (digit === "2" && !isMW) {
       twiml.redirect("/voice/set-pin");
-    } else if (digit === "3" && !isMW) {
-      // Read out the caller's membership number digit by digit
-      try {
-        const user = await storage.getUserByPhone(fromNumber);
-        if (user?.membershipNumber) {
-          const spaced = user.membershipNumber.replace(/\D/g, "").split("").join(". ");
-          twiml.say(`Your membership number is: ${spaced}.`);
-          twiml.pause({ length: 2 });
-          twiml.say(`Again, your membership number is: ${spaced}.`);
-        } else {
-          twiml.say("You do not have a membership number on file yet. Please purchase a membership first.");
-        }
-      } catch (err) {
-        console.error("[voice] membership number lookup error:", err);
-        twiml.say("An error occurred looking up your membership number. Please try again.");
-      }
-      twiml.redirect("/voice/manage-membership");
     } else if (digit === "9") {
       twiml.redirect("/voice/main-menu");
     } else {
@@ -6336,20 +6319,14 @@ export async function registerRoutes(
         await storage.updateUserMembership(user.id, membershipUpdate);
         await storage.getOrCreateMailbox(user.id);
 
-        const siteConf = await getSiteSettingsCached();
-        const isMWPurchase = siteConf.siteCategory === "MW";
-
         // Split payment success into static audio parts + inline TTS for dynamic values
-        // Static prefix → TTS (package + price) → optional bonus audio → optional TTS (card number) → static suffix
+        // Static prefix → TTS (package + price) → optional bonus audio → static suffix
         playPrompt(twiml, req, "payment_success_prefix.mp3", "Payment successful! You now have");
-        twiml.say(`${session.packageLabel} access. Your card has been charged ${session.priceLabel}.`);
+        twiml.say(`${session.packageLabel} of access. Your card has been charged ${session.priceLabel}.`);
         if (bonusMinutes > 0) {
           playPrompt(twiml, req, "payment_success_bonus.mp3",
-            `Plus your first purchase bonus doubles your minutes — enjoy ${totalMinutes.toLocaleString()} minutes total!`
+            `Plus your first purchase bonus doubles your time — enjoy ${minutesToDurationLabel(totalMinutes)} total!`
           );
-        }
-        if (!isMWPurchase && issuedCardNumber) {
-          twiml.say(`Your new membership card number is: ${issuedCardNumber.split("").join(", ")}. Please save this number — you can use it to access your membership from any phone.`);
         }
         playPrompt(twiml, req, "payment_success_suffix.mp3", "Thank you for joining. Returning to the main menu.");
 
