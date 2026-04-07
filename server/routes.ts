@@ -2598,8 +2598,8 @@ export async function registerRoutes(
     // Hold the name recording until the greeting is saved
     pendingNameRecordings.set(callSid, nameRecordingUrl);
 
-    playPrompt(twiml, req, "name_saved_record_greeting.mp3", "Great. Now record your greeting for other callers. After the tone, record at least 8 seconds. Press pound when you are finished.");
-    twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: "/voice/save-profile", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+    playPrompt(twiml, req, "name_saved_record_greeting.mp3", "Great. Now record your greeting for other callers. After the tone, press any key when done.");
+    twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -2622,7 +2622,7 @@ export async function registerRoutes(
 
       // Reject greetings shorter than 3 seconds — play error audio and re-prompt
       if (recordingDuration < 3) {
-        playPrompt(twiml, req, "greeting_error.mp3", "That greeting was too short. Please try again after the tone.");
+        playPrompt(twiml, req, "greeting_error.mp3", "That greeting was too short. Please try again after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
@@ -3658,8 +3658,8 @@ export async function registerRoutes(
         );
         twiml.redirect("/voice/my-mailbox");
       } else {
-        twiml.say("Record your mailbox greeting after the tone. Press pound when finished.");
-        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.say("Record your mailbox greeting after the tone. Press any key when done.");
+        twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
       }
     } catch (err) {
       console.error("[voice] /voice/record-mailbox-greeting error:", err);
@@ -3681,8 +3681,8 @@ export async function registerRoutes(
       const mailbox = await storage.getMailboxByUserId(user.id);
 
       if (digit === "1") {
-        twiml.say("Record your mailbox greeting after the tone. Press pound when finished.");
-        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.say("Record your mailbox greeting after the tone. Press any key when done.");
+        twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
       } else if (digit === "2") {
         if (mailbox?.adRecordingUrl) {
           safePlayRecording(twiml, mailbox.adRecordingUrl, req, "Your greeting is not available for playback.");
@@ -3713,8 +3713,8 @@ export async function registerRoutes(
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
 
       if (!recordingUrl || recordingDuration < 3) {
-        playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone.");
-        twiml.record({ maxLength: 90, playBeep: true, finishOnKey: "#", action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone. Press any key when done.");
+        twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -3756,7 +3756,7 @@ export async function registerRoutes(
 
       if (digit === "1") {
         await storage.markMessageRead(msgId);
-        playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone.");
+        playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}&returnTo=mailbox` });
       } else if (digit === "2") {
         await storage.markMessageRead(msgId);
@@ -3811,7 +3811,7 @@ export async function registerRoutes(
       const senderId = req.query.senderId as string;
 
       if (digit === "1") {
-        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}&returnTo=mailbox` });
       } else {
         twiml.redirect("/voice/my-mailbox");
@@ -3989,7 +3989,7 @@ export async function registerRoutes(
 
     try {
       if (digit === "1") {
-        playPrompt(twiml, req, "record_message.mp3", "Record your message for this guy after the tone.");
+        playPrompt(twiml, req, "record_message.mp3", "Record your message for this guy after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${toUserId}&returnTo=category&category=${category}` });
       } else if (digit === "2") {
         twiml.redirect(`/voice/browse-category-ads?category=${category}`);
@@ -4091,7 +4091,7 @@ export async function registerRoutes(
 
     try {
       if (digit === "1") {
-        playPrompt(twiml, req, "record_message.mp3", "Record your message for this guy after the tone.");
+        playPrompt(twiml, req, "record_message.mp3", "Record your message for this guy after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${toUserId}&returnTo=mailbox` });
       } else if (digit === "9") {
         twiml.redirect(`/voice/mailbox-lookup?mode=${mode}`);
@@ -4156,9 +4156,9 @@ export async function registerRoutes(
         twiml.redirect(`/voice/record-category-ad?category=${category}`);
       } else {
         playPrompt(twiml, req, "mailbox_ad_record.mp3",
-          `Record your ${categoryLabel} mailbox ad after the tone. Tell guys about yourself. Press pound when finished.`
+          `Record your ${categoryLabel} mailbox ad after the tone. Tell guys about yourself. Press any key when done.`
         );
-        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
       }
     } catch (err) {
       console.error("[voice] /voice/record-category-ad error:", err);
@@ -4179,9 +4179,9 @@ export async function registerRoutes(
     try {
       if (digit === "1") {
         playPrompt(twiml, req, "mailbox_ad_record.mp3",
-          "Record your mailbox ad after the tone. Press pound when finished."
+          "Record your mailbox ad after the tone. Press any key when done."
         );
-        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
       } else if (digit === "2") {
         const user = await getOrCreateUser(fromNumber);
         const mailbox = await storage.getMailboxByUserId(user.id);
@@ -4218,8 +4218,8 @@ export async function registerRoutes(
       const categoryLabel = MAILBOX_CATEGORIES[category] || category;
 
       if (!recordingUrl || recordingDuration < 3) {
-        playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone.");
-        twiml.record({ maxLength: 60, playBeep: true, finishOnKey: "#", action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone. Press any key when done.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -5213,7 +5213,7 @@ export async function registerRoutes(
 
       if (digit === "1") {
         await storage.markMessageRead(msgId);
-        playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone.");
+        playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}` });
       } else if (digit === "2") {
         const senderProfile = await storage.getProfile(senderId);
@@ -5296,7 +5296,7 @@ export async function registerRoutes(
 
       if (digit === "1") {
         await storage.markMessageRead(msgId);
-        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}` });
       } else if (digit === "2") {
         await storage.markMessageRead(msgId);
@@ -5327,7 +5327,7 @@ export async function registerRoutes(
       const profileUserId = req.query.profileUserId as string;
 
       if (digit === "1") {
-        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
       } else if (digit === "2") {
         twiml.redirect("/voice/browse-profiles");
@@ -5540,7 +5540,7 @@ export async function registerRoutes(
 
     try {
       if (digit === "1" && profileUserId) {
-        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone.");
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
       } else {
         twiml.redirect("/voice/browse-profiles");
