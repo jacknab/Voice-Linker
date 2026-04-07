@@ -86,7 +86,7 @@ export default function Landing() {
     : "A live chat line for men and women. Real voices, real conversations.";
 
   const displayPhone = localData?.phoneNumber || fallbackPhone;
-  const cityLabel = localData?.city || localData?.regionName || null;
+  const cityLabel = localData?.regionName || localData?.city || null;
   const stateLabel = localData?.state || null;
   const cityFull = cityLabel && stateLabel ? `${cityLabel}, ${stateLabel}` : cityLabel;
 
