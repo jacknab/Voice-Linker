@@ -243,6 +243,9 @@ interface CategoryBrowseState {
 }
 const categoryBrowseState = new Map<string, CategoryBrowseState>();
 
+// Feature flag — set ENABLE_MAILBOX=false in .env to hide mailboxes & personal ads from the IVR
+const MAILBOX_ENABLED = process.env.ENABLE_MAILBOX !== "false";
+
 // Category slug → human label map
 const MAILBOX_CATEGORIES: Record<string, string> = {
   quick_hot_talk: "Quick and Hot Talk",
@@ -2734,7 +2737,7 @@ export async function registerRoutes(
     playPrompt(gather, req, "main_menu.mp3",
       "Main menu. " +
       "To enter the phone booth press star. " +
-      "For mailboxes and personal ads press 1. " +
+      (MAILBOX_ENABLED ? "For mailboxes and personal ads press 1. " : "") +
       "To add time or purchase a membership press 2. " +
       "For information on membership prices press 4. " +
       "To manage your membership press 8. " +
@@ -2754,7 +2757,7 @@ export async function registerRoutes(
     if (digit === "*") {
       // Enter the phone booth (live connector)
       twiml.redirect("/voice/phone-booth");
-    } else if (digit === "1") {
+    } else if (digit === "1" && MAILBOX_ENABLED) {
       // Mailboxes and personal ads
       twiml.redirect("/voice/mailbox-menu");
     } else if (digit === "2") {
@@ -2959,6 +2962,11 @@ export async function registerRoutes(
   // ─── 4a2. Mailbox Menu ────────────────────────────────────────────────────
   app.post("/voice/mailbox-menu", async (req, res) => {
     const twiml = new VoiceResponse();
+    if (!MAILBOX_ENABLED) {
+      twiml.redirect("/voice/main-menu");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-mailbox-menu" });
     playPrompt(gather, req, "mailbox_menu.mp3",
       "To go to your mailbox press one. " +
