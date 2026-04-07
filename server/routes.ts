@@ -680,22 +680,21 @@ export async function registerRoutes(
 
       if (!isPrivate) {
         try {
-          const geoRes = await fetch(
-            `http://ip-api.com/json/${ip}?fields=status,city,regionName,lat,lon`
-          );
+          const geoRes = await fetch(`https://ipinfo.io/${ip}/json`);
           if (geoRes.ok) {
             const geo = await geoRes.json() as {
-              status: string;
               city?: string;
-              regionName?: string;
-              lat?: number;
-              lon?: number;
+              region?: string;
+              loc?: string;
             };
-            if (geo.status === "success") {
-              geoCity = geo.city || null;
-              geoState = geo.regionName || null;
-              geoLat = geo.lat ?? null;
-              geoLon = geo.lon ?? null;
+            geoCity = geo.city || null;
+            geoState = geo.region || null;
+            if (geo.loc) {
+              const [lat, lon] = geo.loc.split(",").map(Number);
+              if (!isNaN(lat) && !isNaN(lon)) {
+                geoLat = lat;
+                geoLon = lon;
+              }
             }
           }
         } catch (geoErr) {
