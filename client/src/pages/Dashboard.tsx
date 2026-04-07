@@ -617,7 +617,7 @@ export default function Dashboard() {
     { key: "plan1", name: membershipSettings.plan1Name, minutes: membershipSettings.plan1Minutes, priceCents: membershipSettings.plan1PriceCents },
     { key: "plan2", name: membershipSettings.plan2Name, minutes: membershipSettings.plan2Minutes, priceCents: membershipSettings.plan2PriceCents },
     { key: "plan3", name: membershipSettings.plan3Name, minutes: membershipSettings.plan3Minutes, priceCents: membershipSettings.plan3PriceCents },
-  ] : [];
+  ].filter(p => p.priceCents > 0 && p.minutes > 0) : [];
 
   const navItems = [
     { key: "overview", label: "Overview" },

@@ -35,11 +35,11 @@ function formatPrice(cents: number): string {
 }
 
 function formatTime(minutes: number): { value: string; unit: string } {
-  if (minutes >= 43200) return { value: String(Math.round(minutes / 43200)), unit: "month" };
-  if (minutes >= 10080) return { value: String(Math.round(minutes / 10080)), unit: "weeks" };
-  if (minutes >= 1440) return { value: String(Math.round(minutes / 1440)), unit: "days" };
-  if (minutes >= 60) return { value: String(Math.round(minutes / 60)), unit: "hours" };
-  return { value: String(minutes), unit: "min" };
+  if (minutes >= 43200) { const v = Math.round(minutes / 43200); return { value: String(v), unit: v === 1 ? "month" : "months" }; }
+  if (minutes >= 10080) { const v = Math.round(minutes / 10080); return { value: String(v), unit: v === 1 ? "week" : "weeks" }; }
+  if (minutes >= 1440) { const v = Math.round(minutes / 1440); return { value: String(v), unit: v === 1 ? "day" : "days" }; }
+  if (minutes >= 60) { const v = Math.round(minutes / 60); return { value: String(v), unit: v === 1 ? "hour" : "hours" }; }
+  return { value: String(minutes), unit: minutes === 1 ? "min" : "mins" };
 }
 
 const PLAN_CONFIG = [
@@ -164,7 +164,7 @@ export default function Membership() {
         { ...PLAN_CONFIG[0], name: settings.plan1Name, minutes: settings.plan1Minutes, priceCents: settings.plan1PriceCents },
         { ...PLAN_CONFIG[1], name: settings.plan2Name, minutes: settings.plan2Minutes, priceCents: settings.plan2PriceCents },
         { ...PLAN_CONFIG[2], name: settings.plan3Name, minutes: settings.plan3Minutes, priceCents: settings.plan3PriceCents },
-      ]
+      ].filter(p => p.priceCents > 0 && p.minutes > 0)
     : [];
 
   const canBuy = !!me && !!me.linkedPhoneNumber;
