@@ -295,6 +295,10 @@ function buildFAQsMW(siteName: string, phone: string): FAQCategory[] {
   ];
 }
 
+function slugify(s: string) {
+  return s.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+}
+
 function AccordionItem({ item, index, openIndex, onToggle }: {
   item: FAQItem;
   index: number;
@@ -304,10 +308,7 @@ function AccordionItem({ item, index, openIndex, onToggle }: {
   const isOpen = openIndex === index;
   return (
     <div
-      style={{
-        borderBottom: "1px solid #1e1e1e",
-        overflow: "hidden",
-      }}
+      style={{ borderBottom: "1px solid #222" }}
       data-testid={`faq-item-${index}`}
     >
       <button
@@ -316,10 +317,10 @@ function AccordionItem({ item, index, openIndex, onToggle }: {
         style={{
           width: "100%",
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "space-between",
-          gap: "1rem",
-          padding: "1.15rem 0",
+          gap: "1.25rem",
+          padding: "1.2rem 0",
           background: "none",
           border: "none",
           cursor: "pointer",
@@ -327,16 +328,16 @@ function AccordionItem({ item, index, openIndex, onToggle }: {
           color: "#fff",
         }}
       >
-        <span style={{ fontSize: "0.97rem", fontWeight: 600, lineHeight: 1.4, color: isOpen ? "#60a5fa" : "#fff", transition: "color 0.15s" }}>
+        <span style={{ fontSize: "1rem", fontWeight: 500, lineHeight: 1.45, color: isOpen ? "#60a5fa" : "#e5e7eb", transition: "color 0.15s" }}>
           {item.q}
         </span>
-        <span style={{ flexShrink: 0, color: "rgba(255,255,255,0.4)" }}>
+        <span style={{ flexShrink: 0, marginTop: "2px", color: isOpen ? "#60a5fa" : "rgba(255,255,255,0.3)", transition: "color 0.15s" }}>
           {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </span>
       </button>
       {isOpen && (
-        <div style={{ paddingBottom: "1.25rem" }}>
-          <p style={{ fontSize: "0.92rem", color: "rgba(255,255,255,0.65)", lineHeight: 1.75, margin: 0 }}>
+        <div style={{ paddingBottom: "1.5rem", paddingRight: "2rem" }}>
+          <p style={{ fontSize: "0.95rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.8, margin: 0 }}>
             {item.a}
           </p>
         </div>
@@ -352,21 +353,22 @@ function FAQSection({ category, globalOffset, openIndex, onToggle }: {
   onToggle: (i: number) => void;
 }) {
   return (
-    <div style={{ marginBottom: "2.5rem" }}>
-      <h2
-        data-testid={`faq-category-${category.heading.toLowerCase().replace(/\s+/g, "-")}`}
-        style={{
-          fontSize: "0.72rem",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.12em",
-          color: "#3b82f6",
-          marginBottom: "0.75rem",
-        }}
-      >
-        {category.heading}
-      </h2>
-      <div style={{ borderTop: "1px solid #1e1e1e" }}>
+    <div id={slugify(category.heading)} style={{ marginBottom: "3.5rem", scrollMarginTop: "6rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1.25rem" }}>
+        <h2
+          data-testid={`faq-category-${slugify(category.heading)}`}
+          style={{
+            fontSize: "1.05rem",
+            fontWeight: 700,
+            color: "#fff",
+            margin: 0,
+          }}
+        >
+          {category.heading}
+        </h2>
+        <div style={{ flex: 1, height: "1px", background: "#222" }} />
+      </div>
+      <div>
         {category.items.map((item, i) => (
           <AccordionItem
             key={i}
@@ -474,7 +476,7 @@ export default function FAQ() {
 
       {/* ── PAGE HEADER ── */}
       <section style={{ background: "#111", borderBottom: "1px solid #1a1a1a", padding: "3.5rem 1.5rem 3rem" }}>
-        <div style={{ maxWidth: "760px", margin: "0 auto" }}>
+        <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
           <p style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#3b82f6", marginBottom: "0.75rem" }}
             data-testid="faq-label">
             Help Center
@@ -483,15 +485,15 @@ export default function FAQ() {
             data-testid="faq-title">
             Frequently Asked Questions
           </h1>
-          <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.55)", lineHeight: 1.7, marginBottom: "1.75rem" }}
+          <p style={{ fontSize: "1rem", color: "rgba(255,255,255,0.55)", lineHeight: 1.7, marginBottom: "1.75rem", maxWidth: "600px" }}
             data-testid="faq-subtitle">
             {isMM
-              ? `Everything you need to know about using ${siteName} — the gay, bi & curious live chatline.`
-              : `Everything you need to know about using ${siteName} — the live chat line for men and women.`}
+              ? `Learn more about ${siteName} below. You'll be all set to start chatting with live gay, bi, and curious men.`
+              : `Learn more about ${siteName} below — the live chat line for men and women connecting through real voices.`}
           </p>
           <a
             href={"tel:" + phone.replace(/\D/g, "")}
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.95rem", fontWeight: 700, padding: "0.6rem 1.25rem", borderRadius: "7px" }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.95rem", fontWeight: 700, padding: "0.65rem 1.35rem", borderRadius: "7px" }}
             data-testid="faq-cta-call"
           >
             <Phone className="w-4 h-4" /> Call {formatPhone(phone)} — First 90 Min Free
@@ -499,55 +501,104 @@ export default function FAQ() {
         </div>
       </section>
 
-      {/* ── FAQ BODY ── */}
-      <section style={{ padding: "3.5rem 1.5rem 5rem" }}>
-        <div style={{ maxWidth: "760px", margin: "0 auto" }}>
-          {categories.map((cat) => {
-            const node = (
-              <FAQSection
-                key={cat.heading}
-                category={cat}
-                globalOffset={offset}
-                openIndex={openIndex}
-                onToggle={handleToggle}
-              />
-            );
-            offset += cat.items.length;
-            return node;
-          })}
+      {/* ── FAQ BODY — two-column layout ── */}
+      <section style={{ padding: "3rem 1.5rem 5rem" }}>
+        <div style={{ maxWidth: "1100px", margin: "0 auto", display: "flex", gap: "3.5rem", alignItems: "flex-start" }}>
 
-          {/* Still have questions */}
-          <div style={{ marginTop: "2rem", background: "#111", border: "1px solid #1e1e1e", borderRadius: "10px", padding: "2rem", textAlign: "center" }}>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#fff", marginBottom: "0.5rem" }}>
-              Still have questions?
-            </h3>
-            <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.5)", marginBottom: "1.25rem" }}>
-              Our support team is happy to help.
+          {/* ── LEFT SIDEBAR ── */}
+          <aside className="hidden md:block" style={{ flexShrink: 0, width: "210px", position: "sticky", top: "100px" }}>
+            <p style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", marginBottom: "0.75rem" }}>
+              Jump to section
             </p>
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "0.75rem" }}>
-              {csPhone && (
-                <a href={"tel:" + csPhone.replace(/\D/g, "")}
-                  style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.88rem", fontWeight: 600, padding: "0.5rem 1.1rem", borderRadius: "6px" }}
-                  data-testid="faq-contact-phone">
-                  <Phone className="w-3.5 h-3.5" /> {formatPhone(csPhone)}
+            <nav style={{ display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+              {categories.map(cat => (
+                <a
+                  key={cat.heading}
+                  href={"#" + slugify(cat.heading)}
+                  style={{ display: "block", fontSize: "0.88rem", color: "rgba(255,255,255,0.5)", textDecoration: "none", padding: "0.4rem 0.6rem", borderRadius: "5px", transition: "color 0.15s, background 0.15s" }}
+                  onMouseEnter={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(255,255,255,0.06)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.5)"; e.currentTarget.style.background = "transparent"; }}
+                  data-testid={`sidebar-link-${slugify(cat.heading)}`}
+                >
+                  {cat.heading}
                 </a>
-              )}
-              {csEmail && (
-                <a href={"mailto:" + csEmail}
-                  style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "#1a1a1a", border: "1px solid #2a2a2a", color: "rgba(255,255,255,0.7)", textDecoration: "none", fontSize: "0.88rem", fontWeight: 600, padding: "0.5rem 1.1rem", borderRadius: "6px" }}
-                  data-testid="faq-contact-email">
-                  {csEmail}
+              ))}
+              <div style={{ height: "1px", background: "#222", margin: "0.75rem 0" }} />
+              <a
+                href={"tel:" + phone.replace(/\D/g, "")}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem", color: "#60a5fa", textDecoration: "none", padding: "0.4rem 0.6rem", transition: "opacity 0.15s" }}
+                onMouseEnter={e => (e.currentTarget.style.opacity = "0.75")}
+                onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                data-testid="sidebar-cta-call"
+              >
+                <Phone className="w-3 h-3" /> {formatPhone(phone)}
+              </a>
+            </nav>
+          </aside>
+
+          {/* ── MAIN FAQ CONTENT ── */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Mobile: horizontal category scrollbar */}
+            <div className="flex md:hidden" style={{ gap: "0.5rem", overflowX: "auto", paddingBottom: "1.25rem", marginBottom: "1.75rem", borderBottom: "1px solid #1e1e1e" }}>
+              {categories.map(cat => (
+                <a
+                  key={cat.heading}
+                  href={"#" + slugify(cat.heading)}
+                  style={{ flexShrink: 0, fontSize: "0.8rem", fontWeight: 600, color: "rgba(255,255,255,0.6)", background: "#1a1a1a", border: "1px solid #2a2a2a", textDecoration: "none", padding: "0.35rem 0.75rem", borderRadius: "20px", whiteSpace: "nowrap" }}
+                >
+                  {cat.heading}
                 </a>
-              )}
-              {!csPhone && !csEmail && (
-                <a href={"tel:" + phone.replace(/\D/g, "")}
-                  style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.88rem", fontWeight: 600, padding: "0.5rem 1.1rem", borderRadius: "6px" }}
-                  data-testid="faq-contact-main">
-                  <Phone className="w-3.5 h-3.5" /> {formatPhone(phone)}
-                </a>
-              )}
+              ))}
+            </div>
+
+            {categories.map((cat) => {
+              const node = (
+                <FAQSection
+                  key={cat.heading}
+                  category={cat}
+                  globalOffset={offset}
+                  openIndex={openIndex}
+                  onToggle={handleToggle}
+                />
+              );
+              offset += cat.items.length;
+              return node;
+            })}
+
+            {/* Still have questions */}
+            <div style={{ marginTop: "1rem", background: "#111", border: "1px solid #1e1e1e", borderRadius: "10px", padding: "2rem 2rem 2rem" }}>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#fff", marginBottom: "0.4rem" }}>
+                Still have questions?
+              </h3>
+              <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.45)", marginBottom: "1.25rem" }}>
+                Our support team is happy to help.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                {csPhone && (
+                  <a href={"tel:" + csPhone.replace(/\D/g, "")}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.88rem", fontWeight: 600, padding: "0.5rem 1.1rem", borderRadius: "6px" }}
+                    data-testid="faq-contact-phone">
+                    <Phone className="w-3.5 h-3.5" /> {formatPhone(csPhone)}
+                  </a>
+                )}
+                {csEmail && (
+                  <a href={"mailto:" + csEmail}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "#1a1a1a", border: "1px solid #2a2a2a", color: "rgba(255,255,255,0.7)", textDecoration: "none", fontSize: "0.88rem", fontWeight: 600, padding: "0.5rem 1.1rem", borderRadius: "6px" }}
+                    data-testid="faq-contact-email">
+                    {csEmail}
+                  </a>
+                )}
+                {!csPhone && !csEmail && (
+                  <a href={"tel:" + phone.replace(/\D/g, "")}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.88rem", fontWeight: 600, padding: "0.5rem 1.1rem", borderRadius: "6px" }}
+                    data-testid="faq-contact-main">
+                    <Phone className="w-3.5 h-3.5" /> {formatPhone(phone)}
+                  </a>
+                )}
+              </div>
             </div>
           </div>
+
         </div>
       </section>
 
