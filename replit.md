@@ -13,7 +13,9 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 
 ## Key Files
 
-- `server/routes.ts` — All TwiML voice routes, IVR logic, web API routes (auth, membership, Stripe, PayPal)
+- `server/routes.ts` — Web API routes (auth, membership, Stripe, PayPal, admin). Dynamically loads the IVR module specified by `IVR_FILE` env var (defaults to `./ivr-default`)
+- `server/ivr-default.ts` — All TwiML `/voice/*` IVR routes and helper state. Exports `registerVoiceRoutes(app)`. Swap by pointing `IVR_FILE` at a different file
+- `server/settings-cache.ts` — Shared 60-second in-memory cache for `MembershipSettings` and `SiteSettings`; exports get/invalidate/getRaw functions used by both routes.ts and ivr-default.ts
 - `server/storage.ts` — Database access layer
 - `server/simulator.ts` — Virtual caller simulator
 - `server/stripeClient.ts` — Stripe SDK client (uses `STRIPE_SECRET_KEY`)
@@ -148,7 +150,7 @@ When browsing profiles, callers can press **3** to request a live direct connect
 - On accept: Twilio REST API redirects initiator mid-ring to join Twilio conference room; both hear "Connecting you now…"; either can press # or hang up to exit
 - On timeout/decline: initiator hears failure message and returns to phone booth
 
-**In-memory state (routes.ts):**
+**In-memory state (ivr-default.ts):**
 - `pendingLiveInvites` — targetUserId → invite (TTL 30s)
 - `liveConnectionUserIds` — Set of userIds currently bridged
 - `liveConnectionCallSidMap` — callSid → userId for hangup cleanup
@@ -208,7 +210,7 @@ Members can set a 4-digit PIN that allows them to call in from **any phone** by 
 - Admin can set a specific PIN or clear it using the "Access PIN Management" panel in the caller detail view
 - PIN API: `PATCH /api/admin/callers/:id/pin` with `{ pin: "1234" }` or `{ pin: null }` to clear
 
-**In-memory state (routes.ts):**
+**In-memory state (ivr-default.ts):**
 - `pendingPinAuth` — callSid → membership holder phone (awaiting PIN entry)
 - `pendingNewPinSetup` — callSid → first PIN entry (awaiting confirmation)
 
