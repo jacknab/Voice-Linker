@@ -4770,7 +4770,8 @@ export async function registerRoutes(
       } else if (digit === "3") {
         // Accept — profile is already saved; confirm and continue
         playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
-        twiml.redirect("/voice/zip-code-prompt");
+        // Zip code step skipped — go straight to live system
+        twiml.redirect("/voice/go-live");
       } else {
         // 9 or anything else → repeat review menu
         twiml.redirect("/voice/review-greeting");
