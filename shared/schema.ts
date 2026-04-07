@@ -196,13 +196,13 @@ export const membershipSettings = pgTable("membership_settings", {
   freeTrialMinutes: integer("free_trial_minutes").notNull().default(90),
   plan1Name: text("plan1_name").notNull().default("Premium"),
   plan1Minutes: integer("plan1_minutes").notNull().default(43200),
-  plan1PriceCents: integer("plan1_price_cents").notNull().default(2500),
+  plan1PriceCents: integer("plan1_price_cents").notNull().default(3500),
   plan2Name: text("plan2_name").notNull().default("Standard"),
   plan2Minutes: integer("plan2_minutes").notNull().default(20160),
-  plan2PriceCents: integer("plan2_price_cents").notNull().default(1000),
+  plan2PriceCents: integer("plan2_price_cents").notNull().default(2000),
   plan3Name: text("plan3_name").notNull().default("Basic"),
   plan3Minutes: integer("plan3_minutes").notNull().default(2880),
-  plan3PriceCents: integer("plan3_price_cents").notNull().default(300),
+  plan3PriceCents: integer("plan3_price_cents").notNull().default(500),
   // Which plan key ("plan1", "plan2", "plan3") gets a first-time buyer double-minutes bonus, or null for none
   bonusPlanKey: text("bonus_plan_key"),
   // Announcement / MOTD — 4 independent slots, each independently enabled
