@@ -307,10 +307,10 @@ const LIVE_INVITE_TTL_MS = 30_000;
 const callTimeAnnounced = new Set<string>(); // already heard the "you have X hours/minutes" announcement
 const callWarningShown  = new Set<string>(); // already heard the < 15-minute warning
 
-// Billing checkpoint: tracks the last sync time so seconds are deducted incrementally
-// during IVR navigation (syncBilling), not just at call end.
-// accumulatedSeconds holds sub-minute remainder so billing rounds up per minute only at finalize.
-interface BillingCheckpoint { lastCheck: number; fromNumber: string; accumulatedSeconds: number; }
+// Billing checkpoint: tracks the last sync time so elapsed seconds are deducted
+// incrementally during IVR navigation (syncBilling), not only at call end.
+// Billing is second-accurate — callers hear their balance in minutes (rounded down).
+interface BillingCheckpoint { lastCheck: number; fromNumber: string; }
 const billingCheckpoints = new Map<string, BillingCheckpoint>(); // CallSid → checkpoint
 
 // Membership lookup override: when a caller enters a membership number from a different
@@ -1639,14 +1639,14 @@ export async function registerRoutes(
   // Starts billing for a call. Safe to call multiple times — only initialises once.
   function startBilling(callSid: string, fromNumber: string): void {
     if (!billingCheckpoints.has(callSid)) {
-      billingCheckpoints.set(callSid, { lastCheck: Date.now(), fromNumber, accumulatedSeconds: 0 });
+      billingCheckpoints.set(callSid, { lastCheck: Date.now(), fromNumber });
       console.log(`[billing] Started for callSid=${callSid}`);
     }
   }
 
-  // Accumulates elapsed seconds since the last checkpoint and deducts whole minutes.
-  // Billing is per-minute: partial minutes are held in the accumulator and only
-  // charged as full minutes — the leftover is rounded up at finalizeCallBilling.
+  // Deducts elapsed seconds since the last checkpoint directly from the account balance.
+  // Billing is second-accurate: the caller sees their balance in minutes (rounded down),
+  // but the backend drains the exact seconds used on every sync.
   // When a membership override is active, deducts from the membership holder's account.
   // In per_day mode no call-time deductions are made — billing is handled nightly.
   async function syncBilling(callSid: string): Promise<void> {
@@ -1658,33 +1658,26 @@ export async function registerRoutes(
     const elapsedSeconds = Math.floor((now - checkpoint.lastCheck) / 1000);
     if (elapsedSeconds <= 0) return;
     checkpoint.lastCheck = now;
-    checkpoint.accumulatedSeconds += elapsedSeconds;
-
-    // Deduct only whole minutes — keep the remainder in the accumulator
-    const minutesToDeduct = Math.floor(checkpoint.accumulatedSeconds / 60);
-    if (minutesToDeduct <= 0) return;
-    const secondsToDeduct = minutesToDeduct * 60;
-    checkpoint.accumulatedSeconds -= secondsToDeduct;
 
     try {
       const cardId = callCardOverride.get(callSid);
       if (cardId) {
-        await storage.deductCardSeconds(cardId, secondsToDeduct);
-        console.log(`[billing] syncBilling: deducted ${secondsToDeduct}s (${minutesToDeduct} min) from cardId=${cardId}`);
+        await storage.deductCardSeconds(cardId, elapsedSeconds);
+        console.log(`[billing] syncBilling: deducted ${elapsedSeconds}s from cardId=${cardId}`);
       } else {
         const overridePhone = callMembershipOverride.get(callSid);
         const billingPhone = overridePhone ?? checkpoint.fromNumber;
         const user = await storage.getOrCreateUser(billingPhone);
-        await storage.deductSeconds(user.id, secondsToDeduct);
-        console.log(`[billing] syncBilling: deducted ${secondsToDeduct}s (${minutesToDeduct} min) from userId=${user.id}${overridePhone ? " (membership override)" : ""}`);
+        await storage.deductSeconds(user.id, elapsedSeconds);
+        console.log(`[billing] syncBilling: deducted ${elapsedSeconds}s from userId=${user.id}${overridePhone ? " (membership override)" : ""}`);
       }
     } catch (err) {
       console.error("[billing] syncBilling error:", err);
     }
   }
 
-  // Runs a final sync, then rounds up any remaining partial minute to a full minute.
-  // This ensures that even a 20-second call costs 1 full minute (per-minute billing).
+  // Runs a final billing sync to capture any remaining elapsed seconds, then clears
+  // the checkpoint. No rounding up — callers are charged only for exact seconds used.
   // In per_day mode, clears the checkpoint without any deduction.
   async function finalizeCallBilling(callSid: string): Promise<void> {
     const { billingMode } = await getMembershipSettingsCached();
@@ -1693,25 +1686,6 @@ export async function registerRoutes(
       return;
     }
     await syncBilling(callSid);
-    const checkpoint = billingCheckpoints.get(callSid);
-    if (checkpoint && checkpoint.accumulatedSeconds > 0) {
-      // Partial minute remaining — charge a full minute (round up)
-      try {
-        const cardId = callCardOverride.get(callSid);
-        if (cardId) {
-          await storage.deductCardSeconds(cardId, 60);
-          console.log(`[billing] finalizeCallBilling: rounded up ${checkpoint.accumulatedSeconds}s remainder to 1 min for cardId=${cardId}`);
-        } else {
-          const overridePhone = callMembershipOverride.get(callSid);
-          const billingPhone = overridePhone ?? checkpoint.fromNumber;
-          const user = await storage.getOrCreateUser(billingPhone);
-          await storage.deductSeconds(user.id, 60);
-          console.log(`[billing] finalizeCallBilling: rounded up ${checkpoint.accumulatedSeconds}s remainder to 1 min for userId=${user.id}`);
-        }
-      } catch (err) {
-        console.error("[billing] finalizeCallBilling roundup error:", err);
-      }
-    }
     billingCheckpoints.delete(callSid);
   }
 
