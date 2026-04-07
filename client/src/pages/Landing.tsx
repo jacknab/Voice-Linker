@@ -208,7 +208,7 @@ export default function Landing() {
               </div>
             ) : (
               <div>
-                <p style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.75)", fontWeight: 400, marginBottom: "0.2rem", textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000" }}>
+                <p style={{ fontSize: "1.64rem", color: "rgba(255,255,255,0.75)", fontWeight: 400, marginBottom: "0.2rem", textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000" }}>
                   Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access number
                 </p>
                 <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(1.75rem, 4vw, 2.7rem)", color: "#fff", textDecoration: "none", letterSpacing: "0.01em", lineHeight: 1.1, textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
