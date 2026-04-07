@@ -1555,8 +1555,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "To enter the phone booth press star. " +
       (MAILBOX_ENABLED ? "For mailboxes and personal ads press 1. " : "") +
       "To add time or purchase a membership press 2. " +
-      "For information on membership prices press 4. " +
-      "To manage your membership press 8. " +
+      "For information on membership prices press 3. " +
+      "To manage your membership press 4. " +
       "For customer service press 0. " +
       "To repeat these choices press 9."
     );
