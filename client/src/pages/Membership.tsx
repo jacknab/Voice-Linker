@@ -304,14 +304,6 @@ export default function Membership() {
                     <span style={{ color: "#555", fontSize: "0.82rem", marginLeft: "0.4rem" }}>one-time</span>
                   </div>
 
-                  <ul style={{ listStyle: "none", padding: 0, margin: "0 0 1.75rem", display: "flex", flexDirection: "column", gap: "0.55rem", flex: 1 }}>
-                    {plan.perks.map((perk) => (
-                      <li key={perk} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <CheckCircle size={14} color={plan.accentColor} />
-                        <span style={{ color: "#aaa", fontSize: "0.85rem" }}>{perk}</span>
-                      </li>
-                    ))}
-                  </ul>
 
                   {/* Payment buttons */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
