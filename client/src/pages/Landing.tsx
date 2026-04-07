@@ -179,16 +179,16 @@ export default function Landing() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
         {/* Content */}
-        <div className={`relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-start px-8 md:px-16 pt-10 md:pt-14 pb-10 justify-start`}>
+        <div className={`relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-start px-4 md:px-16 pt-8 md:pt-14 pb-10 justify-start`}>
           <div style={{ maxWidth: "560px" }}>
 
             {/* Age disclaimer */}
-            <p style={{ fontSize: "1.56rem", color: "rgba(255,255,255,0.55)", marginBottom: "0.75rem", fontWeight: 400, letterSpacing: "0.04em" }}>
+            <p style={{ fontSize: "clamp(0.9rem, 4vw, 1.56rem)", color: "rgba(255,255,255,0.55)", marginBottom: "0.75rem", fontWeight: 400, letterSpacing: "0.04em" }}>
               All users must be 18 years or older
             </p>
 
             {/* Free minutes */}
-            <h1 style={{ fontSize: "clamp(2.2rem, 5vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "1rem", color: "#fff", whiteSpace: "nowrap", textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
+            <h1 style={{ fontSize: "clamp(2.2rem, 8vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "1rem", color: "#fff", textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
               data-testid="hero-headline"
             >
               90 MINUTES FREE!
@@ -208,7 +208,7 @@ export default function Landing() {
               </div>
             ) : (
               <div>
-                <p style={{ fontSize: "1.64rem", color: "rgba(255,255,255,0.75)", fontWeight: 400, marginBottom: "0.2rem", textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000" }}>
+                <p style={{ fontSize: "clamp(0.95rem, 4vw, 1.64rem)", color: "rgba(255,255,255,0.75)", fontWeight: 400, marginBottom: "0.2rem", textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000" }}>
                   Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access number
                 </p>
                 <CallLink phone={displayPhone} style={{ display: "inline-block", fontSize: "clamp(1.75rem, 4vw, 2.7rem)", color: "#fff", textDecoration: "none", letterSpacing: "0.01em", lineHeight: 1.1, textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}

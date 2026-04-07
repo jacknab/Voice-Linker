@@ -651,7 +651,7 @@ export default function Dashboard() {
         </div>
       </nav>
 
-      <div style={{ flex: 1, maxWidth: "1100px", margin: "0 auto", padding: "2rem 1.5rem", width: "100%", boxSizing: "border-box" }}>
+      <div style={{ flex: 1, maxWidth: "1100px", margin: "0 auto", padding: "1.5rem 1rem", width: "100%", boxSizing: "border-box" }}>
 
         {/* Page header */}
         <div style={{ marginBottom: "2rem" }}>
@@ -660,17 +660,19 @@ export default function Dashboard() {
         </div>
 
         {/* Tab Nav */}
-        <div style={{ display: "flex", gap: "0.25rem", background: "#111", border: "1px solid #1e1e1e", borderRadius: "10px", padding: "0.3rem", marginBottom: "2rem", width: "fit-content" }}>
-          {navItems.map(item => (
-            <button
-              key={item.key}
-              onClick={() => setActiveSection(item.key)}
-              data-testid={`tab-${item.key}`}
-              style={{ background: activeSection === item.key ? "#1d4ed8" : "none", border: "none", borderRadius: "7px", color: activeSection === item.key ? "#fff" : "#888", cursor: "pointer", fontSize: "0.82rem", fontWeight: 600, padding: "0.45rem 1.1rem", transition: "all 0.15s" }}
-            >
-              {item.label}
-            </button>
-          ))}
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as any, marginBottom: "2rem" }}>
+          <div style={{ display: "flex", gap: "0.25rem", background: "#111", border: "1px solid #1e1e1e", borderRadius: "10px", padding: "0.3rem", width: "max-content", minWidth: "100%" }}>
+            {navItems.map(item => (
+              <button
+                key={item.key}
+                onClick={() => setActiveSection(item.key)}
+                data-testid={`tab-${item.key}`}
+                style={{ background: activeSection === item.key ? "#1d4ed8" : "none", border: "none", borderRadius: "7px", color: activeSection === item.key ? "#fff" : "#888", cursor: "pointer", fontSize: "0.82rem", fontWeight: 600, padding: "0.45rem 1.1rem", transition: "all 0.15s", whiteSpace: "nowrap" }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ── OVERVIEW ── */}

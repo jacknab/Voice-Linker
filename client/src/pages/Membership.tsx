@@ -203,7 +203,7 @@ export default function Membership() {
         </div>
       </nav>
 
-      <div style={{ flex: 1, maxWidth: "1100px", margin: "0 auto", padding: "4rem 1.5rem 5rem", width: "100%", boxSizing: "border-box" }}>
+      <div style={{ flex: 1, maxWidth: "1100px", margin: "0 auto", padding: "clamp(1.5rem, 5vw, 4rem) 1rem clamp(2rem, 5vw, 5rem)", width: "100%", boxSizing: "border-box" }}>
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "3.5rem" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", background: "#1d4ed815", border: "1px solid #1d4ed830", borderRadius: "100px", padding: "0.3rem 0.9rem", marginBottom: "1.25rem" }}>
