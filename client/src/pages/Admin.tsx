@@ -2250,15 +2250,20 @@ function IVRTesterTab() {
 
   function entryColor(type: IVRLogEntry["type"]) {
     switch (type) {
-      case "say": return "text-blue-800";
-      case "play": return "text-purple-800";
-      case "keypress": return "text-amber-700 font-bold";
-      case "hangup": return "text-red-700";
-      case "record": return "text-orange-700";
-      case "conference": return "text-green-700";
-      case "pay": return "text-teal-700";
-      default: return "text-gray-500 italic";
+      case "say": return "text-white font-bold";
+      case "play": return "text-purple-300 font-bold";
+      case "keypress": return "text-amber-400 font-bold";
+      case "hangup": return "text-red-400 font-bold";
+      case "record": return "text-orange-300 font-bold";
+      case "conference": return "text-green-300 font-bold";
+      case "pay": return "text-teal-300 font-bold";
+      default: return "text-gray-400 italic font-bold";
     }
+  }
+
+  function formatPlayContent(content: string): string {
+    const filename = content.split("/").pop() ?? content;
+    return `♪ ${filename}`;
   }
 
   const canType = connected && !ended && waitingForInput && !loading;
@@ -2392,7 +2397,7 @@ function IVRTesterTab() {
                   </>
                 )}
                 <span className={`flex-1 leading-relaxed ${entryColor(entry.type)} ${entry.type === "keypress" ? "text-right text-amber-400 font-bold text-sm" : ""}`}>
-                  {entry.type === "keypress" ? `▶ ${entry.content}` : entry.content}
+                  {entry.type === "keypress" ? `▶ ${entry.content}` : entry.type === "play" ? formatPlayContent(entry.content) : entry.content}
                 </span>
                 {entry.type === "keypress" && entryIcon(entry.type)}
               </div>
@@ -2400,9 +2405,9 @@ function IVRTesterTab() {
             <div ref={logEndRef} />
           </div>
           {/* Legend */}
-          <div className="border-t border-gray-200 px-3 py-2 flex flex-wrap gap-3">
-            {([["say","SYSTEM","text-blue-600"],["play","AUDIO","text-purple-600"],["keypress","KEY PRESS","text-amber-600"],["record","RECORD","text-orange-600"],["hangup","END","text-red-600"]] as const).map(([type, label, color]) => (
-              <span key={type} className={`flex items-center gap-1 font-mono text-[10px] ${color}`}>
+          <div className="border-t border-gray-700 px-3 py-2 flex flex-wrap gap-3 bg-gray-950">
+            {([["say","SYSTEM (TTS)","text-white"],["play","AUDIO (MP3)","text-purple-300"],["keypress","KEY PRESS","text-amber-400"],["record","RECORD","text-orange-300"],["hangup","END","text-red-400"]] as const).map(([type, label, color]) => (
+              <span key={type} className={`flex items-center gap-1 font-mono text-[10px] font-bold ${color}`}>
                 {entryIcon(type as IVRLogEntry["type"])} {label}
               </span>
             ))}
