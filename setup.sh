@@ -571,9 +571,15 @@ EOF
             && warn "Removed broken symlink: ${LINK}"
     done
 
-    # Remove old phonebooth symlink/file if left over from a previous run
-    sudo rm -f /etc/nginx/sites-enabled/phonebooth /etc/nginx/sites-available/phonebooth \
-        /etc/nginx/conf.d/phonebooth_global.conf 2>/dev/null || true
+    # Remove old phonebooth and existing malebox site configs before touching nginx
+    # so that nginx can start cleanly after certbot (no stale config referencing deleted certs)
+    sudo rm -f \
+        /etc/nginx/sites-enabled/phonebooth \
+        /etc/nginx/sites-available/phonebooth \
+        /etc/nginx/conf.d/phonebooth_global.conf \
+        /etc/nginx/sites-enabled/malebox.conf \
+        /etc/nginx/sites-available/malebox.conf \
+        2>/dev/null || true
 
     if [ -z "$CERT_BASE" ]; then
         info "No SSL certificate found for '${DOMAIN}' — requesting one from Let's Encrypt now."
@@ -589,10 +595,12 @@ EOF
         sudo systemctl stop nginx
 
         info "Running certbot — make sure ${DOMAIN} and www.${DOMAIN} point to this server's IP and port 80 is open."
+        # Use || true — certbot's deploy hook tries to reload nginx while it's stopped,
+        # which exits non-zero even when the certificate is successfully issued.
+        # We verify the cert actually exists below instead of relying on the exit code.
         sudo certbot certonly --standalone \
             -d "${DOMAIN}" -d "www.${DOMAIN}" \
-            --non-interactive --agree-tos -m "${_CERT_EMAIL}" \
-            || { sudo systemctl start nginx; error "Certbot failed. Confirm DNS is pointing to this server and port 80 is reachable, then re-run Step 10."; }
+            --non-interactive --agree-tos -m "${_CERT_EMAIL}" || true
 
         sudo systemctl start nginx
         info "Nginx restarted."
