@@ -1068,75 +1068,12 @@ if [ "$AUTO_YES" = true ]; then
 fi
 
 show_menu() {
-    clear
-    echo -e "${BOLD}${CYAN}"
-    echo "  ¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡"
-    echo "  ¡          Phone Booth  -  VPS Setup Menu                 ¡"
-    echo "  ¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡"
-    echo "  ¡                                                          ¡"
-    echo "  ¡   Domain : ${DOMAIN}"
-    echo "  ¡                                                          ¡"
-    echo "  ¡   1)  Full Setup  (run all steps from the beginning)     ¡"
-    echo "  ¡   2)  Configuration Setup (set variables without running) ¡"
-    echo "  ¡                                                          ¡"
-    echo "  ¡   -- Resume / re-run from a specific step --             ¡"
-    echo "  ¡   3)  Step  1  -  Swap space                            ¡"
-    echo "  ¡   4)  Step  2  -  System packages & Node.js             ¡"
-    echo "  ¡   5)  Step  3  -  Firewall  (UFW + fail2ban)            ¡"
-    echo "  ¡   6)  Step  4  -  npm install                           ¡"
-    echo "  ¡   7)  Step  5  -  PostgreSQL database & user            ¡"
-    echo "  ¡   8)  Step  6  -  .env configuration                    ¡"
-    echo "  ¡   9)  Step  7  -  Uploads directory                     ¡"
-    echo "  ¡  10)  Step  8  -  Database schema + admin account       ¡"
-    echo "  ¡  11)  Step  9  -  Production build                      ¡"
-    echo "  ¡  12)  Step 10  -  PM2 process management + Nginx + SSL         ¡"
-    echo "  ¡                                                          ¡"
-    echo "  ¡   0)  Exit                                               ¡"
-    echo "  ¡                                                          ¡"
-    echo "  ¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡"
-    echo -e "${RESET}"
-    echo -e "  ${YELLOW}Note: every step is safe to re-run - it skips work${RESET}"
-    echo -e "  ${YELLOW}that is already done and only applies what's missing.${RESET}"
-    echo ""
+    # Use GUI interface instead of text menu
+    show_menu_gui
 }
 
 while true; do
     show_menu
-    read -rp "  Enter choice [0-12]: " CHOICE
-
-    case "$CHOICE" in
-        0)
-            echo "Exiting."; exit 0 ;;
-        1)
-            run_from 1  ;;
-        2)
-            do_step_0  ;;   # configuration setup
-        3)
-            run_from 1  ;;   # step 1 from the menu -> start from Step 1
-        4)
-            run_from 2 ;;
-        5)
-            run_from 3  ;;
-        6)
-            run_from 4 ;;
-        7)
-            run_from 5 ;;
-        8)
-            run_from 6 ;;
-        9)
-            run_from 7 ;;
-        10)
-            run_from 8 ;;
-        11)
-            run_from 9 ;;
-        12)
-            run_from 10 ;;
-        *)
-            echo -e "${RED}Invalid choice - please enter a number between 0 and 12.${RESET}"
-            sleep 1 ;;
-    esac
-
-    echo ""
     read -rp "  Return to menu? [Y/n]: " AGAIN
     [[ "${AGAIN,,}" == "n" ]] && break
 done
