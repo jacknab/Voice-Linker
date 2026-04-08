@@ -142,10 +142,9 @@ export async function registerRoutes(
   }
 
 
-  // ── IVR Voice Routes (dynamically loaded) ─────────────────────────────────
+  // ── IVR Voice Routes (dynamically loaded)
   {
-    const ivrFile = process.env.IVR_FILE ?? "./ivr-default";
-    const { registerVoiceRoutes } = await import(ivrFile);
+    const { registerVoiceRoutes } = require("./ivr-default.cjs");
     await registerVoiceRoutes(app);
   }
 

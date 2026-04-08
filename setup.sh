@@ -326,7 +326,17 @@ do_step_5() {
 
     sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
     sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};"
+    sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${DB_USER};"
     success "Database '${DB_NAME}' and user '${DB_USER}' are ready."
+
+    # Initialize database schema immediately after creation
+    info "Initializing database schema..."
+    cd "${APP_DIR}"
+    if [ -f "package.json" ] && npm run db:push >/dev/null 2>&1; then
+        success "Database schema initialized successfully."
+    else
+        warn "Database schema initialization failed - you may need to run 'npm run db:push' manually."
+    fi
 
     # Write DATABASE_URL to .env immediately so db:push always uses the correct database
     local NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1/${DB_NAME}?sslmode=disable"

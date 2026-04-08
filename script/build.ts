@@ -59,6 +59,7 @@ async function buildAll() {
     external: externals,
     logLevel: "info",
   });
+  // Note: ivr-default is bundled into main index.cjs to avoid ES module import issues
 }
 
 buildAll().catch((err) => {
