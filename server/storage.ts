@@ -326,9 +326,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setLinkedRegions(regionId: string, linkedIds: string[]): Promise<void> {
+    // Find which regions are being removed so we can clean up their reverse links too
+    const currentLinks = await db.select().from(regionLinks).where(eq(regionLinks.regionId, regionId));
+    const removedIds = currentLinks.map(l => l.linkedRegionId).filter(id => !linkedIds.includes(id));
+
+    // Remove forward links from this region
     await db.delete(regionLinks).where(eq(regionLinks.regionId, regionId));
+
+    // Remove reverse links for regions that were unlinked
+    if (removedIds.length > 0) {
+      await db.delete(regionLinks).where(
+        and(inArray(regionLinks.regionId, removedIds), eq(regionLinks.linkedRegionId, regionId))
+      );
+    }
+
     if (linkedIds.length > 0) {
+      // Insert forward links
       await db.insert(regionLinks).values(linkedIds.map(id => ({ regionId, linkedRegionId: id })));
+
+      // Insert reverse links if they don't already exist
+      for (const linkedId of linkedIds) {
+        const [existing] = await db.select().from(regionLinks)
+          .where(and(eq(regionLinks.regionId, linkedId), eq(regionLinks.linkedRegionId, regionId)));
+        if (!existing) {
+          await db.insert(regionLinks).values({ regionId: linkedId, linkedRegionId: regionId });
+        }
+      }
     }
   }
 
