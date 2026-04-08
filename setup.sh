@@ -26,10 +26,10 @@ error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; exit 1; }
 hdr()     { echo -e "\n${BOLD}${CYAN}━━━  $*  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"; }
 
 # ─── GLOBAL CONFIGURATION ─────────────────────────────────────────────────────
-APP_PORT=5050
+APP_PORT=5062
 DB_USER="phonebooth_user"
-DB_NAME="phonebooth_db"
-SERVICE_NAME="phonebooth"
+DB_NAME="malebox_chatline"
+SERVICE_NAME="malebox"
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ─── ARGUMENT PARSING ─────────────────────────────────────────────────────────
@@ -790,7 +790,7 @@ run_from() {
     echo -e "    App logs  : pm2 logs ${SERVICE_NAME} -f"
     echo -e "    Restart   : pm2 restart ${SERVICE_NAME}"
     echo -e "    PM2 list  : pm2 list"
-    echo -e "    Nginx log : sudo tail -f /var/log/nginx/phonebooth_error.log"
+    echo -e "    Nginx log : sudo tail -f /var/log/nginx/malebox_error.log"
     echo -e "    Firewall  : sudo ufw status"
     echo ""
     echo -e "  ${BOLD}${YELLOW}Fill in your API keys in .env then restart:${RESET}"
