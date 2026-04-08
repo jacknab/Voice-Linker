@@ -972,11 +972,11 @@ check_apache() {
         warn "Apache2 web server detected on this system!"
         echo ""
         echo -e "${YELLOW}[application name] requires nginx proxy server.${RESET}"
-        echo -e "${YELLOW}Apache2 will conflict with nginx setup.${RESET}"
+        echo -e "${YELLOW}Apache2 may conflict with nginx setup.${RESET}"
         echo ""
-        echo -e "${YELLOW}Setup script can:${RESET}"
+        echo -e "${YELLOW}Setup script options:${RESET}"
         echo "  1) Backup Apache configurations and uninstall Apache2"
-        echo "  2) Continue without uninstalling Apache2 (not recommended)"
+        echo "  2) Continue with Apache2 installed (may cause conflicts)"
         echo "  3) Exit setup"
         echo ""
         
@@ -1000,9 +1000,20 @@ check_apache() {
                     fi
                     ;;
                 2)
-                    warn "Continuing with Apache2 installed may cause conflicts..."
-                    warn "nginx setup may not work properly"
-                    return 0
+                    warn "Continuing with Apache2 installed..."
+                    warn "This may cause port conflicts with nginx."
+                    warn "nginx setup may not work properly."
+                    warn "You are responsible for any conflicts that occur."
+                    echo ""
+                    echo -e "${YELLOW}Type 'YES' to accept responsibility and continue:${RESET}"
+                    read -rp "Your choice: " CONTINUE_CONFIRM
+                    if [ "$CONTINUE_CONFIRM" = "YES" ]; then
+                        success "User accepted responsibility for Apache conflicts."
+                        return 0
+                    else
+                        error "You must type 'YES' to accept responsibility."
+                        sleep 2
+                    fi
                     ;;
                 3)
                     echo "Setup cancelled by user."
