@@ -965,8 +965,67 @@ run_from() {
 # MENU
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Apache detection and handling
+check_apache() {
+    if dpkg -l | grep -q "^ii.*apache2"; then
+        echo ""
+        warn "Apache2 web server detected on this system!"
+        echo ""
+        echo -e "${YELLOW}[application name] requires nginx proxy server.${RESET}"
+        echo -e "${YELLOW}Apache2 will conflict with nginx setup.${RESET}"
+        echo ""
+        echo -e "${YELLOW}Setup script can:${RESET}"
+        echo "  1) Backup Apache configurations and uninstall Apache2"
+        echo "  2) Continue without uninstalling Apache2 (not recommended)"
+        echo "  3) Exit setup"
+        echo ""
+        
+        while true; do
+            read -rp "$(echo -e "${BOLD}Choose an option [1-3]: ${RESET}")" APACHE_CHOICE
+            case "$APACHE_CHOICE" in
+                1)
+                    info "Creating backup of Apache configurations..."
+                    BACKUP_FILE="/root/Apache_backup_$(date +%Y%m%d_%H%M%S).zip"
+                    sudo zip -r "$BACKUP_FILE" /etc/apache2/ 2>/dev/null
+                    if [ -f "$BACKUP_FILE" ]; then
+                        success "Apache configurations backed up to $BACKUP_FILE"
+                        info "Uninstalling Apache2 server..."
+                        sudo systemctl stop apache2 2>/dev/null
+                        sudo apt-get remove --purge apache2 apache2-utils -y
+                        sudo apt-get autoremove -y
+                        success "Apache2 uninstalled successfully"
+                        return 0
+                    else
+                        error "Failed to create Apache backup"
+                    fi
+                    ;;
+                2)
+                    warn "Continuing with Apache2 installed may cause conflicts..."
+                    warn "nginx setup may not work properly"
+                    return 0
+                    ;;
+                3)
+                    echo "Setup cancelled by user."
+                    exit 0
+                    ;;
+                *)
+                    echo -e "${RED}Invalid choice. Please select 1-3.${RESET}"
+                    ;;
+            esac
+        done
+    else
+        return 0
+    fi
+}
+
 # Load existing configuration
 load_config
+
+# Check for Apache conflicts before proceeding
+if ! check_apache; then
+    echo "Setup cancelled by user."
+    exit 0
+fi
 
 # Show disclaimer before menu
 if ! show_disclaimer; then
@@ -974,7 +1033,7 @@ if ! show_disclaimer; then
     exit 0
 fi
 
-# If --yes flag is set, skip the menu and run everything
+# If --yes flag is set, skip to menu and run everything
 if [ "$AUTO_YES" = true ]; then
     info "Running all steps unattended (--yes flag set)."
     run_from 1
