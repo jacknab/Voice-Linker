@@ -412,13 +412,14 @@ do_step_8() {
         do_step_6
     fi
 
-    # Load .env into the current shell so drizzle-kit picks up the correct DATABASE_URL
-    info "Loading .env into environment..."
-    set -a
-    # shellcheck source=/dev/null
-    source "${APP_DIR}/.env"
-    set +a
-    info "DATABASE_URL loaded: ${DATABASE_URL}"
+    # Extract DATABASE_URL directly from .env so no inherited env var can override it
+    info "Reading DATABASE_URL from .env..."
+    DATABASE_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | head -1 | cut -d= -f2-)
+    if [ -z "${DATABASE_URL}" ]; then
+        error "DATABASE_URL is empty in .env — cannot push schema. Run Step 6 first."
+    fi
+    export DATABASE_URL
+    info "DATABASE_URL set to: ${DATABASE_URL}"
 
     echo ""
     echo -e "${BOLD}The following step will create or update database tables to match the application schema.${RESET}"
