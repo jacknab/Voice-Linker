@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  setup.sh  –  Phone Booth full production VPS setup
+#  setup.sh  –  Certxa full production VPS setup
 #
 #  Usage:
 #    bash setup.sh                       # interactive menu
@@ -26,10 +26,10 @@ error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; exit 1; }
 hdr()     { echo -e "\n${BOLD}${CYAN}━━━  $*  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"; }
 
 # ─── GLOBAL CONFIGURATION ─────────────────────────────────────────────────────
-APP_PORT=5050
-DB_USER="phonebooth_user"
-DB_NAME="phonebooth_db"
-SERVICE_NAME="phonebooth"
+APP_PORT=5059
+DB_USER="certxa_user"
+DB_NAME="certxa_db"
+SERVICE_NAME="certxa"
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ─── ARGUMENT PARSING ─────────────────────────────────────────────────────────
@@ -77,7 +77,12 @@ done
 DB_PASSWORD=""
 if [ -f "${APP_DIR}/.env" ] && grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
     EXISTING_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d= -f2-)
-    DB_PASSWORD=$(echo "${EXISTING_URL}" | grep -oP '(?<=:)[^@]+(?=@)' || true)
+    # Safely extract password using sed — handles postgresql://user:pass@host/db format only
+    DB_PASSWORD=$(echo "${EXISTING_URL}" | sed -nE 's|^[^:]+://[^:@]+:([^@/]+)@[^/].*|\1|p' || true)
+    # Discard if it looks malformed (contains slashes or colons — sign of a corrupt URL)
+    if echo "${DB_PASSWORD}" | grep -qP '[:/]'; then
+        DB_PASSWORD=""
+    fi
 fi
 if [ -z "${DB_PASSWORD:-}" ]; then
     DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 28)
@@ -244,7 +249,7 @@ do_step_3() {
     if ! sudo systemctl is-active --quiet fail2ban 2>/dev/null; then
         sudo systemctl enable fail2ban --now
     fi
-    F2B_JAIL="/etc/fail2ban/jail.d/phonebooth.conf"
+    F2B_JAIL="/etc/fail2ban/jail.d/certxa.conf"
     if [ ! -f "$F2B_JAIL" ]; then
         sudo tee "$F2B_JAIL" > /dev/null <<F2BEOF
 [DEFAULT]
@@ -285,9 +290,7 @@ do_step_5() {
         echo -e "${BOLD}What should the database be called?${RESET}"
         echo -e "  (letters, numbers and underscores only — default: ${CYAN}${DB_NAME}${RESET})"
         read -rp "  Database name: " _INPUT_DB_NAME
-        # Use default if user pressed Enter without typing anything
         _INPUT_DB_NAME="${_INPUT_DB_NAME:-$DB_NAME}"
-        # Validate: only a-z A-Z 0-9 _
         if [[ "$_INPUT_DB_NAME" =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
             DB_NAME="$_INPUT_DB_NAME"
             info "Database will be named '${DB_NAME}'."
@@ -322,25 +325,6 @@ do_step_5() {
     sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
     sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};"
     success "Database '${DB_NAME}' and user '${DB_USER}' are ready."
-
-    # Write DATABASE_URL to .env immediately so db:push always uses the correct database
-    local NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1/${DB_NAME}?sslmode=disable"
-    if [ -f "${APP_DIR}/.env" ]; then
-        # Update existing DATABASE_URL line in place
-        if grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
-            sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${NEW_DB_URL}|" "${APP_DIR}/.env"
-            info "DATABASE_URL updated in .env."
-        else
-            echo "DATABASE_URL=${NEW_DB_URL}" >> "${APP_DIR}/.env"
-            info "DATABASE_URL added to existing .env."
-        fi
-    else
-        # Create a minimal .env with just DATABASE_URL now; Step 6 will fill in the rest
-        echo "DATABASE_URL=${NEW_DB_URL}" > "${APP_DIR}/.env"
-        chmod 600 "${APP_DIR}/.env"
-        info "Created .env with DATABASE_URL."
-    fi
-    success "DATABASE_URL written: ${NEW_DB_URL}"
 }
 
 # ── Step 6 – .env file ────────────────────────────────────────────────────────
@@ -369,10 +353,18 @@ PYEOF
     }
 
     if [ -f "${APP_DIR}/.env" ]; then
-        info ".env exists — updating DATABASE_URL, PORT, NODE_ENV."
-        upsert_env "DATABASE_URL" "${NEW_DB_URL}"
-        upsert_env "PORT"         "${APP_PORT}"
-        upsert_env "NODE_ENV"     "production"
+        info ".env exists — updating DATABASE_URL, PORT, NODE_ENV, GOOGLE_REDIRECT_URI, SESSION_SECRET."
+        upsert_env "DATABASE_URL"        "${NEW_DB_URL}"
+        upsert_env "PORT"                "${APP_PORT}"
+        upsert_env "NODE_ENV"            "production"
+        upsert_env "GOOGLE_REDIRECT_URI" "https://${DOMAIN}/google-business"
+        # Ensure SESSION_SECRET is always present (generate one if missing)
+        if ! grep -q "^SESSION_SECRET=" "${APP_DIR}/.env"; then
+            local SESSION_SECRET
+            SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
+            upsert_env "SESSION_SECRET" "${SESSION_SECRET}"
+            info "SESSION_SECRET was missing — generated and added to .env."
+        fi
         success ".env updated."
     else
         local SESSION_SECRET
@@ -388,14 +380,32 @@ PORT=${APP_PORT}
 # ─── Session ─────────────────────────────────────────────────────────────────
 SESSION_SECRET=${SESSION_SECRET}
 
+# ─── CORS ────────────────────────────────────────────────────────────────────
+CORS_ALLOW_ALL=false
+CORS_ORIGINS=https://${DOMAIN}
+
+# ─── Trial ───────────────────────────────────────────────────────────────────
+TRIAL_PERIOD_DAYS=60
+
+# ─── Google OAuth ─────────────────────────────────────────────────────────────
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=https://${DOMAIN}/google-business
+
+# ─── Mailgun ─────────────────────────────────────────────────────────────────
+MAILGUN_API_KEY=
+MAILGUN_DOMAIN=
+MAILGUN_FROM_EMAIL=
+MAILGUN_FROM_NAME=Certxa
+MAILGUN_SENDER_EMAIL=
+
 # ─── Twilio ──────────────────────────────────────────────────────────────────
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_PHONE_NUMBER=
 
-# ─── ElevenLabs ──────────────────────────────────────────────────────────────
-ELEVENLABS_API_KEY=
-ELEVENLABS_VOICE_ID=
+# ─── TextBelt ────────────────────────────────────────────────────────────────
+TEXTBELT_API_KEY=
 
 # ─── Stripe ──────────────────────────────────────────────────────────────────
 STRIPE_SECRET_KEY=
@@ -412,8 +422,9 @@ do_step_7() {
     hdr "Step 7/10  Uploads directory"
     for DIR in \
         "${APP_DIR}/uploads" \
-        "${APP_DIR}/uploads/mm" \
-        "${APP_DIR}/uploads/mw"; do
+        "${APP_DIR}/uploads/avatars" \
+        "${APP_DIR}/uploads/logos" \
+        "${APP_DIR}/uploads/products"; do
         [ -d "$DIR" ] || mkdir -p "$DIR" && info "Verified: $DIR"
     done
     chmod -R 755 "${APP_DIR}/uploads"
@@ -425,35 +436,84 @@ do_step_8() {
     hdr "Step 8/10  Database schema"
     cd "${APP_DIR}"
 
-    # Ensure .env exists before trying to push — if not, create it first
-    if [ ! -f "${APP_DIR}/.env" ]; then
-        warn ".env not found — running Step 6 to create it first."
-        do_step_6
-    fi
+    detect_pg
+    [[ -z "${PG_VERSION:-}" ]] && error "PostgreSQL is not installed. Please run Step 2 first."
 
-    # Extract DATABASE_URL directly from .env so no inherited env var can override it
-    info "Reading DATABASE_URL from .env..."
-    DATABASE_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | head -1 | cut -d= -f2-)
-    if [ -z "${DATABASE_URL}" ]; then
-        error "DATABASE_URL is empty in .env — cannot push schema. Run Step 6 first."
-    fi
-    export DATABASE_URL
-    info "DATABASE_URL set to: ${DATABASE_URL}"
+    info "Running pre-migration data fixes..."
 
-    echo ""
-    echo -e "${BOLD}The following step will create or update database tables to match the application schema.${RESET}"
-    echo -e "  Drizzle will show you exactly which tables will be created or altered before applying any changes."
-    echo ""
+    # Load DB connection details from .env
+    local DB_URL
+    DB_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d= -f2-)
+    [[ -z "$DB_URL" ]] && error "DATABASE_URL not found in .env — please run Step 6 first."
 
-    if [ "$AUTO_YES" = true ]; then
-        info "Running in unattended mode (--yes) — applying schema without prompt."
-        npx drizzle-kit push --force
+    run_sql() {
+        psql "${DB_URL}" -v ON_ERROR_STOP=0 -c "$1" 2>/dev/null || true
+    }
+
+    # 1. Rename password_hash → password if the old column exists and new one doesn't
+    local HAS_PW_HASH
+    HAS_PW_HASH=$(psql "${DB_URL}" -tAc \
+        "SELECT COUNT(*) FROM information_schema.columns
+         WHERE table_name='users' AND column_name='password_hash';" 2>/dev/null || echo "0")
+    local HAS_PW
+    HAS_PW=$(psql "${DB_URL}" -tAc \
+        "SELECT COUNT(*) FROM information_schema.columns
+         WHERE table_name='users' AND column_name='password';" 2>/dev/null || echo "0")
+
+    if [[ "${HAS_PW_HASH:-0}" == "1" && "${HAS_PW:-0}" == "0" ]]; then
+        info "Renaming 'password_hash' column to 'password' in users table..."
+        run_sql "ALTER TABLE users RENAME COLUMN password_hash TO password;"
+        success "Column renamed."
+    elif [[ "${HAS_PW_HASH:-0}" == "1" && "${HAS_PW:-0}" == "1" ]]; then
+        info "Both 'password_hash' and 'password' columns exist — copying data and dropping old column..."
+        run_sql "UPDATE users SET password = password_hash WHERE password IS NULL OR password = '';"
+        run_sql "ALTER TABLE users DROP COLUMN password_hash;"
+        success "Merged and dropped old column."
     else
-        info "Pushing Drizzle schema — you will be asked to confirm any destructive changes..."
-        npx drizzle-kit push
+        info "Password column already in correct state — skipping."
     fi
 
-    success "Schema pushed."
+    # 2. Remove users with null or empty emails (can't enforce NOT NULL otherwise)
+    local NULL_EMAIL_COUNT
+    NULL_EMAIL_COUNT=$(psql "${DB_URL}" -tAc \
+        "SELECT COUNT(*) FROM users WHERE email IS NULL OR email = '';" 2>/dev/null || echo "0")
+    if [[ "${NULL_EMAIL_COUNT:-0}" -gt "0" ]]; then
+        warn "Removing ${NULL_EMAIL_COUNT} user(s) with missing email addresses..."
+        run_sql "DELETE FROM users WHERE email IS NULL OR email = '';"
+        success "Invalid users removed."
+    fi
+
+    # 3. Remove duplicate emails, keeping the most recently created account
+    local DUP_COUNT
+    DUP_COUNT=$(psql "${DB_URL}" -tAc \
+        "SELECT COUNT(*) FROM (
+            SELECT email FROM users GROUP BY email HAVING COUNT(*) > 1
+         ) t;" 2>/dev/null || echo "0")
+    if [[ "${DUP_COUNT:-0}" -gt "0" ]]; then
+        warn "Removing ${DUP_COUNT} duplicate email(s) from users table..."
+        run_sql "DELETE FROM users WHERE id NOT IN (
+                     SELECT DISTINCT ON (email) id FROM users ORDER BY email, created_at DESC NULLS LAST
+                 );"
+        success "Duplicate users removed."
+    fi
+
+    info "Pre-migration fixes complete. Pushing Drizzle schema..."
+    echo ""
+
+    export DATABASE_URL="${DB_URL}"
+    if ! npx drizzle-kit push --force; then
+        error "Drizzle schema push failed — check the error above. Fix the DATABASE_URL in .env and re-run Step 8."
+    fi
+
+    # Verify the push actually worked by checking a core table exists
+    TABLE_CHECK=$(psql "${DB_URL}" -tAc \
+        "SELECT COUNT(*) FROM information_schema.tables
+         WHERE table_schema='public' AND table_name='users';" 2>/dev/null || echo "0")
+    if [[ "${TABLE_CHECK:-0}" == "0" ]]; then
+        error "Schema push appeared to succeed but the 'users' table was not created. Check your DATABASE_URL and re-run Step 8."
+    fi
+
+    success "Schema pushed and verified."
 }
 
 # ── Step 9 – Production build ─────────────────────────────────────────────────
@@ -472,7 +532,7 @@ do_step_10() {
 
     sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
-Description=Phone Booth – Node.js production server
+Description=Certxa – Node.js production server
 After=network.target postgresql.service
 Wants=postgresql.service
 
@@ -496,13 +556,53 @@ EOF
     sudo systemctl daemon-reload
     sudo systemctl enable "${SERVICE_NAME}"
     sudo systemctl restart "${SERVICE_NAME}"
-    success "Service '${SERVICE_NAME}' enabled and started."
+
+    # Wait up to 15 seconds for the service to come up
+    info "Waiting for service to start..."
+    for i in $(seq 1 15); do
+        sleep 1
+        if sudo systemctl is-active --quiet "${SERVICE_NAME}"; then
+            success "Service '${SERVICE_NAME}' is running."
+            break
+        fi
+        if [ "$i" -eq 15 ]; then
+            warn "Service did not come up within 15 seconds. Last log lines:"
+            sudo journalctl -u "${SERVICE_NAME}" -n 20 --no-pager 2>/dev/null || true
+            error "Service '${SERVICE_NAME}' failed to start — see logs above. Fix the issue and re-run Step 10."
+        fi
+    done
 
     # ── Nginx + SSL ──────────────────────────────────────────────────────────
     hdr "Step 10b/10  Nginx + SSL"
 
-    # Auto-detect Let's Encrypt cert directory
-    # Certbot sometimes appends -0001, -0002 when a domain already had a cert
+    # ── Remove any existing certbot certificates for this domain ─────────────
+    info "Checking for existing certbot certificates for '${DOMAIN}'..."
+    EXISTING_CERTS=()
+    for CANDIDATE in \
+        "/etc/letsencrypt/live/${DOMAIN}" \
+        "/etc/letsencrypt/live/${DOMAIN}-0001" \
+        "/etc/letsencrypt/live/${DOMAIN}-0002" \
+        "/etc/letsencrypt/live/${DOMAIN}-0003"; do
+        if [ -d "${CANDIDATE}" ]; then
+            CERT_NAME="$(basename "${CANDIDATE}")"
+            EXISTING_CERTS+=("${CERT_NAME}")
+        fi
+    done
+
+    if [ ${#EXISTING_CERTS[@]} -gt 0 ]; then
+        warn "Found ${#EXISTING_CERTS[@]} existing certificate(s) for '${DOMAIN}' — removing them now."
+        for CERT_NAME in "${EXISTING_CERTS[@]}"; do
+            info "Deleting certificate: ${CERT_NAME}"
+            sudo certbot delete --cert-name "${CERT_NAME}" --non-interactive 2>/dev/null \
+                || sudo rm -rf "/etc/letsencrypt/live/${CERT_NAME}" \
+                               "/etc/letsencrypt/archive/${CERT_NAME}" \
+                               "/etc/letsencrypt/renewal/${CERT_NAME}.conf"
+        done
+        success "Old certificate(s) removed — a fresh one will be issued."
+    else
+        info "No existing certificates found for '${DOMAIN}' — proceeding to issue a new one."
+    fi
+
     local CERT_BASE=""
     for CANDIDATE in \
         "/etc/letsencrypt/live/${DOMAIN}" \
@@ -515,43 +615,37 @@ EOF
         fi
     done
 
-    # ── Clean up default site and broken symlinks before any nginx -t test ───────
-    [ -L /etc/nginx/sites-enabled/default ] \
-        && sudo rm -f /etc/nginx/sites-enabled/default \
-        && info "Removed default nginx site."
-
-    for LINK in /etc/nginx/sites-enabled/*; do
-        [ -L "${LINK}" ] && [ ! -e "${LINK}" ] && sudo rm -f "${LINK}" \
-            && warn "Removed broken symlink: ${LINK}"
-    done
-
-    # Remove old phonebooth symlink/file if left over from a previous run
-    sudo rm -f /etc/nginx/sites-enabled/phonebooth /etc/nginx/sites-available/phonebooth \
-        /etc/nginx/conf.d/phonebooth_global.conf 2>/dev/null || true
-
     if [ -z "$CERT_BASE" ]; then
         info "No SSL certificate found for '${DOMAIN}' — requesting one from Let's Encrypt now."
         echo ""
 
-        # Ask for the email Let's Encrypt will use for renewal reminders
         read -rp "$(echo -e "${BOLD}Email for SSL certificate notices${RESET} [admin@${DOMAIN}]: ")" _CERT_EMAIL
         _CERT_EMAIL="${_CERT_EMAIL:-admin@${DOMAIN}}"
 
-        # Use standalone mode — certbot temporarily binds port 80 itself.
-        # Stop nginx so port 80 is free, then restart after cert is issued.
-        info "Stopping Nginx briefly so certbot can use port 80..."
-        sudo systemctl stop nginx
+        local TMP_SITE="/etc/nginx/sites-available/${SERVICE_NAME}_acme"
+        sudo tee "$TMP_SITE" > /dev/null <<ACMENGINX
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN} www.${DOMAIN};
+    root /var/www/html;
+    location /.well-known/acme-challenge/ { try_files \$uri =404; }
+    location / { return 444; }
+}
+ACMENGINX
+        sudo ln -sf "$TMP_SITE" "/etc/nginx/sites-enabled/${SERVICE_NAME}_acme"
+        sudo nginx -t && sudo systemctl reload nginx \
+            || error "Nginx config test failed — fix nginx errors and re-run Step 10."
 
         info "Running certbot — make sure ${DOMAIN} and www.${DOMAIN} point to this server's IP and port 80 is open."
-        sudo certbot certonly --standalone \
+        sudo certbot certonly --nginx \
             -d "${DOMAIN}" -d "www.${DOMAIN}" \
             --non-interactive --agree-tos -m "${_CERT_EMAIL}" \
-            || { sudo systemctl start nginx; error "Certbot failed. Confirm DNS is pointing to this server and port 80 is reachable, then re-run Step 10."; }
+            || error "Certbot failed. Confirm DNS is pointing to this server and port 80 is reachable, then re-run Step 10."
 
-        sudo systemctl start nginx
-        info "Nginx restarted."
+        sudo rm -f "/etc/nginx/sites-enabled/${SERVICE_NAME}_acme" "$TMP_SITE"
+        sudo systemctl reload nginx
 
-        # Re-scan now that the cert has been issued
         for CANDIDATE in \
             "/etc/letsencrypt/live/${DOMAIN}" \
             "/etc/letsencrypt/live/${DOMAIN}-0001" \
@@ -568,20 +662,27 @@ EOF
 
         success "SSL certificate obtained at ${CERT_BASE}/"
     else
-        # Existing cert found — reuse it; never touch certs belonging to other apps
         info "Existing SSL certificate found at ${CERT_BASE}/"
         info "Reusing existing certificate — no new certbot request needed."
     fi
 
-    # Global Nginx tweaks — always rewritten so re-runs self-heal any old config
-    local NG_GLOBAL="/etc/nginx/conf.d/malebox.conf"
+    [ -L /etc/nginx/sites-enabled/default ] \
+        && sudo rm -f /etc/nginx/sites-enabled/default \
+        && info "Removed default nginx site."
+
+    for LINK in /etc/nginx/sites-enabled/*; do
+        [ -L "${LINK}" ] && [ ! -e "${LINK}" ] && sudo rm -f "${LINK}" \
+            && warn "Removed broken symlink: ${LINK}"
+    done
+
+    local NG_GLOBAL="/etc/nginx/conf.d/certxa_global.conf"
     sudo tee "$NG_GLOBAL" > /dev/null <<NGXGLOBAL
 server_tokens off;
 client_max_body_size 50M;
 NGXGLOBAL
     info "Wrote ${NG_GLOBAL}"
 
-    local NGINX_SITE="/etc/nginx/sites-available/malebox.conf"
+    local NGINX_SITE="/etc/nginx/sites-available/${SERVICE_NAME}"
     sudo tee "${NGINX_SITE}" > /dev/null <<NGINXEOF
 server {
     listen 80;
@@ -613,25 +714,16 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy no-referrer-when-downgrade always;
 
-    location /voice/ {
-        proxy_pass http://127.0.0.1:${APP_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Host              \$host;
-        proxy_set_header X-Real-IP         \$remote_addr;
-        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 15s;
-        proxy_connect_timeout 5s;
-    }
-
     location /api/ {
         proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_http_version 1.1;
+        proxy_set_header Upgrade           \$http_upgrade;
+        proxy_set_header Connection        "upgrade";
         proxy_set_header Host              \$host;
         proxy_set_header X-Real-IP         \$remote_addr;
         proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 30s;
+        proxy_read_timeout 60s;
         proxy_connect_timeout 5s;
         proxy_buffering off;
         proxy_pass_header Set-Cookie;
@@ -656,15 +748,15 @@ server {
         proxy_set_header X-Real-IP         \$remote_addr;
         proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 30s;
+        proxy_read_timeout 60s;
     }
 
-    access_log /var/log/nginx/malebox_access.log;
-    error_log  /var/log/nginx/malebox_error.log warn;
+    access_log /var/log/nginx/certxa_access.log;
+    error_log  /var/log/nginx/certxa_error.log warn;
 }
 NGINXEOF
 
-    sudo ln -sf "${NGINX_SITE}" "/etc/nginx/sites-enabled/malebox.conf"
+    sudo ln -sf "${NGINX_SITE}" "/etc/nginx/sites-enabled/${SERVICE_NAME}"
     sudo nginx -t
     sudo systemctl reload nginx
     sudo systemctl enable certbot.timer 2>/dev/null || true
@@ -690,22 +782,24 @@ run_from() {
     echo -e "${BOLD}${GREEN}  Setup complete!${RESET}"
     echo ""
     echo -e "  ${BOLD}Site      :${RESET} ${CYAN}https://${DOMAIN}${RESET}"
-    echo -e "  ${BOLD}Admin     :${RESET} https://${DOMAIN}/admin/login"
+    echo -e "  ${BOLD}Admin     :${RESET} https://${DOMAIN}/login"
     echo -e "  ${BOLD}Database  :${RESET} ${DB_NAME}  (user: ${DB_USER})"
     echo -e "  ${BOLD}Service   :${RESET} ${SERVICE_NAME}  (systemd)"
     echo ""
     echo -e "  ${BOLD}Useful commands:${RESET}"
     echo -e "    App logs  : sudo journalctl -u ${SERVICE_NAME} -f"
     echo -e "    Restart   : sudo systemctl restart ${SERVICE_NAME}"
-    echo -e "    Nginx log : sudo tail -f /var/log/nginx/phonebooth_error.log"
+    echo -e "    Nginx log : sudo tail -f /var/log/nginx/certxa_error.log"
     echo -e "    Firewall  : sudo ufw status"
     echo ""
     echo -e "  ${BOLD}${YELLOW}Fill in your API keys in .env then restart:${RESET}"
     echo -e "    nano ${APP_DIR}/.env"
     echo ""
+    echo -e "    GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET"
+    echo -e "    MAILGUN_API_KEY / MAILGUN_DOMAIN / MAILGUN_FROM_EMAIL"
     echo -e "    TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER"
-    echo -e "    ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID"
     echo -e "    STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET"
+    echo -e "    TEXTBELT_API_KEY"
     echo ""
     echo -e "    sudo systemctl restart ${SERVICE_NAME}"
     echo -e "${BOLD}${GREEN}════════════════════════════════════════════════${RESET}"
@@ -716,7 +810,6 @@ run_from() {
 # MENU
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# If --yes flag is set, skip the menu and run everything
 if [ "$AUTO_YES" = true ]; then
     info "Running all steps unattended (--yes flag set)."
     run_from 1
@@ -727,7 +820,7 @@ show_menu() {
     clear
     echo -e "${BOLD}${CYAN}"
     echo "  ╔══════════════════════════════════════════════════════════╗"
-    echo "  ║          Phone Booth  –  VPS Setup Menu                 ║"
+    echo "  ║          Certxa  –  VPS Setup Menu                      ║"
     echo "  ╠══════════════════════════════════════════════════════════╣"
     echo "  ║                                                          ║"
     echo "  ║   Domain : ${DOMAIN}"
@@ -742,7 +835,7 @@ show_menu() {
     echo "  ║   6)  Step  5  –  PostgreSQL database & user            ║"
     echo "  ║   7)  Step  6  –  .env configuration                    ║"
     echo "  ║   8)  Step  7  –  Uploads directory                     ║"
-    echo "  ║   9)  Step  8  –  Database schema + admin account       ║"
+    echo "  ║   9)  Step  8  –  Database schema (Drizzle push)        ║"
     echo "  ║  10)  Step  9  –  Production build                      ║"
     echo "  ║  11)  Step 10  –  systemd service + Nginx + SSL         ║"
     echo "  ║                                                          ║"
@@ -765,7 +858,7 @@ while true; do
         1)
             run_from 1  ;;
         2)
-            run_from 1  ;;   # step 1 from the menu → start from Step 1
+            run_from 1  ;;
         3)
             run_from 2  ;;
         4)
