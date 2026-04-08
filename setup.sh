@@ -486,6 +486,10 @@ do_step_10() {
     local RUN_AS_USER
     RUN_AS_USER="$(whoami)"
 
+    # IMPORTANT: Never use dotenv/config in application code as it pollutes global environment
+    # Always use EnvironmentFile for application-specific environment variables
+    warn "Creating systemd service with isolated environment variables..."
+
     sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
 [Unit]
 Description=Phone Booth – Node.js production server
