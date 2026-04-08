@@ -1049,6 +1049,9 @@ if ! show_disclaimer; then
     exit 0
 fi
 
+# Show disclaimer before menu or domain prompt
+show_disclaimer
+
 # If --yes flag is set, skip to menu and run everything
 if [ "$AUTO_YES" = true ]; then
     info "Running all steps unattended (--yes flag set)."
