@@ -1067,13 +1067,72 @@ if [ "$AUTO_YES" = true ]; then
     exit 0
 fi
 
-show_menu() {
-    # Use GUI interface instead of text menu
-    show_menu_gui
+# ═══════════════════════════════════════════════════════════════════════════════
+# ASCII GUI MENU  (whiptail – ships with Ubuntu by default)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ensure_whiptail() {
+    if ! command -v whiptail &>/dev/null; then
+        info "Installing whiptail for the GUI menu..."
+        sudo apt-get install -y whiptail -qq 2>/dev/null || true
+    fi
+}
+
+show_menu_gui() {
+    ensure_whiptail
+
+    local BACKTITLE="Malebox Production Server Setup"
+    local INFO="Domain: ${DOMAIN}   |   Port: ${APP_PORT}   |   DB: ${DB_NAME}"
+
+    local CHOICE
+    CHOICE=$(whiptail \
+        --title "  Malebox – VPS Setup Wizard  " \
+        --backtitle "${BACKTITLE}   ${INFO}" \
+        --menu "\nWhat would you like to do?" \
+        24 74 13 \
+        "1"   "  Full Setup  (all 10 steps from the beginning)" \
+        "---" "  ─────────────────────────────────────────────" \
+        "2"   "  Step  1  –  Swap space" \
+        "3"   "  Step  2  –  System packages & Node.js" \
+        "4"   "  Step  3  –  Firewall  (UFW + fail2ban)" \
+        "5"   "  Step  4  –  npm install" \
+        "6"   "  Step  5  –  PostgreSQL database & user" \
+        "7"   "  Step  6  –  .env configuration" \
+        "8"   "  Step  7  –  Uploads directory" \
+        "9"   "  Step  8  –  Database schema  (Drizzle push)" \
+        "10"  "  Step  9  –  Production build" \
+        "11"  "  Step 10  –  systemd service + Nginx + SSL" \
+        "0"   "  Exit" \
+        3>&1 1>&2 2>&3) || { clear; echo "Exiting."; exit 0; }
+
+    # Separator row — do nothing, just loop back
+    [[ "$CHOICE" == "---" ]] && return 0
+
+    clear
+
+    case "$CHOICE" in
+        0)  clear; echo "Exiting."; exit 0 ;;
+        1)  run_from 1 ;;
+        2)  run_from 1 ;;
+        3)  run_from 2 ;;
+        4)  run_from 3 ;;
+        5)  run_from 4 ;;
+        6)  run_from 5 ;;
+        7)  run_from 6 ;;
+        8)  run_from 7 ;;
+        9)  run_from 8 ;;
+        10) run_from 9 ;;
+        11) run_from 10 ;;
+    esac
+
+    whiptail \
+        --title "  Step Complete  " \
+        --backtitle "${BACKTITLE}   ${INFO}" \
+        --msgbox "\n  Done!  Press Enter to return to the menu." \
+        9 50 \
+        3>&1 1>&2 2>&3 || true
 }
 
 while true; do
-    show_menu
-    read -rp "  Return to menu? [Y/n]: " AGAIN
-    [[ "${AGAIN,,}" == "n" ]] && break
+    show_menu_gui
 done
