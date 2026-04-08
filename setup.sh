@@ -619,13 +619,8 @@ EOF
         info "Reusing existing certificate — no new certbot request needed."
     fi
 
-    # Global Nginx tweaks — always rewritten so re-runs self-heal any old config
-    local NG_GLOBAL="/etc/nginx/conf.d/malebox.conf"
-    sudo tee "$NG_GLOBAL" > /dev/null <<NGXGLOBAL
-server_tokens off;
-client_max_body_size 50M;
-NGXGLOBAL
-    info "Wrote ${NG_GLOBAL}"
+    # Remove any old global conf that may have conflicting directives
+    sudo rm -f /etc/nginx/conf.d/malebox.conf /etc/nginx/conf.d/phonebooth_global.conf 2>/dev/null || true
 
     local NGINX_SITE="/etc/nginx/sites-available/malebox.conf"
     sudo tee "${NGINX_SITE}" > /dev/null <<NGINXEOF
@@ -640,6 +635,8 @@ server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name ${DOMAIN} www.${DOMAIN};
+
+    client_max_body_size 50M;
 
     ssl_certificate     ${CERT_BASE}/fullchain.pem;
     ssl_certificate_key ${CERT_BASE}/privkey.pem;
