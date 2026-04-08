@@ -59,7 +59,7 @@ show_disclaimer() {
     echo -e "${BOLD}${CYAN}================================================================${RESET}"
     echo ""
     echo -e "${YELLOW}Auto application setup process provided by TJ BENJAMIN Services${RESET}"
-    echo -e "${YELLOW}This setup tool is developed for Ubuntu 20.04 Linux based systems${RESET}"
+    echo -e "${YELLOW}This setup tool is developed for Ubuntu 22.04.5 LTS Linux based systems${RESET}"
     echo -e "${YELLOW}This tool will check your system requirements, install dependencies,${RESET}"
     echo -e "${YELLOW}configure PostgreSQL, set up SSL certificates, and deploy the application.${RESET}"
     echo ""
