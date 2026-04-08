@@ -974,10 +974,9 @@ check_apache() {
         echo -e "${YELLOW}[application name] requires nginx proxy server.${RESET}"
         echo -e "${YELLOW}Apache2 may conflict with nginx setup.${RESET}"
         echo ""
-        echo -e "${YELLOW}Setup script options:${RESET}"
+        echo -e "${YELLOW}Apache2 detected - automatic uninstallation required:${RESET}"
         echo "  1) Backup Apache configurations and uninstall Apache2"
-        echo "  2) Continue with Apache2 installed (may cause conflicts)"
-        echo "  3) Exit setup"
+        echo "  2) Exit setup"
         echo ""
         
         while true; do
@@ -1000,52 +999,26 @@ check_apache() {
                     fi
                     ;;
                 2)
-                    warn "Apache2 detected - this option will handle it..."
+                    error "Apache2 detected - automatic uninstallation required for nginx setup."
                     echo ""
-                    echo -e "${YELLOW}This process will:${RESET}"
-                    echo "  1) Backup Apache configurations to /root/Apache_backup_YYYYMMDD_HHMMSS.zip"
-                    echo "  2) Stop Apache2 server"
-                    echo "  3) Uninstall Apache2 server"
-                    echo "  4) Continue with setup (not recommended)"
+                    echo -e "${YELLOW}[application name] requires nginx proxy server.${RESET}"
+                    echo -e "${YELLOW}Apache2 will be automatically uninstalled to prevent conflicts.${RESET}"
                     echo ""
-                    echo -e "${YELLOW}Type 'YES' to proceed with Apache removal:${RESET}"
-                    read -rp "Your choice: " APACHE_ACTION
-                    case "$APACHE_ACTION" in
-                        1)
-                            info "Creating backup of Apache configurations..."
-                            BACKUP_FILE="/root/Apache_backup_$(date +%Y%m%d_%H%M%S).zip"
-                            sudo zip -r "$BACKUP_FILE" /etc/apache2/ 2>/dev/null
-                            if [ -f "$BACKUP_FILE" ]; then
-                                success "Apache configurations backed up to $BACKUP_FILE"
-                            else
-                                error "Failed to create Apache backup"
-                                continue
-                            fi
-                            ;;
-                        2)
-                            info "Stopping Apache2 server..."
-                            sudo systemctl stop apache2 2>/dev/null
-                            success "Apache2 server stopped"
-                            continue
-                            ;;
-                        3)
-                            info "Uninstalling Apache2 server..."
-                            sudo systemctl stop apache2 2>/dev/null
-                            sudo apt-get remove --purge apache2 apache2-utils -y
-                            sudo apt-get autoremove -y
-                            success "Apache2 server uninstalled successfully"
-                            continue
-                            ;;
-                        4)
-                            warn "Continuing with Apache2 installed may cause conflicts..."
-                            warn "nginx setup may not work properly"
-                            warn "You are responsible for any conflicts that occur"
-                            continue
-                            ;;
-                        *)
-                            echo -e "${RED}Invalid choice. Please select 1-4.${RESET}"
-                            ;;
-                    esac
+                    info "Creating backup of Apache configurations..."
+                    BACKUP_FILE="/root/Apache_backup_$(date +%Y%m%d_%H%M%S).zip"
+                    sudo zip -r "$BACKUP_FILE" /etc/apache2/ 2>/dev/null
+                    if [ -f "$BACKUP_FILE" ]; then
+                        success "Apache configurations backed up to $BACKUP_FILE"
+                        info "Uninstalling Apache2 server..."
+                        sudo systemctl stop apache2 2>/dev/null
+                        sudo apt-get remove --purge apache2 apache2-utils -y
+                        sudo apt-get autoremove -y
+                        success "Apache2 uninstalled successfully"
+                        return 0
+                    else
+                        error "Failed to create Apache backup"
+                        continue
+                    fi
                     ;;
                 3)
                     echo "Setup cancelled by user."
