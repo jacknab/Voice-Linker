@@ -31,6 +31,53 @@ DB_USER="phonebooth_user"
 DB_NAME="malebox_chatline"
 SERVICE_NAME="malebox"
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
+CONFIG_FILE="${APP_DIR}/.setup_config"
+
+# CONFIGURATION STORAGE FUNCTIONS
+load_config() {
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+        info "Configuration loaded from $CONFIG_FILE"
+    fi
+}
+
+save_config() {
+    cat > "$CONFIG_FILE" <<CONFIGEOF
+DOMAIN="$DOMAIN"
+APP_PORT="$APP_PORT"
+DB_NAME="$DB_NAME"
+CERT_EMAIL="$CERT_EMAIL"
+CONFIGEOF
+    success "Configuration saved to $CONFIG_FILE"
+}
+
+# DISCLAIMER SCREEN
+show_disclaimer() {
+    clear
+    echo -e "${BOLD}${CYAN}================================================================${RESET}"
+    echo -e "${BOLD}${CYAN}                    DISCLAIMER${RESET}"
+    echo -e "${BOLD}${CYAN}================================================================${RESET}"
+    echo ""
+    echo -e "${YELLOW}Auto application setup process provided by TJ BENJAMIN Services${RESET}"
+    echo -e "${YELLOW}This setup tool is developed for Ubuntu 20.04 Linux based systems${RESET}"
+    echo -e "${YELLOW}This tool will check your system requirements, install dependencies,${RESET}"
+    echo -e "${YELLOW}configure PostgreSQL, set up SSL certificates, and deploy the application.${RESET}"
+    echo ""
+    echo -e "${YELLOW}The setup will modify system files and install packages.${RESET}"
+    echo -e "${YELLOW}Please ensure you have proper backups and system access.${RESET}"
+    echo ""
+    echo -e "${BOLD}${CYAN}================================================================${RESET}"
+    echo ""
+    
+    while true; do
+        read -rp "$(echo -e "${BOLD}Do you agree to proceed? [Y/n]: ${RESET}")" AGREE
+        case "$AGREE" in
+            [Yy]|"") return 0 ;;
+            [Nn]) return 1 ;;
+            *) echo -e "${RED}Please enter Y or n${RESET}" ;;
+        esac
+    done
+}
 
 # ─── ARGUMENT PARSING ─────────────────────────────────────────────────────────
 AUTO_YES=false
@@ -480,6 +527,83 @@ do_step_9() {
     success "Build complete → ${APP_DIR}/dist/"
 }
 
+# ── Step 0 - Configuration Variables Setup
+do_step_0() {
+    hdr "Configuration Variables Setup"
+    info "This step allows you to configure setup variables without running the actual setup."
+    info "These settings will be saved and used when you run the setup process."
+    echo ""
+    
+    # Load existing configuration
+    load_config
+    
+    echo -e "${BOLD}Current Configuration:${RESET}"
+    echo -e "  Domain: ${CYAN}${DOMAIN:-<not set>}${RESET}"
+    echo -e "  Port: ${CYAN}${APP_PORT}${RESET}"
+    echo -e "  Database: ${CYAN}${DB_NAME}${RESET}"
+    echo -e "  Email: ${CYAN}${CERT_EMAIL:-<not set>}${RESET}"
+    echo ""
+    
+    while true; do
+        echo -e "${BOLD}Select an option to configure:${RESET}"
+        echo "  1) Domain name"
+        echo "  2) Application port"
+        echo "  3) Database name"
+        echo "  4) SSL certificate email"
+        echo "  5) Save and exit"
+        echo "  6) Exit without saving"
+        echo ""
+        read -rp "Choice [1-6]: " CHOICE
+        
+        case "$CHOICE" in
+            1)
+                read -rp "$(echo -e "${BOLD}Domain name${RESET} [${DOMAIN:-example.com}]: ")" NEW_DOMAIN
+                if [ -n "$NEW_DOMAIN" ]; then
+                    DOMAIN="${NEW_DOMAIN#https://}"; DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN%/}"
+                    [[ -z "$DOMAIN" ]] && error "Domain name cannot be empty."
+                    success "Domain updated to: $DOMAIN"
+                fi
+                ;;
+            2)
+                read -rp "$(echo -e "${BOLD}Application port${RESET} [${APP_PORT}]: ")" NEW_PORT
+                if [ -n "$NEW_PORT" ]; then
+                    if [[ "$NEW_PORT" =~ ^[0-9]+$ ]] && (( NEW_PORT >= 1024 && NEW_PORT <= 65535 )); then
+                        APP_PORT="$NEW_PORT"
+                        success "Port updated to: $APP_PORT"
+                    else
+                        error "Port must be between 1024 and 65535."
+                    fi
+                fi
+                ;;
+            3)
+                read -rp "$(echo -e "${BOLD}Database name${RESET} [${DB_NAME}]: ")" NEW_DB
+                if [ -n "$NEW_DB" ]; then
+                    DB_NAME="$NEW_DB"
+                    success "Database name updated to: $DB_NAME"
+                fi
+                ;;
+            4)
+                read -rp "$(echo -e "${BOLD}SSL certificate email${RESET} [${CERT_EMAIL:-admin@${DOMAIN:-example.com}}]: ")" NEW_EMAIL
+                if [ -n "$NEW_EMAIL" ]; then
+                    CERT_EMAIL="$NEW_EMAIL"
+                    success "Email updated to: $CERT_EMAIL"
+                fi
+                ;;
+            5)
+                save_config
+                return 0
+                ;;
+            6)
+                return 0
+                ;;
+            *)
+                echo -e "${RED}Invalid choice. Please select 1-6.${RESET}"
+                ;;
+        esac
+        echo ""
+    done
+}
+
 # ── Step 10 – PM2 process management ──────────────────────────────────────────
 do_step_10() {
     hdr "Step 10a/10  PM2 process management (${SERVICE_NAME})"
@@ -840,6 +964,15 @@ run_from() {
 # MENU
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Load existing configuration
+load_config
+
+# Show disclaimer before menu
+if ! show_disclaimer; then
+    echo "Setup cancelled by user."
+    exit 0
+fi
+
 # If --yes flag is set, skip the menu and run everything
 if [ "$AUTO_YES" = true ]; then
     info "Running all steps unattended (--yes flag set)."
@@ -850,38 +983,39 @@ fi
 show_menu() {
     clear
     echo -e "${BOLD}${CYAN}"
-    echo "  ╔══════════════════════════════════════════════════════════╗"
-    echo "  ║          Phone Booth  –  VPS Setup Menu                 ║"
-    echo "  ╠══════════════════════════════════════════════════════════╣"
-    echo "  ║                                                          ║"
-    echo "  ║   Domain : ${DOMAIN}"
-    echo "  ║                                                          ║"
-    echo "  ║   1)  Full Setup  (run all steps from the beginning)     ║"
-    echo "  ║                                                          ║"
-    echo "  ║   ── Resume / re-run from a specific step ──             ║"
-    echo "  ║   2)  Step  1  –  Swap space                            ║"
-    echo "  ║   3)  Step  2  –  System packages & Node.js             ║"
-    echo "  ║   4)  Step  3  –  Firewall  (UFW + fail2ban)            ║"
-    echo "  ║   5)  Step  4  –  npm install                           ║"
-    echo "  ║   6)  Step  5  –  PostgreSQL database & user            ║"
-    echo "  ║   7)  Step  6  –  .env configuration                    ║"
-    echo "  ║   8)  Step  7  –  Uploads directory                     ║"
-    echo "  ║   9)  Step  8  –  Database schema + admin account       ║"
-    echo "  ║  10)  Step  9  –  Production build                      ║"
-    echo "  ║  11)  Step 10  –  PM2 process management + Nginx + SSL         ║"
-    echo "  ║                                                          ║"
-    echo "  ║   0)  Exit                                               ║"
-    echo "  ║                                                          ║"
-    echo "  ╚══════════════════════════════════════════════════════════╝"
+    echo "  ¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡"
+    echo "  ¡          Phone Booth  -  VPS Setup Menu                 ¡"
+    echo "  ¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡"
+    echo "  ¡                                                          ¡"
+    echo "  ¡   Domain : ${DOMAIN}"
+    echo "  ¡                                                          ¡"
+    echo "  ¡   1)  Full Setup  (run all steps from the beginning)     ¡"
+    echo "  ¡   2)  Configuration Setup (set variables without running) ¡"
+    echo "  ¡                                                          ¡"
+    echo "  ¡   -- Resume / re-run from a specific step --             ¡"
+    echo "  ¡   3)  Step  1  -  Swap space                            ¡"
+    echo "  ¡   4)  Step  2  -  System packages & Node.js             ¡"
+    echo "  ¡   5)  Step  3  -  Firewall  (UFW + fail2ban)            ¡"
+    echo "  ¡   6)  Step  4  -  npm install                           ¡"
+    echo "  ¡   7)  Step  5  -  PostgreSQL database & user            ¡"
+    echo "  ¡   8)  Step  6  -  .env configuration                    ¡"
+    echo "  ¡   9)  Step  7  -  Uploads directory                     ¡"
+    echo "  ¡  10)  Step  8  -  Database schema + admin account       ¡"
+    echo "  ¡  11)  Step  9  -  Production build                      ¡"
+    echo "  ¡  12)  Step 10  -  PM2 process management + Nginx + SSL         ¡"
+    echo "  ¡                                                          ¡"
+    echo "  ¡   0)  Exit                                               ¡"
+    echo "  ¡                                                          ¡"
+    echo "  ¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡¡"
     echo -e "${RESET}"
-    echo -e "  ${YELLOW}Note: every step is safe to re-run — it skips work${RESET}"
+    echo -e "  ${YELLOW}Note: every step is safe to re-run - it skips work${RESET}"
     echo -e "  ${YELLOW}that is already done and only applies what's missing.${RESET}"
     echo ""
 }
 
 while true; do
     show_menu
-    read -rp "  Enter choice [0-11]: " CHOICE
+    read -rp "  Enter choice [0-12]: " CHOICE
 
     case "$CHOICE" in
         0)
@@ -889,27 +1023,29 @@ while true; do
         1)
             run_from 1  ;;
         2)
-            run_from 1  ;;   # step 1 from the menu → start from Step 1
+            do_step_0  ;;   # configuration setup
         3)
-            run_from 2  ;;
+            run_from 1  ;;   # step 1 from the menu -> start from Step 1
         4)
-            run_from 3  ;;
+            run_from 2 ;;
         5)
-            run_from 4  ;;
+            run_from 3  ;;
         6)
-            run_from 5  ;;
+            run_from 4 ;;
         7)
-            run_from 6  ;;
+            run_from 5 ;;
         8)
-            run_from 7  ;;
+            run_from 6 ;;
         9)
-            run_from 8  ;;
+            run_from 7 ;;
         10)
-            run_from 9  ;;
+            run_from 8 ;;
         11)
+            run_from 9 ;;
+        12)
             run_from 10 ;;
         *)
-            echo -e "${RED}Invalid choice — please enter a number between 0 and 11.${RESET}"
+            echo -e "${RED}Invalid choice - please enter a number between 0 and 12.${RESET}"
             sleep 1 ;;
     esac
 
