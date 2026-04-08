@@ -39,7 +39,7 @@ interface Region {
   maxCapacity: number;
   description: string | null;
   isActive: boolean;
-  linkedRegionId: string | null;
+  linkedRegionIds: string[];
   defaultZipCode: string | null;
   createdAt: string;
   activeCalls: number;
@@ -296,7 +296,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
   const [maxCapacity, setMaxCapacity] = useState(String(region?.maxCapacity ?? 1000));
   const [description, setDescription] = useState(region?.description ?? "");
   const [isActive, setIsActive] = useState(region?.isActive ?? true);
-  const [linkedRegionId, setLinkedRegionId] = useState<string>(region?.linkedRegionId ?? "");
+  const [linkedRegionIds, setLinkedRegionIds] = useState<string[]>(region?.linkedRegionIds ?? []);
   const [defaultZipCode, setDefaultZipCode] = useState<string>(region?.defaultZipCode ?? "");
 
   const { data: allRegions } = useQuery<Region[]>({ queryKey: ["/api/regions"] });
@@ -309,7 +309,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const body = { name: name.trim(), slug: slug.trim(), phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive, linkedRegionId: linkedRegionId || null, defaultZipCode: defaultZipCode.trim() || null };
+      const body = { name: name.trim(), slug: slug.trim(), phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive, linkedRegionIds, defaultZipCode: defaultZipCode.trim() || null };
       if (isEdit) return apiRequest("PUT", `/api/regions/${region.id}`, body);
       return apiRequest("POST", `/api/regions`, body);
     },
@@ -370,14 +370,32 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
             <input data-testid="input-region-description" type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Colorado Rocky Mountains region" className={C.input} />
           </div>
           <div>
-            <label className={C.label}>Linked Nearby Region</label>
-            <select data-testid="select-linked-region" value={linkedRegionId} onChange={e => setLinkedRegionId(e.target.value)} className={C.select}>
-              <option value="">— No linked region —</option>
-              {otherRegions.map(r => (
-                <option key={r.id} value={r.id}>{r.name} ({r.phoneNumber})</option>
-              ))}
-            </select>
-            <p className="text-gray-400 font-mono text-xs mt-1.5">When callers exhaust this region's queue, they'll be offered to hear callers from the linked region.</p>
+            <label className={C.label}>Linked Nearby Regions</label>
+            <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-48 overflow-y-auto">
+              {otherRegions.length === 0 ? (
+                <div className="px-3 py-2 text-gray-400 font-mono text-xs">No other regions available</div>
+              ) : otherRegions.map(r => {
+                const checked = linkedRegionIds.includes(r.id);
+                return (
+                  <button
+                    key={r.id}
+                    data-testid={`toggle-linked-region-${r.id}`}
+                    type="button"
+                    onClick={() => setLinkedRegionIds(prev => checked ? prev.filter(id => id !== r.id) : [...prev, r.id])}
+                    className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${checked ? "bg-amber-50" : "bg-white hover:bg-gray-50"}`}
+                  >
+                    <span className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${checked ? "bg-[#f5a623] border-[#f5a623]" : "border-gray-300"}`}>
+                      {checked && <span className="block w-2 h-2 bg-white rounded-sm" />}
+                    </span>
+                    <span className="flex-1 font-mono text-xs text-gray-800 font-semibold">{r.name}</span>
+                    <span className="font-mono text-xs text-gray-400">{r.phoneNumber}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-gray-400 font-mono text-xs mt-1.5">
+              Select all nearby cities to link together. Callers will hear "new caller from [city]" when someone joins a linked region, and "new caller close to you" for their own region.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -477,13 +495,16 @@ function RegionsTab() {
                 <button data-testid={`btn-copy-phone-${region.id}`} onClick={() => copyPhone(region.phoneNumber)} className="text-gray-400 hover:text-[#f5a623] transition-colors"><Copy size={12} /></button>
               </div>
 
-              {region.linkedRegionId && (() => {
-                const linked = regions?.find(r => r.id === region.linkedRegionId);
-                return linked ? (
-                  <div data-testid={`text-linked-region-${region.id}`} className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
-                    <MapPin size={11} className="text-[#f5a623]/70" />
-                    <span className="text-gray-500 font-mono text-xs tracking-widest uppercase">Linked:</span>
-                    <span className="text-[#f5a623] font-mono text-xs font-bold">{linked.name}</span>
+              {region.linkedRegionIds && region.linkedRegionIds.length > 0 && (() => {
+                const linkedNames = region.linkedRegionIds
+                  .map(id => regions?.find(r => r.id === id)?.name)
+                  .filter(Boolean) as string[];
+                return linkedNames.length > 0 ? (
+                  <div data-testid={`text-linked-region-${region.id}`} className="flex flex-wrap items-center gap-1.5 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+                    <span className="text-gray-500 font-mono text-xs tracking-widest uppercase flex items-center gap-1"><MapPin size={10} className="text-[#f5a623]/70" />Linked:</span>
+                    {linkedNames.map(name => (
+                      <span key={name} className="text-[#f5a623] font-mono text-xs font-bold bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">{name}</span>
+                    ))}
                   </div>
                 ) : null;
               })()}

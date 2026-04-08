@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, timestamp, integer, uuid, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, timestamp, integer, uuid, doublePrecision, primaryKey } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -16,6 +16,14 @@ export const regions = pgTable("regions", {
   defaultZipCode: text("default_zip_code"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Many-to-many: each region can be linked to multiple nearby regions
+export const regionLinks = pgTable("region_links", {
+  regionId: uuid("region_id").notNull().references(() => regions.id, { onDelete: "cascade" }),
+  linkedRegionId: uuid("linked_region_id").notNull().references(() => regions.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.regionId, table.linkedRegionId] })]);
+
+export type RegionLink = typeof regionLinks.$inferSelect;
 
 // Lookup table — one row per unique US zip code, populated on first use
 export const zipCodes = pgTable("zip_codes", {

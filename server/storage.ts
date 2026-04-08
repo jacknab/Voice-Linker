@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog } from "@shared/schema";
+import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -64,6 +64,8 @@ export interface IStorage {
   updateRegion(id: string, data: Partial<InsertRegion>): Promise<Region>;
   deleteRegion(id: string): Promise<void>;
   getRegionActiveUserCount(regionId: string): Promise<number>;
+  getLinkedRegions(regionId: string): Promise<Region[]>;
+  setLinkedRegions(regionId: string, linkedIds: string[]): Promise<void>;
 
   getUserByPhone(phoneNumber: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
@@ -314,6 +316,20 @@ export class DatabaseStorage implements IStorage {
 
   async deleteRegion(id: string): Promise<void> {
     await db.delete(regions).where(eq(regions.id, id));
+  }
+
+  async getLinkedRegions(regionId: string): Promise<Region[]> {
+    const links = await db.select().from(regionLinks).where(eq(regionLinks.regionId, regionId));
+    if (links.length === 0) return [];
+    const ids = links.map(l => l.linkedRegionId);
+    return db.select().from(regions).where(inArray(regions.id, ids));
+  }
+
+  async setLinkedRegions(regionId: string, linkedIds: string[]): Promise<void> {
+    await db.delete(regionLinks).where(eq(regionLinks.regionId, regionId));
+    if (linkedIds.length > 0) {
+      await db.insert(regionLinks).values(linkedIds.map(id => ({ regionId, linkedRegionId: id })));
+    }
   }
 
   async getRegionActiveUserCount(regionId: string): Promise<number> {

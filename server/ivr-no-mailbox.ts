@@ -146,7 +146,10 @@ interface CallerBrowseState {
   hasWrapped: boolean;        // true after the queue index cycled back to 0
   linkedRegionLoaded: boolean; // true once the linked-region offer has been made (or skipped)
   localUserIds: string[];      // user IDs from the original local-region queue snapshot
-  announcedNewLocalIds: string[]; // new local callers already announced during linked browsing
+  announcedNewLocalIds: string[]; // new local (home region) callers already announced
+  // Multi-region linking support
+  linkedRegionSnapshots: { regionId: string; regionName: string; knownUserIds: string[] }[];
+  announcedLinkedCallerIds: string[]; // user IDs announced as "new caller from [city]"
 }
 const callerBrowseState = new Map<string, CallerBrowseState>();
 
@@ -3824,6 +3827,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               ? await storage.getNearbyProfileUserIds(user.id, regionId, callerLat, callerLon, 80)
               : []
           );
+          // Snapshot each linked region so we can detect new callers joining them later
+          const linkedRegions = regionId ? await storage.getLinkedRegions(regionId) : [];
+          const linkedRegionSnapshots = await Promise.all(
+            linkedRegions.map(async (r) => {
+              const profiles = await storage.getAllActiveProfiles(user.id, r.id);
+              return { regionId: r.id, regionName: r.name, knownUserIds: profiles.map(p => p.userId) };
+            })
+          );
           state = {
             queue: allProfiles.map(p => ({
               userId: p.userId,
@@ -3837,9 +3848,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             linkedRegionLoaded: false,
             localUserIds: allProfiles.map(p => p.userId),
             announcedNewLocalIds: [],
+            linkedRegionSnapshots,
+            announcedLinkedCallerIds: [],
           };
           callerBrowseState.set(callSid, state);
-          console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid} (${nearbySet.size} nearby)`);
+          console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid} (${nearbySet.size} nearby, ${linkedRegions.length} linked regions)`);
         }
 
         if (state.queue.length === 0) {
@@ -3848,29 +3861,28 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         } else {
           // ── Linked-region offer: queue has looped at least once ──────────────
           if (state.hasWrapped && !state.linkedRegionLoaded && regionId) {
-            const currentRegion = await storage.getRegionById(regionId);
-            if (currentRegion?.linkedRegionId) {
+            const linkedRegions = await storage.getLinkedRegions(regionId);
+            if (linkedRegions.length > 0) {
               state.hasWrapped = false; // clear so we don't re-trigger until next full loop
-              twiml.redirect(`/voice/nearby-callers-offer?linkedRegionId=${currentRegion.linkedRegionId}`);
+              const ids = linkedRegions.map(r => r.id).join(",");
+              twiml.redirect(`/voice/nearby-callers-offer?linkedRegionIds=${encodeURIComponent(ids)}`);
               res.type("text/xml");
               return res.send(twiml.toString());
             } else {
-              state.linkedRegionLoaded = true; // no linked region — stop checking
+              state.linkedRegionLoaded = true; // no linked regions — stop checking
             }
           }
 
-          // ── New local caller alert (only when browsing linked region) ────────
-          // If the caller is currently listening to profiles from a nearby region,
-          // intercept the next press-2 to announce any callers who have joined
-          // their HOME region since they left it.
-          if (state.linkedRegionLoaded && regionId) {
-            const knownIds = new Set([...state.localUserIds, ...state.announcedNewLocalIds]);
+          // ── New caller alerts: home region ("close to you") + linked regions ("from [city]") ──
+          // Check for new callers in the home region first
+          if (regionId) {
+            const knownLocalIds = new Set([...state.localUserIds, ...state.announcedNewLocalIds]);
             const currentLocalProfiles = await storage.getAllActiveProfiles(user.id, regionId);
-            const newLocalCaller = currentLocalProfiles.find(p => !knownIds.has(p.userId));
+            const newLocalCaller = currentLocalProfiles.find(p => !knownLocalIds.has(p.userId));
 
             if (newLocalCaller) {
               state.announcedNewLocalIds.push(newLocalCaller.userId);
-              console.log(`[voice] browse-profiles: announcing new local caller userId=${newLocalCaller.userId} to linked-region browser ${callSid}`);
+              console.log(`[voice] browse-profiles: announcing new home-region caller userId=${newLocalCaller.userId} to ${callSid}`);
 
               const alertGather = twiml.gather({
                 numDigits: 1,
@@ -3882,6 +3894,33 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                 safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
               }
               safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
+              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+              twiml.redirect("/voice/browse-profiles");
+              res.type("text/xml");
+              return res.send(twiml.toString());
+            }
+          }
+
+          // Check for new callers in each linked region ("new caller from [city]")
+          for (const snapshot of state.linkedRegionSnapshots) {
+            const knownLinkedIds = new Set([...snapshot.knownUserIds, ...state.announcedLinkedCallerIds]);
+            const currentLinkedProfiles = await storage.getAllActiveProfiles(user.id, snapshot.regionId);
+            const newLinkedCaller = currentLinkedProfiles.find(p => !knownLinkedIds.has(p.userId));
+
+            if (newLinkedCaller) {
+              state.announcedLinkedCallerIds.push(newLinkedCaller.userId);
+              console.log(`[voice] browse-profiles: announcing new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} to ${callSid}`);
+
+              const alertGather = twiml.gather({
+                numDigits: 1,
+                action: `/voice/handle-profile-menu?profileUserId=${newLinkedCaller.userId}`,
+                timeout: 10,
+              });
+              alertGather.say(`New caller from ${snapshot.regionName}.`);
+              if (newLinkedCaller.nameRecordingUrl) {
+                safePlayRecording(alertGather, newLinkedCaller.nameRecordingUrl, req, "");
+              }
+              safePlayRecording(alertGather, newLinkedCaller.recordingUrl, req, "This profile's greeting is not available.");
               playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
               twiml.redirect("/voice/browse-profiles");
               res.type("text/xml");
@@ -3938,24 +3977,23 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/nearby-callers-offer", async (req, res) => {
     const twiml = new VoiceResponse();
     try {
-      const linkedRegionId = req.query.linkedRegionId as string;
-      const linkedRegion = linkedRegionId ? await storage.getRegionById(linkedRegionId) : null;
-
-      if (!linkedRegion) {
+      const linkedRegionIds = ((req.query.linkedRegionIds as string) || "").split(",").filter(Boolean);
+      if (linkedRegionIds.length === 0) {
         twiml.redirect("/voice/browse-profiles");
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
+      const encodedIds = encodeURIComponent(linkedRegionIds.join(","));
       const gather = twiml.gather({
         numDigits: 1,
-        action: `/voice/handle-nearby-callers?linkedRegionId=${linkedRegionId}`,
+        action: `/voice/handle-nearby-callers?linkedRegionIds=${encodedIds}`,
         timeout: 12,
       });
       playPrompt(gather, req, "nearby_callers_offer.mp3",
-        `You've heard all the callers in your area. Press 1 to hear callers close to you from ${linkedRegion.name}. Press 2 to start over from the beginning.`);
+        `You've heard all the callers in your area. Press 1 to hear callers from nearby cities. Press 2 to start over from the beginning.`);
       // Timeout falls through to handle-nearby-callers without a digit (treated as "start over")
-      twiml.redirect(`/voice/handle-nearby-callers?linkedRegionId=${linkedRegionId}`);
+      twiml.redirect(`/voice/handle-nearby-callers?linkedRegionIds=${encodedIds}`);
     } catch (err) {
       console.error("[voice] /voice/nearby-callers-offer error:", err);
       twiml.redirect("/voice/browse-profiles");
@@ -3969,44 +4007,50 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     try {
       const digit = req.body?.Digits;
-      const linkedRegionId = req.query.linkedRegionId as string;
+      const linkedRegionIds = ((req.query.linkedRegionIds as string) || "").split(",").filter(Boolean);
       const callSid = req.body?.CallSid as string;
       const fromNumber = req.body?.From as string;
 
       const state = callerBrowseState.get(callSid);
 
-      if (digit === "1" && state && linkedRegionId) {
-        // Load profiles from the linked region
+      if (digit === "1" && state && linkedRegionIds.length > 0) {
+        // Load profiles from ALL linked regions combined
         const user = await getOrCreateUser(fromNumber);
         const callerZip = user.zipCodeId ? await storage.getZipEntryById(user.zipCodeId) : null;
         const callerLat = callerZip?.latitude ?? null;
         const callerLon = callerZip?.longitude ?? null;
-        const linkedProfiles = await storage.getAllActiveProfiles(user.id, linkedRegionId);
-        const linkedNearbySet = new Set<string>(
-          callerLat != null && callerLon != null
-            ? await storage.getNearbyProfileUserIds(user.id, linkedRegionId, callerLat, callerLon, 80)
-            : []
-        );
-        const linkedRegion = await storage.getRegionById(linkedRegionId);
 
-        if (linkedProfiles.length > 0) {
-          // Replace the queue with linked region profiles only
-          state.queue = linkedProfiles.map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, isNearby: linkedNearbySet.has(p.userId) }));
+        const allLinkedProfiles: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; isNearby: boolean }[] = [];
+        for (const linkedRegionId of linkedRegionIds) {
+          const profiles = await storage.getAllActiveProfiles(user.id, linkedRegionId);
+          const nearbySet = new Set<string>(
+            callerLat != null && callerLon != null
+              ? await storage.getNearbyProfileUserIds(user.id, linkedRegionId, callerLat, callerLon, 80)
+              : []
+          );
+          for (const p of profiles) {
+            allLinkedProfiles.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, isNearby: nearbySet.has(p.userId) });
+          }
+        }
+
+        if (allLinkedProfiles.length > 0) {
+          // Replace the queue with all linked region profiles combined
+          state.queue = allLinkedProfiles;
           state.index = 0;
           state.hasWrapped = false;
           state.linkedRegionLoaded = true;
-          console.log(`[voice] handle-nearby-callers: loaded ${linkedProfiles.length} profiles from linked region ${linkedRegionId}`);
+          console.log(`[voice] handle-nearby-callers: loaded ${allLinkedProfiles.length} profiles from ${linkedRegionIds.length} linked region(s)`);
           playPrompt(twiml, req, "nearby_callers_intro.mp3",
-            `Now playing callers from ${linkedRegion?.name ?? "a nearby area"}. Enjoy!`);
+            `Now playing callers from nearby cities. Enjoy!`);
         } else {
-          // No callers online in linked region — restart local queue
+          // No callers online in any linked region — restart local queue
           if (state) {
             state.index = 0;
             state.linkedRegionLoaded = true;
             state.hasWrapped = false;
           }
           playPrompt(twiml, req, "nearby_callers_none.mp3",
-            "There are no callers online in that area right now. Starting your area over.");
+            "There are no callers online in nearby cities right now. Starting your area over.");
         }
         twiml.redirect("/voice/browse-profiles");
       } else {

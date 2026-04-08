@@ -1118,8 +1118,11 @@ export async function registerRoutes(
       const all = await storage.getAllRegions();
       const withStats = await Promise.all(
         all.map(async (r) => {
-          const stats = await storage.getRegionStats(r.id);
-          return { ...r, ...stats };
+          const [stats, linkedRegions] = await Promise.all([
+            storage.getRegionStats(r.id),
+            storage.getLinkedRegions(r.id),
+          ]);
+          return { ...r, ...stats, linkedRegionIds: linkedRegions.map(lr => lr.id) };
         })
       );
       res.json(withStats);
@@ -1131,7 +1134,7 @@ export async function registerRoutes(
 
   app.post("/api/regions", async (req, res) => {
     try {
-      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionId, defaultZipCode } = req.body;
+      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionIds, defaultZipCode } = req.body;
       if (!name || !slug || !phoneNumber) {
         return res.status(400).json({ message: "name, slug, and phoneNumber are required" });
       }
@@ -1143,11 +1146,13 @@ export async function registerRoutes(
         maxCapacity: maxCapacity ? parseInt(maxCapacity) : 1000,
         description: description?.trim() || null,
         isActive: isActive !== false,
-        linkedRegionId: linkedRegionId || null,
         defaultZipCode: defaultZipCode?.trim() || null,
       });
+      if (Array.isArray(linkedRegionIds) && linkedRegionIds.length > 0) {
+        await storage.setLinkedRegions(region.id, linkedRegionIds);
+      }
       logAudit("region_created", { targetType: "region", targetId: region.id, targetLabel: region.name });
-      res.status(201).json(region);
+      res.status(201).json({ ...region, linkedRegionIds: linkedRegionIds ?? [] });
     } catch (e: any) {
       console.error("[regions] Failed to create region:", e);
       if (e?.message?.includes("unique")) {
@@ -1160,7 +1165,7 @@ export async function registerRoutes(
   app.put("/api/regions/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionId, defaultZipCode } = req.body;
+      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionIds, defaultZipCode } = req.body;
       const region = await storage.updateRegion(id, {
         ...(name !== undefined && { name: name.trim() }),
         ...(slug !== undefined && { slug: slug.trim().toLowerCase() }),
@@ -1169,11 +1174,14 @@ export async function registerRoutes(
         ...(maxCapacity !== undefined && { maxCapacity: parseInt(maxCapacity) }),
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(isActive !== undefined && { isActive }),
-        ...("linkedRegionId" in req.body && { linkedRegionId: linkedRegionId || null }),
         ...("defaultZipCode" in req.body && { defaultZipCode: defaultZipCode?.trim() || null }),
       });
+      if ("linkedRegionIds" in req.body) {
+        await storage.setLinkedRegions(id, Array.isArray(linkedRegionIds) ? linkedRegionIds : []);
+      }
+      const currentLinkedRegions = await storage.getLinkedRegions(id);
       logAudit("region_updated", { targetType: "region", targetId: id, targetLabel: region.name });
-      res.json(region);
+      res.json({ ...region, linkedRegionIds: currentLinkedRegions.map(r => r.id) });
     } catch (e: any) {
       console.error("[regions] Failed to update region:", e);
       res.status(500).json({ message: "Failed to update region" });
