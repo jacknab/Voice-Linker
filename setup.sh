@@ -533,31 +533,19 @@ EOF
         read -rp "$(echo -e "${BOLD}Email for SSL certificate notices${RESET} [admin@${DOMAIN}]: ")" _CERT_EMAIL
         _CERT_EMAIL="${_CERT_EMAIL:-admin@${DOMAIN}}"
 
-        # Write a minimal HTTP server block so certbot can serve the ACME challenge
-        local TMP_SITE="/etc/nginx/sites-available/${SERVICE_NAME}_acme"
-        sudo tee "$TMP_SITE" > /dev/null <<ACMENGINX
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${DOMAIN} www.${DOMAIN};
-    root /var/www/html;
-    location /.well-known/acme-challenge/ { try_files \$uri =404; }
-    location / { return 444; }
-}
-ACMENGINX
-        sudo ln -sf "$TMP_SITE" "/etc/nginx/sites-enabled/${SERVICE_NAME}_acme"
-        sudo nginx -t && sudo systemctl reload nginx \
-            || error "Nginx config test failed — fix nginx errors and re-run Step 10."
+        # Use standalone mode — certbot temporarily binds port 80 itself.
+        # Stop nginx so port 80 is free, then restart after cert is issued.
+        info "Stopping Nginx briefly so certbot can use port 80..."
+        sudo systemctl stop nginx
 
         info "Running certbot — make sure ${DOMAIN} and www.${DOMAIN} point to this server's IP and port 80 is open."
-        sudo certbot certonly --nginx \
+        sudo certbot certonly --standalone \
             -d "${DOMAIN}" -d "www.${DOMAIN}" \
             --non-interactive --agree-tos -m "${_CERT_EMAIL}" \
-            || error "Certbot failed. Confirm DNS is pointing to this server and port 80 is reachable, then re-run Step 10."
+            || { sudo systemctl start nginx; error "Certbot failed. Confirm DNS is pointing to this server and port 80 is reachable, then re-run Step 10."; }
 
-        # Clean up the temporary ACME challenge site
-        sudo rm -f "/etc/nginx/sites-enabled/${SERVICE_NAME}_acme" "$TMP_SITE"
-        sudo systemctl reload nginx
+        sudo systemctl start nginx
+        info "Nginx restarted."
 
         # Re-scan now that the cert has been issued
         for CANDIDATE in \
