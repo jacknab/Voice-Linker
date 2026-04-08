@@ -405,6 +405,21 @@ do_step_7() {
 do_step_8() {
     hdr "Step 8/10  Database schema"
     cd "${APP_DIR}"
+
+    # Ensure .env exists before trying to push — if not, create it first
+    if [ ! -f "${APP_DIR}/.env" ]; then
+        warn ".env not found — running Step 6 to create it first."
+        do_step_6
+    fi
+
+    # Load .env into the current shell so drizzle-kit picks up the correct DATABASE_URL
+    info "Loading .env into environment..."
+    set -a
+    # shellcheck source=/dev/null
+    source "${APP_DIR}/.env"
+    set +a
+    info "DATABASE_URL loaded: ${DATABASE_URL}"
+
     echo ""
     echo -e "${BOLD}The following step will create or update database tables to match the application schema.${RESET}"
     echo -e "  Drizzle will show you exactly which tables will be created or altered before applying any changes."
