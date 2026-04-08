@@ -322,6 +322,25 @@ do_step_5() {
     sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};"
     sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};"
     success "Database '${DB_NAME}' and user '${DB_USER}' are ready."
+
+    # Write DATABASE_URL to .env immediately so db:push always uses the correct database
+    local NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1/${DB_NAME}?sslmode=disable"
+    if [ -f "${APP_DIR}/.env" ]; then
+        # Update existing DATABASE_URL line in place
+        if grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
+            sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${NEW_DB_URL}|" "${APP_DIR}/.env"
+            info "DATABASE_URL updated in .env."
+        else
+            echo "DATABASE_URL=${NEW_DB_URL}" >> "${APP_DIR}/.env"
+            info "DATABASE_URL added to existing .env."
+        fi
+    else
+        # Create a minimal .env with just DATABASE_URL now; Step 6 will fill in the rest
+        echo "DATABASE_URL=${NEW_DB_URL}" > "${APP_DIR}/.env"
+        chmod 600 "${APP_DIR}/.env"
+        info "Created .env with DATABASE_URL."
+    fi
+    success "DATABASE_URL written: ${NEW_DB_URL}"
 }
 
 # ── Step 6 – .env file ────────────────────────────────────────────────────────
