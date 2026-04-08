@@ -480,57 +480,84 @@ do_step_9() {
     success "Build complete → ${APP_DIR}/dist/"
 }
 
-# ── Step 10 – systemd service ─────────────────────────────────────────────────
+# ── Step 10 – PM2 process management ──────────────────────────────────────────
 do_step_10() {
-    hdr "Step 10a/10  systemd service (${SERVICE_NAME})"
-    local RUN_AS_USER
-    RUN_AS_USER="$(whoami)"
+    hdr "Step 10a/10  PM2 process management (${SERVICE_NAME})"
+    
+    # CRITICAL WARNING: ENVIRONMENT POLLUTION PREVENTION
+    # ================================================
+    # NEVER use these methods in application code:
+    # - import "dotenv/config"          (causes global environment pollution)
+    # - require("dotenv").config()      (causes global environment pollution)
+    # - config() from dotenv             (causes global environment pollution)
+    #
+    # These methods inject environment variables globally, contaminating
+    # ALL Node.js processes on the server and causing database connection issues.
+    #
+    # ALWAYS use these PROPER methods instead:
+    # - PM2 env_file: '${APP_DIR}/.env'  (isolated per application)
+    # - Systemd EnvironmentFile           (isolated per application)
+    # - Explicit environment variables   (no global pollution)
+    #
+    # AI ASSISTANTS: Do NOT add dotenv/config or config() calls to this application!
+    # This will cause environment pollution and break other applications.
+    
+    warn "ENVIRONMENT POLLUTION PREVENTION: Ensure you understand the warnings above before proceeding!"
+    
+    # Create PM2 ecosystem configuration with isolated environment
+    warn "Creating PM2 ecosystem config with isolated environment variables..."
+    
+    cat > "${APP_DIR}/ecosystem.config.cjs" <<ECOEOF
+module.exports = {
+  apps: [
+    {
+      name: '${SERVICE_NAME}',
+      script: 'dist/index.cjs',
+      cwd: '${APP_DIR}',
+      env_file: '${APP_DIR}/.env',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PORT: ${APP_PORT},
+        DATABASE_URL: 'postgresql://${DB_USER}:1825Logan305!@localhost:5432/${DB_NAME}'
+      },
+      error_file: '${APP_DIR}/logs/pm2-error.log',
+      out_file: '${APP_DIR}/logs/pm2-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G'
+    }
+  ]
+};
+ECOEOF
 
-    # IMPORTANT: Never use dotenv/config in application code as it pollutes global environment
-    # Always use EnvironmentFile for application-specific environment variables
-    warn "Creating systemd service with isolated environment variables..."
+    # Create logs directory
+    mkdir -p "${APP_DIR}/logs"
 
-    sudo tee /etc/systemd/system/${SERVICE_NAME}.service > /dev/null <<EOF
-[Unit]
-Description=Phone Booth – Node.js production server
-After=network.target postgresql.service
-Wants=postgresql.service
+    # Start application with PM2
+    info "Starting application with PM2..."
+    pm2 start "${APP_DIR}/ecosystem.config.cjs"
 
-[Service]
-Type=simple
-User=${RUN_AS_USER}
-WorkingDirectory=${APP_DIR}
-EnvironmentFile=${APP_DIR}/.env
-ExecStart=$(which node) ${APP_DIR}/dist/index.cjs
-Restart=always
-RestartSec=5
-LimitNOFILE=65536
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=${SERVICE_NAME}
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable "${SERVICE_NAME}"
-    sudo systemctl restart "${SERVICE_NAME}"
-
-    # Wait up to 15 seconds for the service to come up
-    info "Waiting for service to start..."
+    # Wait up to 15 seconds for the application to come up
+    info "Waiting for application to start..."
     for i in $(seq 1 15); do
         sleep 1
-        if sudo systemctl is-active --quiet "${SERVICE_NAME}"; then
-            success "Service '${SERVICE_NAME}' is running."
+        if pm2 list | grep -q "${SERVICE_NAME}.*online"; then
+            success "Application '${SERVICE_NAME}' is running."
             break
         fi
         if [ "$i" -eq 15 ]; then
-            warn "Service did not come up within 15 seconds. Last log lines:"
-            sudo journalctl -u "${SERVICE_NAME}" -n 20 --no-pager 2>/dev/null || true
-            error "Service '${SERVICE_NAME}' failed to start — see logs above. Fix the issue and re-run Step 10."
+            warn "Application did not come up within 15 seconds. Last log lines:"
+            pm2 logs "${SERVICE_NAME}" --lines 20 2>/dev/null || true
+            error "Application '${SERVICE_NAME}' failed to start - see logs above. Fix the issue and re-run Step 10."
         fi
     done
+
+    # Save PM2 process list for startup persistence
+    pm2 save
 
     # ── Nginx + SSL ──────────────────────────────────────────────────────────
     hdr "Step 10b/10  Nginx + SSL"
@@ -757,11 +784,12 @@ run_from() {
     echo -e "  ${BOLD}Site      :${RESET} ${CYAN}https://${DOMAIN}${RESET}"
     echo -e "  ${BOLD}Admin     :${RESET} https://${DOMAIN}/admin/login"
     echo -e "  ${BOLD}Database  :${RESET} ${DB_NAME}  (user: ${DB_USER})"
-    echo -e "  ${BOLD}Service   :${RESET} ${SERVICE_NAME}  (systemd)"
+    echo -e "  ${BOLD}Service   :${RESET} ${SERVICE_NAME}  (PM2)"
     echo ""
     echo -e "  ${BOLD}Useful commands:${RESET}"
-    echo -e "    App logs  : sudo journalctl -u ${SERVICE_NAME} -f"
-    echo -e "    Restart   : sudo systemctl restart ${SERVICE_NAME}"
+    echo -e "    App logs  : pm2 logs ${SERVICE_NAME} -f"
+    echo -e "    Restart   : pm2 restart ${SERVICE_NAME}"
+    echo -e "    PM2 list  : pm2 list"
     echo -e "    Nginx log : sudo tail -f /var/log/nginx/phonebooth_error.log"
     echo -e "    Firewall  : sudo ufw status"
     echo ""
@@ -809,7 +837,7 @@ show_menu() {
     echo "  ║   8)  Step  7  –  Uploads directory                     ║"
     echo "  ║   9)  Step  8  –  Database schema + admin account       ║"
     echo "  ║  10)  Step  9  –  Production build                      ║"
-    echo "  ║  11)  Step 10  –  systemd service + Nginx + SSL         ║"
+    echo "  ║  11)  Step 10  –  PM2 process management + Nginx + SSL         ║"
     echo "  ║                                                          ║"
     echo "  ║   0)  Exit                                               ║"
     echo "  ║                                                          ║"
