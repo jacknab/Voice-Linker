@@ -77,7 +77,12 @@ done
 DB_PASSWORD=""
 if [ -f "${APP_DIR}/.env" ] && grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
     EXISTING_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d= -f2-)
-    DB_PASSWORD=$(echo "${EXISTING_URL}" | grep -oP '(?<=:)[^@]+(?=@)' || true)
+    # Safely extract password using sed — handles postgresql://user:pass@host/db format only
+    DB_PASSWORD=$(echo "${EXISTING_URL}" | sed -nE 's|^[^:]+://[^:@]+:([^@/]+)@[^/].*|\1|p' || true)
+    # Discard if it looks malformed (contains slashes or colons — sign of a corrupt URL)
+    if echo "${DB_PASSWORD}" | grep -qP '[:/]'; then
+        DB_PASSWORD=""
+    fi
 fi
 if [ -z "${DB_PASSWORD:-}" ]; then
     DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 28)
@@ -373,6 +378,13 @@ PYEOF
         upsert_env "DATABASE_URL" "${NEW_DB_URL}"
         upsert_env "PORT"         "${APP_PORT}"
         upsert_env "NODE_ENV"     "production"
+        # Ensure SESSION_SECRET is always present (generate one if missing)
+        if ! grep -q "^SESSION_SECRET=" "${APP_DIR}/.env"; then
+            local SESSION_SECRET
+            SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
+            upsert_env "SESSION_SECRET" "${SESSION_SECRET}"
+            info "SESSION_SECRET was missing — generated and added to .env."
+        fi
         success ".env updated."
     else
         local SESSION_SECRET
@@ -440,17 +452,11 @@ do_step_8() {
     export DATABASE_URL
     info "DATABASE_URL set to: ${DATABASE_URL}"
 
-    echo ""
-    echo -e "${BOLD}The following step will create or update database tables to match the application schema.${RESET}"
-    echo -e "  Drizzle will show you exactly which tables will be created or altered before applying any changes."
+    info "Pushing Drizzle schema..."
     echo ""
 
-    if [ "$AUTO_YES" = true ]; then
-        info "Running in unattended mode (--yes) — applying schema without prompt."
-        npx drizzle-kit push --force
-    else
-        info "Pushing Drizzle schema — you will be asked to confirm any destructive changes..."
-        npx drizzle-kit push
+    if ! npx drizzle-kit push --force; then
+        error "Schema push failed — check the error above. Fix the DATABASE_URL in .env and re-run Step 8."
     fi
 
     success "Schema pushed."
@@ -496,13 +502,53 @@ EOF
     sudo systemctl daemon-reload
     sudo systemctl enable "${SERVICE_NAME}"
     sudo systemctl restart "${SERVICE_NAME}"
-    success "Service '${SERVICE_NAME}' enabled and started."
+
+    # Wait up to 15 seconds for the service to come up
+    info "Waiting for service to start..."
+    for i in $(seq 1 15); do
+        sleep 1
+        if sudo systemctl is-active --quiet "${SERVICE_NAME}"; then
+            success "Service '${SERVICE_NAME}' is running."
+            break
+        fi
+        if [ "$i" -eq 15 ]; then
+            warn "Service did not come up within 15 seconds. Last log lines:"
+            sudo journalctl -u "${SERVICE_NAME}" -n 20 --no-pager 2>/dev/null || true
+            error "Service '${SERVICE_NAME}' failed to start — see logs above. Fix the issue and re-run Step 10."
+        fi
+    done
 
     # ── Nginx + SSL ──────────────────────────────────────────────────────────
     hdr "Step 10b/10  Nginx + SSL"
 
-    # Auto-detect Let's Encrypt cert directory
-    # Certbot sometimes appends -0001, -0002 when a domain already had a cert
+    # ── Remove any stale certbot certificates for this domain before re-issuing ──
+    info "Checking for existing certbot certificates for '${DOMAIN}'..."
+    EXISTING_CERTS=()
+    for CANDIDATE in \
+        "/etc/letsencrypt/live/${DOMAIN}" \
+        "/etc/letsencrypt/live/${DOMAIN}-0001" \
+        "/etc/letsencrypt/live/${DOMAIN}-0002" \
+        "/etc/letsencrypt/live/${DOMAIN}-0003"; do
+        if [ -d "${CANDIDATE}" ]; then
+            EXISTING_CERTS+=("$(basename "${CANDIDATE}")")
+        fi
+    done
+
+    if [ ${#EXISTING_CERTS[@]} -gt 0 ]; then
+        warn "Found ${#EXISTING_CERTS[@]} existing certificate(s) for '${DOMAIN}' — removing them for a clean re-issue."
+        for CERT_NAME in "${EXISTING_CERTS[@]}"; do
+            info "Deleting certificate: ${CERT_NAME}"
+            sudo certbot delete --cert-name "${CERT_NAME}" --non-interactive 2>/dev/null \
+                || sudo rm -rf "/etc/letsencrypt/live/${CERT_NAME}" \
+                               "/etc/letsencrypt/archive/${CERT_NAME}" \
+                               "/etc/letsencrypt/renewal/${CERT_NAME}.conf"
+        done
+        success "Old certificate(s) removed — a fresh one will be issued."
+    else
+        info "No existing certificates found for '${DOMAIN}'."
+    fi
+
+    # Auto-detect Let's Encrypt cert directory (will be empty after cleanup above)
     local CERT_BASE=""
     for CANDIDATE in \
         "/etc/letsencrypt/live/${DOMAIN}" \
@@ -665,7 +711,7 @@ server {
 NGINXEOF
 
     sudo ln -sf "${NGINX_SITE}" "/etc/nginx/sites-enabled/malebox.conf"
-    sudo nginx -t
+    sudo nginx -t || error "Nginx config test failed — check the output above and re-run Step 10."
     sudo systemctl reload nginx
     sudo systemctl enable certbot.timer 2>/dev/null || true
     success "Nginx configured and reloaded."
