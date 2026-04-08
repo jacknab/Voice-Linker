@@ -1000,20 +1000,52 @@ check_apache() {
                     fi
                     ;;
                 2)
-                    warn "Continuing with Apache2 installed..."
-                    warn "This may cause port conflicts with nginx."
-                    warn "nginx setup may not work properly."
-                    warn "You are responsible for any conflicts that occur."
+                    warn "Apache2 detected - this option will handle it..."
                     echo ""
-                    echo -e "${YELLOW}Type 'YES' to accept responsibility and continue:${RESET}"
-                    read -rp "Your choice: " CONTINUE_CONFIRM
-                    if [ "$CONTINUE_CONFIRM" = "YES" ]; then
-                        success "User accepted responsibility for Apache conflicts."
-                        return 0
-                    else
-                        error "You must type 'YES' to accept responsibility."
-                        sleep 2
-                    fi
+                    echo -e "${YELLOW}This process will:${RESET}"
+                    echo "  1) Backup Apache configurations to /root/Apache_backup_YYYYMMDD_HHMMSS.zip"
+                    echo "  2) Stop Apache2 server"
+                    echo "  3) Uninstall Apache2 server"
+                    echo "  4) Continue with setup (not recommended)"
+                    echo ""
+                    echo -e "${YELLOW}Type 'YES' to proceed with Apache removal:${RESET}"
+                    read -rp "Your choice: " APACHE_ACTION
+                    case "$APACHE_ACTION" in
+                        1)
+                            info "Creating backup of Apache configurations..."
+                            BACKUP_FILE="/root/Apache_backup_$(date +%Y%m%d_%H%M%S).zip"
+                            sudo zip -r "$BACKUP_FILE" /etc/apache2/ 2>/dev/null
+                            if [ -f "$BACKUP_FILE" ]; then
+                                success "Apache configurations backed up to $BACKUP_FILE"
+                            else
+                                error "Failed to create Apache backup"
+                                continue
+                            fi
+                            ;;
+                        2)
+                            info "Stopping Apache2 server..."
+                            sudo systemctl stop apache2 2>/dev/null
+                            success "Apache2 server stopped"
+                            continue
+                            ;;
+                        3)
+                            info "Uninstalling Apache2 server..."
+                            sudo systemctl stop apache2 2>/dev/null
+                            sudo apt-get remove --purge apache2 apache2-utils -y
+                            sudo apt-get autoremove -y
+                            success "Apache2 server uninstalled successfully"
+                            continue
+                            ;;
+                        4)
+                            warn "Continuing with Apache2 installed may cause conflicts..."
+                            warn "nginx setup may not work properly"
+                            warn "You are responsible for any conflicts that occur"
+                            continue
+                            ;;
+                        *)
+                            echo -e "${RED}Invalid choice. Please select 1-4.${RESET}"
+                            ;;
+                    esac
                     ;;
                 3)
                     echo "Setup cancelled by user."
