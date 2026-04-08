@@ -28,7 +28,7 @@ source "$(dirname "$0")/ascii_gui.sh"
 
 # ─── GLOBAL CONFIGURATION ─────────────────────────────────────────────
 APP_PORT=5062
-DB_USER="phonebooth_user"
+DB_USER="malebox_user"
 DB_NAME="malebox_chatline"
 SERVICE_NAME="malebox"
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"

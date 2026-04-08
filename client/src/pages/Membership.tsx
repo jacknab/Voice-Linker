@@ -6,7 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { SiPaypal } from "react-icons/si";
 
-const DEFAULT_SITE_NAME = "Phone Booth";
+const DEFAULT_SITE_NAME = "Male Box";
 
 interface SiteSettings {
   siteName: string;

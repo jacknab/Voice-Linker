@@ -3,7 +3,7 @@ import { Phone, Menu, X } from "lucide-react";
 import { Link } from "wouter";
 
 export const DEFAULT_PHONE = "000-000-0000";
-export const DEFAULT_SITE_NAME = "Phone Booth";
+export const DEFAULT_SITE_NAME = "Male Box";
 
 export interface SiteSettings {
   siteName: string;

@@ -750,13 +750,13 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   // ── MW System ─────────────────────────────────────────────────────────────
   { filename: "mw_main_menu.mp3", label: "MW Main Menu", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
 
-  // ── MOTD — Main Menu, Phone Booth, Post Purchase ──────────────────────────
+  // ── MOTD — Main Menu, Male Box, Post Purchase ──────────────────────────
   { filename: "motd_main_menu.mp3", label: "MOTD — Main Menu", text: "Welcome back! Check out the latest callers on the line right now." },
-  { filename: "motd_phone_booth.mp3", label: "MOTD — Phone Booth", text: "Special announcement for Phone Booth callers." },
+  { filename: "motd_phone_booth.mp3", label: "MOTD — Male Box", text: "Special announcement for Male Box callers." },
   { filename: "motd_post_purchase.mp3", label: "MOTD — After Purchase", text: "Thank you for your purchase! Enjoy your time on the line." },
 
-  // ── Phone Booth / Live Connector ──────────────────────────────────────────
-  { filename: "phone_booth_welcome.mp3", label: "Phone Booth Welcome", text: "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." },
+  // ── Male Box / Live Connector ──────────────────────────────────────────
+  { filename: "phone_booth_welcome.mp3", label: "Male Box Welcome", text: "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." },
   { filename: "live_connect_disclaimer.mp3", label: "Live Connect — Disclaimer", text: "Please be respectful and kind. You are about to request a live one on one connection." },
   { filename: "live_connect_chime.mp3", label: "Live Connect — Chime (sound effect)", text: "" },
   { filename: "live_invite_options.mp3", label: "Live Invite — Options", text: "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4." },
@@ -764,11 +764,11 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "live_connect_unavailable.mp3", label: "Live Connect — Caller Unavailable", text: "This caller is not available for a live connection." },
   { filename: "live_connect_left_line.mp3", label: "Live Connect — Caller Left Line", text: "Sorry, that caller has left the line." },
   { filename: "live_connect_busy.mp3", label: "Live Connect — Caller Busy", text: "That caller is already connected with someone else. Please try again later." },
-  { filename: "live_connect_failed.mp3", label: "Live Connect — Failed", text: "We were unable to connect your call. Returning you to the phone booth." },
+  { filename: "live_connect_failed.mp3", label: "Live Connect — Failed", text: "We were unable to connect your call. Returning you to the male box." },
   { filename: "live_connect_connecting.mp3", label: "Live Connect — Connecting", text: "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!" },
   { filename: "live_connect_ringing.mp3", label: "Live Connect — Ringing (sound effect)", text: "" },
   { filename: "live_invite_expired.mp3", label: "Live Invite — Expired", text: "That live connection invitation has expired. Returning to profiles." },
-  { filename: "live_connect_ended.mp3", label: "Live Connect — Ended", text: "Your live connection has ended. Returning you to the phone booth." },
+  { filename: "live_connect_ended.mp3", label: "Live Connect — Ended", text: "Your live connection has ended. Returning you to the male box." },
 
   // ── Profile Browsing ──────────────────────────────────────────────────────
   { filename: "new_caller_close_to_you.mp3", label: "New Caller — Close To You", text: "New caller close to you." },
@@ -792,7 +792,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "mailbox_ad_existing.mp3", label: "Mailbox Ad — Existing Ad Options", text: "You already have an ad in this category. Press 1 to record a new one. Press 2 to hear your current ad. Press 9 to return to the category menu." },
   { filename: "mailbox_ad_record.mp3", label: "Mailbox Ad — Record Prompt", text: "Record your mailbox ad after the tone. Tell guys about yourself. Press pound when finished." },
   { filename: "mailbox_ad_saved.mp3", label: "Mailbox Ad — Saved (Legacy)", text: "Your mailbox ad has been saved. Other guys can now find your ad." },
-  { filename: "mailbox_ad_recorded_pending.mp3", label: "Mailbox Ad — Recorded (Pending Approval)", text: "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. In the meantime you can browse other ads or visit the phone booth to check out who's on the line right now." },
+  { filename: "mailbox_ad_recorded_pending.mp3", label: "Mailbox Ad — Recorded (Pending Approval)", text: "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. In the meantime you can browse other ads or visit the male box to check out who's on the line right now." },
 
   // ── Mailbox Setup Flow ────────────────────────────────────────────────────
   { filename: "mailbox_setup_intro.mp3", label: "Mailbox Setup — Intro & DOB Prompt", text: "You need to first set up your mailbox. To set up your mailbox we need to gather a couple of things from you which helps callers search for the perfect guy and help them find your ads. First we need to know your date of birth. Please enter your date of birth in this order: two digits for the month, two digits for the day, and four digits for the year. For example, for April 17 1976, enter zero four one seven one nine seven six." },
@@ -806,7 +806,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "mailbox_setup_create_passcode.mp3", label: "Mailbox Setup — Create Passcode", text: "For security you need a passcode. Please enter a four digit passcode now. If you make a mistake press star to start over." },
   { filename: "mailbox_setup_passcode_reenter.mp3", label: "Mailbox Setup — Re-enter Passcode", text: "Please re-enter your four digit passcode." },
   { filename: "mailbox_setup_passcode_mismatch.mp3", label: "Mailbox Setup — Passcode Mismatch", text: "Your passcode entries did not match. Please try again." },
-  { filename: "mailbox_setup_complete.mp3", label: "Mailbox Setup — Complete Menu", text: "Your mailbox is now set up. To begin recording a new ad press one. To listen to ads from other guys press two. To enter the phone booth press star. To cancel creating your mailbox press pound." },
+  { filename: "mailbox_setup_complete.mp3", label: "Mailbox Setup — Complete Menu", text: "Your mailbox is now set up. To begin recording a new ad press one. To listen to ads from other guys press two. To enter the male box press star. To cancel creating your mailbox press pound." },
   { filename: "mailbox_setup_cancelled.mp3", label: "Mailbox Setup — Cancelled", text: "Mailbox setup cancelled." },
 
   { filename: "ad_category_menu.mp3", label: "Ad Category Menu (Page 1)", text: "Please select a category. For Quick and Hot Talk press one. For Bicurious press two. For Kink press three. For Total Tops press four. For Strictly Bottoms press five. For Trans press six. To look up a specific mailbox press seven. For more categories press eight. For definitions press nine. To return to the mailbox menu press pound." },
@@ -1990,7 +1990,7 @@ function WebsiteSettingsTab() {
               type="text"
               value={siteName}
               onChange={e => setSiteName(e.target.value)}
-              placeholder="Phone Booth"
+              placeholder="Male Box"
               data-testid="input-site-name"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
@@ -3714,7 +3714,7 @@ function FlaggedContentTab() {
 interface MotdSettings {
   motdEnabled: boolean; motdText: string | null;
   motdMainMenuEnabled: boolean; motdMainMenuText: string | null;
-  motdPhoneBoothEnabled: boolean; motdPhoneBoothText: string | null;
+  motdMaleBoxEnabled: boolean; motdMaleBoxText: string | null;
   motdPostPurchaseEnabled: boolean; motdPostPurchaseText: string | null;
 }
 
@@ -3737,11 +3737,11 @@ const MOTD_SLOTS = [
   },
   {
     key: "phoneBooth" as const,
-    label: "Phone Booth",
-    where: "Plays when a caller enters the phone booth (live connector), immediately after the phone booth welcome message.",
+    label: "Male Box",
+    where: "Plays when a caller enters the male box (live connector), immediately after the male box welcome message.",
     audioFile: "motd_phone_booth.mp3",
-    enabledField: "motdPhoneBoothEnabled" as keyof MotdSettings,
-    textField: "motdPhoneBoothText" as keyof MotdSettings,
+    enabledField: "motdMaleBoxEnabled" as keyof MotdSettings,
+    textField: "motdMaleBoxText" as keyof MotdSettings,
   },
   {
     key: "postPurchase" as const,

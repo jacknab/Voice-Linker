@@ -1036,7 +1036,7 @@ export async function registerRoutes(
     try {
       const { siteName, fallbackPhoneNumber, customerServiceEmail, customerServicePhone, siteCategory } = req.body;
       const data: Record<string, string | null> = {};
-      if (siteName !== undefined) data.siteName = String(siteName).trim() || "Phone Booth";
+      if (siteName !== undefined) data.siteName = String(siteName).trim() || "Male Box";
       if (fallbackPhoneNumber !== undefined) data.fallbackPhoneNumber = String(fallbackPhoneNumber).trim() || "800-730-2508";
       if (customerServiceEmail !== undefined) data.customerServiceEmail = customerServiceEmail ? String(customerServiceEmail).trim() : null;
       if (customerServicePhone !== undefined) data.customerServicePhone = customerServicePhone ? String(customerServicePhone).trim() : null;
@@ -1692,7 +1692,7 @@ export async function registerRoutes(
       return res.status(503).type("text/plain").send("Settings unavailable. Please try again.");
     }
 
-    const siteName  = ss.siteName  || "Phone Booth";
+    const siteName  = ss.siteName  || "Male Box";
     const isMM      = (ss.siteCategory ?? "MM") === "MM";
     const fallback  = ss.fallbackPhoneNumber || "[access number]";
     const csPhone   = ss.customerServicePhone  || "see website footer";
@@ -1747,10 +1747,10 @@ FREE TRIAL
 - Brand-new callers (phone number never seen by the system before) receive a free trial automatically.
 - Free trial length: ${trialMin} minutes of talk time. No credit card required.
 - The free trial is valid for 7 days from the date it was first activated. It is tied to the specific phone number used to call in.
-- During the free trial, the caller has access to the full system (phone booth, mailboxes, messaging, live connect).
+- During the free trial, the caller has access to the full system (male box, mailboxes, messaging, live connect).
 - The system announces a warning when less than 15 minutes remain on the free trial.
 - Free trials cannot be restarted or extended. Once used or expired, a membership must be purchased to continue.
-- Free trial minutes are only deducted while the caller is actively in the phone booth or in a live one-on-one connection — NOT while navigating menus.
+- Free trial minutes are only deducted while the caller is actively in the male box or in a live one-on-one connection — NOT while navigating menus.
 
 IVR CALL FLOW — STEP BY STEP
 ------------------------------
@@ -1773,7 +1773,7 @@ STEP 2a — FREE TRIAL OFFER (brand-new callers only)
 STEP 2b — RECORD YOUR GREETING (first-time callers, before reaching main menu)
   - Caller is asked to record their name (short, up to ~5 seconds).
   - Then asked to record a full profile greeting (up to ~60 seconds, minimum ~8 seconds).
-  - The greeting goes live immediately and is heard by other callers in the phone booth.
+  - The greeting goes live immediately and is heard by other callers in the male box.
 
 STEP 3 — MAIN MENU
   - After identification and any first-time setup, all callers land at the Main Menu.
@@ -1784,7 +1784,7 @@ MAIN MENU OPTIONS
 -----------------
 When at the main menu, callers hear their options and press the corresponding key:
 
-  * (Star)  → Enter the Phone Booth (browse live caller profiles)
+  * (Star)  → Enter the Male Box (browse live caller profiles)
   1         → Mailboxes and personal ads
   2         → Purchase time / add membership
   4         → Hear membership pricing information
@@ -1793,12 +1793,12 @@ When at the main menu, callers hear their options and press the corresponding ke
   9         → Repeat the menu choices
   #         → (no action / returns to menu)
 
-PHONE BOOTH (LIVE CONNECTOR)
+MALE BOX (LIVE CONNECTOR)
 ------------------------------
-The phone booth is the core of the system. This is where callers browse live profiles and can connect with each other in real time.
+The male box is the core of the system. This is where callers browse live profiles and can connect with each other in real time.
 
 HOW IT WORKS:
-- Press * from the main menu to enter the phone booth.
+- Press * from the main menu to enter the male box.
 - The system first announces how many minutes you have remaining (if you're a member or trialist).
 - You're asked to enter your 5-digit zip code (optional) so the system can prioritize nearby callers.
   - Press # to skip the zip code step.
@@ -1814,7 +1814,7 @@ KEYPAD OPTIONS WHILE BROWSING A PROFILE:
   6 → Hear this caller's approximate location
   7 → Flag this profile for review (report inappropriate content)
   9 → Return to the main menu
-  # → Exit the phone booth
+  # → Exit the male box
 
 LIVE CONNECT (one-on-one private calls):
 - Press 3 while listening to a profile to send a live connect request.
@@ -1826,19 +1826,19 @@ LIVE CONNECT (one-on-one private calls):
 - Live connect time is deducted from your membership balance.
 
 PENDING MESSAGES:
-- If you have unread voice messages when you enter the phone booth, the system notifies you before you start browsing profiles.
+- If you have unread voice messages when you enter the male box, the system notifies you before you start browsing profiles.
 - Press 1 to listen to your messages now, or press # to browse profiles first.
 
 TIME DEDUCTION:
-- Minutes are only deducted while you are actively in the phone booth or in a live connect.
+- Minutes are only deducted while you are actively in the male box or in a live connect.
 - Time is NOT deducted while you are in menus, on hold, or navigating other parts of the system.
-- If your time runs out while in the phone booth, your session ends and you are returned to purchase options.
+- If your time runs out while in the male box, your session ends and you are returned to purchase options.
 
 VOICE MESSAGES
 --------------
 - Any caller can send a voice message to another caller's mailbox by pressing 1 while listening to their profile.
 - Record your message after the tone, press # when finished.
-- The recipient will be notified the next time they enter the phone booth.
+- The recipient will be notified the next time they enter the male box.
 - When notified of a message, pressing 1 plays all new messages.
 - After listening to a message, you can:
   - Press 1 to reply to the message
@@ -1885,7 +1885,7 @@ BROWSING OTHER MAILBOX ADS:
 
 MEMBERSHIP & BILLING
 ---------------------
-After the free trial, callers need a paid membership to use the phone booth.
+After the free trial, callers need a paid membership to use the male box.
 
 MEMBERSHIP PLANS:
 ${siteName} currently offers three plans:
@@ -2011,7 +2011,7 @@ LOCAL NUMBERS
   San Francisco). Calling a local number may incur long-distance charges on your
   carrier's plan if you are calling from a different area code.
   There is no functional difference between calling a local number or the national
-  number — you reach the same system, the same account, and the same phone booth.
+  number — you reach the same system, the same account, and the same male box.
 
 WHICH NUMBER SHOULD A MEMBER USE?
   - If they are at home in the system's primary market: use their local number
@@ -2050,7 +2050,7 @@ STEP 3 — LOCATION
   unchanged and they will browse the full pool of callers without local filtering.
 
 STEP 4 — BROWSING
-  Everything works the same. The phone booth, live connect, mailbox, and messaging
+  Everything works the same. The male box, live connect, mailbox, and messaging
   all function identically regardless of physical location.
 
 WHAT TO TELL A MEMBER WHO ASKS ABOUT TRAVELING:
@@ -2110,7 +2110,7 @@ HOW TIME (MINUTES) IS ACTUALLY DEDUCTED
 Understanding exactly when minutes are deducted prevents confusion about balances.
 
 TIME IS DEDUCTED:
-  ✓ While actively listening to caller profiles in the phone booth (browsing)
+  ✓ While actively listening to caller profiles in the male box (browsing)
   ✓ While in a live one-on-one connected call with another caller
   ✓ While being connected to another caller (the "ringing" period)
 
@@ -2128,14 +2128,14 @@ BILLING METHOD:
   - Per-minute: minutes are deducted in real time as the member browses or connects.
   - Per-day: a nightly deduction is made at the end of each day the member uses the system.
   Most systems use per-minute billing. If a member asks why their balance went down,
-  it is because they were actively in the phone booth or a live connect.
+  it is because they were actively in the male box or a live connect.
 
 LOW BALANCE WARNINGS:
   - When a member has less than 15 minutes remaining, the system announces this
-    once per call at the start of the phone booth session.
+    once per call at the start of the male box session.
   - When a member has less than 5 minutes remaining, a warning plays at the
-    main menu before they enter the phone booth.
-  - When balance reaches zero while in the phone booth, the session ends
+    main menu before they enter the male box.
+  - When balance reaches zero while in the male box, the session ends
     automatically and the member is returned to the purchase menu.
 
 ─────────────────────────────────────────────────────────
@@ -2154,11 +2154,11 @@ WHAT IS PRESERVED:
 
 WHAT IS NOT PRESERVED:
   ✗ Their position in the browsing queue — they start fresh from the beginning
-    of the phone booth next time they call.
+    of the male box next time they call.
   ✗ Any pending live connect request — if they were waiting for someone to accept
     a live connect, that invitation is cancelled when either party hangs up.
   ✗ An active live connect call — if disconnected mid-conversation, the live
-    connect ends and both callers are returned to the phone booth.
+    connect ends and both callers are returned to the male box.
 
 WHAT TO TELL A MEMBER WHO CALLS BACK AFTER A DROP:
   "Your balance is preserved — any minutes you had remaining are still there.
@@ -2171,7 +2171,7 @@ LIVE CONNECT — HOW IT WORKS IN FULL DETAIL
 The live connect is the heart of the chatline. Here is the complete flow:
 
 INITIATING:
-  1. While browsing a profile in the phone booth, press 3.
+  1. While browsing a profile in the male box, press 3.
   2. The system checks that both callers have enough time (at least 5 minutes each).
   3. A connect request is sent to the other caller. The other caller hears a chime.
   4. The requesting caller hears a brief hold tone while waiting for acceptance.
@@ -2188,12 +2188,12 @@ ONCE CONNECTED:
   - Real phone numbers are never shared with either party.
   - Time is deducted from BOTH callers' balances simultaneously.
   - Either caller can press # at any time to end the live connect.
-  - After the live connect ends, both callers return to the phone booth.
+  - After the live connect ends, both callers return to the male box.
 
 IF ONE CALLER RUNS OUT OF TIME:
   - The call is ended for that caller immediately.
   - The other caller is informed that the connection ended.
-  - They are returned to the phone booth to continue browsing.
+  - They are returned to the male box to continue browsing.
 
 ─────────────────────────────────────────────────────────
 VOICE MESSAGES — HOW THEY WORK
@@ -2202,15 +2202,15 @@ VOICE MESSAGES — HOW THEY WORK
 Members can send and receive private voice messages without being in a live connect.
 
 SENDING A MESSAGE:
-  1. While browsing a profile in the phone booth, press 1 to send a message.
+  1. While browsing a profile in the male box, press 1 to send a message.
   2. Record your message after the beep (up to ~60 seconds).
   3. Press # or wait for the recording to auto-stop.
   4. The message is delivered to the recipient's mailbox immediately.
-  5. The recipient will be notified next time they enter the phone booth.
+  5. The recipient will be notified next time they enter the male box.
 
 RECEIVING MESSAGES:
   - When a new unread message is waiting, the system announces it when entering
-    the phone booth: "You have X new message(s)."
+    the male box: "You have X new message(s)."
   - Press 1 to listen to messages before browsing, or press # to browse first.
   - Messages can be listened to from the mailbox menu (press 1 from main menu).
 
@@ -2255,13 +2255,13 @@ same platform. Each region can have:
 
 A "linked region" means two regional numbers share the same browsing pool. For example,
 if the New York and New Jersey numbers are linked, callers from both numbers browse
-each other in the same phone booth. This increases the pool of available callers
+each other in the same male box. This increases the pool of available callers
 and reduces wait times.
 
 FROM A MEMBER'S PERSPECTIVE:
   - They dial their local number and are placed in that region's browsing pool.
   - If the region has a linked partner region, they may also see callers from the
-    partner region in the phone booth.
+    partner region in the male box.
   - They can always use the national 800 number instead, which routes to the
     default/primary region.
 
@@ -2296,13 +2296,13 @@ COMMON SCENARIOS AND WHAT TO TELL MEMBERS
 
 "I moved to a new city. Should I update my zip code?"
   → Yes, if you want local callers in your new city to find you. Call in,
-    enter the phone booth, and enter your new zip code when asked. Your profile
+    enter the male box, and enter your new zip code when asked. Your profile
     will update to show your new location.
 
 "My balance went down but I barely used the system."
-  → Time is deducted any time you are actively in the phone booth (browsing profiles)
+  → Time is deducted any time you are actively in the male box (browsing profiles)
     or in a live connect. Even just listening to profiles counts. If you were in the
-    phone booth for 10 minutes listening to greetings, that's 10 minutes deducted.
+    male box for 10 minutes listening to greetings, that's 10 minutes deducted.
 
 "Can two people share one membership / phone number?"
   → The membership is tied to one phone number. Two people using the same phone
@@ -2386,13 +2386,13 @@ Q: I'm calling from a different phone. How do I access my account?
 A: You need your 5-digit membership card number and your 4-digit PIN. When calling from an unrecognized number, the system will ask you to enter these. If you don't have a PIN set, you must call from your original phone to set one first.
 
 Q: How do I know how many minutes I have left?
-A: Every time you enter the phone booth, the system announces your remaining minutes. You can also check at any time by pressing 8 (Manage Membership) from the main menu.
+A: Every time you enter the male box, the system announces your remaining minutes. You can also check at any time by pressing 8 (Manage Membership) from the main menu.
 
-Q: I'm not hearing any callers in the phone booth. Why?
+Q: I'm not hearing any callers in the male box. Why?
 A: There may be no other callers online at that moment. The system will let you know if there are no profiles available. Try calling back at a different time — evenings and weekends tend to have more callers online.
 
 Q: Can I use the system without a membership?
-A: Yes, during your free trial (${trialMin} minutes for new callers). After that, a paid membership is required to use the phone booth and live connect features. Navigating menus does not require a membership.
+A: Yes, during your free trial (${trialMin} minutes for new callers). After that, a paid membership is required to use the male box and live connect features. Navigating menus does not require a membership.
 
 Q: My payment was declined. What do I do?
 A: Make sure your card details are entered correctly. Check that your card has not expired and has sufficient funds. If the problem persists, try a different card or contact your bank.

@@ -25,7 +25,7 @@ export default function About() {
     ? [
         { title: "Privacy First", body: "Every call is completely anonymous. Your phone number is never revealed and your identity is yours to share — or keep private." },
         { title: "Real Connections", body: "No bots. No fake profiles. Every voice you hear belongs to a real person calling in at the same time you are." },
-        { title: "Safe & Inclusive", body: "Phone Booth is a space for gay, bi, and curious men of all backgrounds. We moderate the system to keep it respectful and welcoming." },
+        { title: "Safe & Inclusive", body: "Male Box is a space for gay, bi, and curious men of all backgrounds. We moderate the system to keep it respectful and welcoming." },
         { title: "Available 24/7", body: "The line is always on. Whether it's noon or 3 AM, real guys are on the line ready to connect." },
       ]
     : [

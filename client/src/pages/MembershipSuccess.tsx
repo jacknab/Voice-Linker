@@ -4,7 +4,7 @@ import { Phone, CheckCircle, Loader2, AlertTriangle, ArrowRight, Clock } from "l
 import { useQuery } from "@tanstack/react-query";
 import { SiPaypal } from "react-icons/si";
 
-const DEFAULT_SITE_NAME = "Phone Booth";
+const DEFAULT_SITE_NAME = "Male Box";
 
 interface SiteSettings {
   siteName: string;

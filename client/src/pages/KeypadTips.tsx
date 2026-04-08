@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 
 const DEFAULT_PHONE = "000-000-0000";
-const DEFAULT_SITE_NAME = "Phone Booth";
+const DEFAULT_SITE_NAME = "Male Box";
 
 interface SiteSettings {
   siteName: string;
@@ -116,7 +116,7 @@ const MAIN_MENU_KEYS_MM: KeyDef[] = [
   { key: "7", label: "",               active: false },
   { key: "8", label: "My Membership",  active: true  },
   { key: "9", label: "Repeat Menu",    active: true  },
-  { key: "*", label: "Phone Booth",    active: true  },
+  { key: "*", label: "Male Box",    active: true  },
   { key: "0", label: "Customer Care",  active: true  },
   { key: "#", label: "",               active: false },
 ];
@@ -190,7 +190,7 @@ export default function KeypadTips() {
   const mainMenuKeys = isMM ? MAIN_MENU_KEYS_MM : MAIN_MENU_KEYS_MW;
 
   const modes: { id: Mode; label: string }[] = [
-    { id: "booth",    label: "Phone Booth" },
+    { id: "booth",    label: "Male Box" },
     { id: "menu",     label: "Main Menu" },
     { id: "messages", label: "Messages" },
     { id: "invite",   label: "Live Invite" },
@@ -199,7 +199,7 @@ export default function KeypadTips() {
   const keypads: Record<Mode, { keys: KeyDef[]; title: string; description: string; tip: string }> = {
     booth: {
       keys: PHONE_BOOTH_KEYS,
-      title: "Phone Booth — Browse Profiles",
+      title: "Male Box — Browse Profiles",
       description: "Use these keys while listening to a caller's greeting.",
       tip: "Press 2 to skip a greeting at any point — even while it's still playing. Press 3 to request a live connection.",
     },
@@ -208,7 +208,7 @@ export default function KeypadTips() {
       title: "Main Menu",
       description: "Use these keys when you're at the main menu.",
       tip: isMM
-        ? "Press * anytime from the main menu to jump straight into the Phone Booth."
+        ? "Press * anytime from the main menu to jump straight into the Male Box."
         : "Press 1 from the main menu to join the action and start browsing live callers.",
     },
     messages: {
@@ -356,7 +356,7 @@ export default function KeypadTips() {
           {/* Quick reference table */}
           <div>
             <h2 style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#3b82f6", marginBottom: "1.25rem" }}>
-              Phone Booth — Full Key Reference
+              Male Box — Full Key Reference
             </h2>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "0.6rem" }}
               data-testid="keypad-reference-table">

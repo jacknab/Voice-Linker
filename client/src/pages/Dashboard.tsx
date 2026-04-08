@@ -9,7 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-const DEFAULT_SITE_NAME = "Phone Booth";
+const DEFAULT_SITE_NAME = "Male Box";
 const MAX_LINK_ATTEMPTS = 3;
 
 interface WebUser {

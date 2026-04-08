@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 
 const DEFAULT_PHONE = "000-000-0000";
-const DEFAULT_SITE_NAME = "Phone Booth";
+const DEFAULT_SITE_NAME = "Male Box";
 
 interface SiteSettings {
   siteName: string;
@@ -88,7 +88,7 @@ function buildFAQsMM(siteName: string, phone: string): FAQCategory[] {
       items: [
         {
           q: "How do I browse other callers?",
-          a: "After you're connected, press 1 from the main menu to enter the phone booth and start browsing profiles. You'll hear callers' voice greetings one by one. Callers closest to your location are played first when you enter your zip code.",
+          a: "After you're connected, press 1 from the main menu to enter the male box and start browsing profiles. You'll hear callers' voice greetings one by one. Callers closest to your location are played first when you enter your zip code.",
         },
         {
           q: "How do I send a message to someone?",
@@ -108,11 +108,11 @@ function buildFAQsMM(siteName: string, phone: string): FAQCategory[] {
         },
         {
           q: "How do I use my zip code to find nearby callers?",
-          a: "When you enter the phone booth, you'll be asked to enter your 5-digit zip code (optional). If you provide it, the system will prioritize playing callers who are geographically close to you first. You can skip this step by pressing the pound (#) key.",
+          a: "When you enter the male box, you'll be asked to enter your 5-digit zip code (optional). If you provide it, the system will prioritize playing callers who are geographically close to you first. You can skip this step by pressing the pound (#) key.",
         },
         {
           q: "What do the keypad options mean?",
-          a: "While browsing a caller's profile: press 1 to send a message, press 2 to skip, press 3 for a live connect, press 4 to block, press 5 to go back, press 7 to flag for review, press 9 to return to the main menu. From the main menu: press 1 for the phone booth, press 2 to re-record your profile, press 4 for membership info.",
+          a: "While browsing a caller's profile: press 1 to send a message, press 2 to skip, press 3 for a live connect, press 4 to block, press 5 to go back, press 7 to flag for review, press 9 to return to the main menu. From the main menu: press 1 for the male box, press 2 to re-record your profile, press 4 for membership info.",
         },
       ],
     },
@@ -121,7 +121,7 @@ function buildFAQsMM(siteName: string, phone: string): FAQCategory[] {
       items: [
         {
           q: "How does membership work?",
-          a: "After your free trial expires, you can purchase a membership to continue using the system. Memberships come in blocks of time (minutes) that are deducted while you're actively browsing and connected on the line. Time is only counted when you're in the phone booth — not while navigating menus.",
+          a: "After your free trial expires, you can purchase a membership to continue using the system. Memberships come in blocks of time (minutes) that are deducted while you're actively browsing and connected on the line. Time is only counted when you're in the male box — not while navigating menus.",
         },
         {
           q: "What membership plans are available?",
@@ -137,7 +137,7 @@ function buildFAQsMM(siteName: string, phone: string): FAQCategory[] {
         },
         {
           q: "How do I check how much time I have left?",
-          a: "When you enter the phone booth, the system announces how much time you have remaining before you start browsing profiles.",
+          a: "When you enter the male box, the system announces how much time you have remaining before you start browsing profiles.",
         },
       ],
     },

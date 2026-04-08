@@ -68,7 +68,7 @@ export default function Terms() {
     {
       title: "6. Membership & Payments",
       body: [
-        "Membership time is purchased in blocks of minutes. Time is deducted only while you are actively browsing or connected in the phone booth.",
+        "Membership time is purchased in blocks of minutes. Time is deducted only while you are actively browsing or connected in the male box.",
         "All sales are final. We do not offer refunds for unused membership time except where required by applicable law.",
         "Payments are processed by Stripe. By providing payment information, you authorize us to charge your card for the selected plan.",
         "We reserve the right to change pricing at any time. Price changes will be communicated before they take effect.",

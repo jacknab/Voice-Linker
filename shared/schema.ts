@@ -186,7 +186,7 @@ export const flaggedContent = pgTable("flagged_content", {
 // Singleton settings row for website/operator configuration
 export const siteSettings = pgTable("site_settings", {
   id: text("id").primaryKey().default("singleton"),
-  siteName: text("site_name").notNull().default("Phone Booth"),
+  siteName: text("site_name").notNull().default("Male Box"),
   fallbackPhoneNumber: text("fallback_phone_number").notNull().default("800-730-2508"),
   customerServiceEmail: text("customer_service_email"),
   customerServicePhone: text("customer_service_phone"),
@@ -220,9 +220,9 @@ export const membershipSettings = pgTable("membership_settings", {
   // 2. Main Menu: plays at the top of the main menu (after balance announcement)
   motdMainMenuEnabled: boolean("motd_main_menu_enabled").notNull().default(false),
   motdMainMenuText: text("motd_main_menu_text"),
-  // 3. Phone Booth: plays when a caller enters the phone booth
-  motdPhoneBoothEnabled: boolean("motd_phone_booth_enabled").notNull().default(false),
-  motdPhoneBoothText: text("motd_phone_booth_text"),
+  // 3. Male Box: plays when a caller enters the male box
+  motdMaleBoxEnabled: boolean("motd_phone_booth_enabled").notNull().default(false),
+  motdMaleBoxText: text("motd_phone_booth_text"),
   // 4. Post-Purchase: plays immediately after a successful membership payment
   motdPostPurchaseEnabled: boolean("motd_post_purchase_enabled").notNull().default(false),
   motdPostPurchaseText: text("motd_post_purchase_text"),

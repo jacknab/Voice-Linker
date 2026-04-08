@@ -18,28 +18,28 @@ sudo -u postgres createdb malebox_chatline
 
 ### 2. Set Database User Permissions
 ```bash
-sudo -u postgres psql -c "ALTER USER phonebooth_user PASSWORD '1825Logan305!';"
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE malebox_chatline TO phonebooth_user;"
-sudo -u postgres psql -d malebox_chatline -c "GRANT ALL ON SCHEMA public TO phonebooth_user;"
-sudo -u postgres psql -d malebox_chatline -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO phonebooth_user;"
+sudo -u postgres psql -c "ALTER USER malebox_user PASSWORD '1825Logan305!';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE malebox_chatline TO malebox_user;"
+sudo -u postgres psql -d malebox_chatline -c "GRANT ALL ON SCHEMA public TO malebox_user;"
+sudo -u postgres psql -d malebox_chatline -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO malebox_user;"
 ```
 
 ### 3. Updated Environment Configuration
 Created/updated `.env` file with correct database URL:
 ```
-DATABASE_URL=postgresql://phonebooth_user:1825Logan305!@localhost:5432/malebox_chatline
+DATABASE_URL=postgresql://malebox_user:1825Logan305!@localhost:5432/malebox_chatline
 ```
 
 ### 4. Pushed Database Schema
 Used explicit DATABASE_URL to override any cached environment variables:
 ```bash
-DATABASE_URL="postgresql://phonebooth_user:1825Logan305!@localhost:5432/malebox_chatline" npm run db:push
+DATABASE_URL="postgresql://malebox_user:1825Logan305!@localhost:5432/malebox_chatline" npm run db:push
 ```
 
 ### 5. Killed Old Process and Restarted Application
 ```bash
 pkill -f "node dist/index.cjs"
-DATABASE_URL="postgresql://phonebooth_user:1825Logan305!@localhost:5432/malebox_chatline" npm run start
+DATABASE_URL="postgresql://malebox_user:1825Logan305!@localhost:5432/malebox_chatline" npm run start
 ```
 
 ## Key Files Modified

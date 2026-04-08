@@ -76,7 +76,7 @@ const TREE: TreeNode = {
               label: "Main Menu",
               kind: "menu",
               choices: [
-                { key: "★", label: "Phone Booth" },
+                { key: "★", label: "Male Box" },
                 { key: "1", label: "Mailboxes & Ads" },
                 { key: "2", label: "Add Time" },
                 { key: "4", label: "Info & Prices" },
@@ -86,7 +86,7 @@ const TREE: TreeNode = {
               children: [
                 {
                   id: "phone-booth",
-                  label: "Phone Booth",
+                  label: "Male Box",
                   kind: "menu",
                   choices: [
                     { key: "→", label: "New caller → Record Name" },

@@ -199,8 +199,8 @@ Record each as a natural, flowing phrase — as if it were the middle of a sente
 |-----------|-----|---------|
 | `phrase_you_have.mp3` | "You have" | Starts all time-remaining announcements |
 | `phrase_you_have_1_hour_and.mp3` | "You have 1 hour and" | "You have 1 hour and **[N]** minutes remaining." |
-| `phrase_hour_of_pbtr.mp3` | "hour of phone booth time remaining." | "You have 1 **hour of phone booth time remaining.**" |
-| `phrase_hours_of_pbtr.mp3` | "hours of phone booth time remaining." | "You have **[N]** **hours of phone booth time remaining.**" |
+| `phrase_hour_of_pbtr.mp3` | "hour of male box time remaining." | "You have 1 **hour of male box time remaining.**" |
+| `phrase_hours_of_pbtr.mp3` | "hours of male box time remaining." | "You have **[N]** **hours of male box time remaining.**" |
 | `phrase_minute_of_pbtr.mp3` | "minute remaining." | "You have 1 **minute remaining.**" |
 | `phrase_minutes_of_pbtr.mp3` | "minutes remaining." | "You have **[N]** **minutes remaining.**" |
 

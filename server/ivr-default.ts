@@ -269,7 +269,7 @@ const billingCheckpoints = new Map<string, BillingCheckpoint>(); // CallSid → 
 const callMembershipOverride = new Map<string, string>(); // callSid → membership holder phone
 
 // MW gender selection — tracks female callers so they can bypass membership checks and
-// go directly to the phone booth. Women are always free on MW systems.
+// go directly to the male box. Women are always free on MW systems.
 const femaleCallers = new Set<string>(); // CallSids identified as female
 
 // Temporary store for a membership number mid-entry (between the 10-digit gather and account lookup)
@@ -780,7 +780,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       playPrompt(twiml, req, "system_greeting.mp3",
-        "Welcome to the Phone Booth. this service assumes no responsibility for personal meetings.");
+        "Welcome to the Male Box. this service assumes no responsibility for personal meetings.");
 
       playPrompt(twiml, req, "disclaimer.mp3", "");
 
@@ -810,7 +810,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 1b-i-MW. Gender Selection (MW systems only) ──────────────────────────
   // On MW systems, callers identify their gender before reaching the membership
-  // check. Women are always free and go directly to the phone booth.
+  // check. Women are always free and go directly to the male box.
   app.post("/voice/gender-select", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({
@@ -840,7 +840,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       );
       twiml.redirect("/voice/membership-entry");
     } else if (digit === "2") {
-      // Female caller — always free on MW systems, go straight to the phone booth
+      // Female caller — always free on MW systems, go straight to the male box
       console.log(`[voice] gender-select: female caller callSid=${callSid} — bypassing membership`);
       femaleCallers.add(callSid);
       storage.updateActiveCallGender(callSid, "female").catch(err =>
@@ -1330,9 +1330,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
-  // ─── 1e. Phone Booth Welcome ──────────────────────────────────────────────
+  // ─── 1e. Male Box Welcome ──────────────────────────────────────────────
   // Common landing point after account-state handling.
-  // Always plays the phone booth intro, then checks whether this caller has
+  // Always plays the male box intro, then checks whether this caller has
   // already recorded a profile name. If not, kicks off the name-recording flow.
   app.post("/voice/phone-booth", async (req, res) => {
     const twiml = new VoiceResponse();
@@ -1345,7 +1345,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const isMW = boothSiteConf.siteCategory === "MW";
       const isFemale = femaleCallers.has(callSid);
 
-      // Play the phone booth welcome intro — gender-aware for MW systems
+      // Play the male box welcome intro — gender-aware for MW systems
       if (isMW) {
         if (isFemale) {
           // Female caller on MW hears guys' greetings
@@ -1362,11 +1362,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
       }
 
-      // Phone Booth MOTD
+      // Male Box MOTD
       try {
         const motdCfg = await getMembershipSettingsCached();
-        if (motdCfg.motdPhoneBoothEnabled && motdCfg.motdPhoneBoothText) {
-          playPrompt(twiml, req, "motd_phone_booth.mp3", motdCfg.motdPhoneBoothText);
+        if (motdCfg.motdMaleBoxEnabled && motdCfg.motdMaleBoxText) {
+          playPrompt(twiml, req, "motd_phone_booth.mp3", motdCfg.motdMaleBoxText);
         }
       } catch (err) {
         console.error("[voice] phone-booth motd error:", err);
@@ -1555,7 +1555,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-main-menu" });
     playPrompt(gather, req, "main_menu.mp3",
       "Main menu. " +
-      "To enter the phone booth press star. " +
+      "To enter the male box press star. " +
       (MAILBOX_ENABLED ? "For mailboxes and personal ads press 1. " : "") +
       "To add time or purchase a membership press 2. " +
       "For information on membership prices press 3. " +
@@ -1574,7 +1574,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const digit = req.body?.Digits;
 
     if (digit === "*") {
-      // Enter the phone booth (live connector)
+      // Enter the male box (live connector)
       twiml.redirect("/voice/phone-booth");
     } else if (digit === "1" && MAILBOX_ENABLED) {
       // Mailboxes and personal ads
@@ -1686,7 +1686,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const digit = req.body?.Digits;
 
     if (digit === "1") {
-      // Join the action — enter the phone booth
+      // Join the action — enter the male box
       twiml.redirect("/voice/phone-booth");
     } else if (digit === "2") {
       // Buy membership time
@@ -2311,7 +2311,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "Your mailbox is now set up. " +
       "To begin recording a new ad press one. " +
       "To listen to ads from other guys press two. " +
-      "To enter the phone booth press star. " +
+      "To enter the male box press star. " +
       "To cancel creating your mailbox press pound."
     );
     twiml.redirect("/voice/mailbox-menu");
@@ -3060,7 +3060,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       playPrompt(twiml, req, "mailbox_ad_recorded_pending.mp3",
         "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. " +
-        "In the meantime you can browse other ads or visit the phone booth to check out who's on the line right now."
+        "In the meantime you can browse other ads or visit the male box to check out who's on the line right now."
       );
       twiml.redirect("/voice/mailbox-menu");
     } catch (err) {
@@ -3664,7 +3664,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // ─── 5c. Go Live ──────────────────────────────────────────────────────────
   // Entry point into the live browsing system. Announces how many callers are
   // on the line, notifies the caller that time is being deducted, starts the
-  // phone booth session timer, then drops them into profile browsing.
+  // male box session timer, then drops them into profile browsing.
   app.post("/voice/go-live", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
@@ -4378,7 +4378,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(twiml, req, "profile_flagged.mp3", "This profile has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "9") {
-        // Exiting the phone booth — in per-minute billing notify caller deductions have stopped.
+        // Exiting the male box — in per-minute billing notify caller deductions have stopped.
         // In per-day billing time is not deducted per-call, so skip the announcement.
         const boothExitSettings = await getMembershipSettingsCached();
         if (boothExitSettings.billingMode !== "per_day") {
@@ -4438,7 +4438,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (!invite) {
         // Invite was cleaned up (timed out or already handled)
         playPrompt(twiml, req, "live_connect_failed.mp3",
-          "We were unable to connect your call. Returning you to the phone booth.");
+          "We were unable to connect your call. Returning you to the male box.");
         twiml.redirect("/voice/browse-profiles");
       } else if (invite.status === "accepted") {
         // B accepted (possibly right as ringing finished — race condition handled here)
@@ -4455,7 +4455,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // Timed out or explicitly declined
         pendingLiveInvites.delete(targetUserId);
         playPrompt(twiml, req, "live_connect_failed.mp3",
-          "We were unable to connect your call. Returning you to the phone booth.");
+          "We were unable to connect your call. Returning you to the male box.");
         twiml.redirect("/voice/browse-profiles");
       } else {
         // Still pending — first visit: announce + ring
@@ -4471,7 +4471,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
     } catch (error) {
       console.error("[live-connect] live-connect-wait error:", error);
-      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the phone booth.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the male box.");
       twiml.redirect("/voice/browse-profiles");
     }
 
@@ -4604,7 +4604,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
     } catch (error) {
       console.error("[live-connect] handle-live-invite error:", error);
-      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the phone booth.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the male box.");
       twiml.redirect("/voice/browse-profiles");
     }
 
@@ -4634,7 +4634,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       });
     } catch (error) {
       console.error("[live-connect] live-connect-join error:", error);
-      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the phone booth.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the male box.");
       twiml.redirect("/voice/browse-profiles");
     }
 
@@ -4663,7 +4663,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     console.log(`[live-connect] Connection ended — targetUserId=${targetUserId}, initiatorUserId=${initiatorUserId}`);
 
     playPrompt(twiml, req, "live_connect_ended.mp3",
-      "Your live connection has ended. Returning you to the phone booth.");
+      "Your live connection has ended. Returning you to the male box.");
     twiml.redirect("/voice/browse-profiles");
 
     res.type("text/xml");

@@ -10,7 +10,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 5062,
-        DATABASE_URL: 'postgresql://phonebooth_user:1825Logan305!@localhost:5432/malebox_chatline'
+        DATABASE_URL: 'postgresql://malebox_user:1825Logan305!@localhost:5432/malebox_chatline'
       },
       error_file: './logs/pm2-error.log',
       out_file: './logs/pm2-out.log',

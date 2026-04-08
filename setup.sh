@@ -35,7 +35,7 @@ hdr()     { echo -e "\n${BOLD}${CYAN}━━━  $*  ━━━━━━━━━�
 
 # ─── GLOBAL CONFIGURATION ─────────────────────────────────────────────────────
 APP_PORT=5062
-DB_USER="phonebooth_user"
+DB_USER="malebox_user"
 DB_NAME="malebox_chatline"
 SERVICE_NAME="malebox"
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -305,7 +305,7 @@ do_step_3() {
     if ! sudo systemctl is-active --quiet fail2ban 2>/dev/null; then
         sudo systemctl enable fail2ban --now
     fi
-    F2B_JAIL="/etc/fail2ban/jail.d/phonebooth.conf"
+    F2B_JAIL="/etc/fail2ban/jail.d/malebox.conf"
     if [ ! -f "$F2B_JAIL" ]; then
         sudo tee "$F2B_JAIL" > /dev/null <<F2BEOF
 [DEFAULT]

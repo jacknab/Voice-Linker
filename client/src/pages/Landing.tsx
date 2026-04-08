@@ -6,7 +6,7 @@ import heroImgMM from "@assets/hero_mm_guy_phone.png";
 import heroImgMW from "@assets/image_1775035245108.png";
 
 const DEFAULT_PHONE = "000-000-0000";
-const DEFAULT_SITE_NAME = "Phone Booth";
+const DEFAULT_SITE_NAME = "Male Box";
 
 interface SiteSettings {
   siteName: string;
