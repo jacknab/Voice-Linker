@@ -614,6 +614,7 @@ ECOEOF
 
     # Remove old phonebooth and existing malebox site configs before touching nginx
     # so that nginx can start cleanly after certbot (no stale config referencing deleted certs)
+    info "Cleaning up old nginx configurations..."
     sudo rm -f \
         /etc/nginx/sites-enabled/phonebooth \
         /etc/nginx/sites-available/phonebooth \
@@ -621,6 +622,9 @@ ECOEOF
         /etc/nginx/sites-enabled/malebox.conf \
         /etc/nginx/sites-available/malebox.conf \
         2>/dev/null || true
+    
+    # Also remove any potential malebox symlink in conf.d
+    sudo rm -f /etc/nginx/conf.d/malebox.conf 2>/dev/null || true
 
     if [ -z "$CERT_BASE" ]; then
         info "No SSL certificate found for '${DOMAIN}' — requesting one from Let's Encrypt now."
@@ -647,19 +651,28 @@ ECOEOF
         info "Nginx restarted."
 
         # Re-scan now that the cert has been issued
+        info "Validating issued SSL certificate..."
         for CANDIDATE in \
             "/etc/letsencrypt/live/${DOMAIN}" \
             "/etc/letsencrypt/live/${DOMAIN}-0001" \
             "/etc/letsencrypt/live/${DOMAIN}-0002" \
             "/etc/letsencrypt/live/${DOMAIN}-0003"; do
-            if [ -f "${CANDIDATE}/fullchain.pem" ] && [ -f "${CANDIDATE}/privkey.pem" ]; then
-                CERT_BASE="$CANDIDATE"
-                break
+            if [ -f "${CANDIDATE}/fullchain.pem" ] && [ -f "${CANDIDATE}/privkey.pem" ] && [ -f "${CANDIDATE}/chain.pem" ]; then
+                # Validate certificate files are not empty and have proper content
+                if [ -s "${CANDIDATE}/fullchain.pem" ] && [ -s "${CANDIDATE}/privkey.pem" ]; then
+                    CERT_BASE="$CANDIDATE"
+                    success "SSL certificate validated: ${CANDIDATE}"
+                    break
+                else
+                    warn "Certificate files found but appear to be empty or corrupted: ${CANDIDATE}"
+                fi
             fi
         done
-
-        [[ -z "$CERT_BASE" ]] \
-            && error "Certificate was issued but could not be located under /etc/letsencrypt/live/ — check certbot output above."
+        
+        # Final validation
+        if [ -z "$CERT_BASE" ]; then
+            error "SSL certificate validation failed - no valid certificate found for ${DOMAIN}"
+        fi
 
         success "SSL certificate obtained at ${CERT_BASE}/"
     else
@@ -756,11 +769,29 @@ server {
 }
 NGINXEOF
 
-    sudo ln -sf "${NGINX_SITE}" "/etc/nginx/sites-enabled/malebox.conf"
-    sudo nginx -t || error "Nginx config test failed — check the output above and re-run Step 10."
-    sudo systemctl reload nginx
-    sudo systemctl enable certbot.timer 2>/dev/null || true
-    success "Nginx configured and reloaded."
+# Create nginx symlink with proper validation
+if [ -f "/etc/nginx/sites-enabled/malebox.conf" ]; then
+    warn "Removing existing malebox.conf symlink to prevent duplication..."
+    sudo rm -f "/etc/nginx/sites-enabled/malebox.conf"
+fi
+    
+sudo ln -s "${NGINX_SITE}" "/etc/nginx/sites-enabled/malebox.conf"
+    
+# Validate nginx configuration before reloading
+info "Testing nginx configuration..."
+if ! sudo nginx -t; then
+    error "Nginx config test failed - check the output above and re-run Step 10."
+fi
+    
+# Ensure nginx is running before reload
+if ! sudo systemctl is-active --quiet nginx; then
+    info "Starting nginx service..."
+    sudo systemctl start nginx
+fi
+    
+sudo systemctl reload nginx
+sudo systemctl enable certbot.timer 2>/dev/null || true
+success "Nginx configured and reloaded."
 }
 
 # ─── RUN FROM A GIVEN STEP ────────────────────────────────────────────────────
