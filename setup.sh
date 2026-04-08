@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  setup.sh  –  Phone Booth full production VPS setup
+#  setup.sh  –  Malebox full production VPS setup
 #
 #  Usage:
-#    bash setup.sh                       # interactive menu
+#    bash setup.sh                       # interactive menu (GUI interface)
+#    bash setup.sh --text                # interactive menu (text interface)
 #    bash setup.sh mydomain.com          # pre-fill domain, show menu
 #    bash setup.sh mydomain.com --yes    # fully unattended, run all steps
 #
 #  Requirements:
-#    - Ubuntu 20.04 / 22.04 / 24.04
-#    - Non-root user with sudo privileges
-#    - DNS A record pointing to this server's IP
+#    - Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+#    - Node.js v22.12.0
+#    - PostgreSQL 15.15
+#
+#  Features:
+#    - ASCII GUI interface with visual menus
+#    - Progress indicators and status displays
+#    - Apache2 detection and handling
+#    - Configuration variables setup
+#    - Environment pollution prevention
 # =============================================================================
 
 set -euo pipefail
