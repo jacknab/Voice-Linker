@@ -515,6 +515,16 @@ EOF
         fi
     done
 
+    # ── Clean up default site and broken symlinks before any nginx -t test ───────
+    [ -L /etc/nginx/sites-enabled/default ] \
+        && sudo rm -f /etc/nginx/sites-enabled/default \
+        && info "Removed default nginx site."
+
+    for LINK in /etc/nginx/sites-enabled/*; do
+        [ -L "${LINK}" ] && [ ! -e "${LINK}" ] && sudo rm -f "${LINK}" \
+            && warn "Removed broken symlink: ${LINK}"
+    done
+
     if [ -z "$CERT_BASE" ]; then
         info "No SSL certificate found for '${DOMAIN}' — requesting one from Let's Encrypt now."
         echo ""
@@ -570,14 +580,6 @@ ACMENGINX
         info "Existing SSL certificate found at ${CERT_BASE}/"
         info "Reusing existing certificate — no new certbot request needed."
     fi
-    [ -L /etc/nginx/sites-enabled/default ] \
-        && sudo rm -f /etc/nginx/sites-enabled/default \
-        && info "Removed default nginx site."
-
-    for LINK in /etc/nginx/sites-enabled/*; do
-        [ -L "${LINK}" ] && [ ! -e "${LINK}" ] && sudo rm -f "${LINK}" \
-            && warn "Removed broken symlink: ${LINK}"
-    done
 
     # Global Nginx tweaks — always rewritten so re-runs self-heal any old config
     local NG_GLOBAL="/etc/nginx/conf.d/phonebooth_global.conf"
