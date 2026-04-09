@@ -24,6 +24,7 @@ interface LocalNumberData {
   regionName: string | null;
   regionId: string | null;
   activeCalls: number;
+  linkedNumbers?: Array<{ name: string; phoneNumber: string }>;
 }
 
 function formatPhone(raw: string | null | undefined): string {
@@ -204,6 +205,25 @@ export default function Landing() {
             {localLoading ? (
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "rgba(255,255,255,0.4)", fontSize: "1.1rem" }}>
                 <Loader2 className="w-4 h-4 animate-spin" /> Finding your local number…
+              </div>
+            ) : localData?.linkedNumbers && localData.linkedNumbers.length > 0 ? (
+              <div>
+                <p style={{ fontSize: "clamp(0.85rem, 3vw, 1.1rem)", color: "rgba(255,255,255,0.7)", fontWeight: 400, marginBottom: "0.75rem", textShadow: "1px 1px 0 #000, -1px -1px 0 #000" }}>
+                  Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access numbers
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  {[{ name: localData.regionName!, phoneNumber: localData.phoneNumber! }, ...localData.linkedNumbers].map((entry, i) => (
+                    <a
+                      key={i}
+                      href={"tel:" + entry.phoneNumber.replace(/\D/g, "")}
+                      data-testid={`link-local-number-${i}`}
+                      style={{ display: "flex", alignItems: "baseline", gap: "1rem", textDecoration: "none", color: "#fff", padding: "0.15rem 0" }}
+                    >
+                      <span style={{ fontSize: "clamp(1rem, 3vw, 1.25rem)", fontWeight: 500, color: "rgba(255,255,255,0.75)", minWidth: "7rem", textShadow: "1px 1px 0 #000" }}>{entry.name}</span>
+                      <span style={{ fontSize: "clamp(1.1rem, 3.5vw, 1.5rem)", fontWeight: 900, letterSpacing: "0.01em", textShadow: "2px 2px 0 #000, -1px -1px 0 #000" }}>{formatPhone(entry.phoneNumber)}</span>
+                    </a>
+                  ))}
+                </div>
               </div>
             ) : (
               <div>

@@ -283,6 +283,10 @@ export async function registerRoutes(
 
         if (closestRegion) {
           const regionStats = await storage.getRegionStats(closestRegion.id);
+          const linked = await storage.getLinkedRegions(closestRegion.id);
+          const linkedNumbers = linked
+            .filter(r => r.isActive && r.phoneNumber)
+            .map(r => ({ name: r.name, phoneNumber: r.phoneNumber }));
           return res.json({
             city: geoCity,
             state: geoState,
@@ -290,6 +294,7 @@ export async function registerRoutes(
             regionName: closestRegion.name,
             regionId: closestRegion.id,
             activeCalls: regionStats.activeCalls,
+            linkedNumbers,
           });
         }
       }
@@ -297,6 +302,10 @@ export async function registerRoutes(
       // Fallback: just return the first active region's number
       const fallbackRegion = activeRegions[0];
       const fallbackStats = await storage.getRegionStats(fallbackRegion.id);
+      const fallbackLinked = await storage.getLinkedRegions(fallbackRegion.id);
+      const fallbackLinkedNumbers = fallbackLinked
+        .filter(r => r.isActive && r.phoneNumber)
+        .map(r => ({ name: r.name, phoneNumber: r.phoneNumber }));
       return res.json({
         city: geoCity,
         state: geoState,
@@ -304,6 +313,7 @@ export async function registerRoutes(
         regionName: fallbackRegion.name,
         regionId: fallbackRegion.id,
         activeCalls: fallbackStats.activeCalls,
+        linkedNumbers: fallbackLinkedNumbers,
       });
     } catch (err) {
       console.error("[local-number] error:", err);
