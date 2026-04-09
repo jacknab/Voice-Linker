@@ -1093,9 +1093,10 @@ export async function registerRoutes(
         paypalEmail,
         paypalSandbox,
         freeMode,
+        freeModeScheduleDays,
       } = req.body;
 
-      const data: Record<string, number | string | boolean | null> = {};
+      const data: Record<string, unknown> = {};
       if (freeTrialMinutes !== undefined) data.freeTrialMinutes = parseInt(freeTrialMinutes);
       if (plan1Name !== undefined) data.plan1Name = String(plan1Name).trim();
       if (plan1Minutes !== undefined) data.plan1Minutes = parseInt(plan1Minutes);
@@ -1111,6 +1112,7 @@ export async function registerRoutes(
       if (paypalEmail !== undefined) data.paypalEmail = paypalEmail ? String(paypalEmail).trim() : null;
       if (paypalSandbox !== undefined) data.paypalSandbox = Boolean(paypalSandbox);
       if (freeMode !== undefined) data.freeMode = Boolean(freeMode);
+      if (freeModeScheduleDays !== undefined) data.freeModeScheduleDays = Array.isArray(freeModeScheduleDays) ? freeModeScheduleDays.map(Number) : [];
 
       const updated = await storage.updateMembershipSettings(data);
       invalidateMembershipSettingsCache();

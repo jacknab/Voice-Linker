@@ -1371,7 +1371,7 @@ function TTSTab() {
 // ── MembershipsTab ────────────────────────────────────────────────────────────
 function MembershipsTab() {
   const { toast } = useToast();
-  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; paypalEmail: string | null; paypalSandbox: boolean; freeMode: boolean; }
+  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; paypalEmail: string | null; paypalSandbox: boolean; freeMode: boolean; freeModeScheduleDays: number[]; }
 
   const { data: ms, isLoading } = useQuery<MembershipSettings>({ queryKey: ["/api/admin/membership-settings"] });
 
@@ -1384,6 +1384,7 @@ function MembershipsTab() {
   const [paypalEmail, setPaypalEmail] = useState("");
   const [paypalSandbox, setPaypalSandbox] = useState(false);
   const [freeMode, setFreeMode] = useState(false);
+  const [freeModeScheduleDays, setFreeModeScheduleDays] = useState<number[]>([]);
   const [initialized, setInitialized] = useState(false);
 
   if (ms && !initialized) {
@@ -1396,6 +1397,7 @@ function MembershipsTab() {
     setPaypalEmail(ms.paypalEmail ?? "");
     setPaypalSandbox(ms.paypalSandbox ?? false);
     setFreeMode(ms.freeMode ?? false);
+    setFreeModeScheduleDays(ms.freeModeScheduleDays ?? []);
     setInitialized(true);
   }
 
@@ -1413,6 +1415,7 @@ function MembershipsTab() {
         paypalEmail: paypalEmail.trim() || null,
         paypalSandbox,
         freeMode,
+        freeModeScheduleDays,
       });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-settings"] }); toast({ title: "Membership settings saved" }); },
@@ -1448,31 +1451,88 @@ function MembershipsTab() {
     <div className="space-y-6">
 
       {/* ── Free Mode ────────────────────────────────────────────────────────── */}
-      <div className={`${C.card} border-2 ${freeMode ? "border-green-400 bg-green-50" : "border-gray-200"}`}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h3 className={`font-mono text-sm font-bold tracking-widest uppercase mb-1 ${freeMode ? "text-green-700" : "text-gray-800"}`}>
-              Free Mode {freeMode && <span className="ml-2 text-xs bg-green-500 text-white px-2 py-0.5 rounded-full normal-case tracking-normal">ACTIVE</span>}
-            </h3>
-            <p className="text-gray-500 font-mono text-xs leading-relaxed">
-              When enabled, <strong>all callers get unlimited free access</strong> — no memberships, no trials, no time limits, and no billing deductions. Toggle off to restore normal membership enforcement.
-            </p>
+      {(() => {
+        const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const todayDow = new Date().getDay();
+        const scheduledToday = freeModeScheduleDays.includes(todayDow);
+        const effectivelyActive = freeMode || scheduledToday;
+        const toggleDay = (d: number) => setFreeModeScheduleDays(prev =>
+          prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
+        );
+        return (
+          <div className={`${C.card} border-2 ${effectivelyActive ? "border-green-400 bg-green-50" : freeModeScheduleDays.length > 0 ? "border-yellow-300 bg-yellow-50" : "border-gray-200"}`}>
+            {/* ── Manual override row ── */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h3 className={`font-mono text-sm font-bold tracking-widest uppercase mb-1 ${freeMode ? "text-green-700" : "text-gray-800"}`}>
+                  Free Mode
+                  {freeMode && <span className="ml-2 text-xs bg-green-500 text-white px-2 py-0.5 rounded-full normal-case tracking-normal">ALWAYS ON</span>}
+                  {!freeMode && scheduledToday && <span className="ml-2 text-xs bg-green-500 text-white px-2 py-0.5 rounded-full normal-case tracking-normal">ON TODAY</span>}
+                  {!freeMode && !scheduledToday && freeModeScheduleDays.length > 0 && <span className="ml-2 text-xs bg-yellow-500 text-white px-2 py-0.5 rounded-full normal-case tracking-normal">SCHEDULED</span>}
+                </h3>
+                <p className="text-gray-500 font-mono text-xs leading-relaxed">
+                  <strong>Always On</strong> forces free access every day. Use <strong>Schedule</strong> to activate automatically on specific days of the week.
+                </p>
+              </div>
+              <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                <button
+                  data-testid="btn-toggle-free-mode"
+                  type="button"
+                  onClick={() => setFreeMode(v => !v)}
+                  className={`relative w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${freeMode ? "bg-green-500" : "bg-gray-300"}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${freeMode ? "translate-x-6" : "translate-x-0"}`} />
+                </button>
+                <span className="font-mono text-[10px] text-gray-400 tracking-wider">{freeMode ? "ALWAYS ON" : "ALWAYS OFF"}</span>
+              </div>
+            </div>
+
+            {/* ── Scheduled days picker ── */}
+            <div className="mt-4">
+              <p className="font-mono text-[10px] text-gray-400 tracking-widest uppercase mb-2">Auto-Schedule — check days to enable free mode</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {DAY_LABELS.map((label, d) => {
+                  const selected = freeModeScheduleDays.includes(d);
+                  const isToday = d === todayDow;
+                  return (
+                    <button
+                      key={d}
+                      data-testid={`btn-free-mode-day-${d}`}
+                      type="button"
+                      onClick={() => toggleDay(d)}
+                      disabled={freeMode}
+                      className={`w-11 py-1.5 rounded font-mono text-xs font-bold border transition-colors
+                        ${freeMode ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
+                        ${selected && !freeMode ? "bg-green-500 border-green-500 text-white" : "bg-white border-gray-300 text-gray-600 hover:border-green-400"}
+                        ${isToday && !selected ? "ring-1 ring-yellow-400" : ""}
+                        ${isToday && selected ? "ring-1 ring-green-600" : ""}
+                      `}
+                    >
+                      {label}
+                      {isToday && <span className="block text-[8px] leading-none mt-0.5 opacity-70">today</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {freeMode && (
+                <p className="mt-1.5 font-mono text-[10px] text-gray-400">Schedule is inactive — Always On overrides it.</p>
+              )}
+            </div>
+
+            {/* ── Status banner ── */}
+            {effectivelyActive && (
+              <div className="mt-3 px-3 py-2.5 rounded-lg bg-green-100 border border-green-300 text-green-800 text-xs leading-relaxed">
+                <strong>Free Mode is active{freeMode ? " (Always On)" : " (scheduled day)"}.</strong> All callers skip membership checks and go straight to the main menu. Remember to save to apply changes.
+              </div>
+            )}
+            {!effectivelyActive && freeModeScheduleDays.length > 0 && (
+              <div className="mt-3 px-3 py-2.5 rounded-lg bg-yellow-50 border border-yellow-300 text-yellow-800 text-xs leading-relaxed">
+                <strong>Schedule set.</strong> Free mode will activate automatically on: {freeModeScheduleDays.sort().map(d => DAY_LABELS[d]).join(", ")}. Save to apply.
+              </div>
+            )}
           </div>
-          <button
-            data-testid="btn-toggle-free-mode"
-            type="button"
-            onClick={() => setFreeMode(v => !v)}
-            className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${freeMode ? "bg-green-500" : "bg-gray-300"}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${freeMode ? "translate-x-6" : "translate-x-0"}`} />
-          </button>
-        </div>
-        {freeMode && (
-          <div className="mt-3 px-3 py-2.5 rounded-lg bg-green-100 border border-green-300 text-green-800 text-xs leading-relaxed">
-            <strong>Free Mode is ON.</strong> All callers are sent directly to the main menu regardless of account status or balance. Remember to save to apply.
-          </div>
-        )}
-      </div>
+        );
+      })()}
 
       {/* ── Billing Mode ─────────────────────────────────────────────────────── */}
       <div className={C.card}>

@@ -479,14 +479,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
   }
 
+  // Returns true if free mode is currently active — either the manual "always on" flag is set,
+  // or today's day-of-week (0=Sun … 6=Sat) is in the operator's scheduled days list.
+  function isFreeModeActive(settings: { freeMode: boolean; freeModeScheduleDays: number[] | null }): boolean {
+    if (settings.freeMode) return true;
+    const today = new Date().getDay();
+    return (settings.freeModeScheduleDays ?? []).includes(today);
+  }
+
   // Deducts elapsed seconds since the last checkpoint directly from the account balance.
   // Billing is second-accurate: the caller sees their balance in minutes (rounded down),
   // but the backend drains the exact seconds used on every sync.
   // When a membership override is active, deducts from the membership holder's account.
   // In per_day mode no call-time deductions are made — billing is handled nightly.
   async function syncBilling(callSid: string): Promise<void> {
-    const { billingMode, freeMode } = await getMembershipSettingsCached();
-    if (billingMode === "per_day" || freeMode) return;
+    const settings = await getMembershipSettingsCached();
+    if (settings.billingMode === "per_day" || isFreeModeActive(settings)) return;
     const checkpoint = billingCheckpoints.get(callSid);
     if (!checkpoint) return;
     const now = Date.now();
@@ -600,10 +608,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
         const tickSeconds = LIVE_TICK_MS / 1000;
         // In per_day mode or free mode, calls are free — read balance without deducting.
-        const { billingMode: liveBillingMode, freeMode: liveIsFree } = await getMembershipSettingsCached();
+        const liveSettings = await getMembershipSettingsCached();
         let initiatorUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
         let inviteeUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
-        if (liveBillingMode === "per_day" || liveIsFree) {
+        if (liveSettings.billingMode === "per_day" || isFreeModeActive(liveSettings)) {
           const [iu, vv] = await Promise.all([
             storage.getUserById(s.initiatorUserId),
             storage.getUserById(s.inviteeUserId),
@@ -868,7 +876,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const settings = await getMembershipSettingsCached();
 
       // Free Mode: play announcement and send caller directly to the main menu
-      if (settings.freeMode) {
+      if (isFreeModeActive(settings)) {
         playPrompt(twiml, req, "free_mode_announcement.mp3",
           "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now.");
         twiml.redirect("/voice/phone-booth");
@@ -1248,8 +1256,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       // ── Free Mode: bypass all membership/trial/balance checks ───────────────
-      const { freeMode } = await getMembershipSettingsCached();
-      if (freeMode) {
+      const freeModeSettings = await getMembershipSettingsCached();
+      if (isFreeModeActive(freeModeSettings)) {
         const siteConf = await getSiteSettingsCached();
         twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
       } else if (!user.membershipTier) {

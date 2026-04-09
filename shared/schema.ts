@@ -234,6 +234,9 @@ export const membershipSettings = pgTable("membership_settings", {
   paypalSandbox: boolean("paypal_sandbox").notNull().default(false),
   // Free Mode: when enabled, all callers have unlimited access with no membership, trial, or billing checks
   freeMode: boolean("free_mode").notNull().default(false),
+  // Scheduled Free Mode: days-of-week (0=Sun … 6=Sat) on which free mode activates automatically.
+  // Empty array means no scheduled days. freeMode=true overrides and forces free mode every day.
+  freeModeScheduleDays: integer("free_mode_schedule_days").array().notNull().default(sql`'{}'::integer[]`),
 });
 
 export const promoCodes = pgTable("promo_codes", {
