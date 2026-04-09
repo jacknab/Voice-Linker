@@ -87,7 +87,7 @@ export default function Landing() {
     ? "A gay, bi & curious live chat line. Real guys, real voices."
     : "A live chat line for men and women. Real voices, real conversations.";
 
-  const displayPhone = localData?.phoneNumber || fallbackPhone;
+  const displayPhone = localData?.phoneNumber || "000-000-0000";
   const cityLabel = localData?.regionName || localData?.city || null;
   const stateLabel = localData?.state || null;
   const cityFull = cityLabel && stateLabel ? `${cityLabel}, ${stateLabel}` : cityLabel;
