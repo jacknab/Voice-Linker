@@ -295,7 +295,6 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
   const [stateAbbreviation, setStateAbbreviation] = useState(region?.stateAbbreviation ?? "");
   const [phoneNumber, setPhoneNumber] = useState(region?.phoneNumber ?? "");
   const [timezone, setTimezone] = useState(region?.timezone ?? "America/New_York");
-  const [maxCapacity, setMaxCapacity] = useState(String(region?.maxCapacity ?? 1000));
   const [description, setDescription] = useState(region?.description ?? "");
   const [isActive, setIsActive] = useState(region?.isActive ?? true);
   const [linkedRegionIds, setLinkedRegionIds] = useState<string[]>(region?.linkedRegionIds ?? []);
@@ -311,7 +310,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const body = { name: name.trim(), slug: slug.trim(), stateAbbreviation: stateAbbreviation.trim() || null, phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive, linkedRegionIds, defaultZipCode: defaultZipCode.trim() || null };
+      const body = { name: name.trim(), slug: slug.trim(), stateAbbreviation: stateAbbreviation.trim() || null, phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), description: description.trim() || null, isActive, linkedRegionIds, defaultZipCode: defaultZipCode.trim() || null };
       if (isEdit) return apiRequest("PUT", `/api/regions/${region.id}`, body);
       return apiRequest("POST", `/api/regions`, body);
     },
@@ -361,15 +360,9 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
             <input data-testid="input-region-default-zip" type="text" inputMode="numeric" maxLength={5} value={defaultZipCode} onChange={e => setDefaultZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))} placeholder="e.g. 80202" className={C.input} />
             <p className="text-gray-400 font-mono text-xs mt-1.5">Used for proximity sorting when a caller hasn't provided their own zip code.</p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={C.label}>Timezone</label>
-              <input data-testid="input-region-timezone" type="text" value={timezone} onChange={e => setTimezone(e.target.value)} placeholder="America/Denver" className={C.input} />
-            </div>
-            <div>
-              <label className={C.label}>Max Capacity</label>
-              <input data-testid="input-region-capacity" type="number" value={maxCapacity} onChange={e => setMaxCapacity(e.target.value)} placeholder="1000" className={C.input} />
-            </div>
+          <div>
+            <label className={C.label}>Timezone</label>
+            <input data-testid="input-region-timezone" type="text" value={timezone} onChange={e => setTimezone(e.target.value)} placeholder="America/Denver" className={C.input} />
           </div>
           <div>
             <label className={C.label}>Description</label>
