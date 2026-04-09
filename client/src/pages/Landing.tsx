@@ -188,7 +188,7 @@ export default function Landing() {
             </p>
 
             {/* Free minutes */}
-            <h1 style={{ fontSize: "clamp(2.2rem, 8vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "1rem", color: "#fff", textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
+            <h1 style={{ fontSize: "clamp(2.2rem, 8vw, 4rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.05, marginBottom: "1rem", color: "#fff", textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000", whiteSpace: "nowrap" }}
               data-testid="hero-headline"
             >
               90 MINUTES FREE!
