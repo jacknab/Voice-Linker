@@ -144,7 +144,7 @@ export async function registerRoutes(
 
   // ── IVR Voice Routes (dynamically loaded)
   {
-    const { registerVoiceRoutes } = require("./ivr-default.js");
+    const { registerVoiceRoutes } = await import("./ivr-default.js");
     await registerVoiceRoutes(app);
   }
 
