@@ -1092,6 +1092,7 @@ export async function registerRoutes(
         billingMode,
         paypalEmail,
         paypalSandbox,
+        freeMode,
       } = req.body;
 
       const data: Record<string, number | string | boolean | null> = {};
@@ -1109,6 +1110,7 @@ export async function registerRoutes(
       if (billingMode !== undefined) data.billingMode = billingMode === "per_day" ? "per_day" : "per_minute";
       if (paypalEmail !== undefined) data.paypalEmail = paypalEmail ? String(paypalEmail).trim() : null;
       if (paypalSandbox !== undefined) data.paypalSandbox = Boolean(paypalSandbox);
+      if (freeMode !== undefined) data.freeMode = Boolean(freeMode);
 
       const updated = await storage.updateMembershipSettings(data);
       invalidateMembershipSettingsCache();

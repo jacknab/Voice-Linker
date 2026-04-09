@@ -485,8 +485,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // When a membership override is active, deducts from the membership holder's account.
   // In per_day mode no call-time deductions are made — billing is handled nightly.
   async function syncBilling(callSid: string): Promise<void> {
-    const { billingMode } = await getMembershipSettingsCached();
-    if (billingMode === "per_day") return;
+    const { billingMode, freeMode } = await getMembershipSettingsCached();
+    if (billingMode === "per_day" || freeMode) return;
     const checkpoint = billingCheckpoints.get(callSid);
     if (!checkpoint) return;
     const now = Date.now();
@@ -599,11 +599,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const client = twilio(accountSid, authToken);
 
         const tickSeconds = LIVE_TICK_MS / 1000;
-        // In per_day mode, calls are free — read balance without deducting.
-        const { billingMode: liveBillingMode } = await getMembershipSettingsCached();
+        // In per_day mode or free mode, calls are free — read balance without deducting.
+        const { billingMode: liveBillingMode, freeMode: liveIsFree } = await getMembershipSettingsCached();
         let initiatorUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
         let inviteeUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
-        if (liveBillingMode === "per_day") {
+        if (liveBillingMode === "per_day" || liveIsFree) {
           const [iu, vv] = await Promise.all([
             storage.getUserById(s.initiatorUserId),
             storage.getUserById(s.inviteeUserId),
@@ -1236,7 +1236,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      if (!user.membershipTier) {
+      // ── Free Mode: bypass all membership/trial/balance checks ───────────────
+      const { freeMode } = await getMembershipSettingsCached();
+      if (freeMode) {
+        const siteConf = await getSiteSettingsCached();
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
+      } else if (!user.membershipTier) {
         // Brand new — never had an account, offer the free trial
         twiml.redirect("/voice/free-trial-offer");
       } else if (remainingSeconds <= 0) {

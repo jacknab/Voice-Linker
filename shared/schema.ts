@@ -232,6 +232,8 @@ export const membershipSettings = pgTable("membership_settings", {
   // PayPal Standard integration
   paypalEmail: text("paypal_email"),
   paypalSandbox: boolean("paypal_sandbox").notNull().default(false),
+  // Free Mode: when enabled, all callers have unlimited access with no membership, trial, or billing checks
+  freeMode: boolean("free_mode").notNull().default(false),
 });
 
 export const promoCodes = pgTable("promo_codes", {

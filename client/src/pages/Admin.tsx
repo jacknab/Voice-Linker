@@ -1370,7 +1370,7 @@ function TTSTab() {
 // ── MembershipsTab ────────────────────────────────────────────────────────────
 function MembershipsTab() {
   const { toast } = useToast();
-  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; paypalEmail: string | null; paypalSandbox: boolean; }
+  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; paypalEmail: string | null; paypalSandbox: boolean; freeMode: boolean; }
 
   const { data: ms, isLoading } = useQuery<MembershipSettings>({ queryKey: ["/api/admin/membership-settings"] });
 
@@ -1382,6 +1382,7 @@ function MembershipsTab() {
   const [billingMode, setBillingMode] = useState<"per_minute" | "per_day">("per_minute");
   const [paypalEmail, setPaypalEmail] = useState("");
   const [paypalSandbox, setPaypalSandbox] = useState(false);
+  const [freeMode, setFreeMode] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   if (ms && !initialized) {
@@ -1393,6 +1394,7 @@ function MembershipsTab() {
     setBillingMode((ms.billingMode ?? "per_minute") as "per_minute" | "per_day");
     setPaypalEmail(ms.paypalEmail ?? "");
     setPaypalSandbox(ms.paypalSandbox ?? false);
+    setFreeMode(ms.freeMode ?? false);
     setInitialized(true);
   }
 
@@ -1409,6 +1411,7 @@ function MembershipsTab() {
         billingMode,
         paypalEmail: paypalEmail.trim() || null,
         paypalSandbox,
+        freeMode,
       });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/membership-settings"] }); toast({ title: "Membership settings saved" }); },
@@ -1442,6 +1445,33 @@ function MembershipsTab() {
 
   return (
     <div className="space-y-6">
+
+      {/* ── Free Mode ────────────────────────────────────────────────────────── */}
+      <div className={`${C.card} border-2 ${freeMode ? "border-green-400 bg-green-50" : "border-gray-200"}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h3 className={`font-mono text-sm font-bold tracking-widest uppercase mb-1 ${freeMode ? "text-green-700" : "text-gray-800"}`}>
+              Free Mode {freeMode && <span className="ml-2 text-xs bg-green-500 text-white px-2 py-0.5 rounded-full normal-case tracking-normal">ACTIVE</span>}
+            </h3>
+            <p className="text-gray-500 font-mono text-xs leading-relaxed">
+              When enabled, <strong>all callers get unlimited free access</strong> — no memberships, no trials, no time limits, and no billing deductions. Toggle off to restore normal membership enforcement.
+            </p>
+          </div>
+          <button
+            data-testid="btn-toggle-free-mode"
+            type="button"
+            onClick={() => setFreeMode(v => !v)}
+            className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${freeMode ? "bg-green-500" : "bg-gray-300"}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${freeMode ? "translate-x-6" : "translate-x-0"}`} />
+          </button>
+        </div>
+        {freeMode && (
+          <div className="mt-3 px-3 py-2.5 rounded-lg bg-green-100 border border-green-300 text-green-800 text-xs leading-relaxed">
+            <strong>Free Mode is ON.</strong> All callers are sent directly to the main menu regardless of account status or balance. Remember to save to apply.
+          </div>
+        )}
+      </div>
 
       {/* ── Billing Mode ─────────────────────────────────────────────────────── */}
       <div className={C.card}>
