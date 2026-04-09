@@ -1131,6 +1131,28 @@ export async function registerRoutes(
     }
   });
 
+  async function geocodeRegionZip(zip: string): Promise<void> {
+    try {
+      const existing = await storage.getZipEntryByCode(zip);
+      if (existing?.latitude && existing?.longitude) return;
+      const geoRaw = await lookupZipCode(zip);
+      if (!geoRaw) {
+        console.warn(`[regions] geocodeRegionZip: no data returned for zip ${zip}`);
+        return;
+      }
+      await storage.getOrCreateZipEntry(zip, {
+        latitude: parseFloat(geoRaw.latitude),
+        longitude: parseFloat(geoRaw.longitude),
+        city: geoRaw.city,
+        state: geoRaw.state,
+        neighborhood: geoRaw.neighborhood,
+      });
+      console.log(`[regions] geocodeRegionZip: stored lat/lon for zip ${zip} (${geoRaw.city}, ${geoRaw.state})`);
+    } catch (err) {
+      console.warn(`[regions] geocodeRegionZip: failed for zip ${zip}:`, err);
+    }
+  }
+
   app.post("/api/regions", async (req, res) => {
     try {
       const { name, slug, stateAbbreviation, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionIds, defaultZipCode } = req.body;
@@ -1152,6 +1174,8 @@ export async function registerRoutes(
         await storage.setLinkedRegions(region.id, linkedRegionIds);
       }
       logAudit("region_created", { targetType: "region", targetId: region.id, targetLabel: region.name });
+      const zip = defaultZipCode?.trim();
+      if (zip) geocodeRegionZip(zip);
       res.status(201).json({ ...region, linkedRegionIds: linkedRegionIds ?? [] });
     } catch (e: any) {
       console.error("[regions] Failed to create region:", e);
@@ -1182,6 +1206,8 @@ export async function registerRoutes(
       }
       const currentLinkedRegions = await storage.getLinkedRegions(id);
       logAudit("region_updated", { targetType: "region", targetId: id, targetLabel: region.name });
+      const zip = defaultZipCode?.trim();
+      if (zip && "defaultZipCode" in req.body) geocodeRegionZip(zip);
       res.json({ ...region, linkedRegionIds: currentLinkedRegions.map(r => r.id) });
     } catch (e: any) {
       console.error("[regions] Failed to update region:", e);
