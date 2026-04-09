@@ -1,9 +1,34 @@
 import { useState } from "react";
-import { Phone, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { Link } from "wouter";
 
 export const DEFAULT_PHONE = "000-000-0000";
 export const DEFAULT_SITE_NAME = "Male Box";
+
+export function MaleBoxLogo({ size = 36 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
+      <rect width="64" height="64" rx="14" fill="#0f172a"/>
+      <rect x="6" y="6" width="52" height="52" rx="11" fill="url(#mb-grad)"/>
+      <path d="M15 46V18l11 15 6-9 6 9 11-15v28" stroke="#ffffff" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round"/>
+      <defs>
+        <linearGradient id="mb-grad" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#1d4ed8"/>
+          <stop offset="100%" stopColor="#7c3aed"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
+export function MaleBoxWordmark({ dark = false }: { dark?: boolean }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 0, lineHeight: 1 }}>
+      <span style={{ fontWeight: 900, letterSpacing: "-0.02em", color: dark ? "#0f172a" : "#ffffff" }}>Male</span>
+      <span style={{ fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(135deg, #3b82f6 0%, #7c3aed 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>Box</span>
+    </span>
+  );
+}
 
 export interface SiteSettings {
   siteName: string;
@@ -31,11 +56,9 @@ export function SiteNav({ siteName, onMenuToggle, mobileOpen }: {
   return (
     <nav style={{ background: "#000", position: "sticky", top: 0, zIndex: 100, borderBottom: "1px solid #1a1a1a" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "79px" }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }} data-testid="nav-logo">
-          <div style={{ width: 36, height: 36, background: "#1d4ed8", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Phone className="w-4 h-4 text-white" />
-          </div>
-          <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>{siteName}</span>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.625rem", textDecoration: "none" }} data-testid="nav-logo">
+          <MaleBoxLogo size={38} />
+          <span style={{ fontSize: "1.15rem" }}><MaleBoxWordmark /></span>
         </Link>
 
         <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.95rem", fontWeight: 500 }}>
@@ -145,10 +168,8 @@ export function SiteFooter({ siteName, footerBlurb, csPhone, csEmail }: {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "2rem", marginBottom: "2.5rem" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-              <div style={{ width: 28, height: 28, borderRadius: "6px", background: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Phone className="w-3.5 h-3.5 text-white" />
-              </div>
-              <span style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff" }}>{siteName}</span>
+              <MaleBoxLogo size={30} />
+              <span style={{ fontSize: "1rem" }}><MaleBoxWordmark /></span>
             </div>
             <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.3)", lineHeight: 1.65 }}>{footerBlurb}</p>
           </div>

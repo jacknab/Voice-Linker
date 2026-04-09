@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Phone, ChevronDown, ChevronUp, Menu, X } from "lucide-react";
+import { MaleBoxLogo, MaleBoxWordmark } from "@/components/SiteLayout";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 
@@ -419,11 +420,9 @@ export default function FAQ() {
       {/* ── NAVBAR ── */}
       <nav style={{ background: "#000", position: "sticky", top: 0, zIndex: 100, borderBottom: "1px solid #1a1a1a" }}>
         <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "79px" }}>
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }} data-testid="nav-logo">
-            <div style={{ width: 36, height: 36, background: "#1d4ed8", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Phone className="w-4 h-4 text-white" />
-            </div>
-            <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>{siteName}</span>
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.625rem", textDecoration: "none" }} data-testid="nav-logo">
+            <MaleBoxLogo size={38} />
+            <span style={{ fontSize: "1.15rem" }}><MaleBoxWordmark /></span>
           </Link>
 
           <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.95rem", fontWeight: 500 }}>
@@ -608,10 +607,8 @@ export default function FAQ() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "2rem", marginBottom: "2.5rem" }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                <div style={{ width: 28, height: 28, borderRadius: "6px", background: "#1d4ed8", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Phone className="w-3.5 h-3.5 text-white" />
-                </div>
-                <span style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff" }}>{siteName}</span>
+                <MaleBoxLogo size={30} />
+                <span style={{ fontSize: "1rem" }}><MaleBoxWordmark /></span>
               </div>
               <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.3)", lineHeight: 1.65 }}>
                 {footerBlurb}

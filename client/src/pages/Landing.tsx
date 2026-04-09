@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Phone, Loader2, Menu, X } from "lucide-react";
+import { MaleBoxLogo, MaleBoxWordmark } from "@/components/SiteLayout";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import heroImgMM from "@assets/hero_mm_guy_phone.png";
@@ -104,11 +105,9 @@ export default function Landing() {
 
           {/* Left: Logo + Site Name */}
           <div style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-              <div style={{ width: 36, height: 36, background: "#1d4ed8", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Phone className="w-4 h-4 text-white" />
-              </div>
-              <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>{siteName}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", flexShrink: 0 }}>
+              <MaleBoxLogo size={38} />
+              <span style={{ fontSize: "1.15rem" }}><MaleBoxWordmark /></span>
             </div>
           </div>
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { Phone, CheckCircle, Loader2, AlertTriangle, ArrowRight, Clock } from "lucide-react";
+import { CheckCircle, Loader2, AlertTriangle, ArrowRight, Clock } from "lucide-react";
+import { MaleBoxLogo, MaleBoxWordmark } from "@/components/SiteLayout";
 import { useQuery } from "@tanstack/react-query";
 import { SiPaypal } from "react-icons/si";
 
@@ -64,11 +65,9 @@ export default function MembershipSuccess() {
   const navBar = (
     <nav style={{ background: "#000", borderBottom: "1px solid #1a1a1a" }}>
       <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", minHeight: "64px" }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}>
-          <div style={{ width: 36, height: 36, background: "#1d4ed8", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Phone size={16} color="#fff" />
-          </div>
-          <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff" }}>{siteName}</span>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.625rem", textDecoration: "none" }}>
+          <MaleBoxLogo size={36} />
+          <span style={{ fontSize: "1.1rem" }}><MaleBoxWordmark /></span>
         </Link>
       </div>
     </nav>

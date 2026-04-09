@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  Phone, LogOut, Loader2, User, Clock, Shield, Star, Zap,
+  LogOut, Loader2, User, Clock, Shield, Star, Zap,
   KeyRound, ChevronRight, Eye, EyeOff, CheckCircle2, PhoneCall,
   AlertTriangle, Link2, CheckCircle, History, PhoneIncoming, Timer, Plus, Trash2, PhoneForwarded,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { MaleBoxLogo, MaleBoxWordmark } from "@/components/SiteLayout";
 
 const DEFAULT_SITE_NAME = "Male Box";
 const MAX_LINK_ATTEMPTS = 3;
@@ -632,11 +633,9 @@ export default function Dashboard() {
       {/* Top Nav */}
       <nav style={{ background: "#000", borderBottom: "1px solid #1a1a1a", position: "sticky", top: 0, zIndex: 10 }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "64px" }}>
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}>
-            <div style={{ width: 36, height: 36, background: "#1d4ed8", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Phone size={16} color="#fff" />
-            </div>
-            <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff" }}>{siteName}</span>
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.625rem", textDecoration: "none" }}>
+            <MaleBoxLogo size={34} />
+            <span style={{ fontSize: "1.05rem" }}><MaleBoxWordmark /></span>
           </Link>
           <button
             onClick={() => logoutMutation.mutate()}

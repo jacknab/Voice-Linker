@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Phone, Star, Zap, Clock, CheckCircle, ArrowRight, Loader2, Lock, Shield, AlertTriangle, CreditCard } from "lucide-react";
+import { Star, Zap, Clock, CheckCircle, ArrowRight, Loader2, Lock, Shield, AlertTriangle, CreditCard } from "lucide-react";
+import { MaleBoxLogo, MaleBoxWordmark } from "@/components/SiteLayout";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -183,11 +184,9 @@ export default function Membership() {
       {/* Nav */}
       <nav style={{ background: "#000", borderBottom: "1px solid #1a1a1a", position: "sticky", top: 0, zIndex: 10 }}>
         <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "64px" }}>
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}>
-            <div style={{ width: 36, height: 36, background: "#1d4ed8", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Phone size={16} color="#fff" />
-            </div>
-            <span style={{ fontSize: "1rem", fontWeight: 800, color: "#fff" }}>{siteName}</span>
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.625rem", textDecoration: "none" }}>
+            <MaleBoxLogo size={36} />
+            <span style={{ fontSize: "1.1rem" }}><MaleBoxWordmark /></span>
           </Link>
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             {me ? (
