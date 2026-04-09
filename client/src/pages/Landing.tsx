@@ -183,7 +183,7 @@ export default function Landing() {
           <div style={{ maxWidth: "560px" }}>
 
             {/* Age disclaimer */}
-            <p style={{ fontSize: "clamp(0.9rem, 4vw, 1.56rem)", color: "rgba(255,255,255,0.55)", marginBottom: "0.75rem", fontWeight: 400, letterSpacing: "0.04em" }}>
+            <p style={{ fontSize: "clamp(0.7rem, 2vw, 0.85rem)", color: "rgba(255,255,255,0.55)", marginBottom: "0.75rem", fontWeight: 400, letterSpacing: "0.04em" }}>
               All users must be 18 years or older
             </p>
 
