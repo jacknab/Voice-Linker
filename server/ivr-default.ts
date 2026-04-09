@@ -866,6 +866,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       const settings = await getMembershipSettingsCached();
+
+      // Free Mode: play announcement and send caller directly to the main menu
+      if (settings.freeMode) {
+        playPrompt(twiml, req, "free_mode_announcement.mp3",
+          "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now.");
+        twiml.redirect("/voice/phone-booth");
+        res.type("text/xml");
+        res.send(twiml.toString());
+        return;
+      }
+
       if (settings.billingMode === "per_day") {
         // Per-day billing: skip membership number prompt entirely — caller ID is the sole authenticator
         twiml.redirect("/voice/entry-check");

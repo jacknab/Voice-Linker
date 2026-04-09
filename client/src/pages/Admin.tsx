@@ -831,6 +831,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "disclaimer.mp3", label: "Disclaimer", text: "Interactive Mail assumes no responsibility for personal meetings. This service is for adults only. If you are under 18, please hang up now." },
   { filename: "gender_select.mp3", label: "Gender / Category Select", text: "Guys, press one to talk to women. Women, press two to talk to guys." },
   { filename: "membership_entry_prompt.mp3", label: "Membership Entry Prompt", text: "If you have a membership press 1 now. Otherwise press the pound key." },
+  { filename: "free_mode_announcement.mp3", label: "Free Mode Announcement", text: "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now." },
   { filename: "link_code_invalid.mp3", label: "Link Code Invalid", text: "That code is invalid or has expired. Please generate a new code from your web account and try again." },
   { filename: "membership_invalid.mp3", label: "Membership Number Invalid", text: "We could not find a membership card with that number. Please check your card and try again." },
   { filename: "membership_linked.mp3", label: "Membership Linked / Verified", text: "Your membership card has been activated and linked to this phone number. Welcome." },
