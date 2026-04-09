@@ -166,12 +166,12 @@ export default function Landing() {
       </nav>
 
       {/* ── HERO ── */}
-      <section id="hero" className="relative overflow-hidden min-h-[260px] md:min-h-[480px] border-0 outline-none" style={{ backgroundColor: "#0d0d0d" }}>
+      <section id="hero" className="relative overflow-hidden min-h-[420px] sm:min-h-[460px] md:min-h-[480px] border-0 outline-none" style={{ backgroundColor: "#0d0d0d" }}>
         {/* Background image */}
         <img
           src={heroImg}
           alt={heroAlt}
-          style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: isMM ? "right 20%" : "center 20%", filter: "saturate(0.9) brightness(0.95)", border: "none", outline: "none" }}
+          style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: isMM ? "right top" : "center top", filter: "saturate(0.9) brightness(0.95)", border: "none", outline: "none" }}
         />
         {/* Dark overlay — uniform for centered text readability */}
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)" }} />
@@ -179,7 +179,7 @@ export default function Landing() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #0d0d0d, transparent)" }} />
 
         {/* Content */}
-        <div className={`relative z-10 w-full min-h-[260px] md:min-h-[480px] flex items-start px-4 md:px-16 pt-8 md:pt-14 pb-10 justify-start`}>
+        <div className={`relative z-10 w-full min-h-[420px] sm:min-h-[460px] md:min-h-[480px] flex items-start px-4 md:px-16 pt-8 md:pt-14 pb-10 justify-start`}>
           <div style={{ maxWidth: "560px" }}>
 
             {/* Age disclaimer */}
