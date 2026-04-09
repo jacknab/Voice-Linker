@@ -10,7 +10,7 @@ import {
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ChevronRight, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
-  BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert,
+  BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import {
@@ -34,6 +34,7 @@ interface Region {
   id: string;
   name: string;
   slug: string;
+  stateAbbreviation: string | null;
   phoneNumber: string;
   timezone: string;
   maxCapacity: number;
@@ -291,6 +292,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
   const isEdit = !!region;
   const [name, setName] = useState(region?.name ?? "");
   const [slug, setSlug] = useState(region?.slug ?? "");
+  const [stateAbbreviation, setStateAbbreviation] = useState(region?.stateAbbreviation ?? "");
   const [phoneNumber, setPhoneNumber] = useState(region?.phoneNumber ?? "");
   const [timezone, setTimezone] = useState(region?.timezone ?? "America/New_York");
   const [maxCapacity, setMaxCapacity] = useState(String(region?.maxCapacity ?? 1000));
@@ -309,7 +311,7 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const body = { name: name.trim(), slug: slug.trim(), phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive, linkedRegionIds, defaultZipCode: defaultZipCode.trim() || null };
+      const body = { name: name.trim(), slug: slug.trim(), stateAbbreviation: stateAbbreviation.trim() || null, phoneNumber: phoneNumber.trim(), timezone: timezone.trim(), maxCapacity: parseInt(maxCapacity) || 1000, description: description.trim() || null, isActive, linkedRegionIds, defaultZipCode: defaultZipCode.trim() || null };
       if (isEdit) return apiRequest("PUT", `/api/regions/${region.id}`, body);
       return apiRequest("POST", `/api/regions`, body);
     },
@@ -342,9 +344,13 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
               <input data-testid="input-region-name" type="text" value={name} onChange={e => handleNameChange(e.target.value)} placeholder="Denver" className={C.input} />
             </div>
             <div>
-              <label className={C.label}>URL Slug</label>
-              <input data-testid="input-region-slug" type="text" value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder="denver" className={C.input} />
+              <label className={C.label}>State / Region Group</label>
+              <input data-testid="input-region-state" type="text" value={stateAbbreviation} onChange={e => setStateAbbreviation(e.target.value.toUpperCase())} placeholder="CO" className={C.input + " uppercase"} />
             </div>
+          </div>
+          <div>
+            <label className={C.label}>URL Slug</label>
+            <input data-testid="input-region-slug" type="text" value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder="denver" className={C.input} />
           </div>
           <div>
             <label className={C.label}>Phone Number</label>
@@ -432,9 +438,13 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
 }
 
 // ── RegionsTab ────────────────────────────────────────────────────────────────
+const REGIONS_PAGE_SIZE = 50;
+
 function RegionsTab() {
   const { toast } = useToast();
   const [dialog, setDialog] = useState<"add" | Region | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   const { data: regions, isLoading } = useQuery<Region[]>({
@@ -457,10 +467,45 @@ function RegionsTab() {
   function copyWebhook(slug: string) { navigator.clipboard.writeText(`${origin}/voice/${slug}`); toast({ title: "Webhook URL copied" }); }
   function copyPhone(phone: string) { navigator.clipboard.writeText(phone); toast({ title: "Phone number copied" }); }
 
+  const q = search.trim().toLowerCase();
+  const filtered = (regions ?? []).filter(r =>
+    !q ||
+    r.name.toLowerCase().includes(q) ||
+    (r.stateAbbreviation ?? "").toLowerCase().includes(q) ||
+    r.slug.toLowerCase().includes(q) ||
+    r.phoneNumber.includes(q)
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / REGIONS_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice((safePage - 1) * REGIONS_PAGE_SIZE, safePage * REGIONS_PAGE_SIZE);
+
+  function handleSearch(val: string) { setSearch(val); setPage(1); }
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {dialog === "add" && <RegionDialog onClose={() => setDialog(null)} />}
       {dialog && dialog !== "add" && <RegionDialog region={dialog as Region} onClose={() => setDialog(null)} />}
+
+      {/* Search bar */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            data-testid="input-region-search"
+            type="text"
+            value={search}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="Search name, state, slug, phone..."
+            className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-[#f5a623]/30 focus:border-[#f5a623]"
+          />
+        </div>
+        {regions && (
+          <span className="text-gray-400 font-mono text-xs">
+            {filtered.length} of {regions.length} region{regions.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
 
       {isLoading ? (
         <div className="py-20 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING REGIONS...</div>
@@ -469,81 +514,131 @@ function RegionsTab() {
           <MapPin size={32} className="mx-auto text-gray-300 mb-4" />
           <div className="text-gray-400 font-mono text-xs tracking-widest">NO REGIONS CONFIGURED — ADD ONE TO BEGIN</div>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="py-20 text-center text-gray-400 font-mono text-xs tracking-widest">NO REGIONS MATCH YOUR SEARCH</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {regions.map(region => (
-            <div key={region.id} data-testid={`card-region-${region.id}`} className={C.card}>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg border border-amber-200 bg-amber-50 flex items-center justify-center">
-                    <MapPin size={15} className="text-[#f5a623]" />
-                  </div>
-                  <div>
-                    <div className="text-gray-900 font-mono font-bold text-sm tracking-widest uppercase">{region.name}</div>
-                    <div className="text-gray-400 font-mono text-xs tracking-widest uppercase">{region.slug}</div>
-                  </div>
-                </div>
-                <span className={`${C.badge} ${region.isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${region.isActive ? "bg-emerald-500" : "bg-gray-300"}`} />
-                  {region.isActive ? "Active" : "Inactive"}
-                </span>
-              </div>
+        <>
+          {/* Table */}
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-mono">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-3 py-2.5 text-left text-gray-500 tracking-widest uppercase font-semibold w-14">State</th>
+                    <th className="px-3 py-2.5 text-left text-gray-500 tracking-widest uppercase font-semibold">Name</th>
+                    <th className="px-3 py-2.5 text-left text-gray-500 tracking-widest uppercase font-semibold hidden md:table-cell">Phone</th>
+                    <th className="px-3 py-2.5 text-left text-gray-500 tracking-widest uppercase font-semibold hidden lg:table-cell">Timezone</th>
+                    <th className="px-3 py-2.5 text-center text-gray-500 tracking-widest uppercase font-semibold hidden sm:table-cell w-16">Live</th>
+                    <th className="px-3 py-2.5 text-center text-gray-500 tracking-widest uppercase font-semibold hidden sm:table-cell w-16">Profiles</th>
+                    <th className="px-3 py-2.5 text-center text-gray-500 tracking-widest uppercase font-semibold hidden sm:table-cell w-16">Msgs</th>
+                    <th className="px-3 py-2.5 text-center text-gray-500 tracking-widest uppercase font-semibold w-20">Status</th>
+                    <th className="px-3 py-2.5 text-right text-gray-500 tracking-widest uppercase font-semibold w-32">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginated.map(region => (
+                    <tr key={region.id} data-testid={`row-region-${region.id}`} className="bg-white hover:bg-amber-50/30 transition-colors group">
+                      <td className="px-3 py-2.5">
+                        {region.stateAbbreviation ? (
+                          <span className="inline-block bg-amber-50 border border-amber-200 text-amber-700 font-bold rounded px-1.5 py-0.5 tracking-widest uppercase text-[11px]">
+                            {region.stateAbbreviation}
+                          </span>
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="text-gray-900 font-bold tracking-wide">{region.name}</div>
+                        <div className="text-gray-400 text-[10px] tracking-widest">{region.slug}</div>
+                      </td>
+                      <td className="px-3 py-2.5 hidden md:table-cell">
+                        <div className="flex items-center gap-1.5 text-gray-600">
+                          <span data-testid={`text-phone-${region.id}`}>{region.phoneNumber}</span>
+                          <button data-testid={`btn-copy-phone-${region.id}`} onClick={() => copyPhone(region.phoneNumber)} className="text-gray-300 hover:text-[#f5a623] transition-colors opacity-0 group-hover:opacity-100">
+                            <Copy size={10} />
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 hidden lg:table-cell text-gray-400">{region.timezone}</td>
+                      <td className="px-3 py-2.5 hidden sm:table-cell text-center text-gray-700 font-bold">{region.activeCalls}</td>
+                      <td className="px-3 py-2.5 hidden sm:table-cell text-center text-gray-700">{region.voiceProfiles}</td>
+                      <td className="px-3 py-2.5 hidden sm:table-cell text-center text-gray-700">{region.messagesRelayed}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <button
+                          data-testid={`btn-toggle-region-${region.id}`}
+                          onClick={() => toggleMutation.mutate(region)}
+                          disabled={toggleMutation.isPending}
+                          title={region.isActive ? "Deactivate" : "Activate"}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border font-semibold text-[10px] tracking-widest transition-colors disabled:opacity-50"
+                          style={region.isActive
+                            ? { background: "#ecfdf5", borderColor: "#a7f3d0", color: "#059669" }
+                            : { background: "#f9fafb", borderColor: "#e5e7eb", color: "#9ca3af" }}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${region.isActive ? "bg-emerald-500" : "bg-gray-300"}`} />
+                          {region.isActive ? "Active" : "Off"}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button data-testid={`btn-copy-webhook-${region.id}`} onClick={() => copyWebhook(region.slug)} title="Copy webhook URL" className="p-1 text-gray-300 hover:text-[#f5a623] transition-colors">
+                            <Copy size={12} />
+                          </button>
+                          <button data-testid={`btn-edit-region-${region.id}`} onClick={() => setDialog(region)} className="p-1 text-gray-400 hover:text-[#f5a623] transition-colors">
+                            <Pencil size={12} />
+                          </button>
+                          <button data-testid={`btn-delete-region-${region.id}`} onClick={() => { if (confirm(`Delete region "${region.name}"?`)) deleteMutation.mutate(region.id); }} disabled={deleteMutation.isPending} className="p-1 text-gray-300 hover:text-red-500 transition-colors disabled:opacity-50">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-              <div className="flex items-center gap-2">
-                <Phone size={12} className="text-gray-400" />
-                <span data-testid={`text-phone-${region.id}`} className="text-gray-700 font-mono text-sm flex-1">{region.phoneNumber}</span>
-                <button data-testid={`btn-copy-phone-${region.id}`} onClick={() => copyPhone(region.phoneNumber)} className="text-gray-400 hover:text-[#f5a623] transition-colors"><Copy size={12} /></button>
-              </div>
-
-              {region.linkedRegionIds && region.linkedRegionIds.length > 0 && (() => {
-                const linkedNames = region.linkedRegionIds
-                  .map(id => regions?.find(r => r.id === id)?.name)
-                  .filter(Boolean) as string[];
-                return linkedNames.length > 0 ? (
-                  <div data-testid={`text-linked-region-${region.id}`} className="flex flex-wrap items-center gap-1.5 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
-                    <span className="text-gray-500 font-mono text-xs tracking-widest uppercase flex items-center gap-1"><MapPin size={10} className="text-[#f5a623]/70" />Linked:</span>
-                    {linkedNames.map(name => (
-                      <span key={name} className="text-[#f5a623] font-mono text-xs font-bold bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">{name}</span>
-                    ))}
-                  </div>
-                ) : null;
-              })()}
-
-              <div className="grid grid-cols-3 gap-3 py-1">
-                {[
-                  { val: region.activeCalls, label: "Live on Line" },
-                  { val: region.voiceProfiles, label: "Voice Profiles" },
-                  { val: region.messagesRelayed, label: "Msgs Relayed" },
-                ].map(({ val, label }) => (
-                  <div key={label}>
-                    <div className={C.statValue + " text-2xl"}>{String(val).padStart(3, "0")}</div>
-                    <div className={C.statLabel + " text-[10px]"}>{label}</div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-1.5 text-gray-400 font-mono text-xs"><Clock size={11} />{region.timezone}</div>
-              {region.description && <div className="text-gray-400 font-mono text-xs">{region.description}</div>}
-
-              <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                <div className="flex gap-2">
-                  <button data-testid={`btn-edit-region-${region.id}`} onClick={() => setDialog(region)} className={C.btnGhost}>
-                    <Pencil size={11} /> Edit
-                  </button>
-                  <button data-testid={`btn-delete-region-${region.id}`} onClick={() => { if (confirm(`Delete region "${region.name}"?`)) deleteMutation.mutate(region.id); }} disabled={deleteMutation.isPending} className={C.btnDanger}>
-                    <Trash2 size={11} /> Delete
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button data-testid={`btn-copy-webhook-${region.id}`} onClick={() => copyWebhook(region.slug)} title={`Copy webhook: /voice/${region.slug}`} className="text-gray-400 hover:text-[#f5a623] transition-colors"><Copy size={13} /></button>
-                  <button data-testid={`btn-toggle-region-${region.id}`} onClick={() => toggleMutation.mutate(region)} disabled={toggleMutation.isPending} title={region.isActive ? "Deactivate region" : "Activate region"} className={`transition-colors ${region.isActive ? "text-emerald-500" : "text-gray-300"} hover:text-[#f5a623] disabled:opacity-50`}>
-                    {region.isActive ? <Eye size={16} /> : <EyeOff size={16} />}
-                  </button>
-                </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-gray-400 font-mono text-xs">
+                Page {safePage} of {totalPages} · {filtered.length} regions
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  data-testid="btn-region-prev"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="px-2.5 py-1.5 text-xs font-mono border border-gray-200 rounded-lg text-gray-500 hover:border-[#f5a623] hover:text-[#f5a623] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Prev
+                </button>
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  const start = Math.max(1, Math.min(safePage - 2, totalPages - 4));
+                  const p = start + i;
+                  return (
+                    <button
+                      key={p}
+                      data-testid={`btn-region-page-${p}`}
+                      onClick={() => setPage(p)}
+                      className={`w-8 h-7 text-xs font-mono rounded-lg border transition-colors ${p === safePage ? "bg-[#f5a623] border-[#f5a623] text-white font-bold" : "border-gray-200 text-gray-500 hover:border-[#f5a623] hover:text-[#f5a623]"}`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+                <button
+                  data-testid="btn-region-next"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={safePage === totalPages}
+                  className="px-2.5 py-1.5 text-xs font-mono border border-gray-200 rounded-lg text-gray-500 hover:border-[#f5a623] hover:text-[#f5a623] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next
+                </button>
               </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );

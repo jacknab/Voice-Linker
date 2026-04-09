@@ -1133,13 +1133,14 @@ export async function registerRoutes(
 
   app.post("/api/regions", async (req, res) => {
     try {
-      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionIds, defaultZipCode } = req.body;
+      const { name, slug, stateAbbreviation, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionIds, defaultZipCode } = req.body;
       if (!name || !slug || !phoneNumber) {
         return res.status(400).json({ message: "name, slug, and phoneNumber are required" });
       }
       const region = await storage.createRegion({
         name: name.trim(),
         slug: slug.trim().toLowerCase(),
+        stateAbbreviation: stateAbbreviation?.trim() || null,
         phoneNumber: phoneNumber.trim(),
         timezone: timezone?.trim() || "America/New_York",
         maxCapacity: maxCapacity ? parseInt(maxCapacity) : 1000,
@@ -1164,10 +1165,11 @@ export async function registerRoutes(
   app.put("/api/regions/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const { name, slug, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionIds, defaultZipCode } = req.body;
+      const { name, slug, stateAbbreviation, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionIds, defaultZipCode } = req.body;
       const region = await storage.updateRegion(id, {
         ...(name !== undefined && { name: name.trim() }),
         ...(slug !== undefined && { slug: slug.trim().toLowerCase() }),
+        ...("stateAbbreviation" in req.body && { stateAbbreviation: stateAbbreviation?.trim() || null }),
         ...(phoneNumber !== undefined && { phoneNumber: phoneNumber.trim() }),
         ...(timezone !== undefined && { timezone: timezone.trim() }),
         ...(maxCapacity !== undefined && { maxCapacity: parseInt(maxCapacity) }),

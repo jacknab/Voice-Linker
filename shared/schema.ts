@@ -7,6 +7,7 @@ export const regions = pgTable("regions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  stateAbbreviation: text("state_abbreviation"),
   phoneNumber: text("phone_number").notNull(),
   timezone: text("timezone").notNull().default("America/New_York"),
   maxCapacity: integer("max_capacity").notNull().default(1000),
