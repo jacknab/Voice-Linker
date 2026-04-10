@@ -1497,6 +1497,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (saved) await storage.setProfileTranscriptionPending(saved.id);
       console.log(`[voice] Profile saved immediately for userId=${user.id} (dur=${recordingDuration}s)`);
 
+      // Automatically play back the greeting so the caller can hear it before the review menu.
+      // This also gives the transcription callback time to come back before they press 3 to accept.
+      twiml.say("Here is what your greeting sounds like.");
+      if (nameRecordingUrl) safePlayRecording(twiml, nameRecordingUrl, req, "");
+      safePlayRecording(twiml, recordingUrl, req, "");
       twiml.redirect("/voice/review-greeting");
     } catch (error) {
       console.error("[voice] /voice/save-profile error:", error);
