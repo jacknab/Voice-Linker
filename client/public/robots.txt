@@ -3,4 +3,7 @@ Allow: /
 Disallow: /api/
 Disallow: /admin
 
+# Crawl-delay for well-behaved bots
+Crawl-delay: 1
+
 Sitemap: https://1663575e-67dd-417d-b119-b0f5a3bbac99-00-11rlpsik6rdym.worf.replit.dev/sitemap.xml

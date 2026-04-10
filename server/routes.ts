@@ -17,7 +17,7 @@ import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
 import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached } from "./settings-cache";
-import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt } from "./seoPageGenerator";
+import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage } from "./seoPageGenerator";
 
 // Ensure uploads directory and category subdirectories exist
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -1214,6 +1214,7 @@ export async function registerRoutes(
       }
       writeSitemap(allRegions, siteUrl);
       writeRobotsTxt(siteUrl);
+      writeRegionsIndexPage(allRegions, siteSettingsData.siteName, siteUrl);
       console.log(`[seo] Rebuilt ${built} SEO pages`);
       res.json({ ok: true, pagesBuilt: built });
     } catch (e) {
