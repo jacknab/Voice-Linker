@@ -1,11 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 import type { Region, SiteSettings } from "@shared/schema";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-export const REGIONS_DIR = path.join(__dirname, "../client/public/regions");
+export const REGIONS_DIR = path.join(process.cwd(), "client/public/regions");
 
 function ensureDir() {
   if (!fs.existsSync(REGIONS_DIR)) fs.mkdirSync(REGIONS_DIR, { recursive: true });
@@ -916,7 +913,7 @@ export function regionPageExists(slug: string): boolean {
 
 // Also write a regions index page listing all active regions
 export function writeRegionsIndexPage(allRegions: Region[], siteName: string, siteUrl: string): void {
-  const publicDir = path.join(__dirname, "../client/public");
+  const publicDir = path.join(process.cwd(), "client/public");
   if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
   const activeRegions = allRegions.filter(r => r.isActive).sort((a, b) => a.name.localeCompare(b.name));
   const today = new Date().toISOString().split("T")[0];
@@ -995,7 +992,7 @@ export function writeRegionsIndexPage(allRegions: Region[], siteName: string, si
 // ── Sitemap + robots ───────────────────────────────────────────────────────
 
 export function writeSitemap(allRegions: Region[], siteUrl: string): void {
-  const publicDir = path.join(__dirname, "../client/public");
+  const publicDir = path.join(process.cwd(), "client/public");
   if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
 
   const activeRegions = allRegions.filter(r => r.isActive);
@@ -1014,7 +1011,7 @@ export function writeSitemap(allRegions: Region[], siteUrl: string): void {
 }
 
 export function writeRobotsTxt(siteUrl: string): void {
-  const publicDir = path.join(__dirname, "../client/public");
+  const publicDir = path.join(process.cwd(), "client/public");
   if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir, { recursive: true });
 
   const content = [
