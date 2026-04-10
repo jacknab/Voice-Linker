@@ -4056,7 +4056,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
           // ── Busted Game hint: remind active players they can press 8 ─────────
           if (engState?.gameStarted && !engState.gameCompleted) {
-            profileGather.say("Press 8 if you think this is an A I voice.");
+            profileGather.say("This is Roger. Press 8 if you think this is an A I voice.");
           }
           twiml.redirect("/voice/main-menu");
         }
@@ -4526,10 +4526,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             await storage.adjustUserCredits(winUser.id, bustResult.bonusSeconds);
             console.log(`[engagement] Bust WIN: userId=${winUser.id} +${bustResult.bonusSeconds}s`);
           }
-          twiml.say("You got it! That was our A I voice. Five bonus minutes have been added to your account. Nice ear.");
+          twiml.say("Roger here. You got it! That was our A I voice. Five bonus minutes have been added to your account. Nice ear.");
           twiml.redirect("/voice/browse-profiles");
         } else if (bustResult.result === "miss") {
-          twiml.say("Nope! That is a real caller. Keep listening — the A I is still out there.");
+          twiml.say("Roger here. Nope! That is a real caller. Keep listening — the A I is still out there.");
           twiml.redirect("/voice/browse-profiles");
         } else {
           // No active game — treat as invalid choice
@@ -4571,7 +4571,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const promptText = rawText ? decodeURIComponent(rawText) : "";
 
       if (promptText) {
-        twiml.say({ voice: "alice" }, promptText);
+        twiml.say({ voice: "alice" }, `Roger here. ${promptText}`);
       }
 
       if (followUp === "start_game" && callSid) {
