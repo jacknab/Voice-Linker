@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog } from "@shared/schema";
+import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -258,6 +258,13 @@ export interface IStorage {
 
   // Mailbox stats
   getMailboxStats(): Promise<{ total: number; byCategory: { category: string | null; count: number }[] }>;
+
+  // SMS Marketing
+  getSmsTemplates(): Promise<SmsTemplate[]>;
+  getSmsTemplate(id: number): Promise<SmsTemplate | undefined>;
+  upsertSmsTemplate(id: number, data: { label?: string; message?: string; sendDay?: number | null; isActive?: boolean }): Promise<SmsTemplate>;
+  markSmsSent(id: number, count: number): Promise<void>;
+  getRealUserPhoneNumbers(): Promise<string[]>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -1925,6 +1932,59 @@ export class DatabaseStorage implements IStorage {
       LIMIT ${limitVal}
     `);
     return result.rows as (ModerationLog & { targetPhone: string })[];
+  }
+
+  // ── SMS Marketing ───────────────────────────────────────────────────────────
+
+  async getSmsTemplates(): Promise<SmsTemplate[]> {
+    // Ensure both rows exist (seed on first access)
+    const existing = await db.select().from(smsTemplates).orderBy(smsTemplates.id);
+    const ids = existing.map(t => t.id);
+    for (const id of [1, 2]) {
+      if (!ids.includes(id)) {
+        await db.insert(smsTemplates).values({
+          id,
+          label: `Template #${id}`,
+          message: "",
+          sendDay: null,
+          isActive: false,
+          lastSentAt: null,
+          lastSentCount: 0,
+        });
+      }
+    }
+    return db.select().from(smsTemplates).orderBy(smsTemplates.id);
+  }
+
+  async getSmsTemplate(id: number): Promise<SmsTemplate | undefined> {
+    const [t] = await db.select().from(smsTemplates).where(eq(smsTemplates.id, id));
+    return t;
+  }
+
+  async upsertSmsTemplate(id: number, data: { label?: string; message?: string; sendDay?: number | null; isActive?: boolean }): Promise<SmsTemplate> {
+    const [t] = await db
+      .insert(smsTemplates)
+      .values({ id, label: data.label ?? `Template #${id}`, message: data.message ?? "", sendDay: data.sendDay ?? null, isActive: data.isActive ?? false })
+      .onConflictDoUpdate({
+        target: smsTemplates.id,
+        set: { ...data, updatedAt: new Date() },
+      })
+      .returning();
+    return t;
+  }
+
+  async markSmsSent(id: number, count: number): Promise<void> {
+    await db.update(smsTemplates)
+      .set({ lastSentAt: new Date(), lastSentCount: count, updatedAt: new Date() })
+      .where(eq(smsTemplates.id, id));
+  }
+
+  async getRealUserPhoneNumbers(): Promise<string[]> {
+    const rows = await db
+      .select({ phoneNumber: users.phoneNumber })
+      .from(users)
+      .where(notLike(users.phoneNumber, `${VIRTUAL_PREFIX}%`));
+    return rows.map(r => r.phoneNumber).filter(Boolean) as string[];
   }
 }
 

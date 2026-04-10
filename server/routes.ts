@@ -1045,6 +1045,140 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Admin: SMS Marketing ─────────────────────────────────────────────────
+
+  /** Returns the circular shortest distance between two days (1-30) */
+  function smsDayDistance(a: number, b: number): number {
+    const diff = Math.abs(a - b);
+    return Math.min(diff, 30 - diff);
+  }
+
+  app.get("/api/admin/sms-templates", async (_req, res) => {
+    try {
+      const templates = await storage.getSmsTemplates();
+      res.json(templates);
+    } catch (e) {
+      console.error("[admin/sms] GET error:", e);
+      res.status(500).json({ message: "Failed to fetch SMS templates" });
+    }
+  });
+
+  app.put("/api/admin/sms-templates/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (id !== 1 && id !== 2) return res.status(400).json({ message: "Invalid template id." });
+
+      const { label, message, sendDay, isActive } = req.body as {
+        label?: string;
+        message?: string;
+        sendDay?: number | null;
+        isActive?: boolean;
+      };
+
+      // Fetch current state
+      const all = await storage.getSmsTemplates();
+      const current = all.find(t => t.id === id);
+      const other = all.find(t => t.id !== id);
+
+      if (!current) return res.status(404).json({ message: "Template not found." });
+
+      // If sendDay is being changed, enforce the lock rule
+      if (sendDay !== undefined && sendDay !== current.sendDay) {
+        if (current.lastSentAt !== null) {
+          return res.status(400).json({
+            message: "This template's send day is locked because it has already been sent. You cannot change the day after the first send."
+          });
+        }
+
+        // Validate the new day value
+        if (sendDay !== null && (sendDay < 1 || sendDay > 30)) {
+          return res.status(400).json({ message: "Send day must be between 1 and 30." });
+        }
+
+        // Enforce 10-day spacing against the other template's send day
+        if (sendDay !== null && other?.sendDay !== null && other?.sendDay !== undefined) {
+          const dist = smsDayDistance(sendDay, other.sendDay);
+          if (dist < 10) {
+            return res.status(400).json({
+              message: `Send days must be at least 10 days apart. Template #${other.id} is set to day ${other.sendDay} — your chosen day ${sendDay} is only ${dist} day(s) away.`
+            });
+          }
+        }
+
+        // Prevent same day as other template
+        if (sendDay !== null && other?.sendDay === sendDay) {
+          return res.status(400).json({
+            message: `Day ${sendDay} is already used by Template #${other.id}. Each template must use a different day.`
+          });
+        }
+      }
+
+      const updated = await storage.upsertSmsTemplate(id, {
+        ...(label !== undefined && { label }),
+        ...(message !== undefined && { message }),
+        ...(sendDay !== undefined && { sendDay }),
+        ...(isActive !== undefined && { isActive }),
+      });
+      res.json(updated);
+    } catch (e) {
+      console.error("[admin/sms] PUT error:", e);
+      res.status(500).json({ message: "Failed to update SMS template" });
+    }
+  });
+
+  app.post("/api/admin/sms-templates/:id/send-now", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      if (id !== 1 && id !== 2) return res.status(400).json({ message: "Invalid template id." });
+
+      const template = await storage.getSmsTemplate(id);
+      if (!template) return res.status(404).json({ message: "Template not found." });
+      if (!template.message.trim()) return res.status(400).json({ message: "Template message is empty." });
+
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      if (!accountSid || !authToken) {
+        return res.status(503).json({ message: "Twilio credentials not configured." });
+      }
+
+      // Determine sender number: use fallback phone from site settings
+      const siteSettings = await storage.getSiteSettings();
+      const fromNumber = siteSettings.fallbackPhoneNumber;
+      if (!fromNumber) {
+        return res.status(503).json({ message: "No sender phone number configured in site settings." });
+      }
+
+      const phoneNumbers = await storage.getRealUserPhoneNumbers();
+      if (phoneNumbers.length === 0) {
+        return res.status(400).json({ message: "No phone numbers in the database to send to." });
+      }
+
+      const client = twilio(accountSid, authToken);
+      let sent = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (const to of phoneNumbers) {
+        try {
+          await client.messages.create({ from: fromNumber, to, body: template.message });
+          sent++;
+        } catch (err: any) {
+          failed++;
+          if (errors.length < 5) errors.push(`${to}: ${err.message}`);
+        }
+        // Small delay to stay under Twilio rate limits (1 msg/s per number)
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      await storage.markSmsSent(id, sent);
+      console.log(`[sms] Template #${id} sent: ${sent} delivered, ${failed} failed`);
+      res.json({ ok: true, sent, failed, errors });
+    } catch (e) {
+      console.error("[admin/sms] send-now error:", e);
+      res.status(500).json({ message: "Failed to send SMS" });
+    }
+  });
+
   // ─── Admin: Membership Settings ───────────────────────────────────────────
 
   // ─── Site Settings (public read, admin write) ─────────────────────────────

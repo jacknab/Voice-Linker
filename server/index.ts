@@ -148,6 +148,71 @@ app.use((req, res, next) => {
 
   scheduleNightlyDeduction();
 
+  // ── SMS Marketing Scheduler ────────────────────────────────────────────────
+  // Fires at 10:00 AM server time daily; sends any active template whose
+  // sendDay matches today's day-of-month.
+  async function runSmsDailyCheck() {
+    try {
+      const today = new Date().getDate();
+      const templates = await storage.getSmsTemplates();
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken  = process.env.TWILIO_AUTH_TOKEN;
+      if (!accountSid || !authToken) return;
+
+      const twilioLib = await import("twilio");
+      const client = twilioLib.default(accountSid, authToken);
+      const siteSettings = await storage.getSiteSettings();
+      const fromNumber = siteSettings.fallbackPhoneNumber;
+      if (!fromNumber) return;
+
+      for (const tpl of templates) {
+        if (!tpl.isActive || tpl.sendDay !== today || !tpl.message.trim()) continue;
+
+        if (tpl.lastSentAt) {
+          const sentDate = new Date(tpl.lastSentAt);
+          const now = new Date();
+          if (sentDate.getDate() === today && sentDate.getMonth() === now.getMonth() && sentDate.getFullYear() === now.getFullYear()) {
+            log(`SMS scheduler: Template #${tpl.id} already sent today — skipping`, "sms");
+            continue;
+          }
+        }
+
+        log(`SMS scheduler: Sending Template #${tpl.id} (day ${tpl.sendDay})…`, "sms");
+        const phoneNumbers = await storage.getRealUserPhoneNumbers();
+        let sent = 0, failed = 0;
+        for (const to of phoneNumbers) {
+          try {
+            await client.messages.create({ from: fromNumber, to, body: tpl.message });
+            sent++;
+          } catch (err: any) {
+            failed++;
+            console.error(`[sms] Failed to send to ${to}:`, err.message);
+          }
+          await new Promise(r => setTimeout(r, 50));
+        }
+        await storage.markSmsSent(tpl.id, sent);
+        log(`SMS scheduler: Template #${tpl.id} done — ${sent} sent, ${failed} failed`, "sms");
+      }
+    } catch (err) {
+      console.error("[sms] Daily check error:", err);
+    }
+  }
+
+  function scheduleSmsCheck() {
+    const now = new Date();
+    const next = new Date();
+    next.setHours(10, 0, 0, 0);
+    if (now >= next) next.setDate(next.getDate() + 1);
+    const delay = next.getTime() - now.getTime();
+    log(`SMS scheduler: next check in ${Math.round(delay / 60000)} min`, "sms");
+    setTimeout(async () => {
+      await runSmsDailyCheck();
+      scheduleSmsCheck();
+    }, delay);
+  }
+
+  scheduleSmsCheck();
+
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

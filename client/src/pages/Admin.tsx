@@ -10,7 +10,7 @@ import {
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ChevronRight, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
-  BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search,
+  BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import {
@@ -48,7 +48,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log";
+type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing";
 
 interface FlaggedItem {
   id: string;
@@ -5554,6 +5554,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "analytics",      label: "Analytics",         icon: <BarChart2 size={15} />,  dividerBefore: true },
   { id: "audit-log",      label: "Audit Log",         icon: <TrendingUp size={15} /> },
   { id: "mod-log",        label: "Moderation Log",    icon: <ShieldAlert size={15} /> },
+  { id: "sms-marketing",  label: "SMS Marketing",     icon: <Send size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",     icon: <PhoneCall size={15} /> },
   { id: "ivr-flow",       label: "IVR Flow Map",      icon: <GitBranch size={15} /> },
   { id: "phone-numbers",  label: "Phone Numbers",     icon: <Phone size={15} /> },
@@ -5562,6 +5563,221 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "zip-codes",      label: "Zip Codes",         icon: <MapPin size={15} /> },
   { id: "site-settings",  label: "Website Settings",  icon: <Settings size={15} /> },
 ];
+
+// ── SmsMarketingTab ───────────────────────────────────────────────────────────
+interface SmsTemplateData {
+  id: number;
+  label: string;
+  message: string;
+  sendDay: number | null;
+  isActive: boolean;
+  lastSentAt: string | null;
+  lastSentCount: number;
+  updatedAt: string | null;
+}
+
+function SmsTemplateCard({ template, otherSendDay, onSaved }: {
+  template: SmsTemplateData;
+  otherSendDay: number | null;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [label, setLabel] = useState(template.label);
+  const [message, setMessage] = useState(template.message);
+  const [sendDay, setSendDay] = useState<string>(template.sendDay !== null ? String(template.sendDay) : "");
+  const [isActive, setIsActive] = useState(template.isActive);
+  const [sending, setSending] = useState(false);
+
+  const dayLocked = template.lastSentAt !== null;
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = { label, message, isActive };
+      if (!dayLocked) {
+        body.sendDay = sendDay === "" ? null : parseInt(sendDay, 10);
+      }
+      await apiRequest("PUT", `/api/admin/sms-templates/${template.id}`, body);
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: `Template #${template.id} updated.` });
+      onSaved();
+    },
+    onError: (err: any) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  async function handleSendNow() {
+    if (!confirm(`Send Template #${template.id} to all real phone numbers now?`)) return;
+    setSending(true);
+    try {
+      const res = await apiRequest("POST", `/api/admin/sms-templates/${template.id}/send-now`);
+      const data = await res.json();
+      toast({
+        title: "SMS Sent",
+        description: `${data.sent} delivered, ${data.failed} failed.`,
+      });
+      onSaved();
+    } catch (err: any) {
+      toast({ title: "Send failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const charCount = message.length;
+  const segmentCount = charCount === 0 ? 0 : Math.ceil(charCount / 160);
+
+  return (
+    <div data-testid={`sms-template-card-${template.id}`} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-5 flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <MessageSquare size={16} className="text-violet-500" />
+          <span className="font-semibold text-sm">Template #{template.id}</span>
+          {template.lastSentAt && (
+            <span className="text-xs text-zinc-400 ml-2">
+              Last sent {new Date(template.lastSentAt).toLocaleDateString()} — {template.lastSentCount} recipients
+            </span>
+          )}
+        </div>
+        {/* Active toggle */}
+        <button
+          data-testid={`toggle-active-${template.id}`}
+          onClick={() => setIsActive(!isActive)}
+          className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+            isActive ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400"
+          }`}
+        >
+          {isActive ? <CheckCircle size={12} /> : <XCircle size={12} />}
+          {isActive ? "Active" : "Inactive"}
+        </button>
+      </div>
+
+      {/* Label */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Label (internal)</label>
+        <input
+          data-testid={`input-label-${template.id}`}
+          value={label}
+          onChange={e => setLabel(e.target.value)}
+          className="text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-violet-400"
+          placeholder="e.g. Monthly promo"
+        />
+      </div>
+
+      {/* Message */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
+          Message <span className="text-zinc-400 normal-case font-normal">({charCount} chars · {segmentCount} SMS segment{segmentCount !== 1 ? "s" : ""})</span>
+        </label>
+        <textarea
+          data-testid={`input-message-${template.id}`}
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          rows={4}
+          className="text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"
+          placeholder="Enter the SMS message to send to all members…"
+        />
+      </div>
+
+      {/* Send Day */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
+          Send Day (1–30)
+          {dayLocked && <span className="ml-2 text-amber-500 font-normal normal-case">— locked after first send</span>}
+        </label>
+        {otherSendDay !== null && !dayLocked && (
+          <p className="text-xs text-zinc-400">Other template is on day {otherSendDay}. Choose a day at least 10 days away (circular).</p>
+        )}
+        <input
+          data-testid={`input-send-day-${template.id}`}
+          type="number"
+          min={1}
+          max={30}
+          value={sendDay}
+          onChange={e => setSendDay(e.target.value)}
+          disabled={dayLocked}
+          className="w-28 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-violet-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          placeholder="e.g. 15"
+        />
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          data-testid={`btn-save-template-${template.id}`}
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+          className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {saveMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          Save
+        </button>
+        <button
+          data-testid={`btn-send-now-${template.id}`}
+          onClick={handleSendNow}
+          disabled={sending || !message.trim()}
+          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {sending ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+          Send Now
+        </button>
+        <span className="text-xs text-zinc-400 ml-auto">Sends to all real (non-virtual) phone numbers</span>
+      </div>
+    </div>
+  );
+}
+
+function SmsMarketingTab() {
+  const { data: templates, isLoading, refetch } = useQuery<SmsTemplateData[]>({
+    queryKey: ["/api/admin/sms-templates"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-zinc-400 py-10 justify-center">
+        <Loader2 size={18} className="animate-spin" /> Loading SMS templates…
+      </div>
+    );
+  }
+
+  const t1 = templates?.find(t => t.id === 1);
+  const t2 = templates?.find(t => t.id === 2);
+
+  return (
+    <div className="max-w-2xl mx-auto flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">SMS Marketing</h2>
+          <p className="text-sm text-zinc-500 mt-0.5">
+            Two templates, each sent once per month on its configured day. Days must be at least 10 apart (circular).
+          </p>
+        </div>
+        <button
+          data-testid="btn-refresh-sms"
+          onClick={() => refetch()}
+          className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+        >
+          <RefreshCw size={16} />
+        </button>
+      </div>
+
+      {/* Info callout */}
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-4 py-3 text-sm text-amber-700 dark:text-amber-400 flex gap-2">
+        <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+        <div>
+          <strong>Scheduling rules:</strong> Once a template's send day has been used (it has been sent at least once), the day is permanently locked and cannot be changed. Both templates must use different days that are at least <strong>10 days apart</strong> on a 30-day circular calendar.
+        </div>
+      </div>
+
+      {/* Template cards */}
+      {t1 && <SmsTemplateCard template={t1} otherSendDay={t2?.sendDay ?? null} onSaved={() => refetch()} />}
+      {t2 && <SmsTemplateCard template={t2} otherSendDay={t1?.sendDay ?? null} onSaved={() => refetch()} />}
+    </div>
+  );
+}
 
 // ── Section-level action buttons ──────────────────────────────────────────────
 function SectionActions({ activeTab, onAddProfile, onAddRegion, onSaveMembership, isSavingMembership }: {
@@ -5770,6 +5986,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "phone-testing"  && <IVRTesterTab />}
           {activeTab === "ivr-flow"       && <IvrFlowMap />}
           {activeTab === "site-settings"  && <WebsiteSettingsTab />}
+          {activeTab === "sms-marketing"  && <SmsMarketingTab />}
         </div>
       </div>
     </div>

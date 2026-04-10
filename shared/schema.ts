@@ -452,3 +452,21 @@ export const moderationLogs = pgTable("moderation_logs", {
 export const insertModerationLogSchema = createInsertSchema(moderationLogs).omit({ id: true, createdAt: true });
 export type ModerationLog = typeof moderationLogs.$inferSelect;
 export type InsertModerationLog = z.infer<typeof insertModerationLogSchema>;
+
+// ── SMS Marketing Templates ───────────────────────────────────────────────────
+// Exactly 2 templates (id = 1 or 2). Send day is 1–30 (day of month).
+// Constraints enforced in the backend:
+//   - Both templates must have send days at least 10 days apart (circular)
+//   - Once a template has been sent, its send day is locked
+export const smsTemplates = pgTable("sms_templates", {
+  id: integer("id").primaryKey(), // 1 or 2
+  label: text("label").notNull().default(""),
+  message: text("message").notNull().default(""),
+  sendDay: integer("send_day"),   // 1–30, null = not yet configured
+  isActive: boolean("is_active").notNull().default(false),
+  lastSentAt: timestamp("last_sent_at"),
+  lastSentCount: integer("last_sent_count").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type SmsTemplate = typeof smsTemplates.$inferSelect;
