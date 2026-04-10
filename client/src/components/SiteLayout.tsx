@@ -70,6 +70,14 @@ export function SiteNav({ siteName, onMenuToggle, mobileOpen }: {
             Buy Time
           </Link>
           <div style={{ width: "1px", height: "18px", background: "#222" }} />
+          <Link href="/faq"
+            style={{ color: "#ccc", textDecoration: "none", transition: "color 0.15s" }}
+            onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
+            onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
+            data-testid="nav-faq">
+            FAQ
+          </Link>
+          <div style={{ width: "1px", height: "18px", background: "#222" }} />
           <Link href="/login"
             style={{ color: "#ccc", textDecoration: "none", transition: "color 0.15s" }}
             onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}

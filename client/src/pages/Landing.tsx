@@ -129,18 +129,21 @@ export default function Landing() {
 
           {/* Right: Nav links */}
           <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-            {[
-              { label: "Buy Time", href: "/membership" },
-            ].map(l => (
-              <Link key={l.label} href={l.href}
-                style={{ color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, transition: "color 0.15s" }}
-                onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
-                onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
-                data-testid={`nav-${l.label.toLowerCase().replace(/\s+/g, "-")}`}
-              >
-                {l.label}
-              </Link>
-            ))}
+            <Link href="/membership"
+              style={{ color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, transition: "color 0.15s" }}
+              onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
+              onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
+              data-testid="nav-buy-time">
+              Buy Time
+            </Link>
+            <div style={{ width: "1px", height: "18px", background: "#222" }} />
+            <Link href="/faq"
+              style={{ color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, transition: "color 0.15s" }}
+              onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
+              onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
+              data-testid="nav-faq">
+              FAQ
+            </Link>
             <div style={{ width: "1px", height: "18px", background: "#222" }} />
             <Link href="/login"
               style={{ color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, transition: "color 0.15s" }}
@@ -171,6 +174,10 @@ export default function Landing() {
             <Link href="/membership"
               style={{ display: "block", width: "100%", textAlign: "left", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
               Buy Time
+            </Link>
+            <Link href="/faq"
+              style={{ display: "block", width: "100%", textAlign: "left", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
+              FAQ
             </Link>
             <Link href="/dashboard"
               style={{ display: "block", width: "100%", textAlign: "left", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", padding: "0.5rem 0", borderBottom: "1px solid #1e1e1e" }}>
