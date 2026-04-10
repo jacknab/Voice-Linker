@@ -1,0 +1,134 @@
+You are continuing development of an AI telephone chat system using a single character: Roger.
+
+Now implement a ROGER MOMENT DESIGN SYSTEM that determines *when* Roger should speak for maximum user engagement and minimal annoyance.
+
+---
+
+# CORE GOAL
+
+Roger must only speak at emotionally meaningful or behavior-shifting moments.
+
+Roger is NOT a timer-based bot and NOT a constant commentator.
+
+Roger is a “moment-based personality”.
+
+---
+
+# STEP 1: DEFINE “MOMENTS”
+
+Create a system that categorizes user behavior into MOMENT TYPES:
+
+### 1. BROWSING MOMENT
+
+* user rapidly skips or scrolls profiles
+* NO Roger speech unless high boredom threshold is reached
+
+### 2. HESITATION MOMENT
+
+* user pauses for 3–10 seconds
+* user lingers without action
+  → HIGH PRIORITY trigger window for Roger
+
+### 3. DECISION MOMENT
+
+* user hovers or repeatedly views same profile
+  → Roger may gently influence or tease
+
+### 4. STAGNATION MOMENT
+
+* no input for 20–60 seconds
+  → Roger may re-engage
+
+### 5. GAME OPPORTUNITY MOMENT
+
+* user behavior suggests boredom or disengagement
+  → Roger may introduce mini-game (if available)
+
+### 6. HIGH ENGAGEMENT MOMENT
+
+* user actively interacting (messages, inputs, selections)
+  → Roger should NOT interrupt unless special event triggers
+
+---
+
+# STEP 2: MOMENT SCORING ENGINE
+
+Implement:
+
+calculateRogerMomentScore(sessionState)
+
+Inputs:
+
+* attention_drain_score
+* time_since_last_action
+* time_since_last_roger
+* engagement_streak
+* interaction_cycle_stage
+
+Output:
+
+* moment_type
+* moment_score (0–100)
+
+---
+
+# STEP 3: SPEECH DECISION RULE
+
+Roger can only speak if:
+
+* moment_score >= threshold (e.g. 70)
+  AND
+* speech budget allows (from Roger Speech Budget System)
+  AND
+* cooldown rules are satisfied
+
+If not:
+→ Roger stays silent
+
+---
+
+# STEP 4: MOMENT PRIORITY ORDER
+
+If multiple moments are detected, priority is:
+
+1. HESITATION MOMENT (highest conversion value)
+2. STAGNATION MOMENT
+3. GAME OPPORTUNITY MOMENT
+4. DECISION MOMENT
+5. BROWSING MOMENT
+6. HIGH ENGAGEMENT MOMENT (lowest priority for interruption)
+
+---
+
+# STEP 5: ROGER OUTPUT ALIGNMENT
+
+When Roger speaks, the selected audio/text must match the moment type:
+
+* HESITATION → teasing / pressure / engagement push
+* STAGNATION → re-engagement / comedic interruption
+* GAME MOMENT → game introduction
+* DECISION → subtle influence / humor
+* BROWSING → rare commentary only
+* HIGH ENGAGEMENT → minimal or no interruption
+
+---
+
+# STEP 6: INTEGRATION RULE
+
+Moment system overrides prompt selection randomness.
+
+Even if a prompt is valid:
+→ it must match the detected moment type OR be rejected
+
+---
+
+# OUTPUT REQUIREMENTS
+
+1. Implement moment classification system
+2. Implement calculateRogerMomentScore()
+3. Define moment detection logic clearly
+4. Integrate with speech budget system
+5. Show examples of each moment triggering Roger
+6. Ensure Roger feels timed, intentional, and non-intrusive
+
+Roger is a moment-aware host, not a reactive bot.
