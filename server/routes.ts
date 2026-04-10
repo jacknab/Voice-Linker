@@ -17,7 +17,7 @@ import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
 import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached } from "./settings-cache";
-import { PROMPT_LIBRARY } from "./engagementEngine";
+import { PROMPT_LIBRARY, ROGER_V3_TEXTS } from "./engagementEngine";
 import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage } from "./seoPageGenerator";
 
 // Ensure uploads directory and category subdirectories exist
@@ -1012,11 +1012,14 @@ export async function registerRoutes(
         const audioFilename = `roger_${p.id}.mp3`;
         const audioPath = path.join(UPLOADS_DIR, audioFilename);
         const hasAudio = fs.existsSync(audioPath);
+        const v3Text = ROGER_V3_TEXTS[p.id] ?? null;
         return {
           id: p.id,
           category: p.category,
           tone: p.tone,
           lineText: p.lineText,
+          v3Text,
+          usesV3: v3Text !== null,
           followUpAction: p.followUpAction ?? null,
           cooldownSeconds: p.cooldownSeconds,
           requiredMoods: p.trigger.requiredMoods ?? [],
@@ -1058,11 +1061,19 @@ export async function registerRoutes(
       if (!id?.trim()) return res.status(400).json({ message: "id is required" });
       if (!text?.trim()) return res.status(400).json({ message: "text is required" });
 
-      const filename = `roger_${id.trim().replace(/[^a-zA-Z0-9_\-]/g, "_")}.mp3`;
-      const voiceId  = getVoiceIdForRoger();
-      await generateTTS(text.trim(), filename, undefined, voiceId);
-      logAudit("audio_generated", { targetType: "audio", targetLabel: filename, detail: { voice: "roger" } as unknown as Record<string, unknown> });
-      res.json({ filename, url: `/uploads/${filename}` });
+      const cleanId   = id.trim();
+      const filename  = `roger_${cleanId.replace(/[^a-zA-Z0-9_\-]/g, "_")}.mp3`;
+      const voiceId   = getVoiceIdForRoger();
+
+      // Use the v3 emotion-tagged text + eleven_v3 model when available;
+      // otherwise fall back to the provided plain text + turbo model.
+      const v3Text  = ROGER_V3_TEXTS[cleanId];
+      const finalText  = v3Text ?? text.trim();
+      const modelId    = v3Text ? "eleven_v3" : "eleven_turbo_v2";
+
+      await generateTTS(finalText, filename, undefined, voiceId, modelId);
+      logAudit("audio_generated", { targetType: "audio", targetLabel: filename, detail: { voice: "roger", model: modelId } as unknown as Record<string, unknown> });
+      res.json({ filename, url: `/uploads/${filename}`, model: modelId, usesV3: !!v3Text });
     } catch (e: any) {
       console.error("[admin/roger/generate] failed:", e);
       res.status(500).json({ message: e?.message ?? "Roger TTS generation failed" });

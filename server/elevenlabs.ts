@@ -19,9 +19,20 @@ export function getVoiceIdForRoger(): string {
   return process.env.ELEVENLABS_VOICE_ID_ROGER || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
 }
 
-export async function generateTTS(text: string, outputFilename: string, subfolder?: string, voiceIdOverride?: string): Promise<string> {
+export async function generateTTS(
+  text: string,
+  outputFilename: string,
+  subfolder?: string,
+  voiceIdOverride?: string,
+  modelId?: string
+): Promise<string> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
   const voiceId = voiceIdOverride ?? getVoiceIdForFolder(subfolder ?? null);
+  const model = modelId ?? "eleven_turbo_v2";
+
+  // eleven_v3 benefits from lower stability to unlock full emotional range
+  const stability       = model === "eleven_v3" ? 0.35 : 0.5;
+  const similarityBoost = model === "eleven_v3" ? 0.80 : 0.75;
 
   if (!apiKey) {
     throw new Error("ELEVENLABS_API_KEY is not configured");
@@ -38,10 +49,10 @@ export async function generateTTS(text: string, outputFilename: string, subfolde
       },
       body: JSON.stringify({
         text,
-        model_id: "eleven_turbo_v2",
+        model_id: model,
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
+          stability,
+          similarity_boost: similarityBoost,
         },
       }),
     }

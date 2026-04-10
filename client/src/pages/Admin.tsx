@@ -968,6 +968,8 @@ interface RogerPromptEntry {
   category: string;
   tone: string;
   lineText: string;
+  v3Text: string | null;
+  usesV3: boolean;
   followUpAction: string | null;
   cooldownSeconds: number;
   requiredMoods: string[];
@@ -997,7 +999,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 function RogerSubTab() {
   const { toast } = useToast();
-  const [moodFilter, setMoodFilter] = useState<"all" | "base" | "normal" | "petty" | "activated" | "chaos">("all");
+  const [moodFilter, setMoodFilter] = useState<"all" | "base" | "normal" | "petty" | "activated" | "chaos" | "v3">("all");
   const [searchText, setSearchText] = useState("");
   const [generating, setGenerating] = useState<string | null>(null);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; label: string } | null>(null);
@@ -1093,6 +1095,7 @@ function RogerSubTab() {
 
   const moodFilteredPrompts = prompts.filter(p => {
     if (moodFilter === "base")      return p.requiredMoods.length === 0;
+    if (moodFilter === "v3")        return p.usesV3;
     if (moodFilter !== "all")       return p.requiredMoods.includes(moodFilter);
     return true;
   });
@@ -1101,10 +1104,12 @@ function RogerSubTab() {
     !searchText ||
     p.id.toLowerCase().includes(searchText.toLowerCase()) ||
     p.lineText.toLowerCase().includes(searchText.toLowerCase()) ||
+    (p.v3Text ?? "").toLowerCase().includes(searchText.toLowerCase()) ||
     p.category.toLowerCase().includes(searchText.toLowerCase())
   );
 
   const generated = prompts.filter(p => p.audioUrl).length;
+  const v3Count   = prompts.filter(p => p.usesV3).length;
 
   const MOOD_TABS = [
     { id: "all",       label: "All",       count: prompts.length },
@@ -1113,6 +1118,7 @@ function RogerSubTab() {
     { id: "petty",     label: "Petty",     count: prompts.filter(p => p.requiredMoods.includes("petty")).length },
     { id: "activated", label: "Activated", count: prompts.filter(p => p.requiredMoods.includes("activated")).length },
     { id: "chaos",     label: "Chaos",     count: prompts.filter(p => p.requiredMoods.includes("chaos")).length },
+    { id: "v3",        label: "v3 ✦",      count: v3Count },
   ] as const;
 
   return (
@@ -1142,6 +1148,10 @@ function RogerSubTab() {
           <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[80px]"}>
             <div className="font-mono text-xl font-bold text-amber-600">{prompts.length - generated}</div>
             <div className={C.label}>Missing</div>
+          </div>
+          <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[80px] border-violet-200"}>
+            <div className="font-mono text-xl font-bold text-violet-600">{v3Count}</div>
+            <div className={C.label}>v3 ✦</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1239,6 +1249,15 @@ function RogerSubTab() {
                     </td>
                     <td className={C.td + " align-top"}>
                       <div className="text-gray-700 font-mono text-[11px] leading-relaxed">{entry.lineText}</div>
+                      {entry.usesV3 && entry.v3Text && (
+                        <div className="mt-1.5 rounded border border-violet-200 bg-violet-50 px-2 py-1.5">
+                          <div className="flex items-center gap-1 mb-1">
+                            <span className="px-1 py-0.5 rounded bg-violet-600 text-white text-[8px] font-bold tracking-wider">v3 ✦</span>
+                            <span className="text-[9px] text-violet-500 font-mono">eleven_v3 · emotional delivery</span>
+                          </div>
+                          <div className="text-violet-800 font-mono text-[11px] leading-relaxed italic">{entry.v3Text}</div>
+                        </div>
+                      )}
                     </td>
                     <td className={C.td + " align-top"}>
                       {entry.requiredMoods.length > 0 ? (

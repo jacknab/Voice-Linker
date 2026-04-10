@@ -1254,3 +1254,83 @@ export function processBust(
   s.gameBustMissed = true;
   return { result: "miss", bonusSeconds: 0 };
 }
+
+// ─── ElevenLabs v3 Emotion-Tagged Texts ──────────────────────────────────────
+// Prompts listed here will be generated using the `eleven_v3` model with
+// emotion audio-tags instead of plain delivery.  The emotion text is ONLY used
+// for pre-generation; the plain lineText remains the IVR TTS fallback.
+export const ROGER_V3_TEXTS: Record<string, string> = {
+  // BASE — PICKY
+  picky_01: "[chuckles] Wow. Still browsing? You might officially be the most selective man on the line tonight. [playfully] Honestly... we love the standards.",
+  picky_02: "[sarcastically] You have skipped more guys tonight than a DJ skips bad tracks. [curious] What exactly are you looking for? [quietly] Asking for a friend.",
+  picky_04: "[laughs] Twenty skips. You have set a new record. We are genuinely impressed. [sighs] And also a little worried about you. Send someone a message.",
+  picky_05: "[curious] You have been at this a while and nobody has caught your ear yet. [mischievously] Or... are you just nervous to reach out first?",
+
+  // BASE — FLIRTY
+  flirty_01: "[softly] You are making me blush just watching you browse. [warmly] Somebody out here really wants to hear from you tonight.",
+  flirty_02: "[whispers] Between you and me? Some of these guys have been waiting a long time for someone exactly like you to send them a message.",
+  flirty_03: "[mischievously] Mmm. You clearly have taste. Not everyone holds out this long. [whispers] The right voice is closer than you think.",
+  flirty_04: "[playfully] A little picky tonight, are we? [warmly] That is actually kind of attractive. Do not let it stop you from saying hello.",
+
+  // BASE — DOMINANT
+  dominant_01: "[firmly] Stop. Take a breath. Pick one and send a message. [encouraging] You can absolutely do this.",
+  dominant_02: "[sighs] I am stepping in. [firmly] The very next caller you hear — send him a message. No more skipping. You have earned this.",
+  dominant_03: "[commanding] You have been in charge long enough. Now let someone else have a chance. Press 1 and send that message.",
+
+  // BASE — IDLE
+  idle_01: "[quietly] Hey. Still there? [curious] The guys on the line are wondering about you.",
+  idle_02: "[laughs softly] Did you fall asleep? No judgment. But there is someone on this line who would love to hear from you tonight.",
+
+  // BASE — REENGAGEMENT
+  reengagement_01: "[warmly] Hey, you have been here a while. [encouraging] Have you tried sending a message yet? It takes two seconds — and the reply might surprise you.",
+  reengagement_02: "[playfully] You are one of tonight's most dedicated browsers. [encouraging] Do not let that go to waste — one message could change your whole evening.",
+  reengagement_04: "[warmly] You have put in the time. You deserve a connection tonight. [softly] Someone out here is waiting for exactly your energy.",
+
+  // BASE — REWARD
+  reward_01: "[warmly] Look at you — already making connections. [cheerfully] That is exactly what this is all about.",
+  reward_02: "[excited] Two messages already? You are absolutely on fire tonight. Keep it up.",
+  reward_03: "[cheerfully] Three messages sent. You are the most active person on the line right now. [warmly] Somebody is going to be very happy tonight.",
+
+  // NORMAL MOOD
+  normal_01: "[warmly] Take your time. I am not going anywhere. [quietly] The right voice will catch your ear when you least expect it.",
+  normal_03: "[softly] It is the quiet ones that always have the most to say. [encouraging] Do not hold back tonight.",
+  normal_05: "[quietly] Still with me? Good. [warmly] Just keep listening. The right one might be next.",
+  normal_11: "[softly] Patience like yours is rare. [warmly] So is the connection waiting for you at the end of it. Keep going.",
+  normal_12: "[sighs] You went quiet on me. I get it. [warmly] Some nights you just want to listen. But a message costs nothing.",
+
+  // PETTY MOOD
+  petty_01: "[sighs][sarcastically] Damn. You are picky tonight, huh?",
+  petty_02: "[chuckles][deadpan] Another one bites the dust. [sarcastically] You sure know what you do NOT want. That is half the battle, I guess.",
+  petty_03: "[laughs] You have turned down more guys tonight than most people meet in a year. [deadpan] I respect it, honestly.",
+  petty_04: "[flatly] I am not judging. [laughs] Actually... I might be judging a little. Just a little.",
+  petty_05: "[sarcastically] At this rate we are going to run out of guys before you run out of opinions. [sighs] You might want to lower the bar just slightly.",
+  petty_06: "[sighs] You keep passing on these guys but you will not reach out to any of them either. [deadpan] I see exactly what is happening here.",
+  petty_07: "[deadpan] Okay at this point... you are just being difficult.",
+  petty_08: "[sarcastically] You know what? Fine. Keep skipping. [flatly] I will be here. All night if I have to.",
+  petty_09: "[laughs] You have ghosted more guys tonight than most apps see in a week.",
+  petty_10: "[sighs] I am running out of new guys to show you. [deadpan] Not literally. But almost.",
+  petty_11: "[deadpan] Let us be real. [sighs] You do not even know what you are looking for anymore.",
+
+  // CYCLE STAGE — TENSION
+  cycle_tension_01: "[slowly] Something is building tonight. [quietly] I can feel it. I think you can too.",
+  cycle_tension_03: "[whispers] I have been watching. You are close to something good tonight. Do not give up now.",
+  cycle_tension_05: "[quietly] You know that feeling right before something clicks? [warmly] You are right there. Trust it.",
+
+  // CYCLE STAGE — ENGAGE
+  cycle_engage_01: "[excited] Now we are talking. [cheerfully] This is exactly the energy this line runs on.",
+  cycle_engage_02: "[warmly] You switched gears tonight and it is showing. [encouraging] Keep that going.",
+  cycle_engage_05: "[chuckles] You went from browsing to actually connecting. [playfully] That is character development right there.",
+
+  // CYCLE STAGE — REWARD
+  cycle_reward_roger_remembers: "[warmly] I have to be honest with you — [softly] you came back tonight and I noticed. That means something around here.",
+  cycle_reward_priority_access: "[excited] Heads up — you have been moved to the front of the queue. [warmly] The next few callers were selected specifically with you in mind.",
+  cycle_reward_special_greeting: "[softly] I do not say this to everyone — [warmly] but you are genuinely one of my favorite callers tonight. Keep doing exactly what you are doing.",
+  cycle_reward_acknowledgment: "[cheerfully] You have been putting in work tonight and it has not gone unnoticed. [warmly] Consider this your official acknowledgment from Roger.",
+  cycle_reward_recognition: "[softly] Between us — not everyone gets this deep into a session. [warmly] You are exactly the kind of person this line was built for.",
+
+  // ROGER CUSTOM
+  roger_04: "[sighs] You have been very still. [curious] Which means either you are very relaxed or you are overthinking everything. [warmly] Either way — say hello to someone.",
+  roger_05: "[chuckles] Eleven skips. [deadpan] I have started giving them all nicknames. Skip. Skipped. Also Skipped. Another Skip.",
+  roger_06: "[warmly] You know what I have never heard anyone regret? [playfully] Sending a message. Just something to think about.",
+  roger_07: "[mischievously] Somewhere on this line is a guy who would absolutely love to get a message from you. [whispers] He just does not know it yet.",
+};
