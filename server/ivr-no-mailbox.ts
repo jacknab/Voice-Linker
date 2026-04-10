@@ -3112,23 +3112,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   //           too few words, or repeated words like "hey hey hey boys").
   app.post("/voice/recording-rejected-unclear", async (req, res) => {
     const twiml = new VoiceResponse();
-    const fromNumber = req.body?.From as string;
 
     try {
-      const user = await storage.getUserByPhone(fromNumber);
-      const typeLabel = user?.recordingRejectionType === "personal_ad" ? "personal ad" : "greeting";
-
       const gather = twiml.gather({
         numDigits: 1,
         finishOnKey: "",
         action: "/voice/handle-recording-rejected-unclear",
         timeout: 15,
       });
-      gather.say(
-        `You need to re-record your ${typeLabel} because we can't understand it. ` +
-        `Please speak clearly into the phone so that everyone can hear what you have to say about yourself and what you're looking for. ` +
-        `Be sure to turn down loud music or the television before you record. ` +
-        `To re-record your ${typeLabel}, press 1.`
+      playPrompt(gather, req, "recording_rejected_unclear.mp3",
+        "We need you to re-record your greeting. We couldn't understand what you said. " +
+        "Please speak clearly into the phone so everyone can hear what you have to say about yourself and what you're looking for. " +
+        "Be sure to turn down any loud music or the television before you record. " +
+        "To re-record, press 1."
       );
       twiml.redirect("/voice/recording-rejected-unclear");
     } catch (err) {
@@ -3177,22 +3173,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // reject2 — played when the recording contains a phone number.
   app.post("/voice/recording-rejected-phone-number", async (req, res) => {
     const twiml = new VoiceResponse();
-    const fromNumber = req.body?.From as string;
 
     try {
-      const user = await storage.getUserByPhone(fromNumber);
-      const typeLabel = user?.recordingRejectionType === "personal_ad" ? "personal ad" : "greeting";
-
       const gather = twiml.gather({
         numDigits: 1,
         finishOnKey: "",
         action: "/voice/handle-recording-rejected-phone-number",
         timeout: 15,
       });
-      gather.say(
-        `You need to re-record your ${typeLabel}. ` +
-        `Please do not include your phone number in your ${typeLabel} or it will not be approved. ` +
-        `To re-record your ${typeLabel}, press 1.`
+      playPrompt(gather, req, "recording_rejected_phone_number.mp3",
+        "We need you to re-record your greeting. " +
+        "Phone numbers are not allowed in your greeting and it will not be approved if it contains one. " +
+        "To re-record, press 1."
       );
       twiml.redirect("/voice/recording-rejected-phone-number");
     } catch (err) {
