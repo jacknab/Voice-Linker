@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate } from "@shared/schema";
+import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, personalityProfiles, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate, type PersonalityProfile, type InsertPersonalityProfile } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -261,6 +261,14 @@ export interface IStorage {
 
   // Engagement Engine
   getAdminUploadedProfiles(regionId?: string | null): Promise<{ userId: string; recordingUrl: string; nameRecordingUrl: string | null }[]>;
+
+  // Personality Engine
+  getPersonalityProfiles(): Promise<PersonalityProfile[]>;
+  getPersonalityProfile(id: number): Promise<PersonalityProfile | undefined>;
+  createPersonalityProfile(data: InsertPersonalityProfile): Promise<PersonalityProfile>;
+  updatePersonalityProfile(id: number, data: Partial<InsertPersonalityProfile>): Promise<PersonalityProfile>;
+  deletePersonalityProfile(id: number): Promise<void>;
+  seedDefaultPersonalities(): Promise<void>;
 
   // SMS Marketing
   getSmsTemplates(): Promise<SmsTemplate[]>;
@@ -1945,6 +1953,187 @@ export class DatabaseStorage implements IStorage {
       .from(profiles)
       .where(eq(profiles.isAdminUploaded, true));
     return rows;
+  }
+
+  // ── Personality Engine ───────────────────────────────────────────────────────
+
+  async getPersonalityProfiles(): Promise<PersonalityProfile[]> {
+    return db.select().from(personalityProfiles).orderBy(personalityProfiles.sortOrder, personalityProfiles.id);
+  }
+
+  async getPersonalityProfile(id: number): Promise<PersonalityProfile | undefined> {
+    const [row] = await db.select().from(personalityProfiles).where(eq(personalityProfiles.id, id));
+    return row;
+  }
+
+  async createPersonalityProfile(data: InsertPersonalityProfile): Promise<PersonalityProfile> {
+    const [row] = await db.insert(personalityProfiles).values(data).returning();
+    return row;
+  }
+
+  async updatePersonalityProfile(id: number, data: Partial<InsertPersonalityProfile>): Promise<PersonalityProfile> {
+    const [row] = await db.update(personalityProfiles).set(data).where(eq(personalityProfiles.id, id)).returning();
+    return row;
+  }
+
+  async deletePersonalityProfile(id: number): Promise<void> {
+    await db.delete(personalityProfiles).where(eq(personalityProfiles.id, id));
+  }
+
+  async seedDefaultPersonalities(): Promise<void> {
+    const existing = await db.select({ id: personalityProfiles.id }).from(personalityProfiles);
+    if (existing.length > 0) return;
+
+    const defaults: InsertPersonalityProfile[] = [
+      {
+        name: "Roger",
+        toneStyle: "comedic",
+        description: "Your witty, quick-witted host. Roger keeps things light with humor and is always watching the action.",
+        speechPatterns: "Conversational, punchy one-liners, self-aware humor. Uses rhetorical questions.",
+        triggerBias: "all",
+        isActive: true,
+        sortOrder: 1,
+        customLines: {
+          picky: [
+            "Wow. Still looking? You might officially be the most selective man on the line tonight. Honestly... we love the standards.",
+            "You have skipped more guys tonight than a DJ skips bad tracks. What exactly are you looking for? Asking for a friend.",
+            "Twenty skips and no message. You have set a new record. We are genuinely impressed. And also a little worried about you.",
+          ],
+          idle: [
+            "Hey. Still there? The guys on the line are wondering about you.",
+            "Did you fall asleep? No judgment. But there is someone on this line who would love to hear from you tonight.",
+          ],
+          flirty: [
+            "You are making me blush just watching you browse. Somebody out here really wants to hear from you tonight.",
+            "Between you and me? Some of these guys have been waiting all night for someone exactly like you to send them a message.",
+          ],
+          dominant: [
+            "Stop. Take a breath. Pick one and send a message. You can absolutely do this.",
+          ],
+          reengagement: [
+            "Hey, you have been here a while. Have you tried sending a message yet? It takes two seconds — and the reply might surprise you.",
+            "You are one of tonight's most dedicated browsers. Do not let that go to waste — one message could change your whole evening.",
+          ],
+          reward: [
+            "Look at you — already making connections. That is exactly what this is all about.",
+            "Two messages already? You are absolutely on fire tonight. Keep it up.",
+          ],
+          game_invite: [
+            "Okay, I have a secret. We have hidden one of our AI voices among the real callers tonight. Press 8 any time you think you have caught it. Get it right and we will give you a little gift.",
+            "Pop quiz. Somewhere in the next few callers, there is an AI pretending to be a real guy. Think you can spot the faker? Press 8 when you think you found it. Get it right and win free time.",
+          ],
+        },
+      },
+      {
+        name: "Dom",
+        toneStyle: "dominant",
+        description: "No-nonsense and commanding. Dom cuts through hesitation and pushes callers to make a move.",
+        speechPatterns: "Short, direct sentences. Commands. No fluff. Confident and assertive tone.",
+        triggerBias: "picky",
+        isActive: true,
+        sortOrder: 2,
+        customLines: {
+          picky: [
+            "Dom here. Stop hesitating. Pick one and send the message. Right now.",
+            "Dom here. You have been skipping for too long. The next voice you hear — send him a message. No excuses.",
+            "Dom here. I am going to be straight with you. You are not going to find perfect by skipping forever. Make a move.",
+          ],
+          idle: [
+            "Dom here. You are still on the line and you have not done anything. That ends now. Pick someone.",
+            "Dom here. Do not come here and just listen. That is not how this works. Make your move.",
+          ],
+          flirty: [
+            "Dom here. Someone on this line deserves your attention. Stop holding back. Own it.",
+          ],
+          dominant: [
+            "Dom here. I am stepping in. The very next caller — you send a message. Not a question.",
+            "Dom here. Enough skipping. You know what you want. Stop running from it.",
+          ],
+          reengagement: [
+            "Dom here. Five minutes in and still nothing sent? That changes now. Pick someone. Go.",
+          ],
+          reward: [
+            "Dom here. Good. That is how it is done. Keep that energy going.",
+          ],
+          game_invite: [
+            "Dom here. Listen up. We planted an AI voice in the lineup tonight. Press 8 if you catch it. I want to see if you are as sharp as you think you are. Winner gets free time.",
+          ],
+        },
+      },
+      {
+        name: "Chill",
+        toneStyle: "playful",
+        description: "Laid-back and encouraging. Chill takes the pressure off and makes callers feel welcome.",
+        speechPatterns: "Relaxed, warm, uses casual language. No pressure. Encouraging without being pushy.",
+        triggerBias: "idle",
+        isActive: true,
+        sortOrder: 3,
+        customLines: {
+          picky: [
+            "Chill here. No rush, man. Take all the time you need. The right one is worth waiting for.",
+            "Chill here. Still browsing? That is totally cool. Nothing wrong with knowing what you want.",
+          ],
+          idle: [
+            "Chill here. Hey, still with us? All good — no pressure. Just making sure you are doing alright.",
+            "Chill here. You seem pretty relaxed tonight. That is actually the best way to do this. The right connection happens when you are not forcing it.",
+          ],
+          flirty: [
+            "Chill here. Between you and me? Someone in here is hoping you reach out. No pressure though — just putting that out there.",
+          ],
+          dominant: [
+            "Chill here. When you are ready, just go for it. There is really no wrong choice here.",
+          ],
+          reengagement: [
+            "Chill here. You have been listening for a while. Any one catching your ear? Even a short message can start something good.",
+          ],
+          reward: [
+            "Chill here. Nice. Connections are what it is all about. Good energy tonight.",
+          ],
+          game_invite: [
+            "Chill here. Okay so heads up — we slipped an AI voice into the rotation tonight. Kind of a fun little experiment. Press 8 if you think you hear it. Get it right and you get some bonus time. No stress either way.",
+          ],
+        },
+      },
+      {
+        name: "Spicy",
+        toneStyle: "seductive",
+        description: "Flirtatious and teasing. Spicy turns up the heat and keeps callers intrigued.",
+        speechPatterns: "Suggestive, playful teasing, makes the caller feel desired. Slow-burn energy.",
+        triggerBias: "flirty",
+        isActive: true,
+        sortOrder: 4,
+        customLines: {
+          picky: [
+            "Spicy here. Mmm. Still browsing? You clearly have taste. I like that about you.",
+            "Spicy here. You have been at this a while and nobody has quite done it for you yet. Or maybe... you are just nervous to reach out first?",
+          ],
+          idle: [
+            "Spicy here. Still with me? Good. I was starting to miss you.",
+            "Spicy here. Do not go quiet on me now. Someone out here is waiting to hear your voice tonight.",
+          ],
+          flirty: [
+            "Spicy here. Between you and me? Some of these guys have been waiting all night for someone exactly like you.",
+            "Spicy here. You are making this harder than it needs to be, gorgeous. Just say hello.",
+          ],
+          dominant: [
+            "Spicy here. Okay I am done watching you hesitate. Send the message. You know you want to.",
+          ],
+          reengagement: [
+            "Spicy here. You have put in the time. You deserve a real connection tonight. Someone out here is absolutely your type — trust me.",
+          ],
+          reward: [
+            "Spicy here. Look at you, making moves. That energy is everything. Keep it going.",
+          ],
+          game_invite: [
+            "Spicy here. I have a little secret for you. We hid one of our AI voices in the lineup tonight. Can you spot it? Press 8 if you think you caught it. Get it right and I will make sure you are rewarded.",
+          ],
+        },
+      },
+    ];
+
+    for (const p of defaults) {
+      await db.insert(personalityProfiles).values(p).onConflictDoNothing();
+    }
   }
 
   // ── SMS Marketing ───────────────────────────────────────────────────────────

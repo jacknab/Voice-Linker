@@ -1,0 +1,122 @@
+You are continuing development of an AI engagement engine for a telephone chat system (Livelinks-style).
+
+You will now implement a BEHAVIOR SCORING + FAKE MEMORY FLAG SYSTEM that drives personality selection and prompt triggering.
+
+---
+
+# CORE CONCEPT (IMPORTANT)
+
+Fake memory flags are temporary session-based behavioral labels.
+
+They are NOT real memory and NOT stored permanently.
+
+They only represent how the user is behaving in the current call session.
+
+---
+
+# STEP 1: SESSION STATE EXTENSION
+
+Extend session state with:
+
+* behavior_metrics
+* fake_memory_flags
+
+Example:
+
+```json
+{
+  "behavior_metrics": {
+    "greetings_skipped_count": 0,
+    "session_duration_seconds": 0,
+    "messages_sent_count": 0,
+    "idle_time_seconds": 0,
+    "game_played": false
+  },
+  "fake_memory_flags": {
+    "picky": false,
+    "shy": false,
+    "active": false,
+    "engaged": false,
+    "game_player": false
+  }
+}
+```
+
+---
+
+# STEP 2: FLAG ENGINE (MUST IMPLEMENT)
+
+Create a function:
+
+updateFakeMemoryFlags(sessionState)
+
+It must evaluate:
+
+* picky:
+
+  * greetings_skipped_count >= 8 OR
+  * session_duration > 120 AND messages_sent_count == 0
+
+* shy:
+
+  * messages_sent_count == 0 AND session_duration > 60
+
+* active:
+
+  * messages_sent_count >= 2
+
+* engaged:
+
+  * session_duration > 240
+
+* game_player:
+
+  * game_played == true
+
+Rules:
+
+* flags must update dynamically
+* flags can turn ON and OFF
+* do NOT permanently accumulate flags
+* keep logic stateless based on current session metrics
+
+---
+
+# STEP 3: PROMPT SELECTION INTEGRATION
+
+Modify the prompt selection system so:
+
+* each prompt can require fake_memory_flags
+* selection must match current flags
+* avoid repeating same category twice in a row
+
+Example prompt rule:
+
+```json
+{
+  "category": "picky",
+  "required_flags": ["picky"],
+  "cooldown_seconds": 60,
+  "line_text": "Damn… you’re really picky tonight huh?"
+}
+```
+
+---
+
+# STEP 4: LIMITATIONS (VERY IMPORTANT)
+
+* Maximum 3 active flags at once should influence output
+* Do NOT over-trigger prompts
+* AI should feel natural, not constantly commenting
+
+---
+
+# STEP 5: OUTPUT REQUIRED
+
+1. Implement updateFakeMemoryFlags function
+2. Show updated session schema
+3. Show integration into prompt selection logic
+4. Provide 5 working example prompts using flags
+5. Ensure system is production-safe and modular
+
+Start implementing immediately. Do not over-explain.

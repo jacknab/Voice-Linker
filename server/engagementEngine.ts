@@ -20,6 +20,22 @@
  *   getEngagementState    — for read-only inspection in ivr-default.ts
  */
 
+// ── Personality types ─────────────────────────────────────────────────────────
+
+export interface PersonalityContext {
+  id: number | null;
+  name: string;
+  toneStyle: string;
+  lines: Record<string, string[]>; // PromptCategory → custom voice lines
+}
+
+export interface PersonalitySessionConfig {
+  /** How to assign a personality per session */
+  mode: "rotate" | "lock_first" | "escalate";
+  /** All active personalities sorted by sortOrder */
+  personalities: PersonalityContext[];
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type PromptCategory =
@@ -74,6 +90,13 @@ export interface CallerEngagementState {
   interruptionCount: number;
   /** No interruptions before this timestamp — set after each interruption */
   globalCooldownUntil: number;
+
+  // ── Personality ────────────────────────────────────────────────────────────
+  /** All active personalities for this session (sorted) — used for escalate mode */
+  sessionPersonalities: PersonalityContext[];
+  personalityMode: "rotate" | "lock_first" | "escalate";
+  /** Index into sessionPersonalities currently active */
+  activePersonalityIndex: number;
 
   // ── Busted game ────────────────────────────────────────────────────────────
   gameStarted: boolean;
@@ -378,9 +401,37 @@ const states = new Map<string, CallerEngagementState>();
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/** Initialize state when a caller first enters the browse section. */
-export function initEngagementState(callSid: string, userId: string): void {
+/**
+ * Initialize engagement state for a new browsing session.
+ * personalityConfig is optional — if omitted a fallback "Roger" personality is used.
+ */
+export function initEngagementState(
+  callSid: string,
+  userId: string,
+  personalityConfig?: PersonalitySessionConfig,
+): void {
   if (states.has(callSid)) return; // Already initialized
+
+  const fallback: PersonalityContext = {
+    id: null,
+    name: "Roger",
+    toneStyle: "comedic",
+    lines: {},
+  };
+
+  const personalities = personalityConfig?.personalities.length
+    ? personalityConfig.personalities
+    : [fallback];
+
+  const mode = personalityConfig?.mode ?? "rotate";
+
+  // Select initial personality based on mode
+  let initialIndex = 0;
+  if (mode === "rotate") {
+    initialIndex = Math.floor(Math.random() * personalities.length);
+  }
+  // lock_first and escalate both start at index 0
+
   states.set(callSid, {
     callSid,
     userId,
@@ -393,6 +444,9 @@ export function initEngagementState(callSid: string, userId: string): void {
     recentPromptIds: [],
     interruptionCount: 0,
     globalCooldownUntil: Date.now() + START_GRACE_MS,
+    sessionPersonalities: personalities,
+    personalityMode: mode,
+    activePersonalityIndex: initialIndex,
     gameStarted: false,
     gameCompleted: false,
     gameBustTargetUserId: null,
@@ -400,6 +454,33 @@ export function initEngagementState(callSid: string, userId: string): void {
     gameBustMissed: false,
     gameBustedCorrectly: false,
   });
+}
+
+/** Returns the name of the currently active personality for this call session. */
+export function getActivePersonalityName(callSid: string): string {
+  const s = states.get(callSid);
+  if (!s || s.sessionPersonalities.length === 0) return "Roger";
+  return s.sessionPersonalities[s.activePersonalityIndex]?.name ?? "Roger";
+}
+
+/** Returns a random custom voice line for the given category from the active personality,
+ *  or null if none are defined (caller should fall back to the default prompt library). */
+function getPersonalityLine(s: CallerEngagementState, category: string): string | null {
+  // Escalate: pick personality tier based on skip count
+  if (s.personalityMode === "escalate" && s.sessionPersonalities.length > 1) {
+    let tier = 0;
+    if (s.greetingsSkipped >= 15) tier = Math.min(2, s.sessionPersonalities.length - 1);
+    else if (s.greetingsSkipped >= 6) tier = Math.min(1, s.sessionPersonalities.length - 1);
+    if (tier !== s.activePersonalityIndex) {
+      s.activePersonalityIndex = tier;
+    }
+  }
+
+  const personality = s.sessionPersonalities[s.activePersonalityIndex];
+  if (!personality) return null;
+  const lines = personality.lines[category];
+  if (!lines || lines.length === 0) return null;
+  return lines[Math.floor(Math.random() * lines.length)];
 }
 
 /** Call when the caller presses 2 (skip) on a profile. */
@@ -488,6 +569,12 @@ export function getInterruption(callSid: string): EngagementPrompt | null {
     s.lastInterruptionMs = now;
     s.globalCooldownUntil = now + GLOBAL_COOLDOWN_MS;
     s.interruptionCount++;
+
+    // Override lineText with personality-specific line if available
+    const personalityLine = getPersonalityLine(s, prompt.category);
+    if (personalityLine) {
+      return { ...prompt, lineText: personalityLine };
+    }
 
     return prompt;
   }

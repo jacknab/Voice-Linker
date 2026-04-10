@@ -108,6 +108,9 @@ app.use((req, res, next) => {
   // Periodically purge any active_calls rows that are more than 20 minutes old.
   // This catches calls where Twilio's status callback never fired (e.g. network issues).
   const { storage } = await import("./storage");
+
+  // Seed default personality profiles (Roger, Dom, Chill, Spicy) on first run
+  storage.seedDefaultPersonalities().catch(err => console.error("[personality] seed error:", err));
   setInterval(async () => {
     try {
       await storage.removeStaleActiveCalls(20);

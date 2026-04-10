@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, timestamp, integer, uuid, doublePrecision, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, timestamp, integer, uuid, doublePrecision, primaryKey, serial, jsonb } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -193,6 +193,8 @@ export const siteSettings = pgTable("site_settings", {
   customerServicePhone: text("customer_service_phone"),
   // Site category: 'MM' = Men seeking Men (gay), 'MW' = Men seeking Women (straight)
   siteCategory: text("site_category").notNull().default("MM"),
+  // Personality Engine session mode: rotate | lock_first | escalate
+  personalityMode: text("personality_mode").notNull().default("rotate"),
 });
 
 export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({ id: true });
@@ -470,3 +472,22 @@ export const smsTemplates = pgTable("sms_templates", {
 });
 
 export type SmsTemplate = typeof smsTemplates.$inferSelect;
+
+// ── Personality Engine ─────────────────────────────────────────────────────────
+// Named AI host characters used by the Engagement Engine during call sessions.
+// customLines: JSONB map of PromptCategory → array of voice lines for that category.
+export const personalityProfiles = pgTable("personality_profiles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  toneStyle: text("tone_style").notNull().default("playful"),
+  description: text("description"),
+  speechPatterns: text("speech_patterns"),
+  triggerBias: text("trigger_bias").notNull().default("all"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  customLines: jsonb("custom_lines").$type<Record<string, string[]>>().default({}),
+});
+
+export const insertPersonalityProfileSchema = createInsertSchema(personalityProfiles).omit({ id: true });
+export type PersonalityProfile = typeof personalityProfiles.$inferSelect;
+export type InsertPersonalityProfile = z.infer<typeof insertPersonalityProfileSchema>;

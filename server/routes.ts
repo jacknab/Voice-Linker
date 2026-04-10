@@ -1053,6 +1053,46 @@ export async function registerRoutes(
     return Math.min(diff, 30 - diff);
   }
 
+  // ── Personality Engine ────────────────────────────────────────────────────
+  app.get("/api/admin/personalities", async (_req, res) => {
+    try {
+      res.json(await storage.getPersonalityProfiles());
+    } catch (e) {
+      res.status(500).json({ message: "Failed to fetch personality profiles" });
+    }
+  });
+
+  app.post("/api/admin/personalities", async (req: Request, res: Response) => {
+    try {
+      const { name, toneStyle, description, speechPatterns, triggerBias, isActive, sortOrder, customLines } = req.body;
+      if (!name || !toneStyle) return res.status(400).json({ message: "name and toneStyle are required" });
+      const profile = await storage.createPersonalityProfile({ name, toneStyle, description, speechPatterns, triggerBias: triggerBias ?? "all", isActive: isActive ?? true, sortOrder: sortOrder ?? 0, customLines: customLines ?? {} });
+      res.json(profile);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to create personality profile" });
+    }
+  });
+
+  app.put("/api/admin/personalities/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const profile = await storage.updatePersonalityProfile(id, req.body);
+      res.json(profile);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to update personality profile" });
+    }
+  });
+
+  app.delete("/api/admin/personalities/:id", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      await storage.deletePersonalityProfile(id);
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to delete personality profile" });
+    }
+  });
+
   app.get("/api/admin/sms-templates", async (_req, res) => {
     try {
       const templates = await storage.getSmsTemplates();
@@ -1205,13 +1245,14 @@ export async function registerRoutes(
 
   app.put("/api/admin/site-settings", async (req, res) => {
     try {
-      const { siteName, fallbackPhoneNumber, customerServiceEmail, customerServicePhone, siteCategory } = req.body;
+      const { siteName, fallbackPhoneNumber, customerServiceEmail, customerServicePhone, siteCategory, personalityMode } = req.body;
       const data: Record<string, string | null> = {};
       if (siteName !== undefined) data.siteName = String(siteName).trim() || "Male Box";
       if (fallbackPhoneNumber !== undefined) data.fallbackPhoneNumber = String(fallbackPhoneNumber).trim() || "800-730-2508";
       if (customerServiceEmail !== undefined) data.customerServiceEmail = customerServiceEmail ? String(customerServiceEmail).trim() : null;
       if (customerServicePhone !== undefined) data.customerServicePhone = customerServicePhone ? String(customerServicePhone).trim() : null;
       if (siteCategory !== undefined) data.siteCategory = siteCategory === "MW" ? "MW" : "MM";
+      if (personalityMode !== undefined) data.personalityMode = ["rotate", "lock_first", "escalate"].includes(personalityMode) ? personalityMode : "rotate";
       const updated = await storage.updateSiteSettings(data);
       invalidateSiteSettingsCache();
       logAudit("site_settings_updated", { targetType: "settings", detail: data as Record<string, unknown> });

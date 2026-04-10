@@ -1,0 +1,118 @@
+You are a senior backend engineer building an AI engagement system for a telephone chat (Livelinks-style) platform.
+
+Continue building on the existing Engagement Engine.
+
+---
+
+## NEW FEATURE: SESSION-BASED “FAKE MEMORY FLAGS”
+
+You will implement a system called “fake memory flags”.
+
+### DEFINITION
+
+Fake memory flags are temporary session-based variables that describe the caller’s behavior during the current call.
+
+They are NOT real long-term memory and are NOT tied to a user account.
+
+They exist only for the duration of the call session and are used to make the AI feel more personal and aware.
+
+---
+
+## GOAL
+
+Allow the AI to reference user behavior in a natural, conversational way such as:
+
+* “You’re kinda picky tonight…”
+* “You’ve been quiet so far…”
+* “You seem like you know what you want…”
+
+---
+
+## IMPLEMENTATION
+
+### 1. SESSION STATE OBJECT
+
+Extend the existing session state to include:
+
+```json
+{
+  "fake_memory_flags": {
+    "user_is_picky": false,
+    "user_is_shy": false,
+    "user_is_active": false,
+    "user_is_engaged": false,
+    "user_played_game": false
+  }
+}
+```
+
+---
+
+### 2. FLAG UPDATE LOGIC
+
+Update flags dynamically based on behavior:
+
+* If greetings_skipped_count >= 10 → user_is_picky = true
+* If messages_sent_count == 0 AND session_duration > 60 seconds → user_is_shy = true
+* If messages_sent_count >= 1 → user_is_active = true
+* If session_duration > 180 seconds → user_is_engaged = true
+* If user joins any mini-game → user_played_game = true
+
+This logic should run continuously or after each major event (skip, message, time interval).
+
+---
+
+### 3. PROMPT LIBRARY INTEGRATION
+
+Modify the prompt selection system to include conditions based on fake_memory_flags.
+
+Example:
+
+```json
+{
+  "category": "picky",
+  "trigger_conditions": ["user_is_picky == true"],
+  "line_text": "Wow… you’re really picky tonight huh?"
+}
+```
+
+---
+
+### 4. NATURAL LANGUAGE RULES (IMPORTANT)
+
+Do NOT make the AI sound like it has permanent memory.
+
+Avoid:
+
+* “You always do this”
+* “Every time you call”
+
+Use:
+
+* “tonight”
+* “right now”
+* “you seem like”
+
+The AI should feel observant, not invasive.
+
+---
+
+### 5. INTEGRATION POINTS
+
+Hook flag updates into:
+
+* greeting skip events
+* message send events
+* session timer updates
+* game participation events
+
+---
+
+## OUTPUT REQUIREMENTS
+
+1. Show updated session state structure
+2. Implement flag update logic (real code or pseudocode)
+3. Modify prompt selection logic to use flags
+4. Provide 5 example prompts using fake memory flags
+
+Do not explain conceptually—implement directly into the system.

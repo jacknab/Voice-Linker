@@ -10,7 +10,8 @@ import {
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ChevronRight, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
-  BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send,
+  BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send, Bot,
+  Sparkles, ChevronDown, ChevronUp,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import {
@@ -48,7 +49,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing";
+type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "personalities";
 
 interface FlaggedItem {
   id: string;
@@ -5554,6 +5555,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "analytics",      label: "Analytics",         icon: <BarChart2 size={15} />,  dividerBefore: true },
   { id: "audit-log",      label: "Audit Log",         icon: <TrendingUp size={15} /> },
   { id: "mod-log",        label: "Moderation Log",    icon: <ShieldAlert size={15} /> },
+  { id: "personalities",  label: "Personalities",     icon: <Bot size={15} /> },
   { id: "sms-marketing",  label: "SMS Marketing",     icon: <Send size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",     icon: <PhoneCall size={15} /> },
   { id: "ivr-flow",       label: "IVR Flow Map",      icon: <GitBranch size={15} /> },
@@ -5563,6 +5565,434 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "zip-codes",      label: "Zip Codes",         icon: <MapPin size={15} /> },
   { id: "site-settings",  label: "Website Settings",  icon: <Settings size={15} /> },
 ];
+
+// ── PersonalitiesTab ──────────────────────────────────────────────────────────
+interface PersonalityProfile {
+  id: number;
+  name: string;
+  toneStyle: string;
+  description: string | null;
+  speechPatterns: string | null;
+  triggerBias: string;
+  isActive: boolean;
+  sortOrder: number;
+  customLines: Record<string, string[]> | null;
+}
+
+const PERSONALITY_CATEGORIES = [
+  { key: "picky",        label: "Picky / Too Many Skips" },
+  { key: "idle",         label: "Idle / Not Active" },
+  { key: "flirty",       label: "Flirty / Early Session" },
+  { key: "dominant",     label: "Dominant / Assertive" },
+  { key: "reengagement", label: "Re-engagement" },
+  { key: "reward",       label: "Reward / Messages Sent" },
+  { key: "game_invite",  label: "Game Invite" },
+];
+
+const TONE_STYLES = ["comedic", "playful", "dominant", "seductive", "teasing", "commanding"];
+const TRIGGER_BIASES = ["all", "picky", "idle", "flirty"];
+
+const MODE_OPTIONS = [
+  { value: "rotate",     label: "Rotate",     desc: "Pick a different personality randomly each session." },
+  { value: "lock_first", label: "Lock First",  desc: "Always use the first active personality (by sort order)." },
+  { value: "escalate",   label: "Escalate",   desc: "Start gentle, intensify based on skips (tier 1 → 2 → 3)." },
+];
+
+function PersonalitiesTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: personalities = [], isLoading } = useQuery<PersonalityProfile[]>({
+    queryKey: ["/api/admin/personalities"],
+  });
+
+  const { data: siteSettings } = useQuery<{ personalityMode?: string }>({
+    queryKey: ["/api/admin/site-settings"],
+  });
+
+  const [mode, setMode] = useState<string>("rotate");
+  const [savingMode, setSavingMode] = useState(false);
+  const [editTarget, setEditTarget] = useState<PersonalityProfile | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  useEffect(() => {
+    if (siteSettings?.personalityMode) setMode(siteSettings.personalityMode);
+  }, [siteSettings]);
+
+  async function saveMode(newMode: string) {
+    setSavingMode(true);
+    try {
+      await apiRequest("PUT", "/api/admin/site-settings", { personalityMode: newMode });
+      setMode(newMode);
+      qc.invalidateQueries({ queryKey: ["/api/admin/site-settings"] });
+      toast({ title: "Session mode saved" });
+    } catch {
+      toast({ title: "Failed to save mode", variant: "destructive" });
+    } finally {
+      setSavingMode(false);
+    }
+  }
+
+  async function toggleActive(p: PersonalityProfile) {
+    try {
+      await apiRequest("PUT", `/api/admin/personalities/${p.id}`, { isActive: !p.isActive });
+      qc.invalidateQueries({ queryKey: ["/api/admin/personalities"] });
+    } catch {
+      toast({ title: "Failed to update", variant: "destructive" });
+    }
+  }
+
+  async function deletePersonality(id: number) {
+    if (!confirm("Delete this personality? This cannot be undone.")) return;
+    try {
+      await apiRequest("DELETE", `/api/admin/personalities/${id}`, undefined);
+      qc.invalidateQueries({ queryKey: ["/api/admin/personalities"] });
+      toast({ title: "Personality deleted" });
+    } catch {
+      toast({ title: "Failed to delete", variant: "destructive" });
+    }
+  }
+
+  const toneColors: Record<string, string> = {
+    comedic:   "bg-yellow-100 text-yellow-800",
+    playful:   "bg-green-100 text-green-800",
+    dominant:  "bg-red-100 text-red-800",
+    seductive: "bg-pink-100 text-pink-800",
+    teasing:   "bg-purple-100 text-purple-800",
+    commanding:"bg-orange-100 text-orange-800",
+  };
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      {/* Session Mode */}
+      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 space-y-3">
+        <h2 className="text-base font-semibold flex items-center gap-2">
+          <Sparkles size={16} className="text-purple-500" /> Session Mode
+        </h2>
+        <p className="text-sm text-zinc-500">How the engine selects a personality per call session.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {MODE_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              data-testid={`mode-${opt.value}`}
+              onClick={() => saveMode(opt.value)}
+              className={`text-left border rounded-lg p-3 transition-all text-sm ${mode === opt.value ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20" : "border-zinc-200 dark:border-zinc-700 hover:border-zinc-300"}`}
+            >
+              <div className="font-semibold mb-0.5">{opt.label}</div>
+              <div className="text-xs text-zinc-500">{opt.desc}</div>
+              {mode === opt.value && (
+                <div className="mt-1.5 flex items-center gap-1 text-xs text-purple-600 font-medium">
+                  <CheckCircle size={11} /> Active
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+        {savingMode && <p className="text-xs text-zinc-400 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Saving…</p>}
+      </div>
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-base font-semibold flex items-center gap-2">
+          <Bot size={16} className="text-indigo-500" /> AI Host Personalities ({personalities.length})
+        </h2>
+        <button
+          data-testid="button-create-personality"
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <Plus size={14} /> New Personality
+        </button>
+      </div>
+
+      {/* Cards */}
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-zinc-400"><Loader2 size={16} className="animate-spin" /> Loading…</div>
+      ) : personalities.length === 0 ? (
+        <p className="text-sm text-zinc-500">No personalities yet. Create one to get started.</p>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {personalities.map(p => (
+            <div
+              key={p.id}
+              data-testid={`card-personality-${p.id}`}
+              className={`bg-white dark:bg-zinc-900 border rounded-xl p-4 space-y-2 transition-all ${p.isActive ? "border-zinc-200 dark:border-zinc-700" : "border-zinc-100 dark:border-zinc-800 opacity-60"}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-semibold text-base">{p.name}</div>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${toneColors[p.toneStyle] ?? "bg-zinc-100 text-zinc-700"}`}>
+                      {p.toneStyle}
+                    </span>
+                    {p.triggerBias !== "all" && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
+                        bias: {p.triggerBias}
+                      </span>
+                    )}
+                    <span className="text-xs text-zinc-400">order: {p.sortOrder}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    data-testid={`button-toggle-${p.id}`}
+                    onClick={() => toggleActive(p)}
+                    title={p.isActive ? "Deactivate" : "Activate"}
+                    className="text-zinc-400 hover:text-indigo-600 transition-colors p-1"
+                  >
+                    {p.isActive ? <ToggleRight size={20} className="text-indigo-500" /> : <ToggleLeft size={20} />}
+                  </button>
+                  <button
+                    data-testid={`button-edit-${p.id}`}
+                    onClick={() => setEditTarget(p)}
+                    className="text-zinc-400 hover:text-zinc-700 transition-colors p-1"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    data-testid={`button-delete-${p.id}`}
+                    onClick={() => deletePersonality(p.id)}
+                    className="text-zinc-400 hover:text-red-600 transition-colors p-1"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+              {p.description && <p className="text-xs text-zinc-500 leading-relaxed">{p.description}</p>}
+              <div className="text-xs text-zinc-400">
+                {PERSONALITY_CATEGORIES.filter(c => (p.customLines?.[c.key]?.length ?? 0) > 0).map(c => (
+                  <span key={c.key} className="inline-block mr-1.5 mb-1 px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded text-zinc-600 dark:text-zinc-400">
+                    {c.label}: {p.customLines![c.key].length} line{p.customLines![c.key].length !== 1 ? "s" : ""}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Edit / Create Modal */}
+      {(editTarget || showCreate) && (
+        <PersonalityModal
+          personality={editTarget ?? null}
+          onClose={() => { setEditTarget(null); setShowCreate(false); }}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ["/api/admin/personalities"] }); setEditTarget(null); setShowCreate(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function PersonalityModal({ personality, onClose, onSaved }: {
+  personality: PersonalityProfile | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const isNew = !personality;
+
+  const [name, setName] = useState(personality?.name ?? "");
+  const [toneStyle, setToneStyle] = useState(personality?.toneStyle ?? "playful");
+  const [description, setDescription] = useState(personality?.description ?? "");
+  const [speechPatterns, setSpeechPatterns] = useState(personality?.speechPatterns ?? "");
+  const [triggerBias, setTriggerBias] = useState(personality?.triggerBias ?? "all");
+  const [sortOrder, setSortOrder] = useState(String(personality?.sortOrder ?? 0));
+  const [isActive, setIsActive] = useState(personality?.isActive ?? true);
+  const [customLines, setCustomLines] = useState<Record<string, string>>(
+    Object.fromEntries(
+      PERSONALITY_CATEGORIES.map(c => [c.key, (personality?.customLines?.[c.key] ?? []).join("\n")])
+    )
+  );
+  const [saving, setSaving] = useState(false);
+  const [expandedCat, setExpandedCat] = useState<string | null>(null);
+
+  async function save() {
+    if (!name.trim()) { toast({ title: "Name is required", variant: "destructive" }); return; }
+    setSaving(true);
+    try {
+      const lines: Record<string, string[]> = {};
+      for (const [k, v] of Object.entries(customLines)) {
+        const arr = v.split("\n").map(l => l.trim()).filter(Boolean);
+        if (arr.length) lines[k] = arr;
+      }
+      const payload = {
+        name: name.trim(),
+        toneStyle,
+        description: description.trim() || null,
+        speechPatterns: speechPatterns.trim() || null,
+        triggerBias,
+        sortOrder: parseInt(sortOrder, 10) || 0,
+        isActive,
+        customLines: lines,
+      };
+      if (isNew) {
+        await apiRequest("POST", "/api/admin/personalities", payload);
+      } else {
+        await apiRequest("PUT", `/api/admin/personalities/${personality!.id}`, payload);
+      }
+      toast({ title: isNew ? "Personality created" : "Personality saved" });
+      onSaved();
+    } catch {
+      toast({ title: "Failed to save", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="flex items-center justify-between p-5 border-b border-zinc-200 dark:border-zinc-800 sticky top-0 bg-white dark:bg-zinc-900 z-10">
+          <h3 className="font-semibold text-base flex items-center gap-2">
+            <Bot size={16} className="text-indigo-500" />
+            {isNew ? "New Personality" : `Edit: ${personality!.name}`}
+          </h3>
+          <button onClick={onClose} className="text-zinc-400 hover:text-zinc-700 p-1"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Basic fields */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-zinc-600 mb-1">Name *</label>
+              <input
+                data-testid="input-personality-name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800"
+                placeholder="Roger, Dom, Chill…"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-600 mb-1">Tone Style</label>
+              <select
+                data-testid="select-tone-style"
+                value={toneStyle}
+                onChange={e => setToneStyle(e.target.value)}
+                className="w-full border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800"
+              >
+                {TONE_STYLES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-600 mb-1">Description</label>
+            <textarea
+              data-testid="input-personality-description"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={2}
+              className="w-full border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 resize-none"
+              placeholder="Brief character description…"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-600 mb-1">Speech Patterns</label>
+            <textarea
+              data-testid="input-speech-patterns"
+              value={speechPatterns}
+              onChange={e => setSpeechPatterns(e.target.value)}
+              rows={2}
+              className="w-full border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 resize-none"
+              placeholder="Short punchy lines. Uses humor. Asks rhetorical questions…"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-zinc-600 mb-1">Trigger Bias</label>
+              <select
+                data-testid="select-trigger-bias"
+                value={triggerBias}
+                onChange={e => setTriggerBias(e.target.value)}
+                className="w-full border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800"
+              >
+                {TRIGGER_BIASES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-600 mb-1">Sort Order</label>
+              <input
+                data-testid="input-sort-order"
+                type="number"
+                value={sortOrder}
+                onChange={e => setSortOrder(e.target.value)}
+                className="w-full border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800"
+              />
+            </div>
+            <div className="flex items-end pb-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
+                <input
+                  type="checkbox"
+                  data-testid="checkbox-active"
+                  checked={isActive}
+                  onChange={e => setIsActive(e.target.checked)}
+                  className="accent-indigo-500"
+                />
+                Active
+              </label>
+            </div>
+          </div>
+
+          {/* Voice Lines per Category */}
+          <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 bg-zinc-50 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
+              <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">Voice Lines by Category</span>
+              <p className="text-xs text-zinc-400 mt-0.5">One line per row. Leave blank to use default engine lines.</p>
+            </div>
+            {PERSONALITY_CATEGORIES.map(cat => (
+              <div key={cat.key} className="border-b border-zinc-100 dark:border-zinc-800 last:border-0">
+                <button
+                  type="button"
+                  onClick={() => setExpandedCat(expandedCat === cat.key ? null : cat.key)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                >
+                  <span className="font-medium">{cat.label}</span>
+                  <div className="flex items-center gap-2">
+                    {customLines[cat.key]?.trim() && (
+                      <span className="text-xs text-indigo-600 font-medium">
+                        {customLines[cat.key].split("\n").filter(Boolean).length} line{customLines[cat.key].split("\n").filter(Boolean).length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {expandedCat === cat.key ? <ChevronUp size={14} className="text-zinc-400" /> : <ChevronDown size={14} className="text-zinc-400" />}
+                  </div>
+                </button>
+                {expandedCat === cat.key && (
+                  <div className="px-4 pb-3">
+                    <textarea
+                      data-testid={`input-lines-${cat.key}`}
+                      value={customLines[cat.key]}
+                      onChange={e => setCustomLines(prev => ({ ...prev, [cat.key]: e.target.value }))}
+                      rows={4}
+                      className="w-full border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 resize-y font-mono"
+                      placeholder={`Enter one voice line per line for ${cat.label.toLowerCase()}…`}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 p-5 border-t border-zinc-200 dark:border-zinc-800 sticky bottom-0 bg-white dark:bg-zinc-900">
+          <button onClick={onClose} className="px-4 py-2 text-sm border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
+            Cancel
+          </button>
+          <button
+            data-testid="button-save-personality"
+            onClick={save}
+            disabled={saving}
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg transition-colors"
+          >
+            {saving ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : <><Save size={13} /> Save</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── SmsMarketingTab ───────────────────────────────────────────────────────────
 interface SmsTemplateData {
@@ -5986,6 +6416,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "phone-testing"  && <IVRTesterTab />}
           {activeTab === "ivr-flow"       && <IvrFlowMap />}
           {activeTab === "site-settings"  && <WebsiteSettingsTab />}
+          {activeTab === "personalities"  && <PersonalitiesTab />}
           {activeTab === "sms-marketing"  && <SmsMarketingTab />}
         </div>
       </div>

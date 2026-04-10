@@ -3892,7 +3892,30 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             announcedLinkedCallerIds: [],
           };
           callerBrowseState.set(callSid, state);
-          engagementEngine.initEngagementState(callSid, user.id);
+
+          // ── Load Personality Engine config for this session ─────────────────
+          try {
+            const [allPersonalities, siteConf] = await Promise.all([
+              storage.getPersonalityProfiles(),
+              storage.getSiteSettings(),
+            ]);
+            const activePersonalities = allPersonalities
+              .filter(p => p.isActive)
+              .sort((a, b) => a.sortOrder - b.sortOrder);
+            const personalityConfig: engagementEngine.PersonalitySessionConfig = {
+              mode: ((siteConf as { personalityMode?: string }).personalityMode ?? "rotate") as "rotate" | "lock_first" | "escalate",
+              personalities: activePersonalities.map(p => ({
+                id: p.id,
+                name: p.name,
+                toneStyle: p.toneStyle,
+                lines: (p.customLines ?? {}) as Record<string, string[]>,
+              })),
+            };
+            engagementEngine.initEngagementState(callSid, user.id, personalityConfig);
+          } catch (err) {
+            console.error("[engagement] Failed to load personality config:", err);
+            engagementEngine.initEngagementState(callSid, user.id);
+          }
           console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid} (region=${callerRegionName ?? "none"}, ${linkedRegions.length} linked regions)`);
         }
 
@@ -4527,10 +4550,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           const bonusLabel = bustSettings.billingMode === "per_day"
             ? "one hour of bonus time"
             : "fifteen bonus minutes";
-          twiml.say(`Roger here. You got it! That was our A I voice. ${bonusLabel} has been added to your account. Nice ear.`);
+          const winHost = engagementEngine.getActivePersonalityName(callSid8);
+          twiml.say(`${winHost} here. You got it! That was our A I voice. ${bonusLabel} has been added to your account. Nice ear.`);
           twiml.redirect("/voice/browse-profiles");
         } else if (bustResult.result === "miss") {
-          twiml.say("Roger here. Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing.");
+          const missHost = engagementEngine.getActivePersonalityName(callSid8);
+          twiml.say(`${missHost} here. Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing.`);
           twiml.redirect("/voice/browse-profiles");
         } else {
           // No active game — treat as invalid choice
@@ -4572,7 +4597,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const promptText = rawText ? decodeURIComponent(rawText) : "";
 
       if (promptText) {
-        twiml.say({ voice: "alice" }, `Roger here. ${promptText}`);
+        const hostName = callSid ? engagementEngine.getActivePersonalityName(callSid) : "Roger";
+        twiml.say({ voice: "alice" }, `${hostName} here. ${promptText}`);
       }
 
       if (followUp === "start_game" && callSid) {
