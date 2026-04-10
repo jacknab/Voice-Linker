@@ -1,0 +1,108 @@
+You are continuing development of an AI telephone chat system using a single character: Roger.
+
+IMPORTANT: This is now a STABILIZATION PHASE.
+
+Do NOT add new systems, engines, scoring layers, or architectural features.
+
+Only refine, clean, and unify existing logic.
+
+---
+
+# CORE GOAL
+
+Consolidate the existing system into a simple, stable execution pipeline:
+
+1. Detect user state (light signals only)
+2. Select Roger ID (audio prompt) from existing library
+3. Enforce cooldown + per-caller 24h no-repeat rule
+4. Play audio
+5. Log playback
+
+That is the full system.
+
+---
+
+# STEP 1: FREEZE ARCHITECTURE
+
+The following systems already exist and MUST NOT be expanded or made more complex:
+
+* Roger prompt library system
+* Roger ID audio trigger system
+* attention_drain_score (keep but do NOT expand logic)
+* engagement_streak (keep but do NOT expand logic)
+* speech cooldown / budget system
+* per-caller 24h no-repeat database system
+* Busted mini-game trigger system
+
+---
+
+# STEP 2: REMOVE OVER-ENGINEERING
+
+Do NOT implement:
+
+* flow director systems
+* multi-layer decision trees
+* emotional memory systems
+* scoring-on-scoring systems
+* additional AI personality layers
+
+System must remain flat and predictable.
+
+---
+
+# STEP 3: FINAL EXECUTION PIPELINE
+
+All Roger interactions must follow EXACTLY this flow:
+
+1. evaluate simple triggers:
+
+   * inactivity
+   * skipping behavior
+   * engagement spike
+
+2. check constraints:
+
+   * speech cooldown
+   * speech budget
+   * 24h per-caller no-repeat rule
+
+3. select Roger ID from library
+
+4. execute:
+
+   * play audio file
+   * log roger_id + caller_id + timestamp
+   * execute any attached event (e.g. Busted game trigger)
+
+---
+
+# STEP 4: SIMPLICITY RULE
+
+If a new feature request arises:
+
+* prefer modifying existing logic
+* NOT adding new subsystems
+
+---
+
+# STEP 5: DEBUGGING REQUIREMENT
+
+System must remain:
+
+* easy to trace
+* easy to debug
+* predictable in behavior
+
+Every Roger action must be explainable in one execution path.
+
+---
+
+# OUTPUT REQUIREMENTS
+
+1. Confirm simplified architecture
+2. Show final execution flow diagram (text-based)
+3. Remove or disable any unused complexity
+4. Ensure all existing features still function
+5. Verify no new systems were introduced
+
+Roger is a simple, controlled audio personality system — not a multi-layer AI framework.
