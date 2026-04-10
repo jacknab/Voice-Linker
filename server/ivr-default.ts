@@ -4054,10 +4054,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
           playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-          // ── Busted Game hint: remind active players they can press 8 ─────────
-          if (engState?.gameStarted && !engState.gameCompleted) {
-            profileGather.say("This is Roger. Press 8 if you think this is an A I voice.");
-          }
           twiml.redirect("/voice/main-menu");
         }
       }
@@ -4515,21 +4511,26 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(twiml, req, "profile_flagged.mp3", "This profile has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "8") {
-        // ── Busted Game bust attempt ─────────────────────────────────────────
+        // ── Busted Game bust attempt (one chance only) ───────────────────────
         const callSid8 = req.body?.CallSid as string;
         const bustResult = engagementEngine.processBust(callSid8, profileUserId ?? "");
         if (bustResult.result === "win") {
-          // Credit the user with 5 bonus minutes
+          // Award bonus time — amount depends on billing mode
+          const bustSettings = await getMembershipSettingsCached();
+          const bonusSeconds = bustSettings.billingMode === "per_day" ? 3600 : 900;
           const fromNumber8 = req.body?.From as string;
           if (fromNumber8) {
             const winUser = await getOrCreateUser(fromNumber8);
-            await storage.adjustUserCredits(winUser.id, bustResult.bonusSeconds);
-            console.log(`[engagement] Bust WIN: userId=${winUser.id} +${bustResult.bonusSeconds}s`);
+            await storage.adjustUserCredits(winUser.id, bonusSeconds);
+            console.log(`[engagement] Bust WIN: userId=${winUser.id} +${bonusSeconds}s (billingMode=${bustSettings.billingMode})`);
           }
-          twiml.say("Roger here. You got it! That was our A I voice. Five bonus minutes have been added to your account. Nice ear.");
+          const bonusLabel = bustSettings.billingMode === "per_day"
+            ? "one hour of bonus time"
+            : "fifteen bonus minutes";
+          twiml.say(`Roger here. You got it! That was our A I voice. ${bonusLabel} has been added to your account. Nice ear.`);
           twiml.redirect("/voice/browse-profiles");
         } else if (bustResult.result === "miss") {
-          twiml.say("Roger here. Nope! That is a real caller. Keep listening — the A I is still out there.");
+          twiml.say("Roger here. Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing.");
           twiml.redirect("/voice/browse-profiles");
         } else {
           // No active game — treat as invalid choice

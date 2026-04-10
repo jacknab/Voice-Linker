@@ -565,6 +565,8 @@ export function processBust(
     return { result: "win", bonusSeconds: BUST_REWARD_SECONDS };
   }
 
-  // Wrong profile — game continues; just a miss
+  // Wrong profile — one chance only, game is over
+  s.gameCompleted = true;
+  s.gameBustMissed = true;
   return { result: "miss", bonusSeconds: 0 };
 }
