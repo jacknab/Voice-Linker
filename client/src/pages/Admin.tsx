@@ -1000,6 +1000,14 @@ const CATEGORY_COLORS: Record<string, string> = {
   reward:       "text-emerald-600",
 };
 
+const ROGER_MODELS = [
+  { id: "eleven_turbo_v2",       label: "Turbo v2",        note: "Fast · consistent · works with all voices" },
+  { id: "eleven_turbo_v2_5",     label: "Turbo v2.5",      note: "Slightly more expressive turbo" },
+  { id: "eleven_multilingual_v2",label: "Multilingual v2", note: "High quality · multi-language" },
+  { id: "eleven_v3",             label: "v3 ✦",            note: "Emotional · requires v3-compatible voice" },
+] as const;
+type RogerModelId = typeof ROGER_MODELS[number]["id"];
+
 function RogerSubTab() {
   const { toast } = useToast();
   const [moodFilter, setMoodFilter] = useState<"all" | "base" | "normal" | "petty" | "activated" | "chaos" | "v3">("all");
@@ -1009,6 +1017,7 @@ function RogerSubTab() {
   const bulkAbortRef = useRef(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [rogerModel, setRogerModel] = useState<RogerModelId>("eleven_turbo_v2");
 
   const { data: prompts = [], isLoading, refetch } = useQuery<RogerPromptEntry[]>({
     queryKey: ["/api/admin/roger/prompts"],
@@ -1023,7 +1032,7 @@ function RogerSubTab() {
       const res = await fetch("/api/admin/roger/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, text }),
+        body: JSON.stringify({ id, text, model: rogerModel }),
       });
       if (!res.ok) { const err = await res.json().catch(() => ({ message: "Generation failed" })); throw new Error(err.message); }
       return res.json();
@@ -1082,7 +1091,7 @@ function RogerSubTab() {
         const res = await fetch("/api/admin/roger/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: p.id, text: p.lineText }),
+          body: JSON.stringify({ id: p.id, text: p.lineText, model: rogerModel }),
         });
         if (!res.ok) toast({ title: `Failed: ${p.id}`, variant: "destructive" });
       } catch { toast({ title: `Error: ${p.id}`, description: "Network error", variant: "destructive" }); }
@@ -1126,14 +1135,48 @@ function RogerSubTab() {
 
   return (
     <div className="space-y-5">
-      {/* Roger Voice indicator */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs font-mono">
-        <span className="text-amber-600 font-semibold">Roger Voice ID:</span>
-        <span className="text-amber-800" data-testid="text-roger-voice-id">
-          {rogerVoice ? rogerVoice.masked : "Not configured"}
-        </span>
-        {rogerVoice && (
-          <span className="ml-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-bold">ACTIVE</span>
+      {/* Roger Voice + Model selector */}
+      <div className="flex items-center gap-3 flex-wrap px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+        <div className="flex items-center gap-2 text-xs font-mono">
+          <span className="text-amber-600 font-semibold">Voice ID:</span>
+          <span className="text-amber-800" data-testid="text-roger-voice-id">
+            {rogerVoice ? rogerVoice.masked : "Not configured"}
+          </span>
+          {rogerVoice && (
+            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-bold">ACTIVE</span>
+          )}
+        </div>
+        <div className="h-4 w-px bg-amber-200" />
+        <div className="flex items-center gap-1.5 text-xs font-mono">
+          <span className="text-amber-600 font-semibold">Model:</span>
+          <div className="flex items-center gap-1">
+            {ROGER_MODELS.map(m => (
+              <button
+                key={m.id}
+                data-testid={`btn-roger-model-${m.id}`}
+                onClick={() => setRogerModel(m.id)}
+                title={m.note}
+                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border transition-colors ${
+                  rogerModel === m.id
+                    ? "bg-[#f5a623] border-[#f5a623] text-white"
+                    : "bg-white border-gray-200 text-gray-500 hover:border-[#f5a623] hover:text-[#f5a623]"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {rogerModel === "eleven_v3" && (
+          <div className="ml-auto flex items-center gap-1 text-[10px] font-mono text-violet-700 bg-violet-50 border border-violet-200 rounded px-2 py-0.5">
+            <span className="font-bold">v3 ✦</span>
+            <span>emotion-tagged text will be used where available</span>
+          </div>
+        )}
+        {rogerModel !== "eleven_v3" && (
+          <div className="ml-auto text-[10px] font-mono text-gray-400">
+            Plain text only — emotion brackets will not be read aloud
+          </div>
         )}
       </div>
 

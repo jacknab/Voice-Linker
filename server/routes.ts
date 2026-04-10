@@ -1092,23 +1092,30 @@ export async function registerRoutes(
   // Saves to uploads/roger_<id>.mp3 (shared root, no subfolder).
   app.post("/api/admin/roger/generate", async (req, res) => {
     try {
-      const { id, text } = req.body as { id?: string; text?: string };
+      const { id, text, model: requestedModel } = req.body as { id?: string; text?: string; model?: string };
       if (!id?.trim()) return res.status(400).json({ message: "id is required" });
       if (!text?.trim()) return res.status(400).json({ message: "text is required" });
 
-      const cleanId   = id.trim();
-      const filename  = `roger_${cleanId.replace(/[^a-zA-Z0-9_\-]/g, "_")}.mp3`;
-      const voiceId   = getVoiceIdForRoger();
+      const cleanId  = id.trim();
+      const filename = `roger_${cleanId.replace(/[^a-zA-Z0-9_\-]/g, "_")}.mp3`;
+      const voiceId  = getVoiceIdForRoger();
 
-      // Use the v3 emotion-tagged text + eleven_v3 model when available;
-      // otherwise fall back to the provided plain text + turbo model.
-      const v3Text  = ROGER_V3_TEXTS[cleanId];
-      const finalText  = v3Text ?? text.trim();
-      const modelId    = v3Text ? "eleven_v3" : "eleven_turbo_v2";
+      // Determine model: use the caller-supplied model when provided (admin model selector),
+      // otherwise default to eleven_turbo_v2 for consistency across all prompts.
+      const ALLOWED_MODELS = ["eleven_turbo_v2", "eleven_turbo_v2_5", "eleven_v3", "eleven_multilingual_v2"];
+      const modelId = (requestedModel && ALLOWED_MODELS.includes(requestedModel))
+        ? requestedModel
+        : "eleven_turbo_v2";
+
+      // Use the v3 emotion-tagged text only when the admin explicitly selects the eleven_v3 model.
+      // For all other models, use plain text so emotion brackets aren't read aloud literally.
+      const v3Text   = ROGER_V3_TEXTS[cleanId];
+      const useV3Text = modelId === "eleven_v3" && !!v3Text;
+      const finalText = useV3Text ? v3Text! : text.trim();
 
       await generateTTS(finalText, filename, undefined, voiceId, modelId);
       logAudit("audio_generated", { targetType: "audio", targetLabel: filename, detail: { voice: "roger", model: modelId } as unknown as Record<string, unknown> });
-      res.json({ filename, url: `/uploads/${filename}`, model: modelId, usesV3: !!v3Text });
+      res.json({ filename, url: `/uploads/${filename}`, model: modelId, usesV3: useV3Text });
     } catch (e: any) {
       console.error("[admin/roger/generate] failed:", e);
       res.status(500).json({ message: e?.message ?? "Roger TTS generation failed" });
