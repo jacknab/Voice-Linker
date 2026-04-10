@@ -1259,6 +1259,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
+      // ── Recording rejection gate (runs before free-mode to catch all callers) ─
+      // If the auto-moderator rejected a greeting, intercept regardless of billing mode
+      if (user.recordingRejectionReason && user.recordingRejectionType === "greeting") {
+        const rejectionRoute = user.recordingRejectionReason === "phone_number"
+          ? "/voice/recording-rejected-phone-number"
+          : "/voice/recording-rejected-unclear";
+        twiml.redirect(rejectionRoute);
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       // ── Free Mode: bypass all membership/trial/balance checks ───────────────
       const freeModeSettings = await getMembershipSettingsCached();
       if (isFreeModeActive(freeModeSettings)) {
@@ -1272,17 +1283,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         twiml.redirect("/voice/membership-purchase");
       } else {
-        // ── Recording rejection gate ─────────────────────────────────────────
-        // If the auto-moderator rejected a greeting, intercept before going live
-        if (user.recordingRejectionReason && user.recordingRejectionType === "greeting") {
-          const rejectionRoute = user.recordingRejectionReason === "phone_number"
-            ? "/voice/recording-rejected-phone-number"
-            : "/voice/recording-rejected-unclear";
-          twiml.redirect(rejectionRoute);
-          res.type("text/xml");
-          return res.send(twiml.toString());
-        }
-
         // Has time — announce remaining time to all callers at entry
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
         callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
@@ -3622,10 +3622,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         );
         twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else if (digit === "3") {
-        // Accept — profile is already saved; confirm and continue
-        playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
-        // Zip code step skipped — go straight to live system
-        twiml.redirect("/voice/go-live");
+        // Accept — check if auto-moderation has already rejected this recording
+        // (the transcription callback may have fired while the caller was reviewing)
+        const acceptUser = await getOrCreateUser(fromNumber);
+        if (acceptUser.recordingRejectionReason && acceptUser.recordingRejectionType === "greeting") {
+          const rejectionRoute = acceptUser.recordingRejectionReason === "phone_number"
+            ? "/voice/recording-rejected-phone-number"
+            : "/voice/recording-rejected-unclear";
+          twiml.redirect(rejectionRoute);
+        } else {
+          // Profile is already saved; confirm and continue
+          playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
+          // Zip code step skipped — go straight to live system
+          twiml.redirect("/voice/go-live");
+        }
       } else {
         // 9 or anything else → repeat review menu
         twiml.redirect("/voice/review-greeting");
