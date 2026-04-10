@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, timestamp, integer, uuid, doublePrecision, primaryKey, serial, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, boolean, timestamp, integer, uuid, doublePrecision, primaryKey, serial, jsonb, index } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -472,6 +472,20 @@ export const smsTemplates = pgTable("sms_templates", {
 });
 
 export type SmsTemplate = typeof smsTemplates.$inferSelect;
+
+// ── Roger Prompt History — prevents a caller hearing the same Roger line twice ──
+// roger_id matches the prompt's id field (e.g. "picky_01", "cycle_browse_02").
+// Indexed on caller_id + played_at for fast per-caller lookups.
+export const rogerPromptHistory = pgTable("roger_prompt_history", {
+  id: serial("id").primaryKey(),
+  callerId: text("caller_id").notNull(),
+  rogerId: text("roger_id").notNull(),
+  playedAt: timestamp("played_at").notNull().defaultNow(),
+}, (t) => [
+  index("roger_prompt_history_caller_played_idx").on(t.callerId, t.playedAt),
+]);
+
+export type RogerPromptHistory = typeof rogerPromptHistory.$inferSelect;
 
 // ── Personality Engine ─────────────────────────────────────────────────────────
 // Named AI host characters used by the Engagement Engine during call sessions.

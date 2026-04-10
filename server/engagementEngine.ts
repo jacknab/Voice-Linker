@@ -1096,9 +1096,12 @@ export function cleanupEngagementState(callSid: string): void {
  *   drain 6–7    → 60s since last interrupt
  *   drain 8–10   → 45s since last interrupt, all prompts
  *
+ * @param excludedPromptIds - Prompt IDs heard by this caller in the last 24 h.
+ *   These are skipped entirely so the caller never hears the same Roger line twice.
+ *
  * Returns the best-matching prompt or null.
  */
-export function getInterruption(callSid: string): EngagementPrompt | null {
+export function getInterruption(callSid: string, excludedPromptIds: Set<string> = new Set()): EngagementPrompt | null {
   const s = states.get(callSid);
   if (!s) return null;
 
@@ -1132,6 +1135,9 @@ export function getInterruption(callSid: string): EngagementPrompt | null {
   );
 
   for (const prompt of sorted) {
+    // Skip prompts this caller has already heard in the last 24 h
+    if (excludedPromptIds.has(prompt.id)) continue;
+
     const cd = s.promptCooldowns[prompt.id];
     if (cd && now < cd) continue;
 

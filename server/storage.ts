@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, personalityProfiles, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate, type PersonalityProfile, type InsertPersonalityProfile } from "@shared/schema";
+import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, personalityProfiles, rogerPromptHistory, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate, type PersonalityProfile, type InsertPersonalityProfile } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -276,6 +276,10 @@ export interface IStorage {
   upsertSmsTemplate(id: number, data: { label?: string; message?: string; sendDay?: number | null; isActive?: boolean }): Promise<SmsTemplate>;
   markSmsSent(id: number, count: number): Promise<void>;
   getRealUserPhoneNumbers(): Promise<string[]>;
+
+  // Roger Prompt History
+  recordRogerPromptPlay(callerId: string, rogerId: string): Promise<void>;
+  getExcludedRogerPromptIds(callerId: string, librarySize: number): Promise<Set<string>>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -2187,6 +2191,51 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .where(notLike(users.phoneNumber, `${VIRTUAL_PREFIX}%`));
     return rows.map(r => r.phoneNumber).filter(Boolean) as string[];
+  }
+
+  // ── Roger Prompt History ───────────────────────────────────────────────────
+
+  async recordRogerPromptPlay(callerId: string, rogerId: string): Promise<void> {
+    await db.insert(rogerPromptHistory).values({ callerId, rogerId });
+  }
+
+  /**
+   * Returns the set of roger_ids this caller has already heard within the
+   * freshest window that still leaves ≥ 5 prompts available.
+   *
+   * Window fallback:
+   *   24 h → if pool < 5, try 12 h → if pool < 5, try 6 h → else empty set
+   */
+  async getExcludedRogerPromptIds(callerId: string, librarySize: number): Promise<Set<string>> {
+    const MIN_POOL = 5;
+    const windows = [24, 12, 6];
+
+    for (const hours of windows) {
+      const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const rows = await db
+        .select({ rogerId: rogerPromptHistory.rogerId })
+        .from(rogerPromptHistory)
+        .where(
+          and(
+            eq(rogerPromptHistory.callerId, callerId),
+            gte(rogerPromptHistory.playedAt, cutoff),
+          ),
+        );
+
+      const excluded = new Set(rows.map(r => r.rogerId));
+      const available = librarySize - excluded.size;
+
+      if (available >= MIN_POOL) {
+        if (hours < 24) {
+          console.log(`[roger-history] callerId=${callerId} expanded window to ${hours}h (excluded=${excluded.size}, available=${available})`);
+        }
+        return excluded;
+      }
+    }
+
+    // Last resort: return empty set so selection never fails
+    console.log(`[roger-history] callerId=${callerId} all windows exhausted — returning empty exclusion set`);
+    return new Set<string>();
   }
 }
 

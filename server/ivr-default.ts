@@ -3989,7 +3989,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
 
           // ── Engagement Engine interrupt check ────────────────────────────────
-          const engInterruption = engagementEngine.getInterruption(callSid);
+          // Fetch prompts this caller has already heard in the last 24 h so the
+          // engine can skip them and Roger always sounds fresh.
+          let excludedRogerIds = new Set<string>();
+          try {
+            excludedRogerIds = await storage.getExcludedRogerPromptIds(
+              fromNumber,
+              engagementEngine.PROMPT_LIBRARY.length,
+            );
+          } catch (err) {
+            console.error("[engagement] failed to fetch roger prompt history:", err);
+          }
+
+          const engInterruption = engagementEngine.getInterruption(callSid, excludedRogerIds);
           if (engInterruption) {
             const encodedText = encodeURIComponent(engInterruption.lineText);
             const followUp = encodeURIComponent(engInterruption.followUpAction ?? "");
@@ -4586,6 +4598,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         } else {
           const hostName = callSid ? engagementEngine.getActivePersonalityName(callSid) : "Roger";
           twiml.say({ voice: "alice" }, `${hostName} here. ${promptText}`);
+        }
+
+        // Record this prompt in per-caller history so Roger never repeats within 24 h
+        const fromNumber = req.body?.From as string;
+        if (promptId && fromNumber) {
+          storage.recordRogerPromptPlay(fromNumber, promptId).catch(err =>
+            console.error("[roger-history] failed to record prompt play:", err),
+          );
         }
       }
 
