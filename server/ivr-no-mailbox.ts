@@ -3851,13 +3851,25 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             linkedRegionSnapshots,
             announcedLinkedCallerIds: [],
           };
-          callerBrowseState.set(callSid, state);
+          // Only cache the state if the queue is non-empty.
+          // If empty (seeds may be in an inactive phase), skip caching so the
+          // next browse-profiles visit rebuilds from the live activeCalls table.
+          if (state.queue.length > 0) {
+            callerBrowseState.set(callSid, state);
+          }
           console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid} (${nearbySet.size} nearby, ${linkedRegions.length} linked regions)`);
         }
 
+        const retryCount = parseInt((req.query?.browseRetry as string) ?? "0", 10);
         if (state.queue.length === 0) {
-          playPrompt(twiml, req, "no_profiles.mp3", "No profiles are available right now. Please try again later.");
-          twiml.redirect("/voice/main-menu");
+          if (retryCount < 2) {
+            // Seeds may be temporarily in their inactive phase — wait a moment and retry
+            twiml.pause({ length: 3 });
+            twiml.redirect(`/voice/browse-profiles?browseRetry=${retryCount + 1}`);
+          } else {
+            playPrompt(twiml, req, "no_profiles.mp3", "No profiles are available right now. Please try again later.");
+            twiml.redirect("/voice/main-menu");
+          }
         } else {
           // ── Linked-region offer: queue has looped at least once ──────────────
           if (state.hasWrapped && !state.linkedRegionLoaded && regionId) {

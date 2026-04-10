@@ -709,8 +709,13 @@ export class DatabaseStorage implements IStorage {
 
     // Virtual callers (seed sessions) — scoped to the same region when one is provided
     // so the same seed profile doesn't appear simultaneously in two connected regions.
+    // Seeds with no region assignment (regionId IS NULL) are treated as global and
+    // are visible in all regions — this covers seeds started before regions were active.
     const virtualCondition2 = regionId
-      ? and(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`), eq(activeCalls.regionId, regionId))
+      ? and(
+          like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
+          or(eq(activeCalls.regionId, regionId), isNull(activeCalls.regionId))
+        )
       : like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`);
     const virtualUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
