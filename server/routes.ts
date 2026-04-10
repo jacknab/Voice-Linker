@@ -959,8 +959,8 @@ export async function registerRoutes(
       const validFolders = ["mm", "mw"];
       const targetFolder = folder && validFolders.includes(folder.toLowerCase()) ? folder.toLowerCase() : null;
 
-      // Enforce .mp3 extension and sanitize
-      const safe = filename.replace(/[^a-zA-Z0-9_\-]/g, "_").replace(/\.mp3$/i, "") + ".mp3";
+      // Enforce .mp3 extension and sanitize (strip extension first, then sanitize base, then re-add)
+      const safe = filename.replace(/\.mp3$/i, "").replace(/[^a-zA-Z0-9_\-]/g, "_") + ".mp3";
       await generateTTS(text.trim(), safe, targetFolder ?? undefined);
       const fileLabel = targetFolder ? `${targetFolder}/${safe}` : safe;
       logAudit("audio_generated", { targetType: "audio", targetLabel: fileLabel });
