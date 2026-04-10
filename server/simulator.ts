@@ -170,7 +170,7 @@ async function runRealCallerScheduler(): Promise<void> {
   while (true) {
     try {
       // Count how many real-caller seeds are currently active
-      const activeRealSeedCount = [...runningSimulations].filter(
+      const activeRealSeedCount = Array.from(runningSimulations).filter(
         uid => !adminLoops.has(uid),
       ).length;
 

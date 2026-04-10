@@ -121,7 +121,7 @@ function getContentConfig(siteCategory: string): ContentConfig {
       ],
       faqs: [
         {
-          q: (city, state) => `Is the ${siteName} chat line really free in ${city}, ${state}?`,
+          q: (city, state, siteName) => `Is the ${siteName} chat line really free in ${city}, ${state}?`,
           a: (city, state, siteName) =>
             `Yes — ${siteName} gives all new callers free trial minutes to get started, and no credit card is required to claim them. During your free trial, you can record your greeting, browse greetings from guys in the ${city} area, send voice messages, and even connect live with someone. The free minutes give you a genuine taste of the ${siteName} experience before you decide whether a paid membership is right for you. After your trial minutes are used, affordable membership plans are available at multiple price points — there are no contracts, no hidden fees, and you can cancel anytime.`,
         },
@@ -141,7 +141,7 @@ function getContentConfig(siteCategory: string): ContentConfig {
             `Once your free trial minutes run out, you can choose from several affordable membership plans to keep connecting. Plans vary by the number of minutes included, so you can pick whatever fits your usage and budget. All plans are month-to-month with no long-term contracts, and you can cancel at any time without penalty. There are no hidden fees or surprise charges — the price you see is the price you pay. Visit the ${siteName} website for current pricing details and to find the plan that works best for you.`,
         },
         {
-          q: (city, state) => `How does ${siteName} connect me with guys specifically in the ${city}, ${state} area?`,
+          q: (city, state, siteName) => `How does ${siteName} connect me with guys specifically in the ${city}, ${state} area?`,
           a: (city, state, siteName) =>
             `${siteName} uses local access numbers to create geographically focused communities. When you dial the ${city} local access number, you're automatically placed into the ${city} and ${state} community. The greetings you hear first, the messages you receive, and the live connections you make are all prioritized from guys in and around the ${city} area. This local-first approach is what makes ${siteName} feel genuinely like a community rather than a national dating platform. You're talking to people who share your city, your neighborhood, your daily life — and that local connection makes conversations feel more real and more relevant.`,
         },
@@ -210,7 +210,7 @@ function getContentConfig(siteCategory: string): ContentConfig {
       ],
       faqs: [
         {
-          q: (city, state) => `Is ${siteName} really free for singles in ${city}, ${state}?`,
+          q: (city, state, siteName) => `Is ${siteName} really free for singles in ${city}, ${state}?`,
           a: (city, state, siteName) =>
             `Yes — ${siteName} gives all new callers free trial minutes, and no credit card is needed to claim them. During your free trial you can record your greeting, browse greetings from local singles in the ${city} area, send voice messages, and even connect live. After your trial minutes are used, affordable month-to-month membership plans are available. There are no contracts, no hidden fees, and you can cancel at any time. The free trial is a genuine no-risk way to experience the ${siteName} community before deciding whether a membership makes sense for you.`,
         },
@@ -230,7 +230,7 @@ function getContentConfig(siteCategory: string): ContentConfig {
             `When your free trial minutes are used, you can continue chatting by selecting one of ${siteName}'s affordable membership plans. Plans are flexible and available at multiple price points so you can choose what fits your budget and usage. All memberships are month-to-month — no long-term contracts and no cancellation fees. Visit the ${siteName} website for current plan pricing and details.`,
         },
         {
-          q: (city, state) => `How does ${siteName} connect me with singles in the ${city} area specifically?`,
+          q: (city, state, siteName) => `How does ${siteName} connect me with singles in the ${city} area specifically?`,
           a: (city, state, siteName) =>
             `${siteName} uses local access numbers to create location-specific communities. When you dial the ${city} local number, you're placed directly into the ${city} and ${state} community. The greetings you hear, the messages you receive, and the live connections you make are all prioritized from singles in and around ${city}. This local-first approach means you're building connections with people who share your city and your daily life — which makes conversations more relevant and meetups in real life much more natural.`,
         },

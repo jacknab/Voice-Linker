@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import {
   LogOut, Loader2, User, Clock, Shield, Star, Zap,
   KeyRound, ChevronRight, Eye, EyeOff, CheckCircle2, PhoneCall,
-  AlertTriangle, Link2, CheckCircle, History, PhoneIncoming, Timer, Plus, Trash2, PhoneForwarded,
+  AlertTriangle, Link2, CheckCircle, History, PhoneIncoming, Timer, Plus, Trash2, PhoneForwarded, Phone,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";

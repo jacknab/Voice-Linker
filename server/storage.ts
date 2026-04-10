@@ -7,8 +7,6 @@ const VIRTUAL_PREFIX = "VIRTUAL-";
 
 export interface ProfileWithUser extends Profile {
   phoneNumber: string;
-  transcription?: string | null;
-  transcriptionStatus?: string | null;
 }
 
 export interface CallerSummary {
@@ -457,6 +455,8 @@ export class DatabaseStorage implements IStorage {
         isAdminUploaded: profiles.isAdminUploaded,
         siteCategory: profiles.siteCategory,
         gender: profiles.gender,
+        transcription: profiles.transcription,
+        transcriptionStatus: profiles.transcriptionStatus,
         createdAt: profiles.createdAt,
         phoneNumber: users.phoneNumber,
       })
@@ -477,6 +477,8 @@ export class DatabaseStorage implements IStorage {
         isAdminUploaded: profiles.isAdminUploaded,
         siteCategory: profiles.siteCategory,
         gender: profiles.gender,
+        transcription: profiles.transcription,
+        transcriptionStatus: profiles.transcriptionStatus,
         createdAt: profiles.createdAt,
         phoneNumber: users.phoneNumber,
       })
@@ -1971,12 +1973,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPersonalityProfile(data: InsertPersonalityProfile): Promise<PersonalityProfile> {
-    const [row] = await db.insert(personalityProfiles).values(data).returning();
+    const [row] = await db.insert(personalityProfiles).values(data as any).returning();
     return row;
   }
 
   async updatePersonalityProfile(id: number, data: Partial<InsertPersonalityProfile>): Promise<PersonalityProfile> {
-    const [row] = await db.update(personalityProfiles).set(data).where(eq(personalityProfiles.id, id)).returning();
+    const [row] = await db.update(personalityProfiles).set(data as any).where(eq(personalityProfiles.id, id)).returning();
     return row;
   }
 
@@ -2136,7 +2138,7 @@ export class DatabaseStorage implements IStorage {
     ];
 
     for (const p of defaults) {
-      await db.insert(personalityProfiles).values(p).onConflictDoNothing();
+      await db.insert(personalityProfiles).values(p as any).onConflictDoNothing();
     }
   }
 

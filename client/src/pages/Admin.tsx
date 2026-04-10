@@ -1614,7 +1614,7 @@ function TTSTab() {
         <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
           <Wand2 size={14} className="text-[#f5a623]" /> Custom Audio File
           <span className="ml-auto text-[10px] font-normal normal-case text-gray-400 border border-gray-200 rounded px-2 py-0.5">
-            → {categoryFolder === "shared" ? "Shared" : categoryFolder.toUpperCase()} folder
+            → {categoryFolder.toUpperCase()} folder
           </span>
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1736,7 +1736,7 @@ function TTSTab() {
           <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">
             System Prompts
             <span className="ml-2 text-[10px] font-normal normal-case text-gray-400 border border-gray-200 rounded px-2 py-0.5">
-              Folder: {categoryFolder === "shared" ? "Shared" : categoryFolder.toUpperCase()}
+              Folder: {categoryFolder.toUpperCase()}
             </span>
           </h3>
           <div className="flex items-center gap-2 ml-auto flex-wrap">

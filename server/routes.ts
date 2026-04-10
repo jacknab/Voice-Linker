@@ -16,7 +16,7 @@ import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger } from
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
-import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached } from "./settings-cache";
+import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached, getMembershipSettingsCached } from "./settings-cache";
 import { PROMPT_LIBRARY, ROGER_V3_TEXTS } from "./engagementEngine";
 import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage } from "./seoPageGenerator";
 
@@ -49,6 +49,27 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
 });
 
+
+// Extract Twilio recording SID from a recording URL
+function getRecordingSid(url: string): string | null {
+  const match = url.match(/Recordings\/([^\/\?.]+)/);
+  return match ? match[1] : null;
+}
+
+// Generate a unique random 5-digit card number (10000–99999).
+async function generateUniqueCardNumber(): Promise<string> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const num = String(Math.floor(10000 + Math.random() * 90000));
+    const taken = await storage.isMembershipCardNumberTaken(num);
+    if (!taken) return num;
+  }
+  throw new Error("Unable to generate a unique membership card number after 100 attempts");
+}
+
+// Generate a random 4-digit PIN (1000–9999).
+function generateCardPin(): string {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
 
 function centsToLabel(cents: number): string {
   const dollars = Math.floor(cents / 100);
@@ -1143,7 +1164,7 @@ export async function registerRoutes(
 
   app.put("/api/admin/personalities/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       const profile = await storage.updatePersonalityProfile(id, req.body);
       res.json(profile);
     } catch (e) {
@@ -1153,7 +1174,7 @@ export async function registerRoutes(
 
   app.delete("/api/admin/personalities/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       await storage.deletePersonalityProfile(id);
       res.json({ ok: true });
     } catch (e) {
@@ -1173,7 +1194,7 @@ export async function registerRoutes(
 
   app.put("/api/admin/sms-templates/:id", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (id !== 1 && id !== 2) return res.status(400).json({ message: "Invalid template id." });
 
       const { label, message, sendDay, isActive } = req.body as {
@@ -1236,7 +1257,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/sms-templates/:id/send-now", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (id !== 1 && id !== 2) return res.status(400).json({ message: "Invalid template id." });
 
       const template = await storage.getSmsTemplate(id);
@@ -1824,7 +1845,7 @@ export async function registerRoutes(
     if (!req.session.webUserId) {
       return res.status(401).json({ error: "Not authenticated." });
     }
-    const { sessionId } = req.params;
+    const sessionId = req.params.sessionId as string;
 
     try {
       const stripe = await getUncachableStripeClient();

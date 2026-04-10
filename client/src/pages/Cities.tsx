@@ -83,7 +83,7 @@ export default function Cities() {
                     data-testid={`city-card-${r.slug}`}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
-                        <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "#fff", margin: 0, truncate: "true", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "#fff", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {r.name}
                         </p>
                         {(r.activeCalls ?? 0) > 0 && (
