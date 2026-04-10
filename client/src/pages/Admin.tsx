@@ -1398,6 +1398,22 @@ function TTSTab() {
   const { data: existingFiles } = useQuery<{ filename: string; url: string; size: number; folder: string }[]>({ queryKey: ["/api/admin/tts/prompts"] });
   const { data: zipEntries = [] } = useQuery<ZipEntry[]>({ queryKey: ["/api/admin/zip-codes"] });
   const neighborhoodEntries = zipEntries.filter(e => e.audioFile && e.neighborhood);
+  const { data: allRegions = [] } = useQuery<Region[]>({ queryKey: ["/api/regions"] });
+  const [generatingCity, setGeneratingCity] = useState<string | null>(null);
+
+  const generateCityMutation = useMutation({
+    mutationFn: async (regionId: string) => {
+      const res = await fetch(`/api/admin/regions/${regionId}/regenerate-city-audio`, { method: "POST" });
+      if (!res.ok) { const err = await res.json().catch(() => ({ message: "Failed" })); throw new Error(err.message); }
+      return res.json() as Promise<{ filename: string; url: string }>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
+      toast({ title: "City audio generated" });
+      setGeneratingCity(null);
+    },
+    onError: (err: Error) => { toast({ title: "Generation failed", description: err.message, variant: "destructive" }); setGeneratingCity(null); },
+  });
 
   const existingMap = new Map<string, { filename: string; url: string; size: number; folder: string }>(
     (existingFiles ?? []).map(f => [`${f.folder}:${f.filename}`, f])
@@ -1719,6 +1735,81 @@ function TTSTab() {
                                 <Trash2 size={10} />
                               </button>
                             </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {allRegions.length > 0 && (
+        <div className={C.card}>
+          <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+            <MapPin size={14} className="text-[#f5a623]" /> City Name Audio Files
+          </h3>
+          <p className="text-gray-400 font-mono text-xs -mt-1">
+            One audio file per region. Used in the linked-regions IVR menu when a caller has heard all local callers and is offered nearby cities.
+            The menu says: <span className="text-gray-600 italic">"You have heard all the callers close to you. Press 1 to hear [callers from Denver]. Press 2 to hear [callers from Boulder]. Press 3 to start over."</span>
+            <br />The bracketed parts play from these pre-generated ElevenLabs files. New regions auto-generate on creation. This menu is triggered automatically — no manual setup needed.
+          </p>
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className={C.th}>Region</th>
+                  <th className={C.th}>File</th>
+                  <th className={C.th + " w-32"}>Status</th>
+                  <th className={C.th + " w-40"}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allRegions.map(region => {
+                  const slug = region.slug.replace(/[^a-z0-9_\-]/g, "_");
+                  const filename = `city_${slug}.mp3`;
+                  const exists = fileExistsIn("shared", filename);
+                  const existingFile = getFileIn("shared", filename);
+                  const isGen = generatingCity === region.id;
+                  return (
+                    <tr key={region.id} data-testid={`row-city-audio-${region.id}`} className={C.row}>
+                      <td className={C.td}>
+                        <div className="text-gray-800 font-mono text-xs font-bold">{region.name}</div>
+                        <div className="text-gray-400 font-mono text-[10px] mt-0.5">{region.slug}</div>
+                      </td>
+                      <td className={C.td}>
+                        <span className="font-mono text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">{filename}</span>
+                        <div className="text-gray-400 font-mono text-[10px] mt-0.5 italic">"{`callers from ${region.name}.`}"</div>
+                      </td>
+                      <td className={C.td}>
+                        <span className={`${C.badge} ${exists ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
+                          {exists ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                          {exists ? "Generated" : "Missing"}
+                        </span>
+                      </td>
+                      <td className={C.td}>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            data-testid={`btn-generate-city-${region.id}`}
+                            onClick={() => { setGeneratingCity(region.id); generateCityMutation.mutate(region.id); }}
+                            disabled={!!generatingCity}
+                            className={C.btnGhost + " text-[10px]"}
+                          >
+                            {isGen ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                            {exists ? "Regen" : "Generate"}
+                          </button>
+                          {exists && existingFile && <AudioPlayer src={existingFile.url} />}
+                          {exists && (
+                            <button
+                              data-testid={`btn-delete-city-${region.id}`}
+                              onClick={() => deleteMutation.mutate({ filename, folder: "shared" })}
+                              className={C.btnDanger + " text-[10px]"}
+                            >
+                              <Trash2 size={10} />
+                            </button>
                           )}
                         </div>
                       </td>

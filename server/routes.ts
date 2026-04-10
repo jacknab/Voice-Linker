@@ -20,6 +20,20 @@ import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSite
 import { PROMPT_LIBRARY, ROGER_V3_TEXTS } from "./engagementEngine";
 import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage } from "./seoPageGenerator";
 
+// ─── City Audio Helper ────────────────────────────────────────────────────────
+// Generates a shared ElevenLabs audio file for a region's city name so the
+// linked-regions IVR menu can play it instead of falling back to Twilio TTS.
+// File is saved to uploads/city_{slug}.mp3 (shared folder, works for MM + MW).
+async function generateCityAudio(regionName: string, regionSlug: string): Promise<void> {
+  try {
+    const filename = `city_${regionSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
+    await generateTTS(`callers from ${regionName}.`, filename);
+    console.log(`[city-audio] Generated ${filename} for region "${regionName}"`);
+  } catch (err: any) {
+    console.error(`[city-audio] Failed to generate audio for "${regionName}":`, err.message);
+  }
+}
+
 // Ensure uploads directory and category subdirectories exist
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
@@ -1538,6 +1552,8 @@ export async function registerRoutes(
       if (zip) geocodeRegionZip(zip);
       // Generate SEO landing page (fire-and-forget)
       generateRegionSeoPage(region.id).catch(err => console.error("[seo] Failed to generate page for region", region.id, err));
+      // Auto-generate city name audio for the linked-regions IVR menu (fire-and-forget)
+      generateCityAudio(region.name, region.slug).catch(() => {});
       res.status(201).json({ ...region, linkedRegionIds: linkedRegionIds ?? [] });
     } catch (e: any) {
       console.error("[regions] Failed to create region:", e);
@@ -1572,6 +1588,10 @@ export async function registerRoutes(
       if (zip && "defaultZipCode" in req.body) geocodeRegionZip(zip);
       // Regenerate SEO landing page (fire-and-forget)
       generateRegionSeoPage(id).catch(err => console.error("[seo] Failed to regenerate page for region", id, err));
+      // Regenerate city audio if the name or slug changed (fire-and-forget)
+      if (name !== undefined || slug !== undefined) {
+        generateCityAudio(region.name, region.slug).catch(() => {});
+      }
       res.json({ ...region, linkedRegionIds: currentLinkedRegions.map(r => r.id) });
     } catch (e: any) {
       console.error("[regions] Failed to update region:", e);
@@ -1595,7 +1615,18 @@ export async function registerRoutes(
     }
   });
 
-
+  // Manually regenerate city audio for a specific region
+  app.post("/api/admin/regions/:id/regenerate-city-audio", async (req, res) => {
+    try {
+      const region = await storage.getRegionById(req.params.id);
+      if (!region) return res.status(404).json({ message: "Region not found" });
+      await generateCityAudio(region.name, region.slug);
+      const filename = `city_${region.slug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
+      res.json({ filename, url: `/uploads/${filename}` });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Failed to generate city audio" });
+    }
+  });
 
   // ─── PayPal Standard IPN ────────────────────────────────────────────────────
   // In-memory set to prevent double-crediting from duplicate IPN deliveries

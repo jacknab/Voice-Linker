@@ -4129,9 +4129,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Static intro audio (can be overridden with ElevenLabs recording)
       playPrompt(gather, req, "nearby_callers_offer.mp3", "You have heard all the callers close to you.");
 
-      // Dynamic per-region options (TTS — region names are variable)
+      // Dynamic per-region options — use pre-generated city audio files where available,
+      // falling back to Twilio TTS. City files are named city_{slug}.mp3 and contain
+      // "callers from {city name}." so we prefix with "Press X to hear" via TTS.
       for (const r of regions) {
-        gather.say(`Press ${r.digit} to hear callers from ${r.name}.`);
+        const regionRecord = await storage.getRegionById(r.id).catch(() => null);
+        const slug = regionRecord?.slug ?? r.name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+        const cityFile = `city_${slug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
+        const cityFilePath = path.join(UPLOADS_DIR, cityFile);
+        if (fs.existsSync(cityFilePath)) {
+          gather.say(`Press ${r.digit} to hear`);
+          gather.play(`${baseUrl(req)}/uploads/${cityFile}`);
+        } else {
+          gather.say(`Press ${r.digit} to hear callers from ${r.name}.`);
+        }
       }
       gather.say(`Press ${startOverDigit} to start over from the beginning.`);
 
