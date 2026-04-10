@@ -1,20 +1,32 @@
 /**
- * Engagement Engine — Roger Mood + Attention Drain Engine
+ * Engagement Engine — Roger Audio Personality System
  *
- * Roger is the one and only AI host. His timing is driven by an Attention Drain
- * Score — a live behavioral metric that determines WHEN he speaks and HOW strongly.
- * His mood (normal/petty/activated/chaos) determines WHAT he says.
+ * Roger is the sole AI host. This is a flat, predictable execution pipeline:
+ *
+ *   1. DETECT STATE — evaluate inactivity, skip behavior, engagement signals
+ *      via Attention Drain Score (0–10) and Mood (normal/petty/activated/chaos)
+ *
+ *   2. CHECK CONSTRAINTS — speech cooldown, max interruptions,
+ *      and per-caller 24h no-repeat rule (excludedPromptIds)
+ *
+ *   3. SELECT PROMPT — match Roger ID from the prompt library
+ *      by category priority, trigger conditions, and mood
+ *
+ *   4. EXECUTE — return prompt to IVR; caller logs roger_id + timestamp
  *
  * Attention Drain Score (0–10):
- *   Increases: +2 per skip, +3 per 30s idle, +2 per 30s with 0 messages
- *   Decreases: -5 on message sent, -10 on game started
- *   Clamp: 0–10
+ *   +2 per skip | +3 per 30s idle | +2 per 30s with 0 messages
+ *   -5 on message sent | -10 on game started | clamp 0–10
  *
  * Interrupt Gate (drain-adaptive cooldown):
- *   drain 0–2   → no interrupt
- *   drain 3–5   → 90s cooldown, light prompts only
- *   drain 6–7   → 60s cooldown, medium prompts
- *   drain 8–10  → 45s cooldown, all prompts + game invites
+ *   drain 0–2  → silent (no interrupt)
+ *   drain 3–5  → 90s cooldown
+ *   drain 6–7  → 60s cooldown
+ *   drain 8–10 → 45s cooldown
+ *
+ * Mood Engine: normal → petty → activated → chaos (driven by behavior flags)
+ * Engagement Streak (0–10): +2/message, +3/game, +1/60s active. Resets on idle > 90s.
+ * Busted Game: inject AI voice, award bonus time on correct guess.
  */
 
 // ── Core types ────────────────────────────────────────────────────────────────
@@ -38,11 +50,6 @@ export type PromptTone =
 /** Roger's 4 moods — same character, different energy. */
 export type RogerMood = "normal" | "petty" | "activated" | "chaos";
 
-/**
- * Interaction cycle stage — drives narrative arc and reward timing.
- * browse → tension → engage → reward → browse (loop)
- */
-export type CycleStage = "browse" | "tension" | "engage" | "reward";
 
 /** Temporary session-based behavioral labels. NOT persistent. */
 export interface FakeMemoryFlags {
@@ -83,12 +90,6 @@ export interface EngagementPrompt {
     /** Attention drain gate — prompt only fires when score is in this range. */
     minAttentionDrain?: number;
     maxAttentionDrain?: number;
-    /** Cycle stage gate — only fires when session is in one of these stages. */
-    requiredCycleStages?: CycleStage[];
-    /** Minimum engagement streak required for this prompt. */
-    minEngagementStreak?: number;
-    /** Maximum engagement streak allowed for this prompt. */
-    maxEngagementStreak?: number;
   };
   lineText: string;
   followUpAction?: FollowUpAction;
@@ -129,12 +130,6 @@ export interface CallerEngagementState {
   engagementStreak: number;
   /** Timestamp of last streak time-based increment. */
   lastStreakTickMs: number;
-
-  // ── Interaction Cycle ──────────────────────────────────────────────────────
-  /** Current narrative arc stage: browse→tension→engage→reward→browse */
-  interactionCycleStage: CycleStage;
-  /** Timestamp of the last reward trigger. */
-  lastRewardTimeMs: number;
 
   // ── Busted game ────────────────────────────────────────────────────────────
   gameStarted: boolean;
@@ -716,114 +711,6 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     lineText: "At some point browsing stops being productive and starts being an avoidance strategy. You might be there. Send a message.",
     followUpAction: "suggest_send_message", cooldownSeconds: 300 },
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ENGAGEMENT LOOP PROMPTS — Cycle-Stage Aware Lines
-  // Narrative arc: browse → tension → engage → reward → browse
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  // ─── BROWSE stage — early session, welcoming, no pressure ──────────────────
-  { id: "cycle_browse_01", category: "idle", tone: "playful",
-    trigger: { requiredCycleStages: ["browse"], maxSessionSeconds: 90, maxSkips: 3 },
-    lineText: "Welcome in. Take a look around. No pressure right now — just listen and see what catches your ear.",
-    cooldownSeconds: 180 },
-  { id: "cycle_browse_02", category: "idle", tone: "seductive",
-    trigger: { requiredCycleStages: ["browse"], maxSessionSeconds: 120, maxSkips: 5 },
-    lineText: "There are a lot of interesting voices on here right now.",
-    cooldownSeconds: 160 },
-  { id: "cycle_browse_03", category: "idle", tone: "playful",
-    trigger: { requiredCycleStages: ["browse"], maxSessionSeconds: 100 },
-    lineText: "Every session starts here. The right voice is somewhere in this mix. Keep listening.",
-    cooldownSeconds: 160 },
-  { id: "cycle_browse_04", category: "idle", tone: "comedic",
-    trigger: { requiredCycleStages: ["browse"], maxSessionSeconds: 80, maxSkips: 4 },
-    lineText: "You never know what you are going to find when you first browse. That is honestly the fun part.",
-    cooldownSeconds: 150 },
-  { id: "cycle_browse_05", category: "idle", tone: "seductive",
-    trigger: { requiredCycleStages: ["browse"], maxSessionSeconds: 90 },
-    lineText: "No agenda. No rush. Just explore — something always catches your ear when you least expect it.",
-    cooldownSeconds: 170 },
-  { id: "cycle_browse_06", category: "flirty", tone: "playful",
-    trigger: { requiredCycleStages: ["browse"], maxSessionSeconds: 100, maxSkips: 6 },
-    lineText: "First impressions happen fast on this line. But so do connections. Stay open.",
-    cooldownSeconds: 160 },
-
-  // ─── TENSION stage — suspense building, teasing, anticipation ──────────────
-  { id: "cycle_tension_01", category: "reengagement", tone: "seductive",
-    trigger: { requiredCycleStages: ["tension"], minAttentionDrain: 3 },
-    lineText: "Something is building right now. I can feel it. I think you can too.",
-    cooldownSeconds: 200 },
-  { id: "cycle_tension_02", category: "reengagement", tone: "playful",
-    trigger: { requiredCycleStages: ["tension"], minSessionSeconds: 60, minAttentionDrain: 3 },
-    lineText: "You have been here a while. Things are about to get interesting for you. I can already tell.",
-    cooldownSeconds: 220 },
-  { id: "cycle_tension_03", category: "flirty", tone: "seductive",
-    trigger: { requiredCycleStages: ["tension"], minAttentionDrain: 4 },
-    lineText: "I have been watching. You are close to something good here. Do not give up now.",
-    cooldownSeconds: 210 },
-  { id: "cycle_tension_04", category: "reengagement", tone: "teasing",
-    trigger: { requiredCycleStages: ["tension"], minSkips: 3, minAttentionDrain: 3 },
-    lineText: "The interesting part of this call is right around the corner. Just keep going.",
-    cooldownSeconds: 200 },
-  { id: "cycle_tension_05", category: "flirty", tone: "seductive",
-    trigger: { requiredCycleStages: ["tension"], minAttentionDrain: 4 },
-    lineText: "You know that feeling right before something clicks? You are right there. Trust it.",
-    cooldownSeconds: 220 },
-  { id: "cycle_tension_06", category: "reengagement", tone: "playful",
-    trigger: { requiredCycleStages: ["tension"], minSessionSeconds: 90, minAttentionDrain: 3 },
-    lineText: "We are building toward something right now. I just need you to stay with me a little longer.",
-    cooldownSeconds: 200 },
-
-  // ─── ENGAGE stage — momentum, user is in motion, keep them going ───────────
-  { id: "cycle_engage_01", category: "reward", tone: "playful",
-    trigger: { requiredCycleStages: ["engage"], minEngagementStreak: 3 },
-    lineText: "Now we are talking. This is exactly the energy this line runs on.",
-    cooldownSeconds: 240 },
-  { id: "cycle_engage_02", category: "reward", tone: "seductive",
-    trigger: { requiredCycleStages: ["engage"], minEngagementStreak: 3 },
-    lineText: "You switched gears and it is showing. Keep that going.",
-    cooldownSeconds: 240 },
-  { id: "cycle_engage_03", category: "reward", tone: "playful",
-    trigger: { requiredCycleStages: ["engage"], minEngagementStreak: 4 },
-    lineText: "You are officially in the zone right now. Do not overthink it.",
-    cooldownSeconds: 260 },
-  { id: "cycle_engage_04", category: "reward", tone: "seductive",
-    trigger: { requiredCycleStages: ["engage"], minEngagementStreak: 3 },
-    lineText: "Something shifted and now you are genuinely in it. I love to see it.",
-    cooldownSeconds: 240 },
-  { id: "cycle_engage_05", category: "reward", tone: "comedic",
-    trigger: { requiredCycleStages: ["engage"], minEngagementStreak: 4 },
-    lineText: "You went from browsing to actually connecting. That is character development right there.",
-    cooldownSeconds: 280 },
-  { id: "cycle_engage_06", category: "reward", tone: "seductive",
-    trigger: { requiredCycleStages: ["engage"], minEngagementStreak: 3 },
-    lineText: "The line feels different when someone is actually engaged. And you are. Keep going.",
-    cooldownSeconds: 260 },
-
-  // ─── REWARD stage — payoff moments, 4 types ────────────────────────────────
-  { id: "cycle_reward_roger_remembers", category: "reward", tone: "seductive",
-    trigger: { requiredCycleStages: ["reward"], minEngagementStreak: 5 },
-    lineText: "I have to be honest with you — you came back and I noticed. That means something around here.",
-    cooldownSeconds: 99999 },
-  { id: "cycle_reward_priority_access", category: "reward", tone: "playful",
-    trigger: { requiredCycleStages: ["reward"], minEngagementStreak: 5 },
-    lineText: "Heads up — you have been moved to the front of the queue. The next few callers were selected specifically with you in mind.",
-    cooldownSeconds: 99999 },
-  { id: "cycle_reward_bonus_game", category: "game_invite", tone: "playful",
-    trigger: { requiredCycleStages: ["reward"], minEngagementStreak: 5, requireNoGameStarted: true },
-    lineText: "You have earned a bonus round of the Busted game — no charge. That one is on me. Press 8 if you catch the AI.",
-    followUpAction: "start_game", cooldownSeconds: 99999 },
-  { id: "cycle_reward_special_greeting", category: "reward", tone: "seductive",
-    trigger: { requiredCycleStages: ["reward"], minEngagementStreak: 5 },
-    lineText: "I do not say this to everyone — but you are genuinely one of my favorite callers right now. Keep doing exactly what you are doing.",
-    cooldownSeconds: 99999 },
-  { id: "cycle_reward_acknowledgment", category: "reward", tone: "comedic",
-    trigger: { requiredCycleStages: ["reward"], minEngagementStreak: 6 },
-    lineText: "You have been putting in the work and it has not gone unnoticed. Consider this your official acknowledgment from Roger.",
-    cooldownSeconds: 99999 },
-  { id: "cycle_reward_recognition", category: "reward", tone: "seductive",
-    trigger: { requiredCycleStages: ["reward"], minEngagementStreak: 5 },
-    lineText: "Between us — not everyone gets this deep into a session. You are exactly the kind of person this line was built for.",
-    cooldownSeconds: 99999 },
 ];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -834,10 +721,6 @@ const START_GRACE_MS = 60_000;
 const MAX_INTERRUPTIONS = 8;
 /** Bonus seconds awarded for a correct bust. */
 export const BUST_REWARD_SECONDS = 300;
-/** Minimum gap between reward triggers (ms) — prevents over-rewarding. */
-const REWARD_COOLDOWN_MS = 300_000; // 5 minutes
-/** Engagement streak required to trigger a reward prompt. */
-const REWARD_STREAK_THRESHOLD = 5;
 /** Idle time (ms) that resets the engagement streak. */
 const STREAK_IDLE_RESET_MS = 90_000;
 /** Category priority for prompt selection (lower index = higher priority). */
@@ -895,51 +778,6 @@ function updateSessionMetrics(s: CallerEngagementState): void {
   }
 
   s.lastDrainUpdateMs = now;
-}
-
-/**
- * Updates the interaction cycle stage based on current session metrics.
- * Transitions: browse → tension → engage → reward → browse
- */
-function updateCycleStage(s: CallerEngagementState): void {
-  const now        = Date.now();
-  const streak     = s.engagementStreak;
-  const drain      = s.attentionDrainScore;
-  const canReward  = (now - s.lastRewardTimeMs) >= REWARD_COOLDOWN_MS;
-
-  const prev = s.interactionCycleStage;
-
-  if (s.interactionCycleStage === "browse") {
-    // browse → tension: drain rising OR session picking up
-    if (drain >= 4 || streak >= 2) {
-      s.interactionCycleStage = "tension";
-    }
-  } else if (s.interactionCycleStage === "tension") {
-    // tension → engage: user is actively engaged
-    if (streak >= 3 && drain >= 4) {
-      s.interactionCycleStage = "engage";
-    }
-    // tension → browse: drain dropped back (user re-engaged naturally)
-    else if (drain < 2 && streak < 1) {
-      s.interactionCycleStage = "browse";
-    }
-  } else if (s.interactionCycleStage === "engage") {
-    // engage → reward: high streak + enough time since last reward
-    if (streak >= REWARD_STREAK_THRESHOLD && canReward) {
-      s.interactionCycleStage = "reward";
-    }
-    // engage → tension: streak dropped
-    else if (streak < 2) {
-      s.interactionCycleStage = "tension";
-    }
-  } else if (s.interactionCycleStage === "reward") {
-    // reward is transient — moves back to browse after firing
-    // (handled in getInterruption after reward prompt is consumed)
-  }
-
-  if (prev !== s.interactionCycleStage) {
-    console.log(`[roger-cycle] callSid=${s.callSid} ${prev}→${s.interactionCycleStage} (streak=${streak} drain=${drain})`);
-  }
 }
 
 /**
@@ -1010,8 +848,6 @@ export function initEngagementState(callSid: string, userId: string): void {
     lastDrainUpdateMs: now,
     engagementStreak: 0,
     lastStreakTickMs: now,
-    interactionCycleStage: "browse",
-    lastRewardTimeMs: 0,
     sessionStartMs: now,
     greetingsSkipped: 0,
     messagesSent: 0,
@@ -1070,10 +906,6 @@ export function getEngagementStreak(callSid: string): number {
   return states.get(callSid)?.engagementStreak ?? 0;
 }
 
-export function getCycleStage(callSid: string): CycleStage {
-  return states.get(callSid)?.interactionCycleStage ?? "browse";
-}
-
 export function trackActivity(callSid: string): void {
   const s = states.get(callSid);
   if (s) s.lastActivityMs = Date.now();
@@ -1109,14 +941,11 @@ export function getInterruption(callSid: string, excludedPromptIds: Set<string> 
   if (now < s.globalCooldownUntil) return null;
   if (s.interruptionCount >= MAX_INTERRUPTIONS) return null;
 
-  // Update drain, streak, cycle stage, and mood
+  // Update drain, streak, and mood
   updateSessionMetrics(s);
-  updateCycleStage(s);
   refreshMood(s);
 
   const drain = s.attentionDrainScore;
-  const stage = s.interactionCycleStage;
-  const streak = s.engagementStreak;
 
   // Drain gate — too low means Roger stays quiet
   if (drain < 3) return null;
@@ -1174,15 +1003,6 @@ export function getInterruption(callSid: string, excludedPromptIds: Set<string> 
       if (t.forbiddenFlags.some(f => flags[f])) continue;
     }
 
-    // Cycle stage check
-    if (t.requiredCycleStages && t.requiredCycleStages.length > 0) {
-      if (!t.requiredCycleStages.includes(stage)) continue;
-    }
-
-    // Engagement streak range check
-    if (t.minEngagementStreak !== undefined && streak < t.minEngagementStreak) continue;
-    if (t.maxEngagementStreak !== undefined && streak > t.maxEngagementStreak) continue;
-
     // ✓ Matched — consume
     s.promptCooldowns[prompt.id] = now + prompt.cooldownSeconds * 1000;
     s.recentPromptIds = [...s.recentPromptIds.slice(-4), prompt.id];
@@ -1190,15 +1010,7 @@ export function getInterruption(callSid: string, excludedPromptIds: Set<string> 
     s.globalCooldownUntil = now + cooldownMs;
     s.interruptionCount++;
 
-    // Reward post-fire: record timestamp and reset cycle to browse
-    if (stage === "reward") {
-      s.lastRewardTimeMs       = now;
-      s.interactionCycleStage  = "browse";
-      s.engagementStreak       = Math.max(0, s.engagementStreak - 3); // partial reset
-      console.log(`[roger-reward] callSid=${callSid} reward fired, cycle reset → browse`);
-    }
-
-    console.log(`[roger] callSid=${callSid} prompt="${prompt.id}" mood="${mood}" drain=${drain} stage=${stage} streak=${streak} skips=${s.greetingsSkipped} msgs=${s.messagesSent}`);
+    console.log(`[roger] callSid=${callSid} prompt="${prompt.id}" mood="${mood}" drain=${drain} streak=${s.engagementStreak} skips=${s.greetingsSkipped} msgs=${s.messagesSent}`);
     return prompt;
   }
 
@@ -1310,23 +1122,6 @@ export const ROGER_V3_TEXTS: Record<string, string> = {
   petty_09: "[laughs] You have ghosted more guys today than most apps see in a week.",
   petty_10: "[sighs] I am running out of new guys to show you. [deadpan] Not literally. But almost.",
   petty_11: "[deadpan] Let us be real. [sighs] You do not even know what you are looking for anymore.",
-
-  // CYCLE STAGE — TENSION
-  cycle_tension_01: "[slowly] Something is building right now. [quietly] I can feel it. I think you can too.",
-  cycle_tension_03: "[whispers] I have been watching. You are close to something good here. Do not give up now.",
-  cycle_tension_05: "[quietly] You know that feeling right before something clicks? [warmly] You are right there. Trust it.",
-
-  // CYCLE STAGE — ENGAGE
-  cycle_engage_01: "[excited] Now we are talking. [cheerfully] This is exactly the energy this line runs on.",
-  cycle_engage_02: "[warmly] You switched gears and it is showing. [encouraging] Keep that going.",
-  cycle_engage_05: "[chuckles] You went from browsing to actually connecting. [playfully] That is character development right there.",
-
-  // CYCLE STAGE — REWARD
-  cycle_reward_roger_remembers: "[warmly] I have to be honest with you — [softly] you came back and I noticed. That means something around here.",
-  cycle_reward_priority_access: "[excited] Heads up — you have been moved to the front of the queue. [warmly] The next few callers were selected specifically with you in mind.",
-  cycle_reward_special_greeting: "[softly] I do not say this to everyone — [warmly] but you are genuinely one of my favorite callers right now. Keep doing exactly what you are doing.",
-  cycle_reward_acknowledgment: "[cheerfully] You have been putting in the work and it has not gone unnoticed. [warmly] Consider this your official acknowledgment from Roger.",
-  cycle_reward_recognition: "[softly] Between us — not everyone gets this deep into a session. [warmly] You are exactly the kind of person this line was built for.",
 
   // ROGER CUSTOM
   roger_04: "[sighs] You have been very still. [curious] Which means either you are very relaxed or you are overthinking everything. [warmly] Either way — say hello to someone.",
