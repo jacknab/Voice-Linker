@@ -1500,7 +1500,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Automatically play back the greeting so the caller can hear it before the review menu.
       // This also gives the transcription callback time to come back before they press 3 to accept.
       twiml.say("Here is what your greeting sounds like.");
-      if (nameRecordingUrl) safePlayRecording(twiml, nameRecordingUrl, req, "");
       safePlayRecording(twiml, recordingUrl, req, "");
       twiml.redirect("/voice/review-greeting");
     } catch (error) {
@@ -3591,9 +3590,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-review-greeting" });
     playPrompt(gather, req, "review_greeting.mp3",
-      "To hear your greeting, press 1. " +
+      "If you're happy with the way your greeting sounds, press 1. " +
       "To re-record, press 2. " +
-      "To accept and continue, press 3. " +
+      "To hear how your greeting sounds, press 3. " +
       "To repeat these choices, press 9."
     );
     twiml.redirect("/voice/review-greeting");
@@ -3608,25 +3607,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       if (digit === "1") {
-        // Play back the saved profile (already written to DB in save-profile)
-        const user = await getOrCreateUser(fromNumber);
-        const profile = await storage.getProfile(user.id);
-        if (profile?.nameRecordingUrl) {
-          safePlayRecording(twiml, profile.nameRecordingUrl, req, "");
-        }
-        if (profile?.recordingUrl) {
-          safePlayRecording(twiml, profile.recordingUrl, req, "Your greeting is not available for playback right now.");
-        } else {
-          playPrompt(twiml, req, "no_greeting_found.mp3", "No recording found.");
-        }
-        twiml.redirect("/voice/review-greeting");
-      } else if (digit === "2") {
-        // Re-record from scratch — restart name step
-        playPrompt(twiml, req, "welcome_record_name.mp3",
-          "Say your first name only after the tone. You have 5 seconds."
-        );
-        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
-      } else if (digit === "3") {
         // Accept — check if auto-moderation has already rejected this recording
         // (the transcription callback may have fired while the caller was reviewing)
         const acceptUser = await getOrCreateUser(fromNumber);
@@ -3638,9 +3618,24 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         } else {
           // Profile is already saved; confirm and continue
           playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
-          // Zip code step skipped — go straight to live system
           twiml.redirect("/voice/go-live");
         }
+      } else if (digit === "2") {
+        // Re-record from scratch — restart name step
+        playPrompt(twiml, req, "welcome_record_name.mp3",
+          "Say your first name only after the tone. You have 5 seconds."
+        );
+        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+      } else if (digit === "3") {
+        // Play back the saved greeting so the caller can hear it again
+        const user = await getOrCreateUser(fromNumber);
+        const profile = await storage.getProfile(user.id);
+        if (profile?.recordingUrl) {
+          safePlayRecording(twiml, profile.recordingUrl, req, "Your greeting is not available for playback right now.");
+        } else {
+          playPrompt(twiml, req, "no_greeting_found.mp3", "No recording found.");
+        }
+        twiml.redirect("/voice/review-greeting");
       } else {
         // 9 or anything else → repeat review menu
         twiml.redirect("/voice/review-greeting");
