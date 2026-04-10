@@ -454,6 +454,18 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/transcriptions/:id/dismiss", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.dismissProfileTranscription(id);
+      logAudit("transcription_dismissed", { targetType: "profile", targetId: id });
+      res.json({ success: true });
+    } catch (e) {
+      console.error("[admin] Failed to dismiss transcription:", e);
+      res.status(500).json({ message: "Failed to dismiss transcription" });
+    }
+  });
+
   // --- Admin: All messages inbox ---
   app.get("/api/admin/messages", async (_req, res) => {
     try {

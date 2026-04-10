@@ -6159,6 +6159,14 @@ function TranscriptionsTab() {
     queryKey: ["/api/admin/transcriptions"],
   });
 
+  const dismissMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/admin/transcriptions/${id}/dismiss`);
+      if (!res.ok) throw new Error("Failed to dismiss");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/transcriptions"] }),
+  });
+
   const statusBadge = (status: string | null) => {
     if (!status) return <span className="text-gray-400 font-mono text-xs">No transcript</span>;
     if (status === "pending") return <span className="inline-flex items-center gap-1 text-amber-600 font-mono text-xs"><Loader2 size={10} className="animate-spin" /> Pending</span>;
@@ -6194,6 +6202,7 @@ function TranscriptionsTab() {
             ) : (
               profiles.map(p => {
                 const isOpen = expanded[p.id];
+                const isPending = p.transcriptionStatus === "pending";
                 return (
                   <tr key={p.id} data-testid={`row-transcript-${p.id}`} className={C.row}>
                     <td className={C.td}>
@@ -6208,7 +6217,22 @@ function TranscriptionsTab() {
                       <span className="text-gray-500 font-mono text-xs">{p.recordingDuration != null ? `${p.recordingDuration}s` : "—"}</span>
                     </td>
                     <td className={C.td}><AudioPlayer src={p.recordingUrl} /></td>
-                    <td className={C.td}>{statusBadge(p.transcriptionStatus)}</td>
+                    <td className={C.td}>
+                      <div className="flex items-center gap-2">
+                        {statusBadge(p.transcriptionStatus)}
+                        {isPending && (
+                          <button
+                            data-testid={`btn-dismiss-transcript-${p.id}`}
+                            onClick={() => dismissMutation.mutate(p.id)}
+                            disabled={dismissMutation.isPending}
+                            title="Dismiss stuck pending transcription"
+                            className="text-[10px] font-mono text-gray-400 hover:text-red-500 underline underline-offset-2 transition-colors disabled:opacity-40"
+                          >
+                            Dismiss
+                          </button>
+                        )}
+                      </div>
+                    </td>
                     <td className={C.td}>
                       {p.transcription ? (
                         <div className="max-w-sm">

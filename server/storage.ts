@@ -182,6 +182,7 @@ export interface IStorage {
   updateProfileTranscription(recordingUrl: string, text: string | null, status: string): Promise<void>;
   updateMailboxTranscription(adRecordingUrl: string, text: string | null, status: string): Promise<void>;
   setProfileTranscriptionPending(profileId: string): Promise<void>;
+  dismissProfileTranscription(profileId: string): Promise<void>;
   getAllProfilesWithTranscriptions(): Promise<ProfileWithUser[]>;
 
   // Flagged content queue
@@ -1363,6 +1364,12 @@ export class DatabaseStorage implements IStorage {
   async setProfileTranscriptionPending(profileId: string): Promise<void> {
     await db.update(profiles)
       .set({ transcriptionStatus: "pending" })
+      .where(eq(profiles.id, profileId));
+  }
+
+  async dismissProfileTranscription(profileId: string): Promise<void> {
+    await db.update(profiles)
+      .set({ transcriptionStatus: "failed", transcription: null })
       .where(eq(profiles.id, profileId));
   }
 
