@@ -1,0 +1,89 @@
+I want you to design and begin implementing an AI-driven “Engagement Engine” that injects personality, humor, and interactivity into the call flow using prewritten prompt libraries and logic-based triggers.
+
+CORE GOAL
+
+Transform a passive listening experience into an interactive, game-like system that increases:
+
+Session time
+User engagement
+Message send rate
+FEATURE: AI INTERRUPTION / ENGAGEMENT ENGINE
+
+Build a modular system that:
+
+Tracks caller behavior in real-time:
+greetings_skipped_count
+session_duration
+messages_sent_count
+idle_time
+game_participation
+Uses this data to trigger AI voice interruptions dynamically.
+Selects responses from a structured prompt library (not random).
+PROMPT LIBRARY STRUCTURE
+
+Create a prompt library as a JSON or database table with:
+
+id
+category (picky, idle, flirty, dominant, game_invite, reengagement, reward)
+tone (playful, teasing, seductive, commanding, comedic)
+trigger_conditions (rules for when it should fire)
+line_text (dialogue)
+follow_up_action (optional: start game, suggest action, etc.)
+cooldown (prevent repetition)
+TRIGGER LOGIC
+
+Implement a decision engine that:
+
+Evaluates caller state every X seconds or after each greeting skip
+Selects the best matching prompt based on conditions
+Prevents over-triggering (rate limit interruptions)
+Avoids repeating recent prompts
+
+Example:
+
+If greetings_skipped_count > 10 AND messages_sent_count == 0 → use “picky” prompts
+If idle_time > 30 seconds → use “re-engagement”
+If session_duration > threshold → introduce game invite
+VOICE DELIVERY
+
+Integrate AI-generated voice playback OR TTS system that:
+
+Supports multiple personalities/voices
+Allows tone variation (dreamy, teasing, energetic)
+Can interrupt between greetings naturally
+MINI-GAME SYSTEM
+
+Design a pluggable mini-game framework.
+
+Implement first game: “Busted”
+
+GAME LOGIC:
+
+System inserts a fake “AI greeting” into rotation
+User is told to find it
+User presses a key (e.g. 8) to “bust”
+Track success/failure
+Reward user (flag account for free access, etc.)
+ARCHITECTURE REQUIREMENTS
+Keep system modular (separate engagement engine from core call flow)
+Do NOT break existing greeting playback system
+Add hooks into:
+greeting skip events
+call start
+idle detection
+Store minimal state in session (in-memory or Redis if available)
+OUTPUT FORMAT
+
+Start by:
+
+Explaining how you will integrate this into the existing system
+Defining data structures (prompt library, session state)
+Writing the core engagement engine logic (pseudocode or real code)
+Implementing the first working version of:
+trigger detection
+prompt selection
+injection into call flow
+
+Do NOT skip straight to high-level explanation—begin building actual code.
+
+Focus on making this feel natural, not intrusive. The AI should feel like a clever, slightly mischievous companion—not an annoying interruption system.

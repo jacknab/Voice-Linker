@@ -8,6 +8,7 @@ import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
+import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -712,8 +713,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } catch (err) {
         console.error(`[status] Error removing active call ${callSid}:`, err);
       }
-      // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, region mapping, membership override, and gender selection
+      // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, region mapping, membership override, gender selection, and engagement state
       callerBrowseState.delete(callSid);
+      engagementEngine.cleanupEngagementState(callSid);
       categoryBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
@@ -3890,6 +3892,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             announcedLinkedCallerIds: [],
           };
           callerBrowseState.set(callSid, state);
+          engagementEngine.initEngagementState(callSid, user.id);
           console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid} (region=${callerRegionName ?? "none"}, ${linkedRegions.length} linked regions)`);
         }
 
@@ -3983,6 +3986,35 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             }
           }
 
+          // ── Engagement Engine interrupt check ────────────────────────────────
+          const engInterruption = engagementEngine.getInterruption(callSid);
+          if (engInterruption) {
+            const encodedText = encodeURIComponent(engInterruption.lineText);
+            const followUp = encodeURIComponent(engInterruption.followUpAction ?? "");
+            console.log(`[engagement] Interrupting browse with prompt=${engInterruption.id}, followUp=${engInterruption.followUpAction ?? "none"}`);
+            twiml.redirect(`/voice/engagement-interrupt?text=${encodedText}&followUp=${followUp}`);
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+
+          // ── Busted Game: inject target profile once after game starts ────────
+          const engState = engagementEngine.getEngagementState(callSid);
+          if (engState?.gameStarted && engState.gameBustTargetUserId && !engState.gameBustTargetInjected) {
+            const gameTargetProfile = await storage.getProfile(engState.gameBustTargetUserId);
+            if (gameTargetProfile?.recordingUrl) {
+              const insertAt = Math.min(state.index + 1, state.queue.length);
+              state.queue.splice(insertAt, 0, {
+                userId: engState.gameBustTargetUserId,
+                recordingUrl: gameTargetProfile.recordingUrl,
+                nameRecordingUrl: gameTargetProfile.nameRecordingUrl ?? null,
+                regionId: regionId ?? null,
+                regionName: null,
+              });
+              engagementEngine.markGameTargetInjected(callSid);
+              console.log(`[engagement] Injected game target userId=${engState.gameBustTargetUserId} at queue[${insertAt}] (queue len now ${state.queue.length})`);
+            }
+          }
+
           const profile = state.queue[state.index];
           const prevIndex = state.index;
 
@@ -4022,6 +4054,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
           playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+          // ── Busted Game hint: remind active players they can press 8 ─────────
+          if (engState?.gameStarted && !engState.gameCompleted) {
+            profileGather.say("Press 8 if you think this is an A I voice.");
+          }
           twiml.redirect("/voice/main-menu");
         }
       }
@@ -4283,9 +4319,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const profileUserId = req.query.profileUserId as string;
 
       if (digit === "1") {
+        // If the game target was played and the caller chose to message instead of bust, end the game
+        if (profileUserId) {
+          const callSid1 = req.body?.CallSid as string;
+          if (engagementEngine.isGameTarget(callSid1, profileUserId)) {
+            engagementEngine.markGameTargetPassed(callSid1);
+          }
+        }
         playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
       } else if (digit === "2") {
+        const callSid2 = req.body?.CallSid as string;
+        engagementEngine.trackSkip(callSid2);
+        // If the caller skipped the game target without pressing 8, the game is over
+        if (profileUserId && engagementEngine.isGameTarget(callSid2, profileUserId)) {
+          engagementEngine.markGameTargetPassed(callSid2);
+        }
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "3") {
         // ── Live 1-on-1 Connect ─────────────────────────────────────────────
@@ -4465,6 +4514,28 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         playPrompt(twiml, req, "profile_flagged.mp3", "This profile has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
+      } else if (digit === "8") {
+        // ── Busted Game bust attempt ─────────────────────────────────────────
+        const callSid8 = req.body?.CallSid as string;
+        const bustResult = engagementEngine.processBust(callSid8, profileUserId ?? "");
+        if (bustResult.result === "win") {
+          // Credit the user with 5 bonus minutes
+          const fromNumber8 = req.body?.From as string;
+          if (fromNumber8) {
+            const winUser = await getOrCreateUser(fromNumber8);
+            await storage.adjustUserCredits(winUser.id, bustResult.bonusSeconds);
+            console.log(`[engagement] Bust WIN: userId=${winUser.id} +${bustResult.bonusSeconds}s`);
+          }
+          twiml.say("You got it! That was our A I voice. Five bonus minutes have been added to your account. Nice ear.");
+          twiml.redirect("/voice/browse-profiles");
+        } else if (bustResult.result === "miss") {
+          twiml.say("Nope! That is a real caller. Keep listening — the A I is still out there.");
+          twiml.redirect("/voice/browse-profiles");
+        } else {
+          // No active game — treat as invalid choice
+          playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+          twiml.redirect("/voice/browse-profiles");
+        }
       } else if (digit === "9") {
         // Exiting the male box — in per-minute billing notify caller deductions have stopped.
         // In per-day billing time is not deducted per-call, so skip the announcement.
@@ -4484,6 +4555,46 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       twiml.redirect("/voice/main-menu");
     }
 
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Engagement Engine Interrupt ─────────────────────────────────────────
+  // Plays a personality-driven voice line between profile plays, then optionally
+  // starts the Busted game before redirecting back to browse-profiles.
+  app.post("/voice/engagement-interrupt", async (req, res) => {
+    const twiml = new VoiceResponse();
+    try {
+      const callSid = req.body?.CallSid as string;
+      const rawText = req.query.text as string;
+      const followUp = (req.query.followUp as string) ?? "";
+      const promptText = rawText ? decodeURIComponent(rawText) : "";
+
+      if (promptText) {
+        twiml.say({ voice: "alice" }, promptText);
+      }
+
+      if (followUp === "start_game" && callSid) {
+        // Gather admin-uploaded profiles to choose a bust target from
+        try {
+          const adminProfiles = await storage.getAdminUploadedProfiles();
+          const adminUserIds = adminProfiles
+            .filter(p => p.recordingUrl)
+            .map(p => p.userId);
+          const targetUserId = engagementEngine.startBustedGame(callSid, adminUserIds);
+          if (targetUserId) {
+            console.log(`[engagement] Busted game started for callSid=${callSid}, target=${targetUserId}`);
+          }
+        } catch (err) {
+          console.error("[engagement] engagement-interrupt: failed to start game:", err);
+        }
+      }
+
+      twiml.redirect("/voice/browse-profiles");
+    } catch (error) {
+      console.error("[voice] /voice/engagement-interrupt error:", error);
+      twiml.redirect("/voice/browse-profiles");
+    }
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -4899,6 +5010,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
+      engagementEngine.trackMessageSent(callSid);
       if (returnTo === "mailbox") {
         playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
         twiml.redirect("/voice/my-mailbox");

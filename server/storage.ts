@@ -259,6 +259,9 @@ export interface IStorage {
   // Mailbox stats
   getMailboxStats(): Promise<{ total: number; byCategory: { category: string | null; count: number }[] }>;
 
+  // Engagement Engine
+  getAdminUploadedProfiles(regionId?: string | null): Promise<{ userId: string; recordingUrl: string; nameRecordingUrl: string | null }[]>;
+
   // SMS Marketing
   getSmsTemplates(): Promise<SmsTemplate[]>;
   getSmsTemplate(id: number): Promise<SmsTemplate | undefined>;
@@ -1932,6 +1935,16 @@ export class DatabaseStorage implements IStorage {
       LIMIT ${limitVal}
     `);
     return result.rows as (ModerationLog & { targetPhone: string })[];
+  }
+
+  // ── Engagement Engine ────────────────────────────────────────────────────────
+
+  async getAdminUploadedProfiles(regionId?: string | null): Promise<{ userId: string; recordingUrl: string; nameRecordingUrl: string | null }[]> {
+    const rows = await db
+      .select({ userId: profiles.userId, recordingUrl: profiles.recordingUrl, nameRecordingUrl: profiles.nameRecordingUrl })
+      .from(profiles)
+      .where(eq(profiles.isAdminUploaded, true));
+    return rows;
   }
 
   // ── SMS Marketing ───────────────────────────────────────────────────────────
