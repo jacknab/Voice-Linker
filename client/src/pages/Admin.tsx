@@ -457,6 +457,12 @@ function RegionsTab() {
     onError: () => toast({ title: "Failed to update region", variant: "destructive" }),
   });
 
+  const rebuildSeoMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/admin/rebuild-seo-pages"),
+    onSuccess: (data: any) => toast({ title: "SEO pages rebuilt", description: `${data?.pagesBuilt ?? 0} page(s) generated + sitemap updated` }),
+    onError: () => toast({ title: "Failed to rebuild SEO pages", variant: "destructive" }),
+  });
+
   function copyWebhook(slug: string) { navigator.clipboard.writeText(`${origin}/voice/${slug}`); toast({ title: "Webhook URL copied" }); }
   function copyPhone(phone: string) { navigator.clipboard.writeText(phone); toast({ title: "Phone number copied" }); }
 
@@ -498,6 +504,16 @@ function RegionsTab() {
             {filtered.length} of {regions.length} region{regions.length !== 1 ? "s" : ""}
           </span>
         )}
+        <button
+          data-testid="btn-rebuild-seo-pages"
+          onClick={() => rebuildSeoMutation.mutate()}
+          disabled={rebuildSeoMutation.isPending}
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-xs font-semibold font-mono disabled:opacity-50"
+          title="Rebuild all SEO landing pages and sitemap"
+        >
+          <Globe size={12} />
+          {rebuildSeoMutation.isPending ? "Building..." : "Rebuild SEO Pages"}
+        </button>
       </div>
 
       {isLoading ? (

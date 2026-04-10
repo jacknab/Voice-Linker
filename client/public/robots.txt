@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+Sitemap: https://1663575e-67dd-417d-b119-b0f5a3bbac99-00-11rlpsik6rdym.worf.replit.dev/sitemap.xml

@@ -17,6 +17,7 @@ import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
 import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached } from "./settings-cache";
+import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt } from "./seoPageGenerator";
 
 // Ensure uploads directory and category subdirectories exist
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -1167,6 +1168,60 @@ export async function registerRoutes(
     }
   }
 
+  // ── SEO page helpers ──────────────────────────────────────────────────────
+
+  async function generateRegionSeoPage(regionId: string): Promise<void> {
+    const [region, siteSettingsData, allRegions] = await Promise.all([
+      storage.getRegionById(regionId),
+      storage.getSiteSettings(),
+      storage.getAllRegions(),
+    ]);
+    if (!region) return;
+    const linkedRegions = await storage.getLinkedRegions(regionId);
+    const siteUrl = process.env.SITE_URL?.replace(/\/$/, "") ?? "";
+    writeRegionPage(region, siteSettingsData, linkedRegions, siteUrl || undefined, allRegions);
+    writeSitemap(allRegions, siteUrl || `https://${process.env.REPLIT_DEV_DOMAIN ?? "example.com"}`);
+    writeRobotsTxt(siteUrl || `https://${process.env.REPLIT_DEV_DOMAIN ?? "example.com"}`);
+    console.log(`[seo] Generated page for region: ${region.name} (${region.slug})`);
+  }
+
+  async function rebuildSitemapAsync(): Promise<void> {
+    const [allRegions, siteSettingsData] = await Promise.all([
+      storage.getAllRegions(),
+      storage.getSiteSettings(),
+    ]);
+    const siteUrl = process.env.SITE_URL?.replace(/\/$/, "")
+      ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "example.com"}`;
+    writeSitemap(allRegions, siteUrl);
+    writeRobotsTxt(siteUrl);
+  }
+
+  // Admin: rebuild ALL SEO pages at once
+  app.post("/api/admin/rebuild-seo-pages", async (_req, res) => {
+    try {
+      const [allRegions, siteSettingsData] = await Promise.all([
+        storage.getAllRegions(),
+        storage.getSiteSettings(),
+      ]);
+      const siteUrl = process.env.SITE_URL?.replace(/\/$/, "")
+        ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "example.com"}`;
+      let built = 0;
+      for (const region of allRegions) {
+        if (!region.isActive) continue;
+        const linkedRegions = await storage.getLinkedRegions(region.id);
+        writeRegionPage(region, siteSettingsData, linkedRegions, siteUrl, allRegions);
+        built++;
+      }
+      writeSitemap(allRegions, siteUrl);
+      writeRobotsTxt(siteUrl);
+      console.log(`[seo] Rebuilt ${built} SEO pages`);
+      res.json({ ok: true, pagesBuilt: built });
+    } catch (e) {
+      console.error("[seo] rebuild-seo-pages failed:", e);
+      res.status(500).json({ message: "Failed to rebuild SEO pages" });
+    }
+  });
+
   app.post("/api/regions", async (req, res) => {
     try {
       const { name, slug, stateAbbreviation, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionIds, defaultZipCode } = req.body;
@@ -1190,6 +1245,8 @@ export async function registerRoutes(
       logAudit("region_created", { targetType: "region", targetId: region.id, targetLabel: region.name });
       const zip = defaultZipCode?.trim();
       if (zip) geocodeRegionZip(zip);
+      // Generate SEO landing page (fire-and-forget)
+      generateRegionSeoPage(region.id).catch(err => console.error("[seo] Failed to generate page for region", region.id, err));
       res.status(201).json({ ...region, linkedRegionIds: linkedRegionIds ?? [] });
     } catch (e: any) {
       console.error("[regions] Failed to create region:", e);
@@ -1222,6 +1279,8 @@ export async function registerRoutes(
       logAudit("region_updated", { targetType: "region", targetId: id, targetLabel: region.name });
       const zip = defaultZipCode?.trim();
       if (zip && "defaultZipCode" in req.body) geocodeRegionZip(zip);
+      // Regenerate SEO landing page (fire-and-forget)
+      generateRegionSeoPage(id).catch(err => console.error("[seo] Failed to regenerate page for region", id, err));
       res.json({ ...region, linkedRegionIds: currentLinkedRegions.map(r => r.id) });
     } catch (e: any) {
       console.error("[regions] Failed to update region:", e);
@@ -1232,8 +1291,12 @@ export async function registerRoutes(
   app.delete("/api/regions/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const regionToDelete = await storage.getRegionById(id);
       await storage.deleteRegion(id);
       logAudit("region_deleted", { targetType: "region", targetId: id });
+      // Remove SEO page file
+      if (regionToDelete) deleteRegionPage(regionToDelete.slug);
+      rebuildSitemapAsync().catch(() => {});
       res.status(204).send();
     } catch (e) {
       console.error("[regions] Failed to delete region:", e);
