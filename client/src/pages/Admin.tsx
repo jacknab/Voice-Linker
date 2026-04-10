@@ -771,7 +771,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "membership", filename: "membership_linked.mp3",       label: "Card Accepted / Verified",   text: "Card accepted." },
   { group: "membership", filename: "access_expired.mp3",          label: "Access / Time Expired",      text: "Your access has expired." },
   { group: "membership", filename: "free_mode_announcement.mp3",  label: "Free Mode Announcement",     text: "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now." },
-  { group: "membership", filename: "free_trial_offer.mp3",        label: "Free Trial Offer",           text: "We would like to offer you a free trial so you can check out the system and start meeting new people. To start your free trial press the pound key." },
+  { group: "membership", filename: "free_trial_offer.mp3",        label: "Free Trial Offer",           text: "We would like to offer you a free trial. To get your free trial now press 1. To get your free trial later press the pound key." },
   { group: "membership", filename: "free_trial_terms.mp3",        label: "Free Trial Terms",           text: "Your free trial will expire in seven days and it must be used from this phone number." },
 
   // ── 3. NEW CALLER ONBOARDING — recording name & greeting ─────────────────
@@ -799,8 +799,8 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   // ── 5. INFO / PRICING / MEMBERSHIP PURCHASE ───────────────────────────────
   { group: "billing", filename: "info_menu.mp3",                   label: "Info & Membership Menu",          text: "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu." },
   { group: "billing", filename: "membership_questions.mp3",        label: "Membership Questions Menu",       text: "Membership questions. Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership with a credit card. Press 9 to return to the main menu." },
-  { group: "billing", filename: "membership_how_it_works.mp3",     label: "How Membership Works",            text: "As a member you get full access to the voice line community. Browse profiles, exchange private messages, and connect live one on one with other guys. Membership time is shared across all the lines we operate." },
-  { group: "billing", filename: "membership_pricing.mp3",          label: "Membership Pricing",              text: "Here are our current membership prices." },
+  { group: "billing", filename: "membership_how_it_works.mp3",     label: "How Membership Works",            text: "Here is how membership works. As a member, you get full access to the voice line community. Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. We offer three membership options: a 24 hour pass, a 14 day membership, and a 30 day membership. Your remaining time is tracked in hours. When you have less than 60 minutes left, the system will tell you in minutes. Choose the option that works best for you." },
+  { group: "billing", filename: "membership_pricing.mp3",          label: "Membership Pricing",              text: "Here are our membership prices. A 24 hour pass is 3 dollars. A 14 day membership is 10 dollars. A 30 day membership is 25 dollars. To purchase, press 3 from the membership menu." },
   { group: "billing", filename: "package_confirm_prefix.mp3",      label: "Package Confirm — Prefix",        text: "You selected" },
   { group: "billing", filename: "package_confirm_bonus_prefix.mp3",label: "Package Confirm — Bonus Prefix",  text: "Great choice! You selected" },
   { group: "billing", filename: "package_confirm_suffix.mp3",      label: "Package Confirm — Suffix",        text: "If this is correct press one. To select a different package press two." },
