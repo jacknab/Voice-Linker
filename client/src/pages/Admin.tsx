@@ -747,187 +747,190 @@ function VoiceProfilesTab() {
 }
 
 // ── SYSTEM_PROMPTS list ───────────────────────────────────────────────────────
-const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
-  { filename: "system_greeting.mp3", label: "System Greeting / Legal Notice", text: "Welcome to Interactive Mail. Interactive Mail assumes no responsibility for personal meetings. This service is for adults only. If you are under 18, please hang up now." },
-  { filename: "free_trial_offer.mp3", label: "Free Trial Offer", text: "We would like to offer you a free trial so you can check out the system and start meeting new people. To start your free trial press the pound key." },
-  { filename: "free_trial_terms.mp3", label: "Free Trial Terms", text: "Your free trial will expire in seven days and it must be used from this phone number." },
-  { filename: "goodbye.mp3", label: "Goodbye", text: "Thank you for calling. Goodbye." },
-  { filename: "no_caller_id.mp3", label: "No Caller ID", text: "We could not identify your call. Goodbye." },
-  { filename: "welcome_record_name.mp3", label: "Welcome — Record Name", text: "Welcome! Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds." },
-  { filename: "error_generic.mp3", label: "Generic Error", text: "An error occurred. Please try again later." },
-  { filename: "name_retry.mp3", label: "Name Retry", text: "We didn't catch your name. Please try again." },
-  { filename: "name_saved_record_greeting.mp3", label: "Name Saved — Record Greeting", text: "Great. Now record your greeting for other callers. After the tone, you have 60 seconds." },
-  { filename: "greeting_error.mp3", label: "Greeting Too Short", text: "That greeting was too short. Please try again after the tone." },
-  { filename: "profile_save_error.mp3", label: "Profile Save Error", text: "We could not save your profile. Please try again." },
-  { filename: "access_expired.mp3", label: "Access Expired", text: "Your access has expired." },
-  { filename: "main_menu.mp3", label: "Main Menu", text: "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership." },
-  { filename: "rerecord_name.mp3", label: "Re-record Name", text: "Let's re-record your profile. First, say your first name only after the tone. You have 5 seconds." },
-  { filename: "invalid_choice.mp3", label: "Invalid Choice", text: "Invalid choice." },
-  { filename: "trial_warning.mp3", label: "Trial Warning", text: "You have less than 5 minutes remaining in your free trial. Stay connected by joining now." },
-  { filename: "member_warning.mp3", label: "Member Warning", text: "You have less than 5 minutes remaining in your membership. To renew now press 1. To continue press pound." },
-  { filename: "greeting_setup.mp3", label: "Greeting Setup", text: "Your last greeting you recorded is still available. To use it again, press 1. To record a new greeting, press 2. To hear your greeting, press 3." },
-  { filename: "review_greeting.mp3", label: "Review Greeting", text: "To hear your greeting, press 1. To re-record, press 2. To accept and continue, press 3. To repeat these choices, press 9." },
-  { filename: "no_greeting_found.mp3", label: "No Greeting Found", text: "No greeting found." },
-  { filename: "session_expired_greeting.mp3", label: "Session Expired — Greeting", text: "Your session has expired. Please re-record your greeting." },
-  { filename: "profile_saved.mp3", label: "Profile Saved", text: "Your greeting has been saved." },
-  { filename: "no_profiles.mp3", label: "No Profiles Available", text: "There are no profiles available right now. Please call back later." },
-  { filename: "message_options.mp3", label: "Message Options", text: "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles." },
-  { filename: "profile_options.mp3", label: "Profile Options", text: "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 9 to return to main menu." },
-  { filename: "record_reply.mp3", label: "Record Reply", text: "Record your reply after the tone." },
-  { filename: "record_message.mp3", label: "Record Message", text: "Record your message after the tone." },
-  { filename: "message_sent.mp3", label: "Message Sent", text: "Your message has been sent. Returning to profiles." },
-  { filename: "message_send_error.mp3", label: "Message Send Error", text: "Failed to send your message. Returning to profiles." },
-  { filename: "info_menu.mp3", label: "Info Menu", text: "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu." },
-  { filename: "membership_questions.mp3", label: "Membership Questions", text: "Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership." },
-  { filename: "membership_how_it_works.mp3", label: "How Membership Works", text: "As a member, you get full access to the voice line community." },
-  { filename: "membership_pricing.mp3", label: "Membership Pricing", text: "Here are our membership prices." },
-  { filename: "membership_packages.mp3", label: "Membership Packages", text: "Press 1 for plan 1. Press 2 for plan 2. Press 3 for plan 3. Press 9 to repeat. Press pound to cancel." },
-  { filename: "package_cancelled.mp3", label: "Package Cancelled", text: "Cancelled. Returning to the main menu." },
-  { filename: "package_invalid.mp3", label: "Package Invalid", text: "Invalid selection." },
-  { filename: "package_confirm_prefix.mp3", label: "Package Confirm — Prefix (static)", text: "You selected" },
-  { filename: "package_confirm_bonus_prefix.mp3", label: "Package Confirm — Bonus Prefix (static)", text: "Great choice! You selected" },
-  { filename: "package_confirm_suffix.mp3", label: "Package Confirm — Suffix (static)", text: "If this is correct press one. To select a different package press two." },
-  { filename: "payment_intro.mp3", label: "Payment Intro", text: "Please have your credit card ready." },
-  { filename: "payment_session_expired.mp3", label: "Payment Session Expired", text: "Your session has expired. Please try again." },
-  { filename: "payment_success_prefix.mp3", label: "Payment Success — Prefix (static)", text: "Payment successful! You now have" },
-  { filename: "payment_success_bonus.mp3", label: "Payment Success — First Purchase Bonus (static)", text: "Plus your first purchase bonus doubles your minutes!" },
-  { filename: "payment_success_suffix.mp3", label: "Payment Success — Suffix (static)", text: "Thank you for joining. Returning to the main menu." },
-  { filename: "payment_declined.mp3", label: "Payment Declined", text: "Your card was declined. Please check your details and try again later." },
-  { filename: "payment_failed.mp3", label: "Payment Failed", text: "Your payment could not be completed at this time. Please try again later." },
-  { filename: "payment_activation_error.mp3", label: "Payment Activation Error", text: "Your payment was received but there was an error activating your membership." },
-  { filename: "region_not_active.mp3", label: "Region Not Active", text: "This phone number is not currently active. Please try again later." },
-  { filename: "region_unavailable.mp3", label: "Region Unavailable", text: "This market is temporarily unavailable. Please try again later." },
-  { filename: "motd.mp3", label: "Announcement / MOTD", text: "Welcome back to Interactive Mail. We have an exciting promotion running this weekend — call in and check out the latest profiles." },
-  { filename: "phrase_you_have.mp3", label: "Phrase — You Have", text: "You have" },
-  { filename: "phrase_minutes_of_pbtr.mp3", label: "Phrase — Minutes Remaining", text: "minutes remaining." },
-  { filename: "phrase_minute_of_pbtr.mp3", label: "Phrase — Minute Remaining", text: "minute remaining." },
-  { filename: "phrase_there_are.mp3", label: "Phrase — There Are", text: "There are" },
-  { filename: "phrase_there_is.mp3", label: "Phrase — There Is", text: "There is" },
-  { filename: "phrase_callers_on_the_line.mp3", label: "Phrase — Callers On The Line", text: "guys on the line." },
-  { filename: "phrase_caller_on_the_line.mp3", label: "Phrase — Caller On The Line", text: "guy on the line." },
-  { filename: "num_0.mp3", label: "Number — 0", text: "zero" },
-  { filename: "num_1.mp3", label: "Number — 1", text: "one" },
-  { filename: "num_2.mp3", label: "Number — 2", text: "two" },
-  { filename: "num_3.mp3", label: "Number — 3", text: "three" },
-  { filename: "num_4.mp3", label: "Number — 4", text: "four" },
-  { filename: "num_5.mp3", label: "Number — 5", text: "five" },
-  { filename: "num_6.mp3", label: "Number — 6", text: "six" },
-  { filename: "num_7.mp3", label: "Number — 7", text: "seven" },
-  { filename: "num_8.mp3", label: "Number — 8", text: "eight" },
-  { filename: "num_9.mp3", label: "Number — 9", text: "nine" },
-  { filename: "num_10.mp3", label: "Number — 10", text: "ten" },
-  { filename: "num_11.mp3", label: "Number — 11", text: "eleven" },
-  { filename: "num_12.mp3", label: "Number — 12", text: "twelve" },
-  { filename: "num_13.mp3", label: "Number — 13", text: "thirteen" },
-  { filename: "num_14.mp3", label: "Number — 14", text: "fourteen" },
-  { filename: "num_15.mp3", label: "Number — 15", text: "fifteen" },
-  { filename: "num_16.mp3", label: "Number — 16", text: "sixteen" },
-  { filename: "num_17.mp3", label: "Number — 17", text: "seventeen" },
-  { filename: "num_18.mp3", label: "Number — 18", text: "eighteen" },
-  { filename: "num_19.mp3", label: "Number — 19", text: "nineteen" },
-  { filename: "num_20.mp3", label: "Number — 20", text: "twenty" },
-  { filename: "num_30.mp3", label: "Number — 30", text: "thirty" },
-  { filename: "num_40.mp3", label: "Number — 40", text: "forty" },
-  { filename: "num_50.mp3", label: "Number — 50", text: "fifty" },
-  { filename: "num_60.mp3", label: "Number — 60", text: "sixty" },
-  { filename: "num_70.mp3", label: "Number — 70", text: "seventy" },
-  { filename: "num_80.mp3", label: "Number — 80", text: "eighty" },
-  { filename: "num_90.mp3", label: "Number — 90", text: "ninety" },
-  { filename: "num_100.mp3", label: "Number — 100", text: "one hundred" },
-  { filename: "num_200.mp3", label: "Number — 200", text: "two hundred" },
-  { filename: "num_300.mp3", label: "Number — 300", text: "three hundred" },
-  { filename: "num_400.mp3", label: "Number — 400", text: "four hundred" },
-  { filename: "num_500.mp3", label: "Number — 500", text: "five hundred" },
-  { filename: "num_600.mp3", label: "Number — 600", text: "six hundred" },
-  { filename: "num_700.mp3", label: "Number — 700", text: "seven hundred" },
-  { filename: "num_800.mp3", label: "Number — 800", text: "eight hundred" },
-  { filename: "num_900.mp3", label: "Number — 900", text: "nine hundred" },
+// Ordered to follow the actual IVR call flow so admins can find prompts intuitively.
+// group values map to the GROUP_TABS filter chips below.
+const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: string }[] = [
 
-  // ── Entry & Onboarding ────────────────────────────────────────────────────
-  { filename: "disclaimer.mp3", label: "Disclaimer", text: "Interactive Mail assumes no responsibility for personal meetings. This service is for adults only. If you are under 18, please hang up now." },
-  { filename: "gender_select.mp3", label: "Gender / Category Select", text: "Guys, press one to talk to women. Women, press two to talk to guys." },
-  { filename: "membership_entry_prompt.mp3", label: "Membership Entry Prompt", text: "If you have a membership press 1 now. Otherwise press the pound key." },
-  { filename: "free_mode_announcement.mp3", label: "Free Mode Announcement", text: "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now." },
-  { filename: "link_code_invalid.mp3", label: "Link Code Invalid", text: "That code is invalid or has expired. Please generate a new code from your web account and try again." },
-  { filename: "membership_invalid.mp3", label: "Membership Number Invalid", text: "We could not find a membership card with that number. Please check your card and try again." },
-  { filename: "membership_linked.mp3", label: "Membership Linked / Verified", text: "Your membership card has been activated and linked to this phone number. Welcome." },
+  // ── 1. CALL ENTRY — very first things a caller hears ──────────────────────
+  { group: "entry", filename: "system_greeting.mp3", label: "System Greeting", text: "Welcome to the Male Box. This service assumes no responsibility for personal meetings." },
+  { group: "entry", filename: "disclaimer.mp3", label: "Disclaimer / Legal Notice", text: "Interactive Mail assumes no responsibility for personal meetings. This service is for adults only. If you are under 18, please hang up now." },
+  { group: "entry", filename: "motd.mp3", label: "Announcement / MOTD (Entry)", text: "Welcome back to Interactive Mail. We have an exciting promotion running this weekend — call in and check out the latest profiles." },
+  { group: "entry", filename: "no_caller_id.mp3", label: "No Caller ID", text: "We could not identify your call. Goodbye." },
+  { group: "entry", filename: "region_not_active.mp3", label: "Region Not Active", text: "This phone number is not currently active. Please try again later." },
+  { group: "entry", filename: "region_unavailable.mp3", label: "Region Unavailable", text: "This market is temporarily unavailable. Please try again later." },
+  { group: "entry", filename: "error_generic.mp3", label: "Generic Error", text: "An error occurred. Please try again later." },
+  { group: "entry", filename: "invalid_choice.mp3", label: "Invalid Choice", text: "Invalid choice." },
+  { group: "entry", filename: "goodbye.mp3", label: "Goodbye", text: "Thank you for calling. Goodbye." },
 
-  // ── MW System ─────────────────────────────────────────────────────────────
-  { filename: "mw_main_menu.mp3", label: "MW Main Menu", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+  // ── 2. MW SYSTEM — gender-select and MW main menu (MW sites only) ─────────
+  { group: "entry", filename: "gender_select.mp3", label: "Gender Select (MW Only)", text: "Guys, press one to talk to women. Women, press two to talk to guys." },
+  { group: "entry", filename: "mw_main_menu.mp3", label: "MW Main Menu (MW Only)", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
 
-  // ── MOTD — Main Menu, Male Box, Post Purchase ──────────────────────────
-  { filename: "motd_main_menu.mp3", label: "MOTD — Main Menu", text: "Welcome back! Check out the latest callers on the line right now." },
-  { filename: "motd_phone_booth.mp3", label: "MOTD — Male Box", text: "Special announcement for Male Box callers." },
-  { filename: "motd_post_purchase.mp3", label: "MOTD — After Purchase", text: "Thank you for your purchase! Enjoy your time on the line." },
+  // ── 3. MEMBERSHIP GATEWAY — check/enter membership after disclaimer ────────
+  { group: "membership", filename: "free_mode_announcement.mp3", label: "Free Mode Announcement", text: "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now." },
+  { group: "membership", filename: "membership_entry_prompt.mp3", label: "Membership Entry Prompt", text: "If you have a membership card, enter your card number now. Otherwise press the pound key." },
+  { group: "membership", filename: "link_code_invalid.mp3", label: "Link Code Invalid", text: "That code is invalid or has expired. Please generate a new code from your web account and try again." },
+  { group: "membership", filename: "membership_linked.mp3", label: "Membership Linked / Verified", text: "Your membership card has been verified. Welcome." },
+  { group: "membership", filename: "membership_invalid.mp3", label: "Membership / Card Invalid", text: "We could not find a card with that number. Please check your card and try again." },
+  { group: "membership", filename: "access_expired.mp3", label: "Access / Time Expired", text: "Your access has expired." },
+  { group: "membership", filename: "free_trial_offer.mp3", label: "Free Trial Offer", text: "We would like to offer you a free trial so you can check out the system and start meeting new people. To start your free trial press the pound key." },
+  { group: "membership", filename: "free_trial_terms.mp3", label: "Free Trial Terms", text: "Your free trial will expire in seven days and it must be used from this phone number." },
 
-  // ── Male Box / Live Connector ──────────────────────────────────────────
-  { filename: "phone_booth_welcome.mp3", label: "Male Box Welcome", text: "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." },
-  { filename: "live_connect_disclaimer.mp3", label: "Live Connect — Disclaimer", text: "Please be respectful and kind. You are about to request a live one on one connection." },
-  { filename: "live_connect_chime.mp3", label: "Live Connect — Chime (sound effect)", text: "" },
-  { filename: "live_invite_options.mp3", label: "Live Invite — Options", text: "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4." },
-  { filename: "live_connect_no_minutes.mp3", label: "Live Connect — Not Enough Minutes", text: "You need at least 5 minutes remaining on your membership to connect live. Please add more time and try again." },
-  { filename: "live_connect_unavailable.mp3", label: "Live Connect — Caller Unavailable", text: "This caller is not available for a live connection." },
-  { filename: "live_connect_left_line.mp3", label: "Live Connect — Caller Left Line", text: "Sorry, that caller has left the line." },
-  { filename: "live_connect_busy.mp3", label: "Live Connect — Caller Busy", text: "That caller is already connected with someone else. Please try again later." },
-  { filename: "live_connect_failed.mp3", label: "Live Connect — Failed", text: "We were unable to connect your call. Returning you to the male box." },
-  { filename: "live_connect_connecting.mp3", label: "Live Connect — Connecting", text: "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!" },
-  { filename: "live_connect_ringing.mp3", label: "Live Connect — Ringing (sound effect)", text: "" },
-  { filename: "live_invite_expired.mp3", label: "Live Invite — Expired", text: "That live connection invitation has expired. Returning to profiles." },
-  { filename: "live_connect_ended.mp3", label: "Live Connect — Ended", text: "Your live connection has ended. Returning you to the male box." },
+  // ── 4. NEW CALLER ONBOARDING — profile setup flow ─────────────────────────
+  { group: "onboarding", filename: "welcome_record_name.mp3", label: "Welcome — Record Your Name", text: "Welcome! Before using the system you must create a short voice profile. First, say your first name only after the tone. You have 5 seconds." },
+  { group: "onboarding", filename: "name_retry.mp3", label: "Name — Not Detected, Retry", text: "We didn't catch your name. Please try again." },
+  { group: "onboarding", filename: "name_saved_record_greeting.mp3", label: "Name Saved — Record Greeting", text: "Great. Now record your greeting for other callers. After the tone, you have 60 seconds." },
+  { group: "onboarding", filename: "greeting_error.mp3", label: "Greeting Too Short — Try Again", text: "That greeting was too short. Please try again after the tone." },
+  { group: "onboarding", filename: "greeting_setup.mp3", label: "Existing Greeting Options", text: "Your last greeting you recorded is still available. To use it again, press 1. To record a new greeting, press 2. To hear your greeting, press 3." },
+  { group: "onboarding", filename: "review_greeting.mp3", label: "Review Your Greeting", text: "To hear your greeting, press 1. To re-record, press 2. To accept and continue, press 3. To repeat these choices, press 9." },
+  { group: "onboarding", filename: "no_greeting_found.mp3", label: "No Greeting Found", text: "No greeting found." },
+  { group: "onboarding", filename: "profile_saved.mp3", label: "Profile Saved — Done", text: "Your greeting has been saved." },
+  { group: "onboarding", filename: "profile_save_error.mp3", label: "Profile Save Error", text: "We could not save your profile. Please try again." },
+  { group: "onboarding", filename: "rerecord_name.mp3", label: "Re-record Name (from Main Menu)", text: "Let's re-record your profile. First, say your first name only after the tone. You have 5 seconds." },
+  { group: "onboarding", filename: "session_expired_greeting.mp3", label: "Session Expired — Greeting", text: "Your session has expired. Please re-record your greeting." },
 
-  // ── Profile Browsing ──────────────────────────────────────────────────────
-  { filename: "new_caller_close_to_you.mp3", label: "New Caller — Close To You", text: "New caller close to you." },
-  { filename: "new_caller_closest_to_you.mp3", label: "New Caller — Closest To You", text: "New caller closest to you." },
-  { filename: "nearby_callers_offer.mp3", label: "Nearby Callers — Offer (Intro)", text: "You have heard all the callers close to you." },
-  { filename: "nearby_callers_none.mp3", label: "Nearby Callers — None Available", text: "There are no callers online in that area right now. Starting your area over." },
-  { filename: "no_previous_profile.mp3", label: "No Previous Profile", text: "There is no previous profile. Continuing to the next." },
-  { filename: "caller_blocked.mp3", label: "Caller Blocked", text: "Caller blocked. You will no longer hear this caller's profile." },
-  { filename: "profile_flagged.mp3", label: "Profile Flagged", text: "This profile has been flagged for review. Thank you." },
+  // ── 5. MAIN MENU — what callers hear after entering the system ────────────
+  { group: "menu", filename: "main_menu.mp3", label: "Main Menu", text: "Welcome to the voice line. Press 1 to listen to profiles. Press 2 to re-record your profile. Press 4 for information, prices, and membership." },
+  { group: "menu", filename: "motd_main_menu.mp3", label: "MOTD — Main Menu Announcement", text: "Welcome back! Check out the latest callers on the line right now." },
+  { group: "menu", filename: "trial_warning.mp3", label: "Trial Time Running Low", text: "You have less than 5 minutes remaining in your free trial. Stay connected by joining now." },
+  { group: "menu", filename: "member_warning.mp3", label: "Membership Time Running Low", text: "You have less than 5 minutes remaining in your membership. To renew now press 1. To continue press pound." },
+  { group: "menu", filename: "no_profiles.mp3", label: "No Profiles Available", text: "There are no profiles available right now. Please call back later." },
+  { group: "menu", filename: "info_menu.mp3", label: "Info / Membership Menu", text: "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu." },
+  { group: "menu", filename: "membership_questions.mp3", label: "Membership Questions Menu", text: "Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership." },
+  { group: "menu", filename: "membership_how_it_works.mp3", label: "How Membership Works", text: "As a member, you get full access to the voice line community." },
+  { group: "menu", filename: "membership_pricing.mp3", label: "Membership Pricing", text: "Here are our membership prices." },
+  { group: "menu", filename: "membership_packages.mp3", label: "Membership Packages Menu", text: "Press 1 for plan 1. Press 2 for plan 2. Press 3 for plan 3. Press 9 to repeat. Press pound to cancel." },
 
-  // ── Zip Code ──────────────────────────────────────────────────────────────
-  { filename: "zip_code_prompt.mp3", label: "Zip Code — Prompt", text: "Optional: enter your 5-digit zip code and we'll play callers closest to you first. Press pound to skip." },
-  { filename: "zip_code_saved.mp3", label: "Zip Code — Saved", text: "Got it. We'll use your zip code to show you nearby callers." },
+  // ── 6. PROFILE BROWSING — hearing other callers' greetings ───────────────
+  { group: "browsing", filename: "zip_code_prompt.mp3", label: "Zip Code — Enter to Find Nearby", text: "Optional: enter your 5-digit zip code and we'll play callers closest to you first. Press pound to skip." },
+  { group: "browsing", filename: "zip_code_saved.mp3", label: "Zip Code — Saved", text: "Got it. We'll use your zip code to show you nearby callers." },
+  { group: "browsing", filename: "profile_options.mp3", label: "Profile Options (after hearing a caller)", text: "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 9 to return to main menu." },
+  { group: "browsing", filename: "new_caller_close_to_you.mp3", label: "New Caller — Close To You", text: "New caller close to you." },
+  { group: "browsing", filename: "new_caller_closest_to_you.mp3", label: "New Caller — Closest To You", text: "New caller closest to you." },
+  { group: "browsing", filename: "nearby_callers_offer.mp3", label: "Nearby Callers — All Heard Locally", text: "You have heard all the callers close to you." },
+  { group: "browsing", filename: "nearby_callers_none.mp3", label: "Nearby Callers — None In Area", text: "There are no callers online in that area right now. Starting your area over." },
+  { group: "browsing", filename: "no_previous_profile.mp3", label: "No Previous Profile (Press 5 go back)", text: "There is no previous profile. Continuing to the next." },
+  { group: "browsing", filename: "caller_blocked.mp3", label: "Caller Blocked", text: "Caller blocked. You will no longer hear this caller's profile." },
+  { group: "browsing", filename: "profile_flagged.mp3", label: "Profile Flagged for Review", text: "This profile has been flagged for review. Thank you." },
 
-  // ── Mailbox & Ad System ───────────────────────────────────────────────────
-  { filename: "mailbox_menu.mp3", label: "Mailbox Menu", text: "To go to your mailbox press one. To record a new mailbox ad press two. To listen to ads from other guys press three. To repeat these choices press nine. To exit to the main menu press pound." },
-  { filename: "mailbox_lookup.mp3", label: "Mailbox — Lookup Prompt", text: "Enter the five digit mailbox number you'd like to look up, followed by pound. Or press pound alone to return to the mailbox menu." },
-  { filename: "mailbox_not_found.mp3", label: "Mailbox — Not Found", text: "That mailbox number was not found. Please check the number and try again." },
-  { filename: "mailbox_no_ad.mp3", label: "Mailbox — No Ad Recorded", text: "That mailbox has not recorded an ad yet." },
-  { filename: "mailbox_ad_existing.mp3", label: "Mailbox Ad — Existing Ad Options", text: "You already have an ad in this category. Press 1 to record a new one. Press 2 to hear your current ad. Press 9 to return to the category menu." },
-  { filename: "mailbox_ad_record.mp3", label: "Mailbox Ad — Record Prompt", text: "Record your mailbox ad after the tone. Tell guys about yourself. Press pound when finished." },
-  { filename: "mailbox_ad_saved.mp3", label: "Mailbox Ad — Saved (Legacy)", text: "Your mailbox ad has been saved. Other guys can now find your ad." },
-  { filename: "mailbox_ad_recorded_pending.mp3", label: "Mailbox Ad — Recorded (Pending Approval)", text: "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. In the meantime you can browse other ads or visit the male box to check out who's on the line right now." },
+  // ── 7. MESSAGING — sending & receiving private voice messages ─────────────
+  { group: "messaging", filename: "record_message.mp3", label: "Record Message — Prompt", text: "Record your message after the tone." },
+  { group: "messaging", filename: "record_reply.mp3", label: "Record Reply — Prompt", text: "Record your reply after the tone." },
+  { group: "messaging", filename: "review_your_message.mp3", label: "Review Your Recorded Message", text: "Here is your recorded message." },
+  { group: "messaging", filename: "message_options.mp3", label: "Message Options (after hearing a message)", text: "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles." },
+  { group: "messaging", filename: "message_sent.mp3", label: "Message Sent", text: "Your message has been sent. Returning to profiles." },
+  { group: "messaging", filename: "message_send_error.mp3", label: "Message Send Error", text: "Failed to send your message. Returning to profiles." },
+  { group: "messaging", filename: "message_cancelled.mp3", label: "Message Cancelled", text: "Message cancelled." },
+  { group: "messaging", filename: "message_flagged.mp3", label: "Message Flagged for Review", text: "This message has been flagged for review. Thank you." },
+  { group: "messaging", filename: "no_recording.mp3", label: "No Recording Detected", text: "No recording was detected." },
 
-  // ── Mailbox Setup Flow ────────────────────────────────────────────────────
-  { filename: "mailbox_setup_intro.mp3", label: "Mailbox Setup — Intro & DOB Prompt", text: "You need to first set up your mailbox. To set up your mailbox we need to gather a couple of things from you which helps callers search for the perfect guy and help them find your ads. First we need to know your date of birth. Please enter your date of birth in this order: two digits for the month, two digits for the day, and four digits for the year. For example, for April 17 1976, enter zero four one seven one nine seven six." },
-  { filename: "mailbox_setup_dob_invalid.mp3", label: "Mailbox Setup — Invalid Date of Birth", text: "We did not receive a valid date of birth. Please try again." },
-  { filename: "mailbox_setup_underage.mp3", label: "Mailbox Setup — Underage", text: "We are sorry, but you must be 18 years of age or older to use this service. Goodbye." },
-  { filename: "mailbox_setup_bodytype.mp3", label: "Mailbox Setup — Body Type Menu", text: "Now please select your body type. For Slim press one. For Average press two. For Athletic press three. For Large press four. For Big and Tall press five. To repeat these choices press nine. To exit press pound." },
-  { filename: "mailbox_setup_ethnicity.mp3", label: "Mailbox Setup — Ethnicity Menu", text: "Now please tell us your ethnicity. If you don't want to identify your ethnicity press one. If you're Caucasian press two. African-American press three. Asian press four. Latino press five. Middle Eastern press six. Aboriginal press seven. To repeat these choices press nine. To exit press pound." },
-  { filename: "mailbox_setup_ethnicity_confirm.mp3", label: "Mailbox Setup — Ethnicity Confirmation", text: "If this is correct press one. To select your ethnicity press two. If you don't want to identify your ethnicity press three." },
-  { filename: "mailbox_setup_ready.mp3", label: "Mailbox Setup — Ready to Write Down", text: "Please get something ready to write down your new mailbox number and passcode. This is the only chance you will have to write them down. And don't get them confused with your membership number — we issue separate numbers for memberships. If you're ready to write down your mailbox number and passcode press one. To pause the system while you get a pen and paper press two. For customer service press zero. To repeat these choices press nine. To cancel setting up your mailbox press the pound key." },
-  { filename: "mailbox_setup_existing_passcode.mp3", label: "Mailbox Setup — Existing Passcode Notice", text: "Your mailbox passcode is the same as your membership passcode. If you do not remember your passcode and would like to create a new one, press pound." },
-  { filename: "mailbox_setup_create_passcode.mp3", label: "Mailbox Setup — Create Passcode", text: "For security you need a passcode. Please enter a four digit passcode now. If you make a mistake press star to start over." },
-  { filename: "mailbox_setup_passcode_reenter.mp3", label: "Mailbox Setup — Re-enter Passcode", text: "Please re-enter your four digit passcode." },
-  { filename: "mailbox_setup_passcode_mismatch.mp3", label: "Mailbox Setup — Passcode Mismatch", text: "Your passcode entries did not match. Please try again." },
-  { filename: "mailbox_setup_complete.mp3", label: "Mailbox Setup — Complete Menu", text: "Your mailbox is now set up. To begin recording a new ad press one. To listen to ads from other guys press two. To enter the male box press star. To cancel creating your mailbox press pound." },
-  { filename: "mailbox_setup_cancelled.mp3", label: "Mailbox Setup — Cancelled", text: "Mailbox setup cancelled." },
+  // ── 8. MALE BOX / LIVE CONNECTOR — phone booth & 1-on-1 calls ────────────
+  { group: "live", filename: "phone_booth_welcome.mp3", label: "Male Box — Welcome", text: "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." },
+  { group: "live", filename: "motd_phone_booth.mp3", label: "MOTD — Male Box Announcement", text: "Special announcement for Male Box callers." },
+  { group: "live", filename: "live_connect_disclaimer.mp3", label: "Live Connect — Disclaimer (before invite)", text: "Please be respectful and kind. You are about to request a live one on one connection." },
+  { group: "live", filename: "live_connect_chime.mp3", label: "Live Connect — Chime (sound effect)", text: "" },
+  { group: "live", filename: "live_invite_options.mp3", label: "Live Invite — Options (invitee hears)", text: "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4." },
+  { group: "live", filename: "live_connect_no_minutes.mp3", label: "Live Connect — Not Enough Minutes", text: "You need at least 5 minutes remaining on your membership to connect live. Please add more time and try again." },
+  { group: "live", filename: "live_connect_unavailable.mp3", label: "Live Connect — Caller Unavailable", text: "This caller is not available for a live connection." },
+  { group: "live", filename: "live_connect_left_line.mp3", label: "Live Connect — Caller Left Line", text: "Sorry, that caller has left the line." },
+  { group: "live", filename: "live_connect_busy.mp3", label: "Live Connect — Caller Already Connected", text: "That caller is already connected with someone else. Please try again later." },
+  { group: "live", filename: "live_connect_ringing.mp3", label: "Live Connect — Ringing (sound effect)", text: "" },
+  { group: "live", filename: "live_connect_connecting.mp3", label: "Live Connect — Connecting Now", text: "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!" },
+  { group: "live", filename: "live_connect_failed.mp3", label: "Live Connect — Failed to Connect", text: "We were unable to connect your call. Returning you to the male box." },
+  { group: "live", filename: "live_invite_expired.mp3", label: "Live Invite — Expired", text: "That live connection invitation has expired. Returning to profiles." },
+  { group: "live", filename: "live_connect_ended.mp3", label: "Live Connect — Call Ended", text: "Your live connection has ended. Returning you to the male box." },
 
-  { filename: "ad_category_menu.mp3", label: "Ad Category Menu (Page 1)", text: "Please select a category. For Quick and Hot Talk press one. For Bicurious press two. For Kink press three. For Total Tops press four. For Strictly Bottoms press five. For Trans press six. To look up a specific mailbox press seven. For more categories press eight. For definitions press nine. To return to the mailbox menu press pound." },
-  { filename: "ad_category_menu_p2.mp3", label: "Ad Category Menu (Page 2)", text: "More categories. For Cock Suckers press one. For Hung Cocks press two. For Uncut Cocks press three. For Twinks press four. For Bears press five. For Daddys press six. To look up a specific mailbox press seven. For definitions press nine. To go back to the previous categories press pound." },
-  { filename: "ad_category_definitions.mp3", label: "Ad Category Definitions", text: "Quick and Hot Talk: guys looking for fast, explicit, no-strings chat. Bicurious: men exploring attraction to other men for the first time or occasionally. Kink: callers into fetishes, role play, or specific kinks. Total Tops: guys who are exclusively tops and looking for a bottom. Strictly Bottoms: guys who are exclusively bottoms and looking for a top. Trans: trans men and women connecting with other callers." },
-  { filename: "no_ads_category.mp3", label: "Ad Category — No Ads Available", text: "No ads available in this category yet. Try another category." },
-  { filename: "ads_end_of_list.mp3", label: "Ad Category — End of List", text: "You have heard all the ads in this category. Returning to categories." },
+  // ── 9. PURCHASING — package selection & payment ───────────────────────────
+  { group: "billing", filename: "package_confirm_prefix.mp3", label: "Package Confirm — Prefix", text: "You selected" },
+  { group: "billing", filename: "package_confirm_bonus_prefix.mp3", label: "Package Confirm — Bonus Prefix", text: "Great choice! You selected" },
+  { group: "billing", filename: "package_confirm_suffix.mp3", label: "Package Confirm — Suffix", text: "If this is correct press one. To select a different package press two." },
+  { group: "billing", filename: "package_cancelled.mp3", label: "Package Selection — Cancelled", text: "Cancelled. Returning to the main menu." },
+  { group: "billing", filename: "package_invalid.mp3", label: "Package Selection — Invalid", text: "Invalid selection." },
+  { group: "billing", filename: "payment_intro.mp3", label: "Payment — Have Card Ready", text: "Please have your credit card ready." },
+  { group: "billing", filename: "payment_session_expired.mp3", label: "Payment — Session Expired", text: "Your session has expired. Please try again." },
+  { group: "billing", filename: "payment_success_prefix.mp3", label: "Payment Success — Prefix", text: "Payment successful! You now have" },
+  { group: "billing", filename: "payment_success_bonus.mp3", label: "Payment Success — First Purchase Bonus", text: "Plus your first purchase bonus doubles your minutes!" },
+  { group: "billing", filename: "payment_success_suffix.mp3", label: "Payment Success — Suffix", text: "Thank you for joining. Returning to the main menu." },
+  { group: "billing", filename: "motd_post_purchase.mp3", label: "MOTD — After Purchase Announcement", text: "Thank you for your purchase! Enjoy your time on the line." },
+  { group: "billing", filename: "payment_declined.mp3", label: "Payment — Card Declined", text: "Your card was declined. Please check your details and try again later." },
+  { group: "billing", filename: "payment_failed.mp3", label: "Payment — Failed", text: "Your payment could not be completed at this time. Please try again later." },
+  { group: "billing", filename: "payment_activation_error.mp3", label: "Payment — Activation Error", text: "Your payment was received but there was an error activating your membership." },
+  { group: "billing", filename: "time_deduction_start.mp3", label: "Time Deduction — Started", text: "Time is now being deducted from your membership." },
+  { group: "billing", filename: "time_deduction_stop.mp3", label: "Time Deduction — Stopped", text: "Time is no longer being deducted from your membership." },
 
-  // ── Messaging ─────────────────────────────────────────────────────────────
-  { filename: "review_your_message.mp3", label: "Review Your Message", text: "Here is your recorded message." },
-  { filename: "message_cancelled.mp3", label: "Message Cancelled", text: "Message cancelled." },
-  { filename: "message_flagged.mp3", label: "Message Flagged", text: "This message has been flagged for review. Thank you." },
-  { filename: "no_recording.mp3", label: "No Recording Detected", text: "No recording was detected." },
+  // ── 10. MAILBOX & AD SYSTEM ───────────────────────────────────────────────
+  { group: "mailbox", filename: "mailbox_menu.mp3", label: "Mailbox Menu", text: "To go to your mailbox press one. To record a new mailbox ad press two. To listen to ads from other guys press three. To repeat these choices press nine. To exit to the main menu press pound." },
+  { group: "mailbox", filename: "mailbox_lookup.mp3", label: "Mailbox — Lookup Prompt", text: "Enter the five digit mailbox number you'd like to look up, followed by pound. Or press pound alone to return to the mailbox menu." },
+  { group: "mailbox", filename: "mailbox_not_found.mp3", label: "Mailbox — Not Found", text: "That mailbox number was not found. Please check the number and try again." },
+  { group: "mailbox", filename: "mailbox_no_ad.mp3", label: "Mailbox — No Ad Recorded Yet", text: "That mailbox has not recorded an ad yet." },
+  { group: "mailbox", filename: "mailbox_ad_existing.mp3", label: "Mailbox Ad — Already Have One", text: "You already have an ad in this category. Press 1 to record a new one. Press 2 to hear your current ad. Press 9 to return to the category menu." },
+  { group: "mailbox", filename: "mailbox_ad_record.mp3", label: "Mailbox Ad — Record Prompt", text: "Record your mailbox ad after the tone. Tell guys about yourself. Press pound when finished." },
+  { group: "mailbox", filename: "mailbox_ad_recorded_pending.mp3", label: "Mailbox Ad — Recorded (Pending Approval)", text: "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. In the meantime you can browse other ads or visit the male box to check out who's on the line right now." },
+  { group: "mailbox", filename: "mailbox_ad_saved.mp3", label: "Mailbox Ad — Saved (Legacy)", text: "Your mailbox ad has been saved. Other guys can now find your ad." },
+  { group: "mailbox", filename: "mailbox_setup_intro.mp3", label: "Mailbox Setup — Intro & DOB Prompt", text: "You need to first set up your mailbox. To set up your mailbox we need to gather a couple of things from you which helps callers search for the perfect guy and help them find your ads. First we need to know your date of birth. Please enter your date of birth in this order: two digits for the month, two digits for the day, and four digits for the year. For example, for April 17 1976, enter zero four one seven one nine seven six." },
+  { group: "mailbox", filename: "mailbox_setup_dob_invalid.mp3", label: "Mailbox Setup — Invalid Date of Birth", text: "We did not receive a valid date of birth. Please try again." },
+  { group: "mailbox", filename: "mailbox_setup_underage.mp3", label: "Mailbox Setup — Underage", text: "We are sorry, but you must be 18 years of age or older to use this service. Goodbye." },
+  { group: "mailbox", filename: "mailbox_setup_bodytype.mp3", label: "Mailbox Setup — Body Type Menu", text: "Now please select your body type. For Slim press one. For Average press two. For Athletic press three. For Large press four. For Big and Tall press five. To repeat these choices press nine. To exit press pound." },
+  { group: "mailbox", filename: "mailbox_setup_ethnicity.mp3", label: "Mailbox Setup — Ethnicity Menu", text: "Now please tell us your ethnicity. If you don't want to identify your ethnicity press one. If you're Caucasian press two. African-American press three. Asian press four. Latino press five. Middle Eastern press six. Aboriginal press seven. To repeat these choices press nine. To exit press pound." },
+  { group: "mailbox", filename: "mailbox_setup_ethnicity_confirm.mp3", label: "Mailbox Setup — Ethnicity Confirm", text: "If this is correct press one. To select your ethnicity press two. If you don't want to identify your ethnicity press three." },
+  { group: "mailbox", filename: "mailbox_setup_ready.mp3", label: "Mailbox Setup — Ready to Write Down", text: "Please get something ready to write down your new mailbox number and passcode. This is the only chance you will have to write them down. And don't get them confused with your membership number — we issue separate numbers for memberships. If you're ready to write down your mailbox number and passcode press one. To pause the system while you get a pen and paper press two. For customer service press zero. To repeat these choices press nine. To cancel setting up your mailbox press the pound key." },
+  { group: "mailbox", filename: "mailbox_setup_existing_passcode.mp3", label: "Mailbox Setup — Existing Passcode", text: "Your mailbox passcode is the same as your membership passcode. If you do not remember your passcode and would like to create a new one, press pound." },
+  { group: "mailbox", filename: "mailbox_setup_create_passcode.mp3", label: "Mailbox Setup — Create Passcode", text: "For security you need a passcode. Please enter a four digit passcode now. If you make a mistake press star to start over." },
+  { group: "mailbox", filename: "mailbox_setup_passcode_reenter.mp3", label: "Mailbox Setup — Re-enter Passcode", text: "Please re-enter your four digit passcode." },
+  { group: "mailbox", filename: "mailbox_setup_passcode_mismatch.mp3", label: "Mailbox Setup — Passcode Mismatch", text: "Your passcode entries did not match. Please try again." },
+  { group: "mailbox", filename: "mailbox_setup_complete.mp3", label: "Mailbox Setup — Complete", text: "Your mailbox is now set up. To begin recording a new ad press one. To listen to ads from other guys press two. To enter the male box press star. To cancel creating your mailbox press pound." },
+  { group: "mailbox", filename: "mailbox_setup_cancelled.mp3", label: "Mailbox Setup — Cancelled", text: "Mailbox setup cancelled." },
+  { group: "mailbox", filename: "ad_category_menu.mp3", label: "Ad Category Menu — Page 1", text: "Please select a category. For Quick and Hot Talk press one. For Bicurious press two. For Kink press three. For Total Tops press four. For Strictly Bottoms press five. For Trans press six. To look up a specific mailbox press seven. For more categories press eight. For definitions press nine. To return to the mailbox menu press pound." },
+  { group: "mailbox", filename: "ad_category_menu_p2.mp3", label: "Ad Category Menu — Page 2", text: "More categories. For Cock Suckers press one. For Hung Cocks press two. For Uncut Cocks press three. For Twinks press four. For Bears press five. For Daddys press six. To look up a specific mailbox press seven. For definitions press nine. To go back to the previous categories press pound." },
+  { group: "mailbox", filename: "ad_category_definitions.mp3", label: "Ad Category Definitions", text: "Quick and Hot Talk: guys looking for fast, explicit, no-strings chat. Bicurious: men exploring attraction to other men for the first time or occasionally. Kink: callers into fetishes, role play, or specific kinks. Total Tops: guys who are exclusively tops and looking for a bottom. Strictly Bottoms: guys who are exclusively bottoms and looking for a top. Trans: trans men and women connecting with other callers." },
+  { group: "mailbox", filename: "no_ads_category.mp3", label: "Ad Category — No Ads Available", text: "No ads available in this category yet. Try another category." },
+  { group: "mailbox", filename: "ads_end_of_list.mp3", label: "Ad Category — End of List", text: "You have heard all the ads in this category. Returning to categories." },
 
-  // ── Time & Billing ────────────────────────────────────────────────────────
-  { filename: "time_deduction_start.mp3", label: "Time Deduction — Started", text: "Time is now being deducted from your membership." },
-  { filename: "time_deduction_stop.mp3", label: "Time Deduction — Stopped", text: "Time is no longer being deducted from your membership." },
+  // ── 11. NUMBERS & PHRASES — chained-audio building blocks ────────────────
+  { group: "phrases", filename: "phrase_you_have.mp3", label: "Phrase — «You have»", text: "You have" },
+  { group: "phrases", filename: "phrase_minutes_of_pbtr.mp3", label: "Phrase — «minutes remaining»", text: "minutes remaining." },
+  { group: "phrases", filename: "phrase_minute_of_pbtr.mp3", label: "Phrase — «minute remaining»", text: "minute remaining." },
+  { group: "phrases", filename: "phrase_there_are.mp3", label: "Phrase — «There are»", text: "There are" },
+  { group: "phrases", filename: "phrase_there_is.mp3", label: "Phrase — «There is»", text: "There is" },
+  { group: "phrases", filename: "phrase_callers_on_the_line.mp3", label: "Phrase — «guys on the line»", text: "guys on the line." },
+  { group: "phrases", filename: "phrase_caller_on_the_line.mp3", label: "Phrase — «guy on the line»", text: "guy on the line." },
+  { group: "phrases", filename: "num_0.mp3",  label: "Number — 0",   text: "zero" },
+  { group: "phrases", filename: "num_1.mp3",  label: "Number — 1",   text: "one" },
+  { group: "phrases", filename: "num_2.mp3",  label: "Number — 2",   text: "two" },
+  { group: "phrases", filename: "num_3.mp3",  label: "Number — 3",   text: "three" },
+  { group: "phrases", filename: "num_4.mp3",  label: "Number — 4",   text: "four" },
+  { group: "phrases", filename: "num_5.mp3",  label: "Number — 5",   text: "five" },
+  { group: "phrases", filename: "num_6.mp3",  label: "Number — 6",   text: "six" },
+  { group: "phrases", filename: "num_7.mp3",  label: "Number — 7",   text: "seven" },
+  { group: "phrases", filename: "num_8.mp3",  label: "Number — 8",   text: "eight" },
+  { group: "phrases", filename: "num_9.mp3",  label: "Number — 9",   text: "nine" },
+  { group: "phrases", filename: "num_10.mp3", label: "Number — 10",  text: "ten" },
+  { group: "phrases", filename: "num_11.mp3", label: "Number — 11",  text: "eleven" },
+  { group: "phrases", filename: "num_12.mp3", label: "Number — 12",  text: "twelve" },
+  { group: "phrases", filename: "num_13.mp3", label: "Number — 13",  text: "thirteen" },
+  { group: "phrases", filename: "num_14.mp3", label: "Number — 14",  text: "fourteen" },
+  { group: "phrases", filename: "num_15.mp3", label: "Number — 15",  text: "fifteen" },
+  { group: "phrases", filename: "num_16.mp3", label: "Number — 16",  text: "sixteen" },
+  { group: "phrases", filename: "num_17.mp3", label: "Number — 17",  text: "seventeen" },
+  { group: "phrases", filename: "num_18.mp3", label: "Number — 18",  text: "eighteen" },
+  { group: "phrases", filename: "num_19.mp3", label: "Number — 19",  text: "nineteen" },
+  { group: "phrases", filename: "num_20.mp3", label: "Number — 20",  text: "twenty" },
+  { group: "phrases", filename: "num_30.mp3", label: "Number — 30",  text: "thirty" },
+  { group: "phrases", filename: "num_40.mp3", label: "Number — 40",  text: "forty" },
+  { group: "phrases", filename: "num_50.mp3", label: "Number — 50",  text: "fifty" },
+  { group: "phrases", filename: "num_60.mp3", label: "Number — 60",  text: "sixty" },
+  { group: "phrases", filename: "num_70.mp3", label: "Number — 70",  text: "seventy" },
+  { group: "phrases", filename: "num_80.mp3", label: "Number — 80",  text: "eighty" },
+  { group: "phrases", filename: "num_90.mp3", label: "Number — 90",  text: "ninety" },
+  { group: "phrases", filename: "num_100.mp3", label: "Number — 100", text: "one hundred" },
+  { group: "phrases", filename: "num_200.mp3", label: "Number — 200", text: "two hundred" },
+  { group: "phrases", filename: "num_300.mp3", label: "Number — 300", text: "three hundred" },
+  { group: "phrases", filename: "num_400.mp3", label: "Number — 400", text: "four hundred" },
+  { group: "phrases", filename: "num_500.mp3", label: "Number — 500", text: "five hundred" },
+  { group: "phrases", filename: "num_600.mp3", label: "Number — 600", text: "six hundred" },
+  { group: "phrases", filename: "num_700.mp3", label: "Number — 700", text: "seven hundred" },
+  { group: "phrases", filename: "num_800.mp3", label: "Number — 800", text: "eight hundred" },
+  { group: "phrases", filename: "num_900.mp3", label: "Number — 900", text: "nine hundred" },
 ];
 
 // ── AutoResizeTextarea ────────────────────────────────────────────────────────
@@ -1337,6 +1340,22 @@ function RogerSubTab() {
 }
 
 // ── TTSTab ────────────────────────────────────────────────────────────────────
+// Group filter tabs for the system prompts section (mirrors Roger's mood tabs)
+// ── GROUP_TABS ────────────────────────────────────────────────────────────────
+const GROUP_TABS = [
+  { id: "all",        label: "All" },
+  { id: "entry",      label: "Call Entry" },
+  { id: "membership", label: "Membership" },
+  { id: "onboarding", label: "Onboarding" },
+  { id: "menu",       label: "Main Menu" },
+  { id: "browsing",   label: "Browsing" },
+  { id: "messaging",  label: "Messaging" },
+  { id: "live",       label: "Male Box" },
+  { id: "billing",    label: "Billing" },
+  { id: "mailbox",    label: "Mailbox" },
+  { id: "phrases",    label: "Numbers & Phrases" },
+] as const;
+
 function TTSTab() {
   const { toast } = useToast();
   const [audioGenTab, setAudioGenTab] = useState<"system" | "roger">("system");
@@ -1348,9 +1367,12 @@ function TTSTab() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
-  const [filter, setFilter] = useState("");
+  const [groupFilter, setGroupFilter] = useState<string>("all");
+  const [searchText, setSearchText] = useState("");
   const [generateAllProgress, setGenerateAllProgress] = useState<{ done: number; total: number; currentLabel: string } | null>(null);
   const generateAllAbortRef = useRef(false);
+  const [playingPromptKey, setPlayingPromptKey] = useState<string | null>(null);
+  const promptAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load saved prompt texts from server on mount
   const { data: savedPromptTexts } = useQuery<Record<string, string>>({
@@ -1539,10 +1561,79 @@ function TTSTab() {
     }
   }
 
-  const filtered = SYSTEM_PROMPTS.filter(p => !filter || p.label.toLowerCase().includes(filter.toLowerCase()) || p.filename.toLowerCase().includes(filter.toLowerCase()));
-  const generatedCount = SYSTEM_PROMPTS.filter(p =>
-    fileExistsIn("shared", p.filename) || fileExistsIn("mm", p.filename) || fileExistsIn("mw", p.filename)
-  ).length;
+  function promptExists(filename: string): boolean {
+    return fileExistsIn(categoryFolder, filename) || fileExistsIn("shared", filename);
+  }
+
+  function handlePlayPrompt(key: string, url: string) {
+    if (playingPromptKey === key) {
+      promptAudioRef.current?.pause();
+      promptAudioRef.current = null;
+      setPlayingPromptKey(null);
+      return;
+    }
+    promptAudioRef.current?.pause();
+    const audio = new Audio(url);
+    promptAudioRef.current = audio;
+    setPlayingPromptKey(key);
+    audio.onended = () => { setPlayingPromptKey(null); promptAudioRef.current = null; };
+    audio.onerror = () => { setPlayingPromptKey(null); promptAudioRef.current = null; };
+    audio.play();
+  }
+
+  async function handleGenerateMissing() {
+    if (generateAllProgress) {
+      generateAllAbortRef.current = true;
+      return;
+    }
+    generateAllAbortRef.current = false;
+    const missing = SYSTEM_PROMPTS.filter(p => !promptExists(p.filename));
+    if (missing.length === 0) {
+      toast({ title: "Nothing to generate", description: "All prompts already have audio files." });
+      return;
+    }
+    setGenerateAllProgress({ done: 0, total: missing.length, currentLabel: missing[0]?.label ?? "" });
+    let done = 0;
+    for (const prompt of missing) {
+      if (generateAllAbortRef.current) break;
+      const text = editingText[prompt.filename] ?? prompt.text;
+      if (!text.trim()) { done++; continue; }
+      const key = `${categoryFolder}:${prompt.filename}`;
+      setGenerating(key);
+      setGenerateAllProgress({ done, total: missing.length, currentLabel: prompt.label });
+      try {
+        const res = await fetch("/api/admin/tts/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: text.trim(), filename: prompt.filename, folder: categoryFolder }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ message: "Failed" }));
+          toast({ title: `Failed: ${prompt.label}`, description: err.message, variant: "destructive" });
+        }
+      } catch {
+        toast({ title: `Error: ${prompt.label}`, description: "Network error", variant: "destructive" });
+      }
+      done++;
+    }
+    const wasCancelled = generateAllAbortRef.current;
+    setGenerating(null);
+    setGenerateAllProgress(null);
+    generateAllAbortRef.current = false;
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
+    if (!wasCancelled) {
+      toast({ title: "Generate Missing complete", description: `${done} of ${missing.length} missing prompts generated.` });
+    }
+  }
+
+  const groupFiltered = groupFilter === "all" ? SYSTEM_PROMPTS : SYSTEM_PROMPTS.filter(p => p.group === groupFilter);
+  const filtered = groupFiltered.filter(p =>
+    !searchText ||
+    p.label.toLowerCase().includes(searchText.toLowerCase()) ||
+    p.filename.toLowerCase().includes(searchText.toLowerCase())
+  );
+  const generatedCount = SYSTEM_PROMPTS.filter(p => promptExists(p.filename)).length;
+  const missingCount = SYSTEM_PROMPTS.length - generatedCount;
 
   const subTabBar = (
     <div className="flex border-b border-gray-200 gap-1 mb-6">
@@ -1822,23 +1913,29 @@ function TTSTab() {
         </div>
       )}
 
-      <div className={C.card}>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">
-            System Prompts
-            <span className="ml-2 text-[10px] font-normal normal-case text-gray-400 border border-gray-200 rounded px-2 py-0.5">
-              Folder: {categoryFolder.toUpperCase()}
-            </span>
-          </h3>
-          <div className="flex items-center gap-2 ml-auto flex-wrap">
-            <input
-              data-testid="input-filter-prompts"
-              type="text"
-              value={filter}
-              onChange={e => setFilter(e.target.value)}
-              placeholder="Filter prompts..."
-              className="w-44 bg-white border border-gray-300 rounded px-3 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#f5a623] transition-colors"
-            />
+      {/* ── System Prompts (Roger-style) ── */}
+      <div className="space-y-4">
+        {/* Stats row + bulk actions */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex gap-3">
+            <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[72px]"}>
+              <div className="font-mono text-xl font-bold text-gray-800">{SYSTEM_PROMPTS.length}</div>
+              <div className={C.label}>Total</div>
+            </div>
+            <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[72px]"}>
+              <div className="font-mono text-xl font-bold text-emerald-600">{generatedCount}</div>
+              <div className={C.label}>Generated</div>
+            </div>
+            <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[72px]"}>
+              <div className="font-mono text-xl font-bold text-amber-600">{missingCount}</div>
+              <div className={C.label}>Missing</div>
+            </div>
+            <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[72px]"}>
+              <div className="font-mono text-xs font-bold text-blue-600 uppercase pt-1">{categoryFolder.toUpperCase()}</div>
+              <div className={C.label}>Folder</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
             {dirtyKeys.size > 0 && (
               <button
                 data-testid="btn-save-prompt-texts"
@@ -1851,8 +1948,8 @@ function TTSTab() {
               </button>
             )}
             <button
-              data-testid="btn-generate-all"
-              onClick={handleGenerateAll}
+              data-testid="btn-generate-missing"
+              onClick={handleGenerateMissing}
               disabled={!!generating && !generateAllProgress}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-bold border transition-colors ${
                 generateAllProgress
@@ -1862,12 +1959,23 @@ function TTSTab() {
             >
               {generateAllProgress
                 ? <><X size={12} /> Cancel</>
-                : <><Wand2 size={12} /> Generate All</>}
+                : <><Wand2 size={12} /> Generate Missing ({missingCount})</>}
+            </button>
+            <button
+              data-testid="btn-generate-all"
+              onClick={handleGenerateAll}
+              disabled={!!generating && !generateAllProgress}
+              className={C.btnGhost + " text-xs"}
+              title="Regenerate every prompt (overwrites existing)"
+            >
+              <Wand2 size={11} /> Regen All
             </button>
           </div>
         </div>
+
+        {/* Bulk progress bar */}
         {generateAllProgress && (
-          <div className="mt-3 space-y-1.5">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs font-mono text-gray-500">
               <span className="truncate max-w-xs">{generateAllProgress.currentLabel}</span>
               <span className="flex-shrink-0 ml-2 text-[#f5a623] font-bold">{generateAllProgress.done} / {generateAllProgress.total}</span>
@@ -1880,29 +1988,65 @@ function TTSTab() {
             </div>
           </div>
         )}
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full">
+
+        {/* Group filter chips + search */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {GROUP_TABS.map(tab => {
+            const count = tab.id === "all" ? SYSTEM_PROMPTS.length : SYSTEM_PROMPTS.filter(p => p.group === tab.id).length;
+            return (
+              <button
+                key={tab.id}
+                data-testid={`btn-prompt-group-${tab.id}`}
+                onClick={() => setGroupFilter(tab.id)}
+                className={`px-3 py-1 rounded text-xs font-mono font-semibold border transition-colors ${
+                  groupFilter === tab.id
+                    ? "bg-[#f5a623] border-[#f5a623] text-white"
+                    : "bg-white border-gray-200 text-gray-500 hover:border-[#f5a623] hover:text-[#f5a623]"
+                }`}
+              >
+                {tab.label}
+                <span className="ml-1 opacity-60">({count})</span>
+              </button>
+            );
+          })}
+          <div className="ml-auto flex items-center gap-1.5 bg-white border border-gray-200 rounded px-2 py-1">
+            <Search size={11} className="text-gray-400" />
+            <input
+              data-testid="input-search-prompts"
+              type="text"
+              value={searchText}
+              onChange={e => setSearchText(e.target.value)}
+              placeholder="Search prompts…"
+              className="text-xs font-mono outline-none w-40 text-gray-700 placeholder-gray-400"
+            />
+          </div>
+        </div>
+
+        {/* Prompt table */}
+        <div className="overflow-x-auto rounded border border-gray-200">
+          <table className="w-full text-xs">
             <thead>
-              <tr>
-                <th className={C.th}>Prompt</th>
-                <th className={C.th}>Text</th>
-                <th className={C.th + " w-32"}>Status</th>
-                <th className={C.th + " w-40"}>Actions</th>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-56">Prompt / File</th>
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider">Text to Speak</th>
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-24">Status</th>
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-28">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(prompt => {
-                const exists = fileExistsIn(categoryFolder, prompt.filename);
+                const exists = promptExists(prompt.filename);
                 const isGen = generating === `${categoryFolder}:${prompt.filename}`;
-                const existingFile = getFileIn(categoryFolder, prompt.filename);
+                const existingFile = getFileIn(categoryFolder, prompt.filename) ?? getFileIn("shared", prompt.filename);
                 const currentText = editingText[prompt.filename] ?? prompt.text;
+                const isPlaying = playingPromptKey === prompt.filename;
                 return (
                   <tr key={prompt.filename} data-testid={`row-prompt-${prompt.filename}`} className={C.row}>
-                    <td className={C.td + " w-52"}>
-                      <div className="text-gray-800 font-mono text-xs font-bold">{prompt.label}</div>
+                    <td className={C.td + " align-top"}>
+                      <div className="text-gray-800 font-mono text-[11px] font-bold leading-tight">{prompt.label}</div>
                       <div className="text-gray-400 font-mono text-[10px] mt-0.5">{prompt.filename}</div>
                     </td>
-                    <td className={C.td}>
+                    <td className={C.td + " align-top"}>
                       <div className="relative">
                         <AutoResizeTextarea
                           data-testid={`textarea-prompt-${prompt.filename}`}
@@ -1915,36 +2059,55 @@ function TTSTab() {
                         )}
                       </div>
                     </td>
-                    <td className={C.td}>
+                    <td className={C.td + " align-top"}>
                       <span className={`${C.badge} ${exists ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
                         {exists ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
-                        {exists ? "Generated" : "Missing"}
+                        {exists ? "Ready" : "Missing"}
                       </span>
                     </td>
-                    <td className={C.td}>
-                      <div className="flex items-center gap-1.5">
+                    <td className={C.td + " align-top"}>
+                      <div className="flex items-center gap-1">
                         <button
                           data-testid={`btn-generate-${prompt.filename}`}
                           onClick={() => handleGenerate(prompt.filename, currentText, categoryFolder)}
                           disabled={!!generating}
+                          title={exists ? "Regenerate audio" : "Generate audio"}
                           className={C.btnGhost + " text-[10px]"}
                         >
                           {isGen ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
-                          {exists ? "Regen" : "Generate"}
                         </button>
+                        {exists && existingFile && (
+                          <button
+                            data-testid={`btn-play-prompt-${prompt.filename}`}
+                            onClick={() => handlePlayPrompt(prompt.filename, existingFile.url)}
+                            title={isPlaying ? "Stop" : "Play audio"}
+                            className={C.btnGhost + " text-[10px]"}
+                          >
+                            {isPlaying ? <Pause size={10} /> : <Play size={10} />}
+                          </button>
+                        )}
                         {exists && (
-                          <>
-                            {existingFile && <AudioPlayer src={existingFile.url} />}
-                            <button data-testid={`btn-delete-prompt-${prompt.filename}`} onClick={() => deleteMutation.mutate({ filename: prompt.filename, folder: categoryFolder })} className={C.btnDanger + " text-[10px]"}>
-                              <Trash2 size={10} />
-                            </button>
-                          </>
+                          <button
+                            data-testid={`btn-delete-prompt-${prompt.filename}`}
+                            onClick={() => deleteMutation.mutate({ filename: prompt.filename, folder: categoryFolder })}
+                            title="Delete audio file"
+                            className={C.btnDanger + " text-[10px]"}
+                          >
+                            <Trash2 size={10} />
+                          </button>
                         )}
                       </div>
                     </td>
                   </tr>
                 );
               })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-center py-8 text-gray-400 font-mono text-xs">
+                    No prompts match current filter.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
