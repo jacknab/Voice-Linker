@@ -27,6 +27,11 @@ interface LocalNumberData {
   linkedNumbers?: Array<{ name: string; phoneNumber: string }>;
 }
 
+interface MembershipSettings {
+  freeMode: boolean;
+  freeModeScheduleDays: number[] | null;
+}
+
 function formatPhone(raw: string | null | undefined): string {
   if (!raw) return DEFAULT_PHONE;
   const d = raw.replace(/\D/g, "");
@@ -62,6 +67,16 @@ export default function Landing() {
     staleTime: Infinity,
     retry: 1,
   });
+
+  const { data: membershipData } = useQuery<MembershipSettings>({
+    queryKey: ["/api/membership-settings"],
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
+  const isFreeModeActive = membershipData?.freeMode
+    || (membershipData?.freeModeScheduleDays ?? []).includes(new Date().getDay())
+    || false;
 
   const siteName = siteData?.siteName || DEFAULT_SITE_NAME;
   const fallbackPhone = siteData?.fallbackPhoneNumber || DEFAULT_PHONE;
@@ -191,7 +206,7 @@ export default function Landing() {
             <h1 style={{ fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.15, marginBottom: "1rem", color: "#fff", textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
               data-testid="hero-headline"
             >
-              Talk to Real Local Guys<br />Right Now — It's Free!
+              Talk to Real Local Guys<br />Right Now — {isFreeModeActive ? "It's Free!" : "Try It Free!"}
             </h1>
 
             {/* Glass pill */}
