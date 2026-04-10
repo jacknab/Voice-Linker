@@ -1844,7 +1844,7 @@ function TTSTab() {
                       <td className={C.td}>
                         <span className={`${C.badge} ${exists ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
                           {exists ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
-                          {exists ? "Generated" : "Missing"}
+                          {exists ? "Audio ready" : "No audio"}
                         </span>
                       </td>
                       <td className={C.td}>
@@ -1921,7 +1921,7 @@ function TTSTab() {
                       <td className={C.td}>
                         <span className={`${C.badge} ${exists ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
                           {exists ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
-                          {exists ? "Generated" : "Missing"}
+                          {exists ? "Audio ready" : "No audio"}
                         </span>
                       </td>
                       <td className={C.td}>
@@ -2105,7 +2105,7 @@ function TTSTab() {
                     <td className={C.td + " align-top"}>
                       <span className={`${C.badge} ${exists ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
                         {exists ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
-                        {exists ? "Ready" : "Missing"}
+                        {exists ? "Audio ready" : "No audio"}
                       </span>
                     </td>
                     <td className={C.td + " align-top"}>
