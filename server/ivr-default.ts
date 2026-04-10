@@ -3708,14 +3708,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      // Announce how many callers are currently on the line
-      // On MW systems, only count opposite-gender callers so the announcement is accurate
+      // Announce how many callers are currently on the line.
+      // On MW systems, only count opposite-gender callers so the announcement is accurate.
+      // Total = home region + all linked regions.
       const goLiveSiteConf = await getSiteSettingsCached();
       const goLiveCallerGender = goLiveSiteConf.siteCategory === "MW"
         ? (femaleCallers.has(callSid) ? "female" : "male")
         : null;
-      const activeCallerCount = await storage.getActiveCallerCount(user.id, regionId, goLiveCallerGender);
-      playCallerCount(twiml, req, activeCallerCount);
+      const goLiveHomeCount = await storage.getActiveCallerCount(user.id, regionId, goLiveCallerGender);
+      let goLiveTotal = goLiveHomeCount;
+      if (regionId) {
+        const goLiveLinkedRegions = await storage.getLinkedRegions(regionId);
+        for (const lr of goLiveLinkedRegions) {
+          goLiveTotal += await storage.getActiveCallerCount(user.id, lr.id, goLiveCallerGender);
+        }
+      }
+      playCallerCount(twiml, req, goLiveTotal);
 
       // In per-minute billing, notify the caller that their time is now running.
       // In per-day billing, time is not deducted per-call, so skip this announcement.
@@ -3788,9 +3796,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // On MW systems, only count opposite-gender profiles scoped to the MW siteCategory
       const browseSiteCategory = browseSiteConf.siteCategory ?? "MM";
       const availableCount = await storage.getAvailableProfileCount(user.id, regionId, browseCallerGender, browseSiteCategory);
-      // Caller count is system-wide (no region filter) so virtual callers with no region are included
-      const activeCallerCount = await storage.getActiveCallerCount(user.id, undefined, browseCallerGender);
-      console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, callerGender=${browseCallerGender}, activeOtherCallers=${activeCallerCount}, availableProfiles=${availableCount}`);
+      console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, callerGender=${browseCallerGender}, availableProfiles=${availableCount}`);
 
       if (availableCount === 0) {
         playPrompt(twiml, req, "no_profiles.mp3", "There are no profiles available right now. Please call back later.");
@@ -3987,9 +3993,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
           console.log(`[voice] Playing profile userId=${profile.userId} (position ${state.index}/${state.queue.length})`);
 
-          // Announce caller count only at the very start of the queue
+          // Announce caller count only at the very start of the queue.
+          // Count home region + all linked regions so the total is accurate.
           if (state.index === 1) {
-            playCallerCount(twiml, req, activeCallerCount);
+            const homeCount = await storage.getActiveCallerCount(user.id, regionId ?? undefined, browseCallerGender);
+            let regionalTotal = homeCount;
+            for (const snap of state.linkedRegionSnapshots) {
+              regionalTotal += await storage.getActiveCallerCount(user.id, snap.regionId, browseCallerGender);
+            }
+            console.log(`[voice] browse-profiles: announcing caller count: ${regionalTotal} (home=${homeCount}, linkedRegions=${state.linkedRegionSnapshots.length})`);
+            playCallerCount(twiml, req, regionalTotal);
           }
 
           // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one
