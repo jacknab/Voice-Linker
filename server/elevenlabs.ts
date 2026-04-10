@@ -14,9 +14,14 @@ export function getVoiceIdForFolder(folder?: string | null): string {
   return process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
 }
 
-export async function generateTTS(text: string, outputFilename: string, subfolder?: string): Promise<string> {
+/** Returns Roger's dedicated ElevenLabs voice ID. Falls back to the shared voice ID. */
+export function getVoiceIdForRoger(): string {
+  return process.env.ELEVENLABS_VOICE_ID_ROGER || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+}
+
+export async function generateTTS(text: string, outputFilename: string, subfolder?: string, voiceIdOverride?: string): Promise<string> {
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = getVoiceIdForFolder(subfolder ?? null);
+  const voiceId = voiceIdOverride ?? getVoiceIdForFolder(subfolder ?? null);
 
   if (!apiKey) {
     throw new Error("ELEVENLABS_API_KEY is not configured");

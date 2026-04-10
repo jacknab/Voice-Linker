@@ -12,7 +12,7 @@ import fs from "fs";
 import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
-import { generateTTS, listVoices, getVoiceIdForFolder } from "./elevenlabs";
+import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
@@ -1048,6 +1048,32 @@ export async function registerRoutes(
       voiceIdMM: getVoiceIdForFolder("mm"),
       voiceIdMW: getVoiceIdForFolder("mw"),
     });
+  });
+
+  // Generate a single Roger prompt audio file using Roger's dedicated ElevenLabs voice.
+  // Saves to uploads/roger_<id>.mp3 (shared root, no subfolder).
+  app.post("/api/admin/roger/generate", async (req, res) => {
+    try {
+      const { id, text } = req.body as { id?: string; text?: string };
+      if (!id?.trim()) return res.status(400).json({ message: "id is required" });
+      if (!text?.trim()) return res.status(400).json({ message: "text is required" });
+
+      const filename = `roger_${id.trim().replace(/[^a-zA-Z0-9_\-]/g, "_")}.mp3`;
+      const voiceId  = getVoiceIdForRoger();
+      await generateTTS(text.trim(), filename, undefined, voiceId);
+      logAudit("audio_generated", { targetType: "audio", targetLabel: filename, detail: { voice: "roger" } as unknown as Record<string, unknown> });
+      res.json({ filename, url: `/uploads/${filename}` });
+    } catch (e: any) {
+      console.error("[admin/roger/generate] failed:", e);
+      res.status(500).json({ message: e?.message ?? "Roger TTS generation failed" });
+    }
+  });
+
+  // Return Roger's current ElevenLabs voice ID (masked for display).
+  app.get("/api/admin/roger/voice", (_req, res) => {
+    const id = getVoiceIdForRoger();
+    const masked = id.length > 8 ? `${id.slice(0, 4)}${"•".repeat(id.length - 8)}${id.slice(-4)}` : id;
+    res.json({ voiceId: id, masked });
   });
 
   // ─── Admin: System Prompt Text Overrides ──────────────────────────────────

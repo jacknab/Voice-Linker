@@ -1009,12 +1009,16 @@ function RogerSubTab() {
     queryKey: ["/api/admin/roger/prompts"],
   });
 
+  const { data: rogerVoice } = useQuery<{ voiceId: string; masked: string }>({
+    queryKey: ["/api/admin/roger/voice"],
+  });
+
   const generateMutation = useMutation({
     mutationFn: async ({ id, text }: { id: string; text: string }) => {
-      const res = await fetch("/api/admin/tts/generate", {
+      const res = await fetch("/api/admin/roger/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, filename: `roger_${id}.mp3` }),
+        body: JSON.stringify({ id, text }),
       });
       if (!res.ok) { const err = await res.json().catch(() => ({ message: "Generation failed" })); throw new Error(err.message); }
       return res.json();
@@ -1070,10 +1074,10 @@ function RogerSubTab() {
       setBulkProgress({ done, total: missing.length, label: p.id });
       setGenerating(p.id);
       try {
-        const res = await fetch("/api/admin/tts/generate", {
+        const res = await fetch("/api/admin/roger/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: p.lineText, filename: `roger_${p.id}.mp3` }),
+          body: JSON.stringify({ id: p.id, text: p.lineText }),
         });
         if (!res.ok) toast({ title: `Failed: ${p.id}`, variant: "destructive" });
       } catch { toast({ title: `Error: ${p.id}`, description: "Network error", variant: "destructive" }); }
@@ -1113,6 +1117,17 @@ function RogerSubTab() {
 
   return (
     <div className="space-y-5">
+      {/* Roger Voice indicator */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs font-mono">
+        <span className="text-amber-600 font-semibold">Roger Voice ID:</span>
+        <span className="text-amber-800" data-testid="text-roger-voice-id">
+          {rogerVoice ? rogerVoice.masked : "Not configured"}
+        </span>
+        {rogerVoice && (
+          <span className="ml-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-bold">ACTIVE</span>
+        )}
+      </div>
+
       {/* Stats + bulk action */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex gap-3">
