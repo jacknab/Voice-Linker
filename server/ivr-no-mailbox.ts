@@ -3916,7 +3916,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                 action: `/voice/handle-profile-menu?profileUserId=${newLinkedCaller.userId}`,
                 timeout: 10,
               });
-              alertGather.say(`New caller from ${snapshot.regionName}.`);
+              const linkedRegionRecord = await storage.getRegionById(snapshot.regionId).catch(() => null);
+              const linkedSlug = linkedRegionRecord?.slug ?? snapshot.regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+              const linkedCityFile = `city_${linkedSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
+              const linkedCityFilePath = path.join(UPLOADS_DIR, linkedCityFile);
+              if (fs.existsSync(linkedCityFilePath)) {
+                alertGather.play(`${baseUrl(req)}/uploads/${linkedCityFile}`);
+              } else {
+                alertGather.say(`New caller from ${snapshot.regionName}.`);
+              }
               if (newLinkedCaller.nameRecordingUrl) {
                 safePlayRecording(alertGather, newLinkedCaller.nameRecordingUrl, req, "");
               }

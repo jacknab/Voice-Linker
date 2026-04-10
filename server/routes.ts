@@ -27,7 +27,7 @@ import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeR
 async function generateCityAudio(regionName: string, regionSlug: string): Promise<void> {
   try {
     const filename = `city_${regionSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
-    await generateTTS(`callers from ${regionName}.`, filename);
+    await generateTTS(`new caller from ${regionName}.`, filename);
     console.log(`[city-audio] Generated ${filename} for region "${regionName}"`);
   } catch (err: any) {
     console.error(`[city-audio] Failed to generate audio for "${regionName}":`, err.message);

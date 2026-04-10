@@ -3986,7 +3986,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                 action: `/voice/handle-profile-menu?profileUserId=${newLinkedCaller.userId}`,
                 timeout: 10,
               });
-              alertGather.say(`New caller from ${snapshot.regionName}.`);
+              const linkedRegionRecord = await storage.getRegionById(snapshot.regionId).catch(() => null);
+              const linkedSlug = linkedRegionRecord?.slug ?? snapshot.regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+              const linkedCityFile = `city_${linkedSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
+              const linkedCityFilePath = path.join(UPLOADS_DIR, linkedCityFile);
+              if (fs.existsSync(linkedCityFilePath)) {
+                alertGather.play(`${baseUrl(req)}/uploads/${linkedCityFile}`);
+              } else {
+                alertGather.say(`New caller from ${snapshot.regionName}.`);
+              }
               if (newLinkedCaller.nameRecordingUrl) {
                 safePlayRecording(alertGather, newLinkedCaller.nameRecordingUrl, req, "");
               }
@@ -4129,20 +4137,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Static intro audio (can be overridden with ElevenLabs recording)
       playPrompt(gather, req, "nearby_callers_offer.mp3", "You have heard all the callers close to you.");
 
-      // Dynamic per-region options — use pre-generated city audio files where available,
-      // falling back to Twilio TTS. City files are named city_{slug}.mp3 and contain
-      // "callers from {city name}." so we prefix with "Press X to hear" via TTS.
+      // Dynamic per-region options — use TTS so the menu always reads correctly.
+      // (City audio files now contain "new caller from {city}" for the live announcement.)
       for (const r of regions) {
-        const regionRecord = await storage.getRegionById(r.id).catch(() => null);
-        const slug = regionRecord?.slug ?? r.name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-        const cityFile = `city_${slug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
-        const cityFilePath = path.join(UPLOADS_DIR, cityFile);
-        if (fs.existsSync(cityFilePath)) {
-          gather.say(`Press ${r.digit} to hear`);
-          gather.play(`${baseUrl(req)}/uploads/${cityFile}`);
-        } else {
-          gather.say(`Press ${r.digit} to hear callers from ${r.name}.`);
-        }
+        gather.say(`Press ${r.digit} to hear callers from ${r.name}.`);
       }
       gather.say(`Press ${startOverDigit} to start over from the beginning.`);
 
