@@ -131,3 +131,9 @@ id = "vkonZScf1cXMroy6Uls_j"
 uri = "file://attached_assets/stock_images/man_phone_smile_5.jpg"
 type = "image"
 title = "man smiling phone call outdoor"
+
+[[outputs]]
+id = "lpSU0-n0vmVqs22Bkcfox"
+uri = "file://DOCUMENTATION.md"
+type = "text"
+title = "Male Box — Complete Developer & Operator Documentation"
