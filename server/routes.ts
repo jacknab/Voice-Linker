@@ -17,6 +17,7 @@ import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
 import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached } from "./settings-cache";
+import { PROMPT_LIBRARY } from "./engagementEngine";
 import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage } from "./seoPageGenerator";
 
 // Ensure uploads directory and category subdirectories exist
@@ -998,6 +999,36 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (e) {
       res.status(500).json({ message: "Failed to delete file" });
+    }
+  });
+
+  // ─── Admin: Roger Prompt Library ────────────────────────────────────────────
+
+  // Returns all Roger prompts from the engine prompt library.
+  // Also annotates each entry with whether a pre-generated audio file exists.
+  app.get("/api/admin/roger/prompts", (_req, res) => {
+    try {
+      const enriched = PROMPT_LIBRARY.map(p => {
+        const audioFilename = `roger_${p.id}.mp3`;
+        const audioPath = path.join(UPLOADS_DIR, audioFilename);
+        const hasAudio = fs.existsSync(audioPath);
+        return {
+          id: p.id,
+          category: p.category,
+          tone: p.tone,
+          lineText: p.lineText,
+          followUpAction: p.followUpAction ?? null,
+          cooldownSeconds: p.cooldownSeconds,
+          requiredMoods: p.trigger.requiredMoods ?? [],
+          minAttentionDrain: p.trigger.minAttentionDrain ?? 0,
+          maxAttentionDrain: p.trigger.maxAttentionDrain ?? 10,
+          audioFilename: hasAudio ? audioFilename : null,
+          audioUrl: hasAudio ? `/uploads/${audioFilename}` : null,
+        };
+      });
+      res.json(enriched);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load Roger prompt library" });
     }
   });
 

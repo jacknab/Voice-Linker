@@ -11,6 +11,42 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - **Voice**: Twilio TwiML IVR system
 - **Payments**: Stripe (web checkout + IVR card entry) + PayPal Standard (web checkout via IPN)
 
+## Roger Mood + Attention Drain Engine
+
+**Roger** is the single AI host character that interjects between profile plays. He has 4 moods and a behavioral timing system:
+
+### Attention Drain System (`server/engagementEngine.ts`)
+- **Score 0–10**: rises with user inactivity; falls when the user engages
+  - +2 per skip, +3 per 30s idle, +2 per 30s with 0 messages sent
+  - -5 on message sent, -10 on game start
+- **Interrupt Gate** (drain-adaptive cooldown):
+  - drain < 3 → Roger stays silent
+  - drain 3–5 → 90s cooldown, light prompts only
+  - drain 6–7 → 60s cooldown
+  - drain 8–10 → 45s cooldown, strong prompts + game invites
+
+### Roger's 4 Moods
+| Mood | Trigger | Energy |
+|---|---|---|
+| **normal** | Default state | Warm, patient, gently nudging |
+| **petty** | `picky` flag (≥8 skips or 2+ min with 0 msgs) | Sassy, calling out the behavior |
+| **activated** | `active` (≥2 msgs) or `engaged` (4+ min) | Hyped, celebratory |
+| **chaos** | `gamePlayed` flag (after Busted game) | Game-show energy, unpredictable |
+
+- Mood switches every 60–90s (randomized); major events (skip/message/game) force an immediate recalc
+- **155+ prompts** in `PROMPT_LIBRARY` each tagged with `requiredMoods`, `minAttentionDrain`, `maxAttentionDrain`
+
+### Admin: Audio Gen → Roger Tab
+- `GET /api/admin/roger/prompts` returns the full prompt library with audio file status
+- Per-prompt: Generate (→ `roger_<id>.mp3` in uploads/), Play, Delete
+- Bulk "Generate Missing" button for batch audio generation
+- Filter by mood tab (All / Base / Normal / Petty / Activated / Chaos) + text search
+
+### IVR Audio File Fallback
+- When `getInterruption()` fires, the prompt ID is passed as `?pid=` to `/voice/engagement-interrupt`
+- If `uploads/roger_<id>.mp3` exists → `twiml.play()` (pre-recorded voice)
+- Otherwise → `twiml.say()` with Alice voice (live TTS fallback)
+
 ## Key Files
 
 - `server/routes.ts` — Web API routes (auth, membership, Stripe, PayPal, admin). Dynamically loads the IVR module specified by `IVR_FILE` env var (defaults to `./ivr-default`)

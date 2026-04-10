@@ -962,9 +962,350 @@ function AutoResizeTextarea({
   );
 }
 
+// ── RogerSubTab ───────────────────────────────────────────────────────────────
+interface RogerPromptEntry {
+  id: string;
+  category: string;
+  tone: string;
+  lineText: string;
+  followUpAction: string | null;
+  cooldownSeconds: number;
+  requiredMoods: string[];
+  minAttentionDrain: number;
+  maxAttentionDrain: number;
+  audioFilename: string | null;
+  audioUrl: string | null;
+}
+
+const MOOD_COLORS: Record<string, string> = {
+  normal:    "bg-blue-100 text-blue-700 border-blue-200",
+  petty:     "bg-orange-100 text-orange-700 border-orange-200",
+  activated: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  chaos:     "bg-purple-100 text-purple-700 border-purple-200",
+  base:      "bg-gray-100 text-gray-600 border-gray-200",
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  picky:        "text-orange-600",
+  idle:         "text-gray-500",
+  flirty:       "text-pink-600",
+  dominant:     "text-red-600",
+  game_invite:  "text-indigo-600",
+  reengagement: "text-blue-600",
+  reward:       "text-emerald-600",
+};
+
+function RogerSubTab() {
+  const { toast } = useToast();
+  const [moodFilter, setMoodFilter] = useState<"all" | "base" | "normal" | "petty" | "activated" | "chaos">("all");
+  const [searchText, setSearchText] = useState("");
+  const [generating, setGenerating] = useState<string | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number; label: string } | null>(null);
+  const bulkAbortRef = useRef(false);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const { data: prompts = [], isLoading, refetch } = useQuery<RogerPromptEntry[]>({
+    queryKey: ["/api/admin/roger/prompts"],
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: async ({ id, text }: { id: string; text: string }) => {
+      const res = await fetch("/api/admin/tts/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, filename: `roger_${id}.mp3` }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({ message: "Generation failed" })); throw new Error(err.message); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/roger/prompts"] });
+      setGenerating(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Generation failed", description: err.message, variant: "destructive" });
+      setGenerating(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (filename: string) => {
+      const res = await fetch(`/api/admin/tts/prompts/${encodeURIComponent(filename)}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) throw new Error("Delete failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/roger/prompts"] });
+      toast({ title: "Audio file deleted" });
+    },
+    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+  });
+
+  function handlePlay(entry: RogerPromptEntry) {
+    if (!entry.audioUrl) return;
+    if (playingId === entry.id) {
+      audioRef.current?.pause();
+      audioRef.current = null;
+      setPlayingId(null);
+      return;
+    }
+    audioRef.current?.pause();
+    const audio = new Audio(entry.audioUrl);
+    audioRef.current = audio;
+    setPlayingId(entry.id);
+    audio.onended = () => { setPlayingId(null); audioRef.current = null; };
+    audio.onerror = () => { setPlayingId(null); audioRef.current = null; };
+    audio.play();
+  }
+
+  async function handleGenerateMissing() {
+    if (bulkProgress) { bulkAbortRef.current = true; return; }
+    const missing = prompts.filter(p => !p.audioUrl);
+    if (missing.length === 0) { toast({ title: "All files already generated" }); return; }
+    bulkAbortRef.current = false;
+    setBulkProgress({ done: 0, total: missing.length, label: "" });
+    let done = 0;
+    for (const p of missing) {
+      if (bulkAbortRef.current) break;
+      setBulkProgress({ done, total: missing.length, label: p.id });
+      setGenerating(p.id);
+      try {
+        const res = await fetch("/api/admin/tts/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: p.lineText, filename: `roger_${p.id}.mp3` }),
+        });
+        if (!res.ok) toast({ title: `Failed: ${p.id}`, variant: "destructive" });
+      } catch { toast({ title: `Error: ${p.id}`, description: "Network error", variant: "destructive" }); }
+      done++;
+    }
+    const cancelled = bulkAbortRef.current;
+    setGenerating(null);
+    setBulkProgress(null);
+    bulkAbortRef.current = false;
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/roger/prompts"] });
+    if (!cancelled) toast({ title: "Bulk generation complete", description: `${done} files generated.` });
+  }
+
+  const moodFilteredPrompts = prompts.filter(p => {
+    if (moodFilter === "base")      return p.requiredMoods.length === 0;
+    if (moodFilter !== "all")       return p.requiredMoods.includes(moodFilter);
+    return true;
+  });
+
+  const filtered = moodFilteredPrompts.filter(p =>
+    !searchText ||
+    p.id.toLowerCase().includes(searchText.toLowerCase()) ||
+    p.lineText.toLowerCase().includes(searchText.toLowerCase()) ||
+    p.category.toLowerCase().includes(searchText.toLowerCase())
+  );
+
+  const generated = prompts.filter(p => p.audioUrl).length;
+
+  const MOOD_TABS = [
+    { id: "all",       label: "All",       count: prompts.length },
+    { id: "base",      label: "Base",      count: prompts.filter(p => p.requiredMoods.length === 0).length },
+    { id: "normal",    label: "Normal",    count: prompts.filter(p => p.requiredMoods.includes("normal")).length },
+    { id: "petty",     label: "Petty",     count: prompts.filter(p => p.requiredMoods.includes("petty")).length },
+    { id: "activated", label: "Activated", count: prompts.filter(p => p.requiredMoods.includes("activated")).length },
+    { id: "chaos",     label: "Chaos",     count: prompts.filter(p => p.requiredMoods.includes("chaos")).length },
+  ] as const;
+
+  return (
+    <div className="space-y-5">
+      {/* Stats + bulk action */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex gap-3">
+          <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[80px]"}>
+            <div className="font-mono text-xl font-bold text-gray-800">{prompts.length}</div>
+            <div className={C.label}>Total</div>
+          </div>
+          <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[80px]"}>
+            <div className="font-mono text-xl font-bold text-emerald-600">{generated}</div>
+            <div className={C.label}>Generated</div>
+          </div>
+          <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[80px]"}>
+            <div className="font-mono text-xl font-bold text-amber-600">{prompts.length - generated}</div>
+            <div className={C.label}>Missing</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {bulkProgress && (
+            <span className="text-xs font-mono text-gray-500">
+              {bulkProgress.done}/{bulkProgress.total} — {bulkProgress.label}
+            </span>
+          )}
+          <button
+            data-testid="btn-roger-generate-missing"
+            onClick={handleGenerateMissing}
+            disabled={!!generating && !bulkProgress}
+            className={bulkProgress ? C.btnDanger + " text-xs" : C.btnPrimary + " text-xs"}
+          >
+            {bulkProgress ? (
+              <><Loader2 size={11} className="animate-spin" /> Cancel</>
+            ) : (
+              <><Wand2 size={11} /> Generate Missing ({prompts.length - generated})</>
+            )}
+          </button>
+          <button
+            data-testid="btn-roger-refresh"
+            onClick={() => refetch()}
+            className={C.btnGhost + " text-xs"}
+            title="Refresh status"
+          >
+            <RefreshCw size={11} />
+          </button>
+        </div>
+      </div>
+
+      {/* Mood filter tabs */}
+      <div className="flex items-center gap-1 flex-wrap">
+        {MOOD_TABS.map(tab => (
+          <button
+            key={tab.id}
+            data-testid={`btn-roger-mood-${tab.id}`}
+            onClick={() => setMoodFilter(tab.id)}
+            className={`px-3 py-1 rounded text-xs font-mono font-semibold border transition-colors ${
+              moodFilter === tab.id
+                ? "bg-[#f5a623] border-[#f5a623] text-white"
+                : "bg-white border-gray-200 text-gray-500 hover:border-[#f5a623] hover:text-[#f5a623]"
+            }`}
+          >
+            {tab.label}
+            <span className="ml-1 opacity-60">({tab.count})</span>
+          </button>
+        ))}
+        <div className="ml-auto flex items-center gap-1.5 bg-white border border-gray-200 rounded px-2 py-1">
+          <Search size={11} className="text-gray-400" />
+          <input
+            data-testid="input-roger-search"
+            type="text"
+            value={searchText}
+            onChange={e => setSearchText(e.target.value)}
+            placeholder="Search prompts…"
+            className="text-xs font-mono outline-none w-40 text-gray-700 placeholder-gray-400"
+          />
+        </div>
+      </div>
+
+      {/* Prompt table */}
+      {isLoading ? (
+        <div className="flex items-center gap-2 py-8 justify-center text-gray-400 font-mono text-xs">
+          <Loader2 size={14} className="animate-spin" /> Loading Roger prompts…
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded border border-gray-200">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-36">ID / Category</th>
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider">Line Text</th>
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-24">Mood</th>
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-16">Drain</th>
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-24">Status</th>
+                <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-28">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(entry => {
+                const moodKey = entry.requiredMoods[0] ?? "base";
+                const isGen = generating === entry.id;
+                const isPlaying = playingId === entry.id;
+                return (
+                  <tr key={entry.id} data-testid={`row-roger-${entry.id}`} className={C.row}>
+                    <td className={C.td + " align-top"}>
+                      <div className="font-mono text-[10px] font-bold text-gray-800">{entry.id}</div>
+                      <div className={`font-mono text-[10px] mt-0.5 ${CATEGORY_COLORS[entry.category] ?? "text-gray-400"}`}>
+                        {entry.category}
+                      </div>
+                      {entry.followUpAction && (
+                        <div className="font-mono text-[9px] text-indigo-400 mt-0.5">→ {entry.followUpAction}</div>
+                      )}
+                    </td>
+                    <td className={C.td + " align-top"}>
+                      <div className="text-gray-700 font-mono text-[11px] leading-relaxed">{entry.lineText}</div>
+                    </td>
+                    <td className={C.td + " align-top"}>
+                      {entry.requiredMoods.length > 0 ? (
+                        <div className="flex flex-wrap gap-0.5">
+                          {entry.requiredMoods.map(m => (
+                            <span key={m} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${MOOD_COLORS[m] ?? ""}`}>
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${MOOD_COLORS.base}`}>
+                          base
+                        </span>
+                      )}
+                    </td>
+                    <td className={C.td + " align-top"}>
+                      <span className="font-mono text-[10px] text-gray-500">
+                        {entry.minAttentionDrain}–{entry.maxAttentionDrain}
+                      </span>
+                    </td>
+                    <td className={C.td + " align-top"}>
+                      <span className={`${C.badge} ${entry.audioUrl ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
+                        {entry.audioUrl ? <CheckCircle size={10} /> : <AlertCircle size={10} />}
+                        {entry.audioUrl ? "Audio ready" : "No audio"}
+                      </span>
+                    </td>
+                    <td className={C.td + " align-top"}>
+                      <div className="flex items-center gap-1">
+                        <button
+                          data-testid={`btn-roger-gen-${entry.id}`}
+                          onClick={() => { setGenerating(entry.id); generateMutation.mutate({ id: entry.id, text: entry.lineText }); }}
+                          disabled={!!generating}
+                          title={entry.audioUrl ? "Regenerate audio" : "Generate audio"}
+                          className={C.btnGhost + " text-[10px]"}
+                        >
+                          {isGen ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
+                        </button>
+                        {entry.audioUrl && (
+                          <>
+                            <button
+                              data-testid={`btn-roger-play-${entry.id}`}
+                              onClick={() => handlePlay(entry)}
+                              title={isPlaying ? "Stop" : "Play audio"}
+                              className={C.btnGhost + " text-[10px]"}
+                            >
+                              {isPlaying ? <Pause size={10} /> : <Play size={10} />}
+                            </button>
+                            <button
+                              data-testid={`btn-roger-delete-${entry.id}`}
+                              onClick={() => entry.audioFilename && deleteMutation.mutate(entry.audioFilename)}
+                              title="Delete audio file"
+                              className={C.btnDanger + " text-[10px]"}
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="text-center py-8 text-gray-400 font-mono text-xs">
+                    No prompts match current filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── TTSTab ────────────────────────────────────────────────────────────────────
 function TTSTab() {
   const { toast } = useToast();
+  const [audioGenTab, setAudioGenTab] = useState<"system" | "roger">("system");
   const [customText, setCustomText] = useState("");
   const [customFilename, setCustomFilename] = useState("");
   const [editingText, setEditingText] = useState<Record<string, string>>({});
@@ -1153,8 +1494,37 @@ function TTSTab() {
     fileExistsIn("shared", p.filename) || fileExistsIn("mm", p.filename) || fileExistsIn("mw", p.filename)
   ).length;
 
+  const subTabBar = (
+    <div className="flex border-b border-gray-200 gap-1 mb-6">
+      {(["system", "roger"] as const).map(tab => (
+        <button
+          key={tab}
+          data-testid={`btn-audio-gen-tab-${tab}`}
+          onClick={() => setAudioGenTab(tab)}
+          className={`px-4 py-2 text-sm font-mono font-semibold border-b-2 -mb-px transition-colors ${
+            audioGenTab === tab
+              ? "border-[#f5a623] text-[#f5a623]"
+              : "border-transparent text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          {tab === "system" ? "System Prompts" : "Roger"}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (audioGenTab === "roger") {
+    return (
+      <div className="space-y-6">
+        {subTabBar}
+        <RogerSubTab />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {subTabBar}
       <div className="grid grid-cols-3 gap-4">
         <div className={C.cardAlt}>
           <div className={C.label}>Active Mode</div>

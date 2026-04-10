@@ -3993,8 +3993,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           if (engInterruption) {
             const encodedText = encodeURIComponent(engInterruption.lineText);
             const followUp = encodeURIComponent(engInterruption.followUpAction ?? "");
+            const pid = encodeURIComponent(engInterruption.id);
             console.log(`[engagement] Interrupting browse with prompt=${engInterruption.id}, followUp=${engInterruption.followUpAction ?? "none"}`);
-            twiml.redirect(`/voice/engagement-interrupt?text=${encodedText}&followUp=${followUp}`);
+            twiml.redirect(`/voice/engagement-interrupt?text=${encodedText}&followUp=${followUp}&pid=${pid}`);
             res.type("text/xml");
             return res.send(twiml.toString());
           }
@@ -4573,11 +4574,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const callSid = req.body?.CallSid as string;
       const rawText = req.query.text as string;
       const followUp = (req.query.followUp as string) ?? "";
+      const promptId = req.query.pid as string ?? "";
       const promptText = rawText ? decodeURIComponent(rawText) : "";
 
       if (promptText) {
-        const hostName = callSid ? engagementEngine.getActivePersonalityName(callSid) : "Roger";
-        twiml.say({ voice: "alice" }, `${hostName} here. ${promptText}`);
+        // Use pre-generated Roger audio file if it exists, otherwise fall back to twiml.say
+        const rogerAudioFile = promptId ? path.join(UPLOADS_DIR, `roger_${promptId}.mp3`) : null;
+        if (rogerAudioFile && fs.existsSync(rogerAudioFile)) {
+          twiml.play(`${baseUrl(req)}/uploads/roger_${promptId}.mp3`);
+          console.log(`[engagement-interrupt] Playing Roger audio file: roger_${promptId}.mp3`);
+        } else {
+          const hostName = callSid ? engagementEngine.getActivePersonalityName(callSid) : "Roger";
+          twiml.say({ voice: "alice" }, `${hostName} here. ${promptText}`);
+        }
       }
 
       if (followUp === "start_game" && callSid) {
