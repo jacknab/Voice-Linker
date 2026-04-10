@@ -199,6 +199,14 @@ export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({ 
 export type SiteSettings = typeof siteSettings.$inferSelect;
 export type InsertSiteSettings = z.infer<typeof insertSiteSettingsSchema>;
 
+// Stores custom text overrides for IVR system prompts
+export const systemPromptOverrides = pgTable("system_prompt_overrides", {
+  filename: text("filename").primaryKey(),
+  customText: text("custom_text").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export type SystemPromptOverride = typeof systemPromptOverrides.$inferSelect;
+
 // Singleton settings row for membership/free-trial configuration
 export const membershipSettings = pgTable("membership_settings", {
   id: text("id").primaryKey().default("singleton"),

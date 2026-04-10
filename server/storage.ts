@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog } from "@shared/schema";
+import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -134,6 +134,10 @@ export interface IStorage {
 
   getSiteSettings(): Promise<SiteSettings>;
   updateSiteSettings(data: Partial<InsertSiteSettings>): Promise<SiteSettings>;
+
+  // System prompt overrides (IVR audio gen)
+  getPromptOverrides(): Promise<Record<string, string>>;
+  savePromptOverrides(overrides: Record<string, string>): Promise<void>;
 
   getMembershipSettings(): Promise<MembershipSettings>;
   updateMembershipSettings(data: Partial<InsertMembershipSettings>): Promise<MembershipSettings>;
@@ -959,6 +963,24 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({ target: siteSettings.id, set: data })
       .returning();
     return updated;
+  }
+
+  async getPromptOverrides(): Promise<Record<string, string>> {
+    const rows = await db.select().from(systemPromptOverrides);
+    const result: Record<string, string> = {};
+    for (const row of rows) result[row.filename] = row.customText;
+    return result;
+  }
+
+  async savePromptOverrides(overrides: Record<string, string>): Promise<void> {
+    const entries = Object.entries(overrides).filter(([, text]) => text.trim() !== "");
+    if (entries.length === 0) return;
+    await db.insert(systemPromptOverrides)
+      .values(entries.map(([filename, customText]) => ({ filename, customText })))
+      .onConflictDoUpdate({
+        target: systemPromptOverrides.filename,
+        set: { customText: sql`EXCLUDED.custom_text`, updatedAt: sql`now()` },
+      });
   }
 
   async getMembershipSettings(): Promise<MembershipSettings> {

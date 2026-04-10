@@ -931,19 +931,46 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string }[] = [
   { filename: "time_deduction_stop.mp3", label: "Time Deduction — Stopped", text: "Time is no longer being deducted from your membership." },
 ];
 
+// ── AutoResizeTextarea ────────────────────────────────────────────────────────
+function AutoResizeTextarea({
+  value,
+  onChange,
+  className,
+  "data-testid": testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  "data-testid"?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.style.height = "auto";
+      ref.current.style.height = ref.current.scrollHeight + "px";
+    }
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      data-testid={testId}
+      rows={1}
+      className={className}
+      style={{ overflow: "hidden", resize: "none" }}
+    />
+  );
+}
+
 // ── TTSTab ────────────────────────────────────────────────────────────────────
 function TTSTab() {
   const { toast } = useToast();
   const [customText, setCustomText] = useState("");
   const [customFilename, setCustomFilename] = useState("");
-  const [editingText, setEditingText] = useState<Record<string, string>>(() => {
-    try {
-      const saved = localStorage.getItem("admin_prompt_texts");
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [editingText, setEditingText] = useState<Record<string, string>>({});
+  const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set());
+  const [initialized, setInitialized] = useState(false);
   const [generating, setGenerating] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -951,11 +978,44 @@ function TTSTab() {
   const [generateAllProgress, setGenerateAllProgress] = useState<{ done: number; total: number; currentLabel: string } | null>(null);
   const generateAllAbortRef = useRef(false);
 
+  // Load saved prompt texts from server on mount
+  const { data: savedPromptTexts } = useQuery<Record<string, string>>({
+    queryKey: ["/api/admin/prompt-texts"],
+  });
+
   useEffect(() => {
-    try {
-      localStorage.setItem("admin_prompt_texts", JSON.stringify(editingText));
-    } catch {}
-  }, [editingText]);
+    if (savedPromptTexts && !initialized) {
+      setEditingText(savedPromptTexts);
+      setInitialized(true);
+    }
+  }, [savedPromptTexts, initialized]);
+
+  const savePromptsMutation = useMutation({
+    mutationFn: async (overrides: Record<string, string>) => {
+      const res = await fetch("/api/admin/prompt-texts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ overrides }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      return res.json();
+    },
+    onSuccess: () => {
+      setDirtyKeys(new Set());
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/prompt-texts"] });
+      toast({ title: "Prompt texts saved", description: "All changes have been saved to the server." });
+    },
+    onError: () => toast({ title: "Save failed", description: "Could not save prompt texts.", variant: "destructive" }),
+  });
+
+  function handleTextChange(filename: string, value: string) {
+    setEditingText(prev => ({ ...prev, [filename]: value }));
+    setDirtyKeys(prev => new Set(prev).add(filename));
+  }
+
+  function handleSaveAll() {
+    savePromptsMutation.mutate(editingText);
+  }
 
   const { data: settings } = useQuery<{ voiceIdMM: string; voiceIdMW: string }>({ queryKey: ["/api/admin/tts/settings"] });
   const { data: siteSettings } = useQuery<{ siteCategory: string }>({ queryKey: ["/api/site-settings"] });
@@ -1276,7 +1336,7 @@ function TTSTab() {
               Folder: {categoryFolder === "shared" ? "Shared" : categoryFolder.toUpperCase()}
             </span>
           </h3>
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
             <input
               data-testid="input-filter-prompts"
               type="text"
@@ -1285,6 +1345,17 @@ function TTSTab() {
               placeholder="Filter prompts..."
               className="w-44 bg-white border border-gray-300 rounded px-3 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#f5a623] transition-colors"
             />
+            {dirtyKeys.size > 0 && (
+              <button
+                data-testid="btn-save-prompt-texts"
+                onClick={handleSaveAll}
+                disabled={savePromptsMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-bold border bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {savePromptsMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                Save {dirtyKeys.size} change{dirtyKeys.size !== 1 ? "s" : ""}
+              </button>
+            )}
             <button
               data-testid="btn-generate-all"
               onClick={handleGenerateAll}
@@ -1338,13 +1409,17 @@ function TTSTab() {
                       <div className="text-gray-400 font-mono text-[10px] mt-0.5">{prompt.filename}</div>
                     </td>
                     <td className={C.td}>
-                      <textarea
-                        data-testid={`textarea-prompt-${prompt.filename}`}
-                        value={currentText}
-                        onChange={e => setEditingText(prev => ({ ...prev, [prompt.filename]: e.target.value }))}
-                        rows={2}
-                        className="w-full bg-gray-50 border border-gray-200 rounded px-2.5 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none focus:border-[#f5a623] transition-colors resize-none"
-                      />
+                      <div className="relative">
+                        <AutoResizeTextarea
+                          data-testid={`textarea-prompt-${prompt.filename}`}
+                          value={currentText}
+                          onChange={v => handleTextChange(prompt.filename, v)}
+                          className={`w-full bg-gray-50 border rounded px-2.5 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none transition-colors ${dirtyKeys.has(prompt.filename) ? "border-amber-400 bg-amber-50 focus:border-amber-500" : "border-gray-200 focus:border-[#f5a623]"}`}
+                        />
+                        {dirtyKeys.has(prompt.filename) && (
+                          <span className="absolute top-1 right-1.5 text-[9px] font-bold text-amber-500 font-mono select-none pointer-events-none">unsaved</span>
+                        )}
+                      </div>
                     </td>
                     <td className={C.td}>
                       <span className={`${C.badge} ${exists ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>

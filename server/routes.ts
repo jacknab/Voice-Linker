@@ -1019,6 +1019,32 @@ export async function registerRoutes(
     });
   });
 
+  // ─── Admin: System Prompt Text Overrides ──────────────────────────────────
+
+  app.get("/api/admin/prompt-texts", async (_req, res) => {
+    try {
+      const overrides = await storage.getPromptOverrides();
+      res.json(overrides);
+    } catch (e) {
+      console.error("[admin/prompt-texts] GET failed:", e);
+      res.status(500).json({ message: "Failed to fetch prompt texts" });
+    }
+  });
+
+  app.put("/api/admin/prompt-texts", async (req, res) => {
+    try {
+      const { overrides } = req.body as { overrides: Record<string, string> };
+      if (!overrides || typeof overrides !== "object") {
+        return res.status(400).json({ message: "overrides object required" });
+      }
+      await storage.savePromptOverrides(overrides);
+      res.json({ ok: true, saved: Object.keys(overrides).length });
+    } catch (e) {
+      console.error("[admin/prompt-texts] PUT failed:", e);
+      res.status(500).json({ message: "Failed to save prompt texts" });
+    }
+  });
+
   // ─── Admin: Membership Settings ───────────────────────────────────────────
 
   // ─── Site Settings (public read, admin write) ─────────────────────────────
