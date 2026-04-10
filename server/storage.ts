@@ -1999,16 +1999,16 @@ export class DatabaseStorage implements IStorage {
         sortOrder: 1,
         customLines: {
           picky: [
-            "Wow. Still looking? You might officially be the most selective man on the line tonight. Honestly... we love the standards.",
-            "You have skipped more guys tonight than a DJ skips bad tracks. What exactly are you looking for? Asking for a friend.",
+            "Wow. Still looking? You might officially be the most selective man on the line right now. Honestly... we love the standards.",
+            "You have skipped more guys today than a DJ skips bad tracks. What exactly are you looking for? Asking for a friend.",
             "Twenty skips and no message. You have set a new record. We are genuinely impressed. And also a little worried about you.",
           ],
           idle: [
             "Hey. Still there? The guys on the line are wondering about you.",
-            "Did you fall asleep? No judgment. But there is someone on this line who would love to hear from you tonight.",
+            "Did you fall asleep? No judgment. But there is someone on this line who would love to hear from you right now.",
           ],
           flirty: [
-            "You are making me blush just watching you browse. Somebody out here really wants to hear from you tonight.",
+            "You are making me blush just watching you browse. Somebody out here really wants to hear from you right now.",
             "Between you and me? Some of these guys have been waiting all night for someone exactly like you to send them a message.",
           ],
           dominant: [
@@ -2016,14 +2016,14 @@ export class DatabaseStorage implements IStorage {
           ],
           reengagement: [
             "Hey, you have been here a while. Have you tried sending a message yet? It takes two seconds — and the reply might surprise you.",
-            "You are one of tonight's most dedicated browsers. Do not let that go to waste — one message could change your whole evening.",
+            "You are one of today's most dedicated callers. Do not let that go to waste — one message could change your whole session.",
           ],
           reward: [
             "Look at you — already making connections. That is exactly what this is all about.",
-            "Two messages already? You are absolutely on fire tonight. Keep it up.",
+            "Two messages already? You are absolutely on fire right now. Keep it up.",
           ],
           game_invite: [
-            "Okay, I have a secret. We have hidden one of our AI voices among the real callers tonight. Press 8 any time you think you have caught it. Get it right and we will give you a little gift.",
+            "Okay, I have a secret. We have hidden one of our AI voices among the real callers. Press 8 any time you think you have caught it. Get it right and we will give you a little gift.",
             "Pop quiz. Somewhere in the next few callers, there is an AI pretending to be a real guy. Think you can spot the faker? Press 8 when you think you found it. Get it right and win free time.",
           ],
         },
@@ -2060,7 +2060,7 @@ export class DatabaseStorage implements IStorage {
             "Dom here. Good. That is how it is done. Keep that energy going.",
           ],
           game_invite: [
-            "Dom here. Listen up. We planted an AI voice in the lineup tonight. Press 8 if you catch it. I want to see if you are as sharp as you think you are. Winner gets free time.",
+            "Dom here. Listen up. We planted an AI voice in the lineup. Press 8 if you catch it. I want to see if you are as sharp as you think you are. Winner gets free time.",
           ],
         },
       },
@@ -2079,7 +2079,7 @@ export class DatabaseStorage implements IStorage {
           ],
           idle: [
             "Chill here. Hey, still with us? All good — no pressure. Just making sure you are doing alright.",
-            "Chill here. You seem pretty relaxed tonight. That is actually the best way to do this. The right connection happens when you are not forcing it.",
+            "Chill here. You seem pretty relaxed right now. That is actually the best way to do this. The right connection happens when you are not forcing it.",
           ],
           flirty: [
             "Chill here. Between you and me? Someone in here is hoping you reach out. No pressure though — just putting that out there.",
@@ -2091,10 +2091,10 @@ export class DatabaseStorage implements IStorage {
             "Chill here. You have been listening for a while. Any one catching your ear? Even a short message can start something good.",
           ],
           reward: [
-            "Chill here. Nice. Connections are what it is all about. Good energy tonight.",
+            "Chill here. Nice. Connections are what it is all about. Good energy right now.",
           ],
           game_invite: [
-            "Chill here. Okay so heads up — we slipped an AI voice into the rotation tonight. Kind of a fun little experiment. Press 8 if you think you hear it. Get it right and you get some bonus time. No stress either way.",
+            "Chill here. Okay so heads up — we slipped an AI voice into the rotation. Kind of a fun little experiment. Press 8 if you think you hear it. Get it right and you get some bonus time. No stress either way.",
           ],
         },
       },
@@ -2113,7 +2113,7 @@ export class DatabaseStorage implements IStorage {
           ],
           idle: [
             "Spicy here. Still with me? Good. I was starting to miss you.",
-            "Spicy here. Do not go quiet on me now. Someone out here is waiting to hear your voice tonight.",
+            "Spicy here. Do not go quiet on me now. Someone out here is waiting to hear your voice right now.",
           ],
           flirty: [
             "Spicy here. Between you and me? Some of these guys have been waiting all night for someone exactly like you.",
@@ -2123,13 +2123,13 @@ export class DatabaseStorage implements IStorage {
             "Spicy here. Okay I am done watching you hesitate. Send the message. You know you want to.",
           ],
           reengagement: [
-            "Spicy here. You have put in the time. You deserve a real connection tonight. Someone out here is absolutely your type — trust me.",
+            "Spicy here. You have put in the time. You deserve a real connection. Someone out here is absolutely your type — trust me.",
           ],
           reward: [
             "Spicy here. Look at you, making moves. That energy is everything. Keep it going.",
           ],
           game_invite: [
-            "Spicy here. I have a little secret for you. We hid one of our AI voices in the lineup tonight. Can you spot it? Press 8 if you think you caught it. Get it right and I will make sure you are rewarded.",
+            "Spicy here. I have a little secret for you. We hid one of our AI voices in the lineup. Can you spot it? Press 8 if you think you caught it. Get it right and I will make sure you are rewarded.",
           ],
         },
       },
