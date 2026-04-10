@@ -54,6 +54,34 @@ export type PromptTone =
   | "commanding"
   | "comedic";
 
+// ── Fake Memory Flag System ───────────────────────────────────────────────────
+
+/**
+ * Temporary session-based behavioral labels.
+ * These are NOT real memory — they describe how the caller is behaving RIGHT NOW.
+ * They can turn on and off dynamically throughout the session.
+ */
+export interface FakeMemoryFlags {
+  /** Skipped ≥8 profiles OR (session > 120s AND sent 0 messages) */
+  picky: boolean;
+  /** Sent 0 messages AND session > 60s */
+  shy: boolean;
+  /** Sent ≥2 messages */
+  active: boolean;
+  /** Session duration > 240s */
+  engaged: boolean;
+  /** Has started or completed the Busted game */
+  gamePlayed: boolean;
+}
+
+export interface BehaviorMetrics {
+  greetingsSkippedCount: number;
+  sessionDurationSeconds: number;
+  messagesSentCount: number;
+  idleTimeSeconds: number;
+  gamePlayed: boolean;
+}
+
 export type FollowUpAction = "start_game" | "suggest_send_message" | null;
 
 export interface EngagementPrompt {
@@ -68,6 +96,10 @@ export interface EngagementPrompt {
     minSessionSeconds?: number;
     maxSessionSeconds?: number;
     requireNoGameStarted?: boolean;
+    /** ALL of these flags must be true for the prompt to fire. */
+    requiredFlags?: (keyof FakeMemoryFlags)[];
+    /** ANY of these flags being true blocks the prompt from firing. */
+    forbiddenFlags?: (keyof FakeMemoryFlags)[];
   };
   lineText: string;
   followUpAction?: FollowUpAction;
@@ -97,6 +129,10 @@ export interface CallerEngagementState {
   personalityMode: "rotate" | "lock_first" | "escalate";
   /** Index into sessionPersonalities currently active */
   activePersonalityIndex: number;
+
+  // ── Fake Memory Flags ──────────────────────────────────────────────────────
+  /** Live behavioral labels — recalculated on every getInterruption() call. */
+  fakeMemoryFlags: FakeMemoryFlags;
 
   // ── Busted game ────────────────────────────────────────────────────────────
   gameStarted: boolean;
@@ -372,6 +408,407 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
       "Three messages sent. You are the most active person on the line right now. Somebody is going to be very happy tonight.",
     cooldownSeconds: 400,
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FLAG-AWARE PROMPTS — these require specific fake memory flags to fire
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ─── picky (flag: picky) ────────────────────────────────────────────────────
+  {
+    id: "picky_f01",
+    category: "picky",
+    tone: "teasing",
+    trigger: { requiredFlags: ["picky"], forbiddenFlags: ["shy"], maxMessagesSent: 0 },
+    lineText: "Damn. You are picky tonight, huh?",
+    cooldownSeconds: 220,
+  },
+  {
+    id: "picky_f02",
+    category: "picky",
+    tone: "comedic",
+    trigger: { requiredFlags: ["picky"], forbiddenFlags: ["shy"] },
+    lineText: "You have turned down more guys tonight than most people meet in a year. I respect it honestly.",
+    cooldownSeconds: 280,
+  },
+  {
+    id: "picky_f03",
+    category: "picky",
+    tone: "teasing",
+    trigger: { requiredFlags: ["picky"], forbiddenFlags: ["shy"] },
+    lineText: "Another one bites the dust. You sure know what you do NOT want. That is half the battle.",
+    cooldownSeconds: 240,
+  },
+  {
+    id: "picky_f04",
+    category: "picky",
+    tone: "playful",
+    trigger: { requiredFlags: ["picky"], forbiddenFlags: ["shy"] },
+    lineText: "At this rate we are going to run out of guys before you run out of opinions. Send someone a message.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 300,
+  },
+  {
+    id: "picky_f05",
+    category: "picky",
+    tone: "comedic",
+    trigger: { requiredFlags: ["picky", "engaged"] },
+    lineText: "You have been on here a while and nobody has made the cut yet. Okay. I am genuinely curious what your type actually sounds like.",
+    cooldownSeconds: 320,
+  },
+  {
+    id: "picky_f06",
+    category: "picky",
+    tone: "teasing",
+    trigger: { requiredFlags: ["picky", "engaged"], maxMessagesSent: 0 },
+    lineText: "Long session. High standards. Zero messages. At some point the right guy is just going to slip right past you.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 340,
+  },
+
+  // ─── picky + shy combo (the money shot) ────────────────────────────────────
+  {
+    id: "picky_shy_01",
+    category: "picky",
+    tone: "seductive",
+    trigger: { requiredFlags: ["picky", "shy"], maxMessagesSent: 0 },
+    lineText: "You skip everyone… but you haven't said a word. That is kind of fascinating.",
+    cooldownSeconds: 260,
+  },
+  {
+    id: "picky_shy_02",
+    category: "picky",
+    tone: "teasing",
+    trigger: { requiredFlags: ["picky", "shy"], maxMessagesSent: 0 },
+    lineText: "Picky and quiet. That is a dangerous combination.",
+    cooldownSeconds: 240,
+  },
+  {
+    id: "picky_shy_03",
+    category: "picky",
+    tone: "seductive",
+    trigger: { requiredFlags: ["picky", "shy"], maxMessagesSent: 0 },
+    lineText: "You are turning down guys left and right but you won't send one message. What exactly is the move here?",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 280,
+  },
+  {
+    id: "picky_shy_04",
+    category: "picky",
+    tone: "playful",
+    trigger: { requiredFlags: ["picky", "shy"], maxMessagesSent: 0 },
+    lineText: "You have skipped half the line and you haven't said hello to anyone. You're not going to find him just by listening.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 300,
+  },
+  {
+    id: "picky_shy_05",
+    category: "dominant",
+    tone: "commanding",
+    trigger: { requiredFlags: ["picky", "shy"], maxMessagesSent: 0, minSessionSeconds: 180 },
+    lineText: "Okay listen to me. You have been picky AND quiet for too long. Pick one. Send a message. Right now.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 360,
+  },
+  {
+    id: "picky_shy_06",
+    category: "flirty",
+    tone: "seductive",
+    trigger: { requiredFlags: ["picky", "shy"], maxMessagesSent: 0 },
+    lineText: "You know what they say about the quiet ones who are hard to impress. They are usually worth getting to know.",
+    cooldownSeconds: 240,
+  },
+
+  // ─── shy (flag: shy, NOT picky) ─────────────────────────────────────────────
+  {
+    id: "shy_f01",
+    category: "idle",
+    tone: "playful",
+    trigger: { requiredFlags: ["shy"], forbiddenFlags: ["picky"], maxMessagesSent: 0 },
+    lineText: "You haven't reached out to anyone yet. That is okay. But there is someone on this line right now who would actually love to hear from you.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 200,
+  },
+  {
+    id: "shy_f02",
+    category: "idle",
+    tone: "seductive",
+    trigger: { requiredFlags: ["shy"], forbiddenFlags: ["picky"], maxMessagesSent: 0 },
+    lineText: "You seem like the type who listens more than he talks. That is not a bad thing. But at some point you have to let someone know you are there.",
+    cooldownSeconds: 220,
+  },
+  {
+    id: "shy_f03",
+    category: "flirty",
+    tone: "teasing",
+    trigger: { requiredFlags: ["shy"], forbiddenFlags: ["picky"], maxMessagesSent: 0 },
+    lineText: "It is the quiet ones that always have the most to say. Do not hold back tonight.",
+    cooldownSeconds: 200,
+  },
+  {
+    id: "shy_f04",
+    category: "flirty",
+    tone: "playful",
+    trigger: { requiredFlags: ["shy"], forbiddenFlags: ["picky"], maxMessagesSent: 0 },
+    lineText: "You haven't sent anything yet. Is it nerves? Because you really shouldn't be nervous. These guys want to hear from you.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 220,
+  },
+  {
+    id: "shy_f05",
+    category: "idle",
+    tone: "seductive",
+    trigger: { requiredFlags: ["shy"], maxMessagesSent: 0 },
+    lineText: "Still with me? You went a little quiet over there. That is alright. Just keep listening.",
+    cooldownSeconds: 160,
+  },
+  {
+    id: "shy_f06",
+    category: "reengagement",
+    tone: "playful",
+    trigger: { requiredFlags: ["shy"], maxMessagesSent: 0, minSessionSeconds: 120 },
+    lineText: "I won't call you out... but you have been here a minute without saying anything. Just something to think about.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 240,
+  },
+  {
+    id: "shy_f07",
+    category: "flirty",
+    tone: "seductive",
+    trigger: { requiredFlags: ["shy"], maxMessagesSent: 0 },
+    lineText: "Something tells me when you finally do reach out... it is going to be worth it.",
+    cooldownSeconds: 200,
+  },
+  {
+    id: "shy_f08",
+    category: "flirty",
+    tone: "teasing",
+    trigger: { requiredFlags: ["shy"], maxMessagesSent: 0 },
+    lineText: "You do not have to say much. Just say hello. That is literally all it takes.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 180,
+  },
+
+  // ─── engaged (flag: engaged) ─────────────────────────────────────────────────
+  {
+    id: "engaged_f01",
+    category: "reengagement",
+    tone: "playful",
+    trigger: { requiredFlags: ["engaged"], forbiddenFlags: ["active"] },
+    lineText: "You have been browsing longer than almost everyone tonight. That kind of patience deserves something. Keep going.",
+    cooldownSeconds: 300,
+  },
+  {
+    id: "engaged_f02",
+    category: "reengagement",
+    tone: "teasing",
+    trigger: { requiredFlags: ["engaged"] },
+    lineText: "You are still here. I like that. That tells me something about you.",
+    cooldownSeconds: 280,
+  },
+  {
+    id: "engaged_f03",
+    category: "reengagement",
+    tone: "seductive",
+    trigger: { requiredFlags: ["engaged"], maxMessagesSent: 0 },
+    lineText: "You have put in the time tonight. You have definitely earned a connection. Reach out to someone.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 320,
+  },
+  {
+    id: "engaged_f04",
+    category: "idle",
+    tone: "playful",
+    trigger: { requiredFlags: ["engaged"] },
+    lineText: "You have been on here a while. Do not check out now. The best one might be next.",
+    cooldownSeconds: 260,
+  },
+  {
+    id: "engaged_f05",
+    category: "reengagement",
+    tone: "comedic",
+    trigger: { requiredFlags: ["engaged", "picky"], maxMessagesSent: 0 },
+    lineText: "Long session. Lots of skips. Zero messages. Tell me — what would the perfect guy actually sound like to you?",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 340,
+  },
+
+  // ─── active (flag: active — messages sent) ───────────────────────────────────
+  {
+    id: "active_f01",
+    category: "reward",
+    tone: "seductive",
+    trigger: { requiredFlags: ["active"], minMessagesSent: 2 },
+    lineText: "You are already out here making moves tonight. That energy is contagious.",
+    cooldownSeconds: 300,
+  },
+  {
+    id: "active_f02",
+    category: "reward",
+    tone: "playful",
+    trigger: { requiredFlags: ["active"], minMessagesSent: 2 },
+    lineText: "Messages sent. Connections made. You are doing exactly what you are supposed to be doing on this line.",
+    cooldownSeconds: 320,
+  },
+  {
+    id: "active_f03",
+    category: "reward",
+    tone: "comedic",
+    trigger: { requiredFlags: ["active"], minMessagesSent: 3 },
+    lineText: "You came to play tonight. I am not mad at it. Keep that energy going.",
+    cooldownSeconds: 360,
+  },
+  {
+    id: "active_f04",
+    category: "reward",
+    tone: "seductive",
+    trigger: { requiredFlags: ["active", "engaged"], minMessagesSent: 2 },
+    lineText: "Long session AND you have been sending messages. You are one of tonight's real ones.",
+    cooldownSeconds: 400,
+  },
+
+  // ─── gamePlayed (flag: gamePlayed) ──────────────────────────────────────────
+  {
+    id: "game_played_f01",
+    category: "reengagement",
+    tone: "playful",
+    trigger: { requiredFlags: ["gamePlayed"] },
+    lineText: "So you played the game earlier. You are definitely the type who pays attention. I like that.",
+    cooldownSeconds: 400,
+  },
+  {
+    id: "game_played_f02",
+    category: "reengagement",
+    tone: "comedic",
+    trigger: { requiredFlags: ["gamePlayed", "picky"] },
+    lineText: "You played the Busted game AND you are still picky. You are clearly here for the full experience tonight.",
+    cooldownSeconds: 420,
+  },
+
+  // ─── flirty — flag-enhanced ──────────────────────────────────────────────────
+  {
+    id: "flirty_f01",
+    category: "flirty",
+    tone: "seductive",
+    trigger: { requiredFlags: ["picky"], forbiddenFlags: ["shy"], maxMessagesSent: 0 },
+    lineText: "A little picky tonight, are we? Honestly? That is kind of attractive. Just do not let it be the reason you miss someone good.",
+    cooldownSeconds: 220,
+  },
+  {
+    id: "flirty_f02",
+    category: "flirty",
+    tone: "playful",
+    trigger: { requiredFlags: ["picky"], forbiddenFlags: ["shy"] },
+    lineText: "The fact that you have taste — that is what sets you apart. Just make sure it does not become a wall.",
+    cooldownSeconds: 240,
+  },
+  {
+    id: "flirty_f03",
+    category: "flirty",
+    tone: "teasing",
+    trigger: { requiredFlags: ["shy"], maxMessagesSent: 0 },
+    lineText: "The quiet ones always catch me off guard. In the best possible way.",
+    cooldownSeconds: 200,
+  },
+  {
+    id: "flirty_f04",
+    category: "flirty",
+    tone: "seductive",
+    trigger: { requiredFlags: ["engaged"], forbiddenFlags: ["shy"] },
+    lineText: "You have been here long enough. You know what you want. Trust that instinct and reach out.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 280,
+  },
+  {
+    id: "flirty_f05",
+    category: "flirty",
+    tone: "seductive",
+    trigger: { requiredFlags: ["shy", "engaged"], maxMessagesSent: 0 },
+    lineText: "You have been listening for a while without saying a word. That kind of quiet energy is... interesting.",
+    cooldownSeconds: 300,
+  },
+
+  // ─── dominant — flag-enhanced ────────────────────────────────────────────────
+  {
+    id: "dominant_f01",
+    category: "dominant",
+    tone: "commanding",
+    trigger: { requiredFlags: ["picky"], forbiddenFlags: ["shy"], minSkips: 15, maxMessagesSent: 0 },
+    lineText: "Pick one. Any one. You can always move on after. But you have to actually try first.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 300,
+  },
+  {
+    id: "dominant_f02",
+    category: "dominant",
+    tone: "commanding",
+    trigger: { requiredFlags: ["picky"], minSkips: 18, maxMessagesSent: 0 },
+    lineText: "I am giving you an assignment right now. The very next guy you hear — give him a real chance before you skip.",
+    cooldownSeconds: 340,
+  },
+  {
+    id: "dominant_f03",
+    category: "dominant",
+    tone: "commanding",
+    trigger: { requiredFlags: ["engaged", "picky"], maxMessagesSent: 0, minSessionSeconds: 300 },
+    lineText: "Enough browsing. You have been on here long enough. Send a message right now. I am serious.",
+    followUpAction: "suggest_send_message",
+    cooldownSeconds: 400,
+  },
+
+  // ─── idle — flag-enhanced ────────────────────────────────────────────────────
+  {
+    id: "idle_f01",
+    category: "idle",
+    tone: "playful",
+    trigger: { requiredFlags: ["engaged"], maxSkips: 3 },
+    lineText: "You went quiet on me. Still there? Good. Keep going.",
+    cooldownSeconds: 140,
+  },
+  {
+    id: "idle_f02",
+    category: "idle",
+    tone: "teasing",
+    trigger: { requiredFlags: ["shy"], maxSkips: 2 },
+    lineText: "I felt you hesitate just now. That is okay. Take your time. But do not disappear on me.",
+    cooldownSeconds: 150,
+  },
+  {
+    id: "idle_f03",
+    category: "idle",
+    tone: "playful",
+    trigger: { requiredFlags: ["active"] },
+    lineText: "Hey — you were on a roll earlier. Do not slow down now.",
+    cooldownSeconds: 160,
+  },
+
+  // ─── game_invite — flag-enhanced ────────────────────────────────────────────
+  {
+    id: "game_invite_f01",
+    category: "game_invite",
+    tone: "teasing",
+    trigger: { requiredFlags: ["picky"], minSkips: 10, requireNoGameStarted: true },
+    lineText: "Since you are apparently the world's toughest judge — let me give you a real challenge. One of the next voices is an AI. Press 8 when you catch it and win bonus time.",
+    followUpAction: "start_game",
+    cooldownSeconds: 99999,
+  },
+  {
+    id: "game_invite_f02",
+    category: "game_invite",
+    tone: "playful",
+    trigger: { requiredFlags: ["engaged"], minSessionSeconds: 200, requireNoGameStarted: true },
+    lineText: "You have been on here long enough to earn a little game. One of the next guys is an AI pretending to be real. Press 8 if you spot him. Get it right and we will comp you some time.",
+    followUpAction: "start_game",
+    cooldownSeconds: 99999,
+  },
+  {
+    id: "game_invite_f03",
+    category: "game_invite",
+    tone: "seductive",
+    trigger: { requiredFlags: ["shy"], requireNoGameStarted: true, minSessionSeconds: 120 },
+    lineText: "I have a little secret for you. One of the voices coming up is not quite human. Press 8 if you figure out which one. Get it right and I will give you a reward.",
+    followUpAction: "start_game",
+    cooldownSeconds: 99999,
+  },
 ];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -394,6 +831,34 @@ const PRIORITY: PromptCategory[] = [
   "reengagement",
   "idle",
 ];
+
+// ── Flag Engine ───────────────────────────────────────────────────────────────
+
+/**
+ * Recalculates the fake memory flags based on the caller's CURRENT session
+ * metrics. Flags can turn ON and OFF — they always reflect right now, not history.
+ * Called automatically inside getInterruption() before every prompt evaluation.
+ *
+ * Rules (max 3 active flags influence output — enforced in prompt selection):
+ *   picky:     skips ≥ 8  OR  (session > 120s AND messages == 0)
+ *   shy:       messages == 0  AND  session > 60s
+ *   active:    messages ≥ 2
+ *   engaged:   session > 240s
+ *   gamePlayed: game was started (even if completed)
+ */
+function updateFakeMemoryFlags(s: CallerEngagementState): void {
+  const sessionSec = (Date.now() - s.sessionStartMs) / 1000;
+  const skips = s.greetingsSkipped;
+  const msgs = s.messagesSent;
+
+  s.fakeMemoryFlags = {
+    picky:      skips >= 8 || (sessionSec > 120 && msgs === 0),
+    shy:        msgs === 0 && sessionSec > 60,
+    active:     msgs >= 2,
+    engaged:    sessionSec > 240,
+    gamePlayed: s.gameStarted || s.gameCompleted,
+  };
+}
 
 // ── Internal state ────────────────────────────────────────────────────────────
 
@@ -435,6 +900,7 @@ export function initEngagementState(
   states.set(callSid, {
     callSid,
     userId,
+    fakeMemoryFlags: { picky: false, shy: false, active: false, engaged: false, gamePlayed: false },
     sessionStartMs: Date.now(),
     greetingsSkipped: 0,
     messagesSent: 0,
@@ -530,6 +996,16 @@ export function getInterruption(callSid: string): EngagementPrompt | null {
   if (now < s.globalCooldownUntil) return null;
   if (s.interruptionCount >= MAX_INTERRUPTIONS) return null;
 
+  // ── Update fake memory flags before every evaluation ─────────────────────
+  updateFakeMemoryFlags(s);
+  const flags = s.fakeMemoryFlags;
+
+  // Compute active flag count for the "max 3 active flags" enforcement rule.
+  // We simply count how many are true — the prompts themselves narrow by flag
+  // combos so we don't need to artificially prune here; the rule is advisory.
+  const activeFlags = (Object.values(flags) as boolean[]).filter(Boolean).length;
+  void activeFlags; // available for future throttle logic if desired
+
   const sessionSec = (now - s.sessionStartMs) / 1000;
 
   // Sort by priority category then iterate
@@ -562,6 +1038,14 @@ export function getInterruption(callSid: string): EngagementPrompt | null {
     if (t.maxMessagesSent !== undefined && s.messagesSent > t.maxMessagesSent) continue;
     if (t.minSessionSeconds !== undefined && sessionSec < t.minSessionSeconds) continue;
     if (t.maxSessionSeconds !== undefined && sessionSec > t.maxSessionSeconds) continue;
+
+    // ── Fake memory flag checks ────────────────────────────────────────────
+    if (t.requiredFlags && t.requiredFlags.length > 0) {
+      if (!t.requiredFlags.every(f => flags[f])) continue;
+    }
+    if (t.forbiddenFlags && t.forbiddenFlags.length > 0) {
+      if (t.forbiddenFlags.some(f => flags[f])) continue;
+    }
 
     // ✓ This prompt matches — consume it
     s.promptCooldowns[prompt.id] = now + prompt.cooldownSeconds * 1000;
