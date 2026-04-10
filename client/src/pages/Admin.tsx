@@ -1096,8 +1096,8 @@ function RogerSubTab() {
         if (!res.ok) toast({ title: `Failed: ${p.id}`, variant: "destructive" });
       } catch { toast({ title: `Error: ${p.id}`, description: "Network error", variant: "destructive" }); }
       done++;
-      // Pace requests to avoid ElevenLabs rate limits (~50 req/min on Starter plan)
-      if (!bulkAbortRef.current) await new Promise(r => setTimeout(r, 1200));
+      // 30-second gap between requests to stay well within ElevenLabs rate limits
+      if (!bulkAbortRef.current) await new Promise(r => setTimeout(r, 30000));
     }
     const cancelled = bulkAbortRef.current;
     setGenerating(null);
@@ -1595,8 +1595,8 @@ function TTSTab() {
         toast({ title: `Error: ${prompt.label}`, description: "Network error", variant: "destructive" });
       }
       done++;
-      // Pace requests to avoid ElevenLabs rate limits (~50 req/min on Starter plan)
-      if (!generateAllAbortRef.current) await new Promise(r => setTimeout(r, 1200));
+      // 30-second gap between requests to stay well within ElevenLabs rate limits
+      if (!generateAllAbortRef.current) await new Promise(r => setTimeout(r, 30000));
     }
     const wasCancelled = generateAllAbortRef.current;
     setGenerating(null);
@@ -1662,8 +1662,8 @@ function TTSTab() {
         toast({ title: `Error: ${prompt.label}`, description: "Network error", variant: "destructive" });
       }
       done++;
-      // Pace requests to avoid ElevenLabs rate limits (~50 req/min on Starter plan)
-      if (!generateAllAbortRef.current) await new Promise(r => setTimeout(r, 1200));
+      // 30-second gap between requests to stay well within ElevenLabs rate limits
+      if (!generateAllAbortRef.current) await new Promise(r => setTimeout(r, 30000));
     }
     const wasCancelled = generateAllAbortRef.current;
     setGenerating(null);
