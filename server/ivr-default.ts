@@ -3893,29 +3893,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           };
           callerBrowseState.set(callSid, state);
 
-          // ── Load Personality Engine config for this session ─────────────────
-          try {
-            const [allPersonalities, siteConf] = await Promise.all([
-              storage.getPersonalityProfiles(),
-              storage.getSiteSettings(),
-            ]);
-            const activePersonalities = allPersonalities
-              .filter(p => p.isActive)
-              .sort((a, b) => a.sortOrder - b.sortOrder);
-            const personalityConfig: engagementEngine.PersonalitySessionConfig = {
-              mode: ((siteConf as { personalityMode?: string }).personalityMode ?? "rotate") as "rotate" | "lock_first" | "escalate",
-              personalities: activePersonalities.map(p => ({
-                id: p.id,
-                name: p.name,
-                toneStyle: p.toneStyle,
-                lines: (p.customLines ?? {}) as Record<string, string[]>,
-              })),
-            };
-            engagementEngine.initEngagementState(callSid, user.id, personalityConfig);
-          } catch (err) {
-            console.error("[engagement] Failed to load personality config:", err);
-            engagementEngine.initEngagementState(callSid, user.id);
-          }
+          // ── Initialize Roger Mood Engine for this session ────────────────────
+          engagementEngine.initEngagementState(callSid, user.id);
           console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid} (region=${callerRegionName ?? "none"}, ${linkedRegions.length} linked regions)`);
         }
 
