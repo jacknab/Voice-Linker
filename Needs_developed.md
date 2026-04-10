@@ -9,7 +9,6 @@
 - Phone Numbers (call stats by number/month)
 - Blocked Numbers (view, search, and unblock all caller blocks)
 - Messages *(placeholder — no functionality yet)*
-- Phone Testing *(placeholder — no functionality yet)*
 - **Caller Management** — User directory (searchable/sortable), caller detail view (call history, messages, profile status), manual credit adjustment (add/remove minutes), block/unblock from caller detail view.
 
 ---

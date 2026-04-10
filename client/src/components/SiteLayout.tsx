@@ -56,7 +56,7 @@ export function SiteNav({ siteName, onMenuToggle, mobileOpen }: {
   return (
     <nav style={{ background: "#000", position: "sticky", top: 0, zIndex: 100, borderBottom: "1px solid #1a1a1a" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "79px" }}>
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.625rem", textDecoration: "none" }} data-testid="nav-logo">
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.625rem", textDecoration: "none", cursor: "pointer" }} data-testid="nav-logo">
           <MaleBoxLogo size={38} />
           <span style={{ fontSize: "1.15rem" }}><MaleBoxWordmark /></span>
         </Link>

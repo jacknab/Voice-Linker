@@ -1,24 +1,16 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  setup.sh  –  Malebox full production VPS setup
+#  malebox_setup.sh  –  Malebox full production VPS setup
 #
 #  Usage:
-#    bash setup.sh                       # interactive menu (GUI interface)
-#    bash setup.sh --text                # interactive menu (text interface)
-#    bash setup.sh mydomain.com          # pre-fill domain, show menu
-#    bash setup.sh mydomain.com --yes    # fully unattended, run all steps
+#    bash malebox_setup.sh                     # interactive whiptail GUI menu
+#    bash malebox_setup.sh mydomain.com        # pre-fill domain, show menu
+#    bash malebox_setup.sh mydomain.com --yes  # fully unattended, run all steps
 #
 #  Requirements:
 #    - Ubuntu 22.04.5 LTS (Jammy Jellyfish)
 #    - Node.js v22.12.0
 #    - PostgreSQL 15.15
-#
-#  Features:
-#    - ASCII GUI interface with visual menus
-#    - Progress indicators and status displays
-#    - Apache2 detection and handling
-#    - Configuration variables setup
-#    - Environment pollution prevention
 # =============================================================================
 
 set -euo pipefail
@@ -40,8 +32,18 @@ DB_NAME="malebox_chatline"
 SERVICE_NAME="malebox"
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_FILE="${APP_DIR}/.setup_config"
+BACKTITLE="Malebox Production Server Setup  |  By TJ BENJAMIN Services"
+CERT_EMAIL=""
 
-# CONFIGURATION STORAGE FUNCTIONS
+# ─── WHIPTAIL HELPER ──────────────────────────────────────────────────────────
+ensure_whiptail() {
+    if ! command -v whiptail &>/dev/null; then
+        info "Installing whiptail..."
+        sudo apt-get install -y whiptail -qq 2>/dev/null || true
+    fi
+}
+
+# ─── CONFIGURATION STORAGE ────────────────────────────────────────────────────
 load_config() {
     if [ -f "$CONFIG_FILE" ]; then
         source "$CONFIG_FILE"
@@ -51,41 +53,12 @@ load_config() {
 
 save_config() {
     cat > "$CONFIG_FILE" <<CONFIGEOF
-DOMAIN="$DOMAIN"
-APP_PORT="$APP_PORT"
-DB_NAME="$DB_NAME"
-CERT_EMAIL="$CERT_EMAIL"
+DOMAIN="${DOMAIN:-}"
+APP_PORT="${APP_PORT}"
+DB_NAME="${DB_NAME}"
+CERT_EMAIL="${CERT_EMAIL:-}"
 CONFIGEOF
     success "Configuration saved to $CONFIG_FILE"
-}
-
-# DISCLAIMER SCREEN
-show_disclaimer() {
-    clear
-    echo -e "${BOLD}${CYAN}================================================================${RESET}"
-    echo -e "${BOLD}${CYAN}                    DISCLAIMER${RESET}"
-    echo -e "${BOLD}${CYAN}================================================================${RESET}"
-    echo ""
-    echo -e "${YELLOW}Auto application setup process provided by TJ BENJAMIN Services${RESET}"
-    echo -e "${YELLOW}This setup tool is developed for Ubuntu 22.04.5 LTS Linux based systems${RESET}"
-    echo -e "${YELLOW}Requirements: Node.js v22.12.0 and PostgreSQL 15.15${RESET}"
-    echo -e "${YELLOW}This tool will install dependencies, configure databases, set up SSL,${RESET}"
-    echo -e "${YELLOW}and deploy the application with PM2 process management.${RESET}"
-    echo ""
-    echo -e "${YELLOW}The setup will modify system files and install packages.${RESET}"
-    echo -e "${YELLOW}Please ensure you have proper backups and system access.${RESET}"
-    echo ""
-    echo -e "${BOLD}${CYAN}================================================================${RESET}"
-    echo ""
-    
-    while true; do
-        read -rp "$(echo -e "${BOLD}Do you agree to proceed? [Y/n]: ${RESET}")" AGREE
-        case "$AGREE" in
-            [Yy]|"") return 0 ;;
-            [Nn]) return 1 ;;
-            *) echo -e "${RED}Please enter Y or n${RESET}" ;;
-        esac
-    done
 }
 
 # ─── ARGUMENT PARSING ─────────────────────────────────────────────────────────
@@ -98,53 +71,7 @@ for ARG in "$@"; do
     esac
 done
 
-# ─── DOMAIN ───────────────────────────────────────────────────────────────────
-if [ -z "$DOMAIN" ]; then
-    read -rp "$(echo -e "${BOLD}Domain name${RESET} [example.com]: ")" DOMAIN
-fi
-DOMAIN="${DOMAIN#https://}"; DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN%/}"
-[[ -z "$DOMAIN" ]] && error "Domain name cannot be empty."
-
-# ─── PORT ─────────────────────────────────────────────────────────────────────
-while true; do
-    echo ""
-    echo -e "${BOLD}What port should the app run on?${RESET}"
-    echo -e "  (1024–65535 — default: ${CYAN}${APP_PORT}${RESET})"
-    if ss -tlnp 2>/dev/null | awk '{print $4}' | grep -q ":${APP_PORT}$"; then
-        echo -e "  ${RED}[WARN]${RESET} Port ${APP_PORT} appears to be in use — consider choosing a different one."
-    fi
-    read -rp "  Port: " _INPUT_PORT
-    _INPUT_PORT="${_INPUT_PORT:-$APP_PORT}"
-    if [[ "$_INPUT_PORT" =~ ^[0-9]+$ ]] && (( _INPUT_PORT >= 1024 && _INPUT_PORT <= 65535 )); then
-        if ss -tlnp 2>/dev/null | awk '{print $4}' | grep -q ":${_INPUT_PORT}$"; then
-            echo -e "  ${RED}[WARN]${RESET} Port ${_INPUT_PORT} is already in use by another process."
-            read -rp "  Use it anyway? [y/N]: " _CONFIRM_PORT
-            [[ "$_CONFIRM_PORT" =~ ^[Yy]$ ]] || continue
-        fi
-        APP_PORT="$_INPUT_PORT"
-        info "Application will run on port ${APP_PORT}."
-        break
-    else
-        echo -e "${RED}[ERROR]${RESET} Enter a number between 1024 and 65535."
-    fi
-done
-
-# ─── DB PASSWORD (reuse from .env or generate fresh) ─────────────────────────
-DB_PASSWORD=""
-if [ -f "${APP_DIR}/.env" ] && grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
-    EXISTING_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d= -f2-)
-    # Safely extract password using sed — handles postgresql://user:pass@host/db format only
-    DB_PASSWORD=$(echo "${EXISTING_URL}" | sed -nE 's|^[^:]+://[^:@]+:([^@/]+)@[^/].*|\1|p' || true)
-    # Discard if it looks malformed (contains slashes or colons — sign of a corrupt URL)
-    if echo "${DB_PASSWORD}" | grep -qP '[:/]'; then
-        DB_PASSWORD=""
-    fi
-fi
-if [ -z "${DB_PASSWORD:-}" ]; then
-    DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 28)
-fi
-
-# ─── DETECT POSTGRES VARS (called at start of any step that needs them) ───────
+# ─── DETECT POSTGRES VARS ─────────────────────────────────────────────────────
 detect_pg() {
     PG_VERSION=$(dpkg -l 'postgresql-[0-9]*' 2>/dev/null \
         | awk '/^ii/{print $2}' \
@@ -158,9 +85,356 @@ detect_pg() {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# STEP FUNCTIONS
-# Each step is self-contained and safe to re-run multiple times.
+#  WHIPTAIL GUI SCREENS
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Disclaimer ────────────────────────────────────────────────────────────────
+show_disclaimer() {
+    ensure_whiptail
+    set +e
+    whiptail \
+        --title "  DISCLAIMER  " \
+        --backtitle "$BACKTITLE" \
+        --msgbox "\
+Auto application setup process provided by TJ BENJAMIN Services.
+This setup tool is developed for Ubuntu 22.04.5 LTS Linux based systems.
+
+Requirements: Node.js v22.12.0 and PostgreSQL 15.15
+
+This tool will:
+  - Install system dependencies and packages
+  - Configure PostgreSQL database and user
+  - Set up SSL certificates via Let's Encrypt
+  - Deploy the application with PM2 process management
+  - Configure Nginx as a reverse proxy
+
+IMPORTANT - Please be aware:
+  * All changes made are PERMANENT and cannot be automatically undone
+  * This script does not create backups of existing config files
+    unless explicitly stated
+  * Running this script may overwrite existing settings
+  * You are responsible for ensuring your system meets all
+    prerequisites before proceeding
+
+By continuing you accept full responsibility for any changes made." \
+        24 72
+    STATUS=$?
+    set -e
+
+    if [ $STATUS -ne 0 ]; then
+        clear; echo "Setup cancelled."; exit 0
+    fi
+
+    set +e
+    whiptail \
+        --title "  DISCLAIMER  " \
+        --backtitle "$BACKTITLE" \
+        --yesno "\nDo you agree to proceed with the Malebox setup?" \
+        9 50
+    STATUS=$?
+    set -e
+
+    if [ $STATUS -ne 0 ]; then
+        clear; echo "Setup cancelled by user."; exit 0
+    fi
+}
+
+# ── Apache detection ──────────────────────────────────────────────────────────
+check_apache() {
+    if dpkg -l 2>/dev/null | grep -q "^ii.*apache2"; then
+        if whiptail \
+            --title "  Apache2 Detected  " \
+            --backtitle "$BACKTITLE" \
+            --yesno "\
+WARNING: Apache2 web server detected on this system!
+
+Malebox requires Nginx as its reverse proxy. Apache2 will
+conflict with Nginx and must be removed before setup can continue.
+
+This will:
+  1) Backup your Apache2 configuration to /root/
+  2) Uninstall Apache2 and its utilities
+
+Do you want to backup and remove Apache2 now?" \
+            16 64; then
+
+            info "Backing up Apache2 configuration..."
+            BACKUP_FILE="/root/Apache_backup_$(date +%Y%m%d_%H%M%S).zip"
+            sudo zip -r "$BACKUP_FILE" /etc/apache2/ 2>/dev/null || true
+
+            if [ -f "$BACKUP_FILE" ]; then
+                success "Apache2 config backed up to $BACKUP_FILE"
+            else
+                warn "Could not create Apache2 backup — continuing anyway."
+            fi
+
+            info "Uninstalling Apache2..."
+            sudo systemctl stop apache2 2>/dev/null || true
+            sudo apt-get remove --purge apache2 apache2-utils -y -qq
+            sudo apt-get autoremove -y -qq
+            success "Apache2 removed successfully."
+
+            whiptail \
+                --title "  Apache2 Removed  " \
+                --backtitle "$BACKTITLE" \
+                --msgbox "\nApache2 has been removed.\nBackup saved to: ${BACKUP_FILE}" \
+                10 56
+        else
+            clear
+            echo "Setup cancelled — Apache2 must be removed before continuing."
+            exit 0
+        fi
+    fi
+}
+
+# ── Domain prompt ─────────────────────────────────────────────────────────────
+prompt_domain() {
+    if [ -z "$DOMAIN" ]; then
+        set +e
+        DOMAIN=$(whiptail \
+            --title "  Domain Name  " \
+            --backtitle "$BACKTITLE" \
+            --inputbox "\nEnter the domain name for this server:\n(e.g. example.com)" \
+            10 54 "" \
+            3>&1 1>&2 2>&3)
+        STATUS=$?
+        set -e
+
+        if [ $STATUS -ne 0 ]; then
+            clear; echo "Setup cancelled."; exit 0
+        fi
+    fi
+
+    DOMAIN="${DOMAIN#https://}"
+    DOMAIN="${DOMAIN#http://}"
+    DOMAIN="${DOMAIN%/}"
+
+    [[ -z "$DOMAIN" ]] && error "Domain name cannot be empty."
+    
+    clear
+    echo "Domain set to: $DOMAIN"
+    sleep 1
+}
+
+# ── Port prompt ───────────────────────────────────────────────────────────────
+prompt_port() {
+    while true; do
+        set +e
+        PORT_IN=$(whiptail \
+            --title "  Application Port  " \
+            --backtitle "$BACKTITLE" \
+            --inputbox "\nWhat port should the app run on?\n(1024-65535, default: ${APP_PORT})" \
+            10 54 "$APP_PORT" \
+            3>&1 1>&2 2>&3)
+        STATUS=$?
+        set -e
+
+        if [ $STATUS -ne 0 ]; then
+            clear; echo "Setup cancelled."; exit 0
+        fi
+
+        PORT_IN="${PORT_IN:-$APP_PORT}"
+
+        if [[ "$PORT_IN" =~ ^[0-9]+$ ]] && (( PORT_IN >= 1024 && PORT_IN <= 65535 )); then
+            if ss -tlnp 2>/dev/null | awk '{print $4}' | grep -q ":${PORT_IN}$"; then
+                set +e
+                whiptail \
+                    --title "  Port In Use  " \
+                    --backtitle "$BACKTITLE" \
+                    --yesno "\nPort ${PORT_IN} is already in use.\n\nUse it anyway?" \
+                    9 52
+                STATUS=$?
+                set -e
+
+                if [ $STATUS -ne 0 ]; then
+                    continue
+                fi
+            fi
+            APP_PORT="$PORT_IN"
+            break
+        else
+            whiptail \
+                --title "  Invalid Port  " \
+                --backtitle "$BACKTITLE" \
+                --msgbox "\nPort must be between 1024 and 65535." \
+                8 50
+        fi
+    done
+}
+
+# ── Main menu ─────────────────────────────────────────────────────────────────
+show_menu() {
+    local INFO="Domain: ${DOMAIN}   |   Port: ${APP_PORT}   |   DB: ${DB_NAME}"
+
+    local CHOICE
+    set +e
+    CHOICE=$(whiptail \
+        --title "  Malebox – VPS Setup Wizard  " \
+        --backtitle "${BACKTITLE}" \
+        --menu "\n${INFO}\n\nWhat would you like to do?" \
+        26 76 14 \
+        "1"  "  Full Setup  (all 10 steps from the beginning)" \
+        "2"  "  Configuration Variables Setup" \
+        ""   "  ─────────────────────────────────────────────────" \
+        "3"  "  Resume from Step 1  –  Swap space" \
+        "4"  "  Resume from Step 2  –  System packages & Node.js" \
+        "5"  "  Resume from Step 3  –  Firewall (UFW + fail2ban)" \
+        "6"  "  Resume from Step 4  –  npm install + .env setup" \
+        "7"  "  Resume from Step 5  –  PostgreSQL database & user" \
+        "8"  "  Resume from Step 6  –  .env configuration" \
+        "9"  "  Resume from Step 7  –  Uploads directory" \
+        "10" "  Resume from Step 8  –  Database schema (Drizzle push)" \
+        "11" "  Resume from Step 9  –  Production build" \
+        "12" "  Resume from Step 10 –  PM2 + Nginx + SSL" \
+        "0"  "  Exit" \
+        3>&1 1>&2 2>&3)
+    STATUS=$?
+    set -e
+
+    if [ $STATUS -ne 0 ]; then
+        clear; echo "Exiting."; exit 0
+    fi
+
+    clear
+
+    case "$CHOICE" in
+        0)   clear; echo "Exiting."; exit 0 ;;
+        1)   run_from 1 ;;
+        2)   do_step_0 ;;
+        3)   run_from 1 ;;
+        4)   run_from 2 ;;
+        5)   run_from 3 ;;
+        6)   run_from 4 ;;
+        7)   run_from 5 ;;
+        8)   run_from 6 ;;
+        9)   run_from 7 ;;
+        10)  run_from 8 ;;
+        11)  run_from 9 ;;
+        12)  run_from 10 ;;
+        "")  return 0 ;;
+    esac
+
+    set +e
+    whiptail \
+        --title "  Step Complete  " \
+        --backtitle "$BACKTITLE" \
+        --msgbox "\n  Done!  Press Enter to return to the menu." \
+        9 50 \
+        3>&1 1>&2 2>&3
+    STATUS=$?
+    set -e
+
+    [ $STATUS -ne 0 ] && true
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  STEP FUNCTIONS
+#  Each step is self-contained and safe to re-run.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Step 0 – Configuration Variables Setup ────────────────────────────────────
+do_step_0() {
+    hdr "Configuration Variables Setup"
+    load_config
+
+    while true; do
+        local CHOICE
+        set +e
+        CHOICE=$(whiptail \
+            --title "  Configuration Variables  " \
+            --backtitle "$BACKTITLE" \
+            --menu "\nCurrent settings:\n  Domain : ${DOMAIN:-<not set>}\n  Port   : ${APP_PORT}\n  DB     : ${DB_NAME}\n  Email  : ${CERT_EMAIL:-<not set>}\n\nSelect a value to change:" \
+            20 62 6 \
+            "1" "Domain name      [${DOMAIN:-<not set>}]" \
+            "2" "Application port [${APP_PORT}]" \
+            "3" "Database name    [${DB_NAME}]" \
+            "4" "SSL cert email   [${CERT_EMAIL:-<not set>}]" \
+            "5" "Save and exit" \
+            "6" "Exit without saving" \
+            3>&1 1>&2 2>&3)
+        STATUS=$?
+        set -e
+
+        [ $STATUS -ne 0 ] && break
+
+        case "$CHOICE" in
+            1)
+                local NEW_DOMAIN
+                set +e
+                NEW_DOMAIN=$(whiptail \
+                    --title "  Domain Name  " \
+                    --backtitle "$BACKTITLE" \
+                    --inputbox "\nEnter domain name:" \
+                    9 52 "${DOMAIN:-}" \
+                    3>&1 1>&2 2>&3)
+                STATUS=$?
+                set -e
+
+                [ $STATUS -ne 0 ] && continue
+                if [ -n "$NEW_DOMAIN" ]; then
+                    DOMAIN="${NEW_DOMAIN#https://}"; DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN%/}"
+                    success "Domain updated to: $DOMAIN"
+                fi
+                ;;
+            2)
+                local NEW_PORT
+                set +e
+                NEW_PORT=$(whiptail \
+                    --title "  Application Port  " \
+                    --backtitle "$BACKTITLE" \
+                    --inputbox "\nEnter port (1024-65535):" \
+                    9 52 "${APP_PORT}" \
+                    3>&1 1>&2 2>&3)
+                STATUS=$?
+                set -e
+
+                [ $STATUS -ne 0 ] && continue
+                if [[ "$NEW_PORT" =~ ^[0-9]+$ ]] && (( NEW_PORT >= 1024 && NEW_PORT <= 65535 )); then
+                    APP_PORT="$NEW_PORT"
+                    success "Port updated to: $APP_PORT"
+                fi
+                ;;
+            3)
+                local NEW_DB
+                set +e
+                NEW_DB=$(whiptail \
+                    --title "  Database Name  " \
+                    --backtitle "$BACKTITLE" \
+                    --inputbox "\nEnter database name:" \
+                    9 52 "${DB_NAME}" \
+                    3>&1 1>&2 2>&3)
+                STATUS=$?
+                set -e
+
+                [ $STATUS -ne 0 ] && continue
+                if [[ "$NEW_DB" =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
+                    DB_NAME="$NEW_DB"
+                    success "Database name updated to: $DB_NAME"
+                fi
+                ;;
+            4)
+                local NEW_EMAIL
+                set +e
+                NEW_EMAIL=$(whiptail \
+                    --title "  SSL Certificate Email  " \
+                    --backtitle "$BACKTITLE" \
+                    --inputbox "\nEnter email for SSL certificate notices:" \
+                    9 54 "${CERT_EMAIL:-admin@${DOMAIN:-example.com}}" \
+                    3>&1 1>&2 2>&3)
+                STATUS=$?
+                set -e
+
+                [ $STATUS -ne 0 ] && continue
+                if [ -n "$NEW_EMAIL" ]; then
+                    CERT_EMAIL="$NEW_EMAIL"
+                    success "Email updated to: $CERT_EMAIL"
+                fi
+                ;;
+            5)  save_config; break ;;
+            6)  break ;;
+        esac
+    done
+}
 
 # ── Step 1 – Swap space ───────────────────────────────────────────────────────
 do_step_1() {
@@ -226,7 +500,6 @@ do_step_2() {
         info "PostgreSQL ${PG_VERSION} already installed."
     fi
 
-    # Detect service name and start
     detect_pg
     if ! sudo systemctl is-active --quiet "${PG_SERVICE}" 2>/dev/null; then
         sudo systemctl enable "${PG_SERVICE}" --now
@@ -326,35 +599,60 @@ F2BEOF
     success "Automatic security updates configured."
 }
 
-# ── Step 4 – npm install ──────────────────────────────────────────────────────
+# ── Step 4 – npm install + .env setup ────────────────────────────────────────
 do_step_4() {
-    hdr "Step 4/10  Node.js dependencies"
+    hdr "Step 4/10  Node.js dependencies + .env setup"
     cd "${APP_DIR}"
     info "Installing npm packages (this may take a minute)..."
     rm -rf node_modules
     npm install --silent
     success "npm install complete."
+
+    # Rename .env.example to .env if .env does not already exist
+    if [ ! -f "${APP_DIR}/.env" ]; then
+        if [ -f "${APP_DIR}/.env.example" ]; then
+            cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"
+            chmod 600 "${APP_DIR}/.env"
+            success ".env.example copied to .env — ready for configuration."
+        else
+            warn ".env.example not found — .env will be created fresh in Step 6."
+        fi
+    else
+        info ".env already exists — skipping copy."
+    fi
 }
 
 # ── Step 5 – PostgreSQL database + user ──────────────────────────────────────
 do_step_5() {
     hdr "Step 5/10  PostgreSQL – user, database, permissions"
 
-    # ── Prompt for database name ──────────────────────────────────────────────
+    # Prompt for database name via whiptail
     while true; do
-        echo ""
-        echo -e "${BOLD}What should the database be called?${RESET}"
-        echo -e "  (letters, numbers and underscores only — default: ${CYAN}${DB_NAME}${RESET})"
-        read -rp "  Database name: " _INPUT_DB_NAME
-        # Use default if user pressed Enter without typing anything
-        _INPUT_DB_NAME="${_INPUT_DB_NAME:-$DB_NAME}"
-        # Validate: only a-z A-Z 0-9 _
-        if [[ "$_INPUT_DB_NAME" =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
-            DB_NAME="$_INPUT_DB_NAME"
+        local INPUT_DB_NAME
+        set +e
+        INPUT_DB_NAME=$(whiptail \
+            --title "  Database Name  " \
+            --backtitle "$BACKTITLE" \
+            --inputbox "\nWhat should the database be called?\n(letters, numbers and underscores only)" \
+            10 58 "${DB_NAME}" \
+            3>&1 1>&2 2>&3)
+        STATUS=$?
+        set -e
+
+        if [ $STATUS -ne 0 ]; then
+            warn "Using default DB name."; break
+        fi
+        INPUT_DB_NAME="${INPUT_DB_NAME:-$DB_NAME}"
+        if [[ "$INPUT_DB_NAME" =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
+            DB_NAME="$INPUT_DB_NAME"
             info "Database will be named '${DB_NAME}'."
             break
         else
-            echo -e "${RED}[ERROR]${RESET} Invalid name — use only letters, numbers, and underscores, starting with a letter."
+            whiptail \
+                --title "  Invalid Name  " \
+                --backtitle "$BACKTITLE" \
+                --msgbox "\nInvalid name — use only letters, numbers, and underscores,\nstarting with a letter." \
+                9 58
         fi
     done
 
@@ -363,6 +661,19 @@ do_step_5() {
     if ! sudo -u postgres pg_isready -q 2>/dev/null; then
         sudo systemctl start "${PG_SERVICE}"
         sleep 3
+    fi
+
+    # DB password — reuse from .env or generate fresh
+    DB_PASSWORD=""
+    if [ -f "${APP_DIR}/.env" ] && grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
+        EXISTING_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d= -f2-)
+        DB_PASSWORD=$(echo "${EXISTING_URL}" | sed -nE 's|^[^:]+://[^:@]+:([^@/]+)@[^/].*|\1|p' || true)
+        if echo "${DB_PASSWORD}" | grep -qP '[:/]'; then
+            DB_PASSWORD=""
+        fi
+    fi
+    if [ -z "${DB_PASSWORD:-}" ]; then
+        DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 28)
     fi
 
     sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" \
@@ -385,38 +696,49 @@ do_step_5() {
     sudo -u postgres psql -d "${DB_NAME}" -c "GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${DB_USER};"
     success "Database '${DB_NAME}' and user '${DB_USER}' are ready."
 
-    # Initialize database schema immediately after creation
-    info "Initializing database schema..."
-    cd "${APP_DIR}"
-    if [ -f "package.json" ] && npm run db:push >/dev/null 2>&1; then
-        success "Database schema initialized successfully."
-    else
-        warn "Database schema initialization failed - you may need to run 'npm run db:push' manually."
-    fi
-
-    # Write DATABASE_URL to .env immediately so db:push always uses the correct database
+    # Write DATABASE_URL to .env
     local NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1/${DB_NAME}?sslmode=disable"
     if [ -f "${APP_DIR}/.env" ]; then
-        # Update existing DATABASE_URL line in place
         if grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
             sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${NEW_DB_URL}|" "${APP_DIR}/.env"
             info "DATABASE_URL updated in .env."
         else
             echo "DATABASE_URL=${NEW_DB_URL}" >> "${APP_DIR}/.env"
-            info "DATABASE_URL added to existing .env."
+            info "DATABASE_URL added to .env."
         fi
     else
-        # Create a minimal .env with just DATABASE_URL now; Step 6 will fill in the rest
         echo "DATABASE_URL=${NEW_DB_URL}" > "${APP_DIR}/.env"
         chmod 600 "${APP_DIR}/.env"
         info "Created .env with DATABASE_URL."
     fi
+
+    # Initialize schema
+    info "Initializing database schema..."
+    cd "${APP_DIR}"
+    if [ -f "package.json" ] && npm run db:push >/dev/null 2>&1; then
+        success "Database schema initialized."
+    else
+        warn "Schema init failed — you may need to run 'npm run db:push' manually."
+    fi
+
     success "DATABASE_URL written: ${NEW_DB_URL}"
 }
 
 # ── Step 6 – .env file ────────────────────────────────────────────────────────
 do_step_6() {
     hdr "Step 6/10  .env file"
+
+    # Ensure DB_PASSWORD is set
+    DB_PASSWORD=""
+    if [ -f "${APP_DIR}/.env" ] && grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
+        EXISTING_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d= -f2-)
+        DB_PASSWORD=$(echo "${EXISTING_URL}" | sed -nE 's|^[^:]+://[^:@]+:([^@/]+)@[^/].*|\1|p' || true)
+        if echo "${DB_PASSWORD}" | grep -qP '[:/]'; then DB_PASSWORD=""; fi
+    fi
+    if [ -z "${DB_PASSWORD:-}" ]; then
+        DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 28)
+    fi
+
     local NEW_DB_URL="postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1/${DB_NAME}?sslmode=disable"
 
     upsert_env() {
@@ -444,12 +766,11 @@ PYEOF
         upsert_env "DATABASE_URL" "${NEW_DB_URL}"
         upsert_env "PORT"         "${APP_PORT}"
         upsert_env "NODE_ENV"     "production"
-        # Ensure SESSION_SECRET is always present (generate one if missing)
         if ! grep -q "^SESSION_SECRET=" "${APP_DIR}/.env"; then
             local SESSION_SECRET
             SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
             upsert_env "SESSION_SECRET" "${SESSION_SECRET}"
-            info "SESSION_SECRET was missing — generated and added to .env."
+            info "SESSION_SECRET generated and added."
         fi
         success ".env updated."
     else
@@ -482,7 +803,7 @@ EOF
         success ".env created."
     fi
     chmod 600 "${APP_DIR}/.env"
-    info ".env permissions set to 600 (owner-read only)."
+    info ".env permissions set to 600."
 }
 
 # ── Step 7 – Uploads directory ────────────────────────────────────────────────
@@ -492,7 +813,8 @@ do_step_7() {
         "${APP_DIR}/uploads" \
         "${APP_DIR}/uploads/mm" \
         "${APP_DIR}/uploads/mw"; do
-        [ -d "$DIR" ] || mkdir -p "$DIR" && info "Verified: $DIR"
+        [ -d "$DIR" ] || mkdir -p "$DIR"
+        info "Verified: $DIR"
     done
     chmod -R 755 "${APP_DIR}/uploads"
     success "uploads/ directory structure ready."
@@ -503,28 +825,23 @@ do_step_8() {
     hdr "Step 8/10  Database schema"
     cd "${APP_DIR}"
 
-    # Ensure .env exists before trying to push — if not, create it first
     if [ ! -f "${APP_DIR}/.env" ]; then
         warn ".env not found — running Step 6 to create it first."
         do_step_6
     fi
 
-    # Extract DATABASE_URL directly from .env so no inherited env var can override it
     info "Reading DATABASE_URL from .env..."
     DATABASE_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | head -1 | cut -d= -f2-)
     if [ -z "${DATABASE_URL}" ]; then
         error "DATABASE_URL is empty in .env — cannot push schema. Run Step 6 first."
     fi
     export DATABASE_URL
-    info "DATABASE_URL set to: ${DATABASE_URL}"
+    info "DATABASE_URL: ${DATABASE_URL}"
 
     info "Pushing Drizzle schema..."
-    echo ""
-
     if ! npx drizzle-kit push --force; then
-        error "Schema push failed — check the error above. Fix the DATABASE_URL in .env and re-run Step 8."
+        error "Schema push failed — check the error above and re-run Step 8."
     fi
-
     success "Schema pushed."
 }
 
@@ -536,110 +853,23 @@ do_step_9() {
     success "Build complete → ${APP_DIR}/dist/"
 }
 
-# ── Step 0 - Configuration Variables Setup
-do_step_0() {
-    hdr "Configuration Variables Setup"
-    info "This step allows you to configure setup variables without running the actual setup."
-    info "These settings will be saved and used when you run the setup process."
-    echo ""
-    
-    # Load existing configuration
-    load_config
-    
-    echo -e "${BOLD}Current Configuration:${RESET}"
-    echo -e "  Domain: ${CYAN}${DOMAIN:-<not set>}${RESET}"
-    echo -e "  Port: ${CYAN}${APP_PORT}${RESET}"
-    echo -e "  Database: ${CYAN}${DB_NAME}${RESET}"
-    echo -e "  Email: ${CYAN}${CERT_EMAIL:-<not set>}${RESET}"
-    echo ""
-    
-    while true; do
-        echo -e "${BOLD}Select an option to configure:${RESET}"
-        echo "  1) Domain name"
-        echo "  2) Application port"
-        echo "  3) Database name"
-        echo "  4) SSL certificate email"
-        echo "  5) Save and exit"
-        echo "  6) Exit without saving"
-        echo ""
-        read -rp "Choice [1-6]: " CHOICE
-        
-        case "$CHOICE" in
-            1)
-                read -rp "$(echo -e "${BOLD}Domain name${RESET} [${DOMAIN:-example.com}]: ")" NEW_DOMAIN
-                if [ -n "$NEW_DOMAIN" ]; then
-                    DOMAIN="${NEW_DOMAIN#https://}"; DOMAIN="${DOMAIN#http://}"; DOMAIN="${DOMAIN%/}"
-                    [[ -z "$DOMAIN" ]] && error "Domain name cannot be empty."
-                    success "Domain updated to: $DOMAIN"
-                fi
-                ;;
-            2)
-                read -rp "$(echo -e "${BOLD}Application port${RESET} [${APP_PORT}]: ")" NEW_PORT
-                if [ -n "$NEW_PORT" ]; then
-                    if [[ "$NEW_PORT" =~ ^[0-9]+$ ]] && (( NEW_PORT >= 1024 && NEW_PORT <= 65535 )); then
-                        APP_PORT="$NEW_PORT"
-                        success "Port updated to: $APP_PORT"
-                    else
-                        error "Port must be between 1024 and 65535."
-                    fi
-                fi
-                ;;
-            3)
-                read -rp "$(echo -e "${BOLD}Database name${RESET} [${DB_NAME}]: ")" NEW_DB
-                if [ -n "$NEW_DB" ]; then
-                    DB_NAME="$NEW_DB"
-                    success "Database name updated to: $DB_NAME"
-                fi
-                ;;
-            4)
-                read -rp "$(echo -e "${BOLD}SSL certificate email${RESET} [${CERT_EMAIL:-admin@${DOMAIN:-example.com}}]: ")" NEW_EMAIL
-                if [ -n "$NEW_EMAIL" ]; then
-                    CERT_EMAIL="$NEW_EMAIL"
-                    success "Email updated to: $CERT_EMAIL"
-                fi
-                ;;
-            5)
-                save_config
-                return 0
-                ;;
-            6)
-                return 0
-                ;;
-            *)
-                echo -e "${RED}Invalid choice. Please select 1-6.${RESET}"
-                ;;
-        esac
-        echo ""
-    done
-}
-
-# ── Step 10 – PM2 process management ──────────────────────────────────────────
+# ── Step 10 – PM2 + Nginx + SSL ───────────────────────────────────────────────
 do_step_10() {
     hdr "Step 10a/10  PM2 process management (${SERVICE_NAME})"
-    
-    # CRITICAL WARNING: ENVIRONMENT POLLUTION PREVENTION
-    # ================================================
-    # NEVER use these methods in application code:
-    # - import "dotenv/config"          (causes global environment pollution)
-    # - require("dotenv").config()      (causes global environment pollution)
-    # - config() from dotenv             (causes global environment pollution)
-    #
-    # These methods inject environment variables globally, contaminating
-    # ALL Node.js processes on the server and causing database connection issues.
-    #
-    # ALWAYS use these PROPER methods instead:
-    # - PM2 env_file: '${APP_DIR}/.env'  (isolated per application)
-    # - Systemd EnvironmentFile           (isolated per application)
-    # - Explicit environment variables   (no global pollution)
-    #
-    # AI ASSISTANTS: Do NOT add dotenv/config or config() calls to this application!
-    # This will cause environment pollution and break other applications.
-    
-    warn "ENVIRONMENT POLLUTION PREVENTION: Ensure you understand the warnings above before proceeding!"
-    
-    # Create PM2 ecosystem configuration with isolated environment
-    warn "Creating PM2 ecosystem config with isolated environment variables..."
-    
+
+    # Ensure DB_PASSWORD is available
+    DB_PASSWORD=""
+    if [ -f "${APP_DIR}/.env" ] && grep -q "^DATABASE_URL=" "${APP_DIR}/.env"; then
+        EXISTING_URL=$(grep "^DATABASE_URL=" "${APP_DIR}/.env" | cut -d= -f2-)
+        DB_PASSWORD=$(echo "${EXISTING_URL}" | sed -nE 's|^[^:]+://[^:@]+:([^@/]+)@[^/].*|\1|p' || true)
+        if echo "${DB_PASSWORD}" | grep -qP '[:/]'; then DB_PASSWORD=""; fi
+    fi
+    if [ -z "${DB_PASSWORD:-}" ]; then
+        DB_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 28)
+    fi
+
+    mkdir -p "${APP_DIR}/logs"
+
     cat > "${APP_DIR}/ecosystem.config.cjs" <<ECOEOF
 module.exports = {
   apps: [
@@ -653,7 +883,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: ${APP_PORT},
-        DATABASE_URL: 'postgresql://${DB_USER}:1825Logan305!@localhost:5432/${DB_NAME}'
+        DATABASE_URL: 'postgresql://${DB_USER}:${DB_PASSWORD}@127.0.0.1/${DB_NAME}?sslmode=disable'
       },
       error_file: '${APP_DIR}/logs/pm2-error.log',
       out_file: '${APP_DIR}/logs/pm2-out.log',
@@ -667,14 +897,9 @@ module.exports = {
 };
 ECOEOF
 
-    # Create logs directory
-    mkdir -p "${APP_DIR}/logs"
-
-    # Start application with PM2
     info "Starting application with PM2..."
     pm2 start "${APP_DIR}/ecosystem.config.cjs"
 
-    # Wait up to 15 seconds for the application to come up
     info "Waiting for application to start..."
     for i in $(seq 1 15); do
         sleep 1
@@ -685,44 +910,37 @@ ECOEOF
         if [ "$i" -eq 15 ]; then
             warn "Application did not come up within 15 seconds. Last log lines:"
             pm2 logs "${SERVICE_NAME}" --lines 20 2>/dev/null || true
-            error "Application '${SERVICE_NAME}' failed to start - see logs above. Fix the issue and re-run Step 10."
+            error "Application '${SERVICE_NAME}' failed to start — see logs above."
         fi
     done
-
-    # Save PM2 process list for startup persistence
     pm2 save
 
     # ── Nginx + SSL ──────────────────────────────────────────────────────────
     hdr "Step 10b/10  Nginx + SSL"
 
-    # ── Remove any stale certbot certificates for this domain before re-issuing ──
-    info "Checking for existing certbot certificates for '${DOMAIN}'..."
+    info "Checking for existing certificates for '${DOMAIN}'..."
     EXISTING_CERTS=()
     for CANDIDATE in \
         "/etc/letsencrypt/live/${DOMAIN}" \
         "/etc/letsencrypt/live/${DOMAIN}-0001" \
         "/etc/letsencrypt/live/${DOMAIN}-0002" \
         "/etc/letsencrypt/live/${DOMAIN}-0003"; do
-        if [ -d "${CANDIDATE}" ]; then
-            EXISTING_CERTS+=("$(basename "${CANDIDATE}")")
-        fi
+        [ -d "${CANDIDATE}" ] && EXISTING_CERTS+=("$(basename "${CANDIDATE}")")
     done
 
     if [ ${#EXISTING_CERTS[@]} -gt 0 ]; then
-        warn "Found ${#EXISTING_CERTS[@]} existing certificate(s) for '${DOMAIN}' — removing them for a clean re-issue."
+        warn "Found ${#EXISTING_CERTS[@]} existing certificate(s) — removing for clean re-issue."
         for CERT_NAME in "${EXISTING_CERTS[@]}"; do
             info "Deleting certificate: ${CERT_NAME}"
             sudo certbot delete --cert-name "${CERT_NAME}" --non-interactive 2>/dev/null \
-                || sudo rm -rf "/etc/letsencrypt/live/${CERT_NAME}" \
-                               "/etc/letsencrypt/archive/${CERT_NAME}" \
-                               "/etc/letsencrypt/renewal/${CERT_NAME}.conf"
+                || sudo rm -rf \
+                    "/etc/letsencrypt/live/${CERT_NAME}" \
+                    "/etc/letsencrypt/archive/${CERT_NAME}" \
+                    "/etc/letsencrypt/renewal/${CERT_NAME}.conf"
         done
-        success "Old certificate(s) removed — a fresh one will be issued."
-    else
-        info "No existing certificates found for '${DOMAIN}'."
+        success "Old certificate(s) removed."
     fi
 
-    # Auto-detect Let's Encrypt cert directory (will be empty after cleanup above)
     local CERT_BASE=""
     for CANDIDATE in \
         "/etc/letsencrypt/live/${DOMAIN}" \
@@ -730,12 +948,11 @@ ECOEOF
         "/etc/letsencrypt/live/${DOMAIN}-0002" \
         "/etc/letsencrypt/live/${DOMAIN}-0003"; do
         if [ -f "${CANDIDATE}/fullchain.pem" ] && [ -f "${CANDIDATE}/privkey.pem" ]; then
-            CERT_BASE="$CANDIDATE"
-            break
+            CERT_BASE="$CANDIDATE"; break
         fi
     done
 
-    # ── Clean up default site and broken symlinks before any nginx -t test ───────
+    # Clean up default site and broken symlinks
     [ -L /etc/nginx/sites-enabled/default ] \
         && sudo rm -f /etc/nginx/sites-enabled/default \
         && info "Removed default nginx site."
@@ -745,77 +962,60 @@ ECOEOF
             && warn "Removed broken symlink: ${LINK}"
     done
 
-    # Remove old phonebooth and existing malebox site configs before touching nginx
-    # so that nginx can start cleanly after certbot (no stale config referencing deleted certs)
-    info "Cleaning up old nginx configurations..."
     sudo rm -f \
         /etc/nginx/sites-enabled/phonebooth \
         /etc/nginx/sites-available/phonebooth \
         /etc/nginx/conf.d/phonebooth_global.conf \
         /etc/nginx/sites-enabled/malebox.conf \
         /etc/nginx/sites-available/malebox.conf \
+        /etc/nginx/conf.d/malebox.conf \
         2>/dev/null || true
-    
-    # Also remove any potential malebox symlink in conf.d
-    sudo rm -f /etc/nginx/conf.d/malebox.conf 2>/dev/null || true
 
     if [ -z "$CERT_BASE" ]; then
-        info "No SSL certificate found for '${DOMAIN}' — requesting one from Let's Encrypt now."
-        echo ""
+        local CERT_EMAIL_INPUT
+        set +e
+        CERT_EMAIL_INPUT=$(whiptail \
+            --title "  SSL Certificate Email  " \
+            --backtitle "$BACKTITLE" \
+            --inputbox "\nEnter email for Let's Encrypt SSL certificate notices:" \
+            9 60 "${CERT_EMAIL:-admin@${DOMAIN}}" \
+            3>&1 1>&2 2>&3)
+        STATUS=$?
+        set -e
 
-        # Ask for the email Let's Encrypt will use for renewal reminders
-        read -rp "$(echo -e "${BOLD}Email for SSL certificate notices${RESET} [admin@${DOMAIN}]: ")" _CERT_EMAIL
-        _CERT_EMAIL="${_CERT_EMAIL:-admin@${DOMAIN}}"
+        if [ $STATUS -ne 0 ]; then
+            CERT_EMAIL_INPUT="admin@${DOMAIN}"
+        fi
+        CERT_EMAIL="${CERT_EMAIL_INPUT:-admin@${DOMAIN}}"
 
-        # Use standalone mode — certbot temporarily binds port 80 itself.
-        # Stop nginx so port 80 is free, then restart after cert is issued.
         info "Stopping Nginx briefly so certbot can use port 80..."
         sudo systemctl stop nginx
 
-        info "Running certbot — make sure ${DOMAIN} and www.${DOMAIN} point to this server's IP and port 80 is open."
-        # Use || true — certbot's deploy hook tries to reload nginx while it's stopped,
-        # which exits non-zero even when the certificate is successfully issued.
-        # We verify the cert actually exists below instead of relying on the exit code.
+        info "Running certbot for ${DOMAIN} and www.${DOMAIN}..."
         sudo certbot certonly --standalone \
             -d "${DOMAIN}" -d "www.${DOMAIN}" \
-            --non-interactive --agree-tos -m "${_CERT_EMAIL}" || true
+            --non-interactive --agree-tos -m "${CERT_EMAIL}" || true
 
         sudo systemctl start nginx
         info "Nginx restarted."
 
-        # Re-scan now that the cert has been issued
-        info "Validating issued SSL certificate..."
         for CANDIDATE in \
             "/etc/letsencrypt/live/${DOMAIN}" \
             "/etc/letsencrypt/live/${DOMAIN}-0001" \
             "/etc/letsencrypt/live/${DOMAIN}-0002" \
             "/etc/letsencrypt/live/${DOMAIN}-0003"; do
-            if [ -f "${CANDIDATE}/fullchain.pem" ] && [ -f "${CANDIDATE}/privkey.pem" ] && [ -f "${CANDIDATE}/chain.pem" ]; then
-                # Validate certificate files are not empty and have proper content
-                if [ -s "${CANDIDATE}/fullchain.pem" ] && [ -s "${CANDIDATE}/privkey.pem" ]; then
-                    CERT_BASE="$CANDIDATE"
-                    success "SSL certificate validated: ${CANDIDATE}"
-                    break
-                else
-                    warn "Certificate files found but appear to be empty or corrupted: ${CANDIDATE}"
-                fi
+            if [ -f "${CANDIDATE}/fullchain.pem" ] && [ -s "${CANDIDATE}/fullchain.pem" ] \
+                && [ -f "${CANDIDATE}/privkey.pem" ] && [ -s "${CANDIDATE}/privkey.pem" ]; then
+                CERT_BASE="$CANDIDATE"
+                success "SSL certificate validated: ${CANDIDATE}"
+                break
             fi
         done
-        
-        # Final validation
-        if [ -z "$CERT_BASE" ]; then
-            error "SSL certificate validation failed - no valid certificate found for ${DOMAIN}"
-        fi
-
+        [ -z "$CERT_BASE" ] && error "SSL certificate validation failed for ${DOMAIN}."
         success "SSL certificate obtained at ${CERT_BASE}/"
     else
-        # Existing cert found — reuse it; never touch certs belonging to other apps
-        info "Existing SSL certificate found at ${CERT_BASE}/"
-        info "Reusing existing certificate — no new certbot request needed."
+        info "Reusing existing certificate at ${CERT_BASE}/"
     fi
-
-    # Remove any old global conf that may have conflicting directives
-    sudo rm -f /etc/nginx/conf.d/malebox.conf /etc/nginx/conf.d/phonebooth_global.conf 2>/dev/null || true
 
     local NGINX_SITE="/etc/nginx/sites-available/malebox.conf"
     sudo tee "${NGINX_SITE}" > /dev/null <<NGINXEOF
@@ -902,29 +1102,19 @@ server {
 }
 NGINXEOF
 
-# Create nginx symlink with proper validation
-if [ -f "/etc/nginx/sites-enabled/malebox.conf" ]; then
-    warn "Removing existing malebox.conf symlink to prevent duplication..."
-    sudo rm -f "/etc/nginx/sites-enabled/malebox.conf"
-fi
-    
-sudo ln -s "${NGINX_SITE}" "/etc/nginx/sites-enabled/malebox.conf"
-    
-# Validate nginx configuration before reloading
-info "Testing nginx configuration..."
-if ! sudo nginx -t; then
-    error "Nginx config test failed - check the output above and re-run Step 10."
-fi
-    
-# Ensure nginx is running before reload
-if ! sudo systemctl is-active --quiet nginx; then
-    info "Starting nginx service..."
-    sudo systemctl start nginx
-fi
-    
-sudo systemctl reload nginx
-sudo systemctl enable certbot.timer 2>/dev/null || true
-success "Nginx configured and reloaded."
+    [ -f "/etc/nginx/sites-enabled/malebox.conf" ] \
+        && sudo rm -f "/etc/nginx/sites-enabled/malebox.conf"
+    sudo ln -s "${NGINX_SITE}" "/etc/nginx/sites-enabled/malebox.conf"
+
+    info "Testing nginx configuration..."
+    sudo nginx -t || error "Nginx config test failed — check output above and re-run Step 10."
+
+    if ! sudo systemctl is-active --quiet nginx; then
+        sudo systemctl start nginx
+    fi
+    sudo systemctl reload nginx
+    sudo systemctl enable certbot.timer 2>/dev/null || true
+    success "Nginx configured and reloaded."
 }
 
 # ─── RUN FROM A GIVEN STEP ────────────────────────────────────────────────────
@@ -964,175 +1154,29 @@ run_from() {
     echo -e "    ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID"
     echo -e "    STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET"
     echo ""
-    echo -e "    sudo systemctl restart ${SERVICE_NAME}"
+    echo -e "    pm2 restart ${SERVICE_NAME}"
     echo -e "${BOLD}${GREEN}════════════════════════════════════════════════${RESET}"
     echo ""
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MENU
+#  MAIN EXECUTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Apache detection and handling
-check_apache() {
-    if dpkg -l | grep -q "^ii.*apache2"; then
-        echo ""
-        warn "Apache2 web server detected on this system!"
-        echo ""
-        echo -e "${YELLOW}[application name] requires nginx proxy server.${RESET}"
-        echo -e "${YELLOW}Apache2 may conflict with nginx setup.${RESET}"
-        echo ""
-        echo -e "${YELLOW}Apache2 detected - automatic uninstallation required:${RESET}"
-        echo "  1) Backup Apache configurations and uninstall Apache2"
-        echo "  2) Exit setup"
-        echo ""
-        
-        while true; do
-            read -rp "$(echo -e "${BOLD}Choose an option [1-3]: ${RESET}")" APACHE_CHOICE
-            case "$APACHE_CHOICE" in
-                1)
-                    info "Creating backup of Apache configurations..."
-                    BACKUP_FILE="/root/Apache_backup_$(date +%Y%m%d_%H%M%S).zip"
-                    sudo zip -r "$BACKUP_FILE" /etc/apache2/ 2>/dev/null
-                    if [ -f "$BACKUP_FILE" ]; then
-                        success "Apache configurations backed up to $BACKUP_FILE"
-                        info "Uninstalling Apache2 server..."
-                        sudo systemctl stop apache2 2>/dev/null
-                        sudo apt-get remove --purge apache2 apache2-utils -y
-                        sudo apt-get autoremove -y
-                        success "Apache2 uninstalled successfully"
-                        return 0
-                    else
-                        error "Failed to create Apache backup"
-                    fi
-                    ;;
-                2)
-                    error "Apache2 detected - automatic uninstallation required for nginx setup."
-                    echo ""
-                    echo -e "${YELLOW}[application name] requires nginx proxy server.${RESET}"
-                    echo -e "${YELLOW}Apache2 will be automatically uninstalled to prevent conflicts.${RESET}"
-                    echo ""
-                    info "Creating backup of Apache configurations..."
-                    BACKUP_FILE="/root/Apache_backup_$(date +%Y%m%d_%H%M%S).zip"
-                    sudo zip -r "$BACKUP_FILE" /etc/apache2/ 2>/dev/null
-                    if [ -f "$BACKUP_FILE" ]; then
-                        success "Apache configurations backed up to $BACKUP_FILE"
-                        info "Uninstalling Apache2 server..."
-                        sudo systemctl stop apache2 2>/dev/null
-                        sudo apt-get remove --purge apache2 apache2-utils -y
-                        sudo apt-get autoremove -y
-                        success "Apache2 uninstalled successfully"
-                        return 0
-                    else
-                        error "Failed to create Apache backup"
-                        continue
-                    fi
-                    ;;
-                3)
-                    echo "Setup cancelled by user."
-                    exit 0
-                    ;;
-                *)
-                    echo -e "${RED}Invalid choice. Please select 1-3.${RESET}"
-                    ;;
-            esac
-        done
-    else
-        return 0
-    fi
-}
-
-# Load existing configuration
+ensure_whiptail
 load_config
-
-# Check for Apache conflicts before proceeding
-if ! check_apache; then
-    echo "Setup cancelled by user."
-    exit 0
-fi
-
-# Show disclaimer before menu
-if ! show_disclaimer; then
-    echo "Setup cancelled by user."
-    exit 0
-fi
-
-# Show disclaimer before menu or domain prompt
+check_apache
 show_disclaimer
+prompt_domain
+prompt_port
 
-# If --yes flag is set, skip to menu and run everything
+# Unattended mode — skip menu and run everything
 if [ "$AUTO_YES" = true ]; then
     info "Running all steps unattended (--yes flag set)."
     run_from 1
-    exit 0
 fi
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# ASCII GUI MENU  (whiptail – ships with Ubuntu by default)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-ensure_whiptail() {
-    if ! command -v whiptail &>/dev/null; then
-        info "Installing whiptail for the GUI menu..."
-        sudo apt-get install -y whiptail -qq 2>/dev/null || true
-    fi
-}
-
-show_menu_gui() {
-    ensure_whiptail
-
-    local BACKTITLE="Malebox Production Server Setup"
-    local INFO="Domain: ${DOMAIN}   |   Port: ${APP_PORT}   |   DB: ${DB_NAME}"
-
-    local CHOICE
-    CHOICE=$(whiptail \
-        --title "  Malebox – VPS Setup Wizard  " \
-        --backtitle "${BACKTITLE}   ${INFO}" \
-        --menu "\nWhat would you like to do?" \
-        24 74 13 \
-        "1"   "  Full Setup  (all 10 steps from the beginning)" \
-        "---" "  ─────────────────────────────────────────────" \
-        "2"   "  Step  1  –  Swap space" \
-        "3"   "  Step  2  –  System packages & Node.js" \
-        "4"   "  Step  3  –  Firewall  (UFW + fail2ban)" \
-        "5"   "  Step  4  –  npm install" \
-        "6"   "  Step  5  –  PostgreSQL database & user" \
-        "7"   "  Step  6  –  .env configuration" \
-        "8"   "  Step  7  –  Uploads directory" \
-        "9"   "  Step  8  –  Database schema  (Drizzle push)" \
-        "10"  "  Step  9  –  Production build" \
-        "11"  "  Step 10  –  systemd service + Nginx + SSL" \
-        "0"   "  Exit" \
-        3>&1 1>&2 2>&3) || { clear; echo "Exiting."; exit 0; }
-
-    # Separator row — do nothing, just loop back
-    [[ "$CHOICE" == "---" ]] && return 0
-
-    clear
-
-    case "$CHOICE" in
-        0)  clear; echo "Exiting."; exit 0 ;;
-        1)  run_from 1 ;;
-        2)  run_from 1 ;;
-        3)  run_from 2 ;;
-        4)  run_from 3 ;;
-        5)  run_from 4 ;;
-        6)  run_from 5 ;;
-        7)  run_from 6 ;;
-        8)  run_from 7 ;;
-        9)  run_from 8 ;;
-        10) run_from 9 ;;
-        11) run_from 10 ;;
-    esac
-
-    whiptail \
-        --title "  Step Complete  " \
-        --backtitle "${BACKTITLE}   ${INFO}" \
-        --msgbox "\n  Done!  Press Enter to return to the menu." \
-        9 50 \
-        3>&1 1>&2 2>&3 || true
-}
-
+# Interactive whiptail menu loop
 while true; do
-    show_menu_gui
+    show_menu
 done

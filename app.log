@@ -1,9 +1,0 @@
-[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
-[dotenv@17.3.1] injecting env (0) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
-Warning: connect.session() MemoryStore is not
-designed for a production environment, as it will leak
-memory, and will not scale past a single process.
-7:25:15 PM [billing] Nightly billing scheduler: next run in 274 min
-7:25:15 PM [express] serving on port 5062
-7:25:18 PM [simulator] started 0 admin-uploaded seed loop(s)
-7:25:18 PM [simulator] real caller scheduler started

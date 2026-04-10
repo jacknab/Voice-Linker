@@ -6,17 +6,17 @@ const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 // Returns the correct ElevenLabs voice ID for a given folder (mm/mw) or falls back to the legacy var.
 export function getVoiceIdForFolder(folder?: string | null): string {
   if (folder === "mm") {
-    return process.env.ELEVENLABS_VOICE_ID_MM || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+    return process.env.ELEVENLABS_VOICE_ID_MM || process.env.ELEVENLABS_VOICE_ID || "wLoW00IP5kfH8oiOBAPp";
   }
   if (folder === "mw") {
-    return process.env.ELEVENLABS_VOICE_ID_MW || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+    return process.env.ELEVENLABS_VOICE_ID_MW || process.env.ELEVENLABS_VOICE_ID || "4tRn1lSkEn13EVTuqb0g";
   }
-  return process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+  return process.env.ELEVENLABS_VOICE_ID || "wLoW00IP5kfH8oiOBAPp";
 }
 
 /** Returns Roger's dedicated ElevenLabs voice ID. Falls back to the shared voice ID. */
 export function getVoiceIdForRoger(): string {
-  return process.env.ELEVENLABS_VOICE_ID_ROGER || process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+  return process.env.ELEVENLABS_VOICE_ID_ROGER || process.env.ELEVENLABS_VOICE_ID || "wSqOdjeNqDrHcoK0zorF";
 }
 
 export async function generateTTS(
