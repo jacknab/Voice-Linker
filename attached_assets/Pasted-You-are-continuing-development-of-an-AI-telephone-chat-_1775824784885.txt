@@ -1,0 +1,95 @@
+You are continuing development of an AI telephone chat engagement system using a single character: Roger.
+
+Now implement a HIGH-QUALITY EXTENSIVE ROGER DIALOGUE LIBRARY SYSTEM.
+
+---
+
+# CORE GOAL
+
+Generate and populate a structured prompt library containing at least 150+ high-quality Roger dialogue lines.
+
+These lines must be used by the existing prompt selection engine and replace any hardcoded responses.
+
+Roger is a comedic, slightly sassy, reactive host personality.
+
+---
+
+# STEP 1: AUTO-GENERATE PROMPT LIBRARY
+
+Create a prompt library in JSON or database form:
+
+Each entry must follow this structure:
+
+```json
+{
+  "id": "unique_string",
+  "category": "teasing | idle | dominant | comedic | game | reward | reengage",
+  "mood": "normal | petty | activated | chaos",
+  "cycle_stage": "browse | tension | engage | reward",
+  "min_attention_drain": 0,
+  "max_attention_drain": 10,
+  "required_flags": [],
+  "cooldown_seconds": 60,
+  "weight": 1,
+  "text": "Roger dialogue line"
+}
+```
+
+---
+
+# STEP 2: CONTENT REQUIREMENTS
+
+Generate at least 150+ UNIQUE Roger dialogue lines distributed across:
+
+* teasing (picky behavior commentary)
+* idle / silence engagement
+* dominant / action-pushing lines
+* comedic Roger commentary
+* game invitations
+* reward / positive reinforcement
+* re-engagement / exit prevention
+
+---
+
+# STEP 3: QUALITY RULES
+
+* All lines must sound like ONE consistent character: Roger
+* Tone must be comedic, slightly sassy, and conversational
+* No robotic or generic chatbot phrasing
+* Avoid repetition or template-like phrasing
+* Lines should feel reactive to user behavior
+* Must include variety in intensity (light → strong)
+
+---
+
+# STEP 4: INTEGRATION RULE
+
+Replace ALL existing hardcoded Roger responses with:
+
+→ selectRogerPrompt(sessionState).text
+
+No fallback hardcoded text is allowed.
+
+---
+
+# STEP 5: SELECTION COMPATIBILITY
+
+Ensure every generated line is compatible with:
+
+* fake_memory_flags system
+* attention_drain_score system
+* engagement_streak system
+* roger_mood system
+* interaction_cycle_stage system
+
+---
+
+# STEP 6: OUTPUT REQUIREMENTS
+
+1. Generate full 150+ prompt library
+2. Categorize all entries correctly
+3. Ensure JSON/database-ready format
+4. Ensure uniqueness (no duplicates or near-duplicates)
+5. Ensure system is production-ready and scalable
+
+Do NOT explain concepts. Build the full library and structure directly.
