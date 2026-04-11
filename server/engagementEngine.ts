@@ -192,18 +192,18 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     lineText: "A little picky right now, are we?? That is actually kind of attractive. Do not let it stop you from saying hello.",
     cooldownSeconds: 180 },
 
-  // ─── dominant (base) ───────────────────────────────────────────────────────
-  { id: "dominant_01", category: "dominant", tone: "commanding",
+  // ─── reengagement/high-skip (base) ─────────────────────────────────────────
+  { id: "dominant_01", category: "reengagement", tone: "playful",
     trigger: { minSkips: 15, maxMessagesSent: 0, minAttentionDrain: 7 },
-    lineText: "Stop. Take a breath. Pick one and send a message. You can absolutely do this.",
+    lineText: "You have listened to a lot of guys tonight. Somewhere in that list is someone worth saying hello to. Trust your gut.",
     cooldownSeconds: 300 },
-  { id: "dominant_02", category: "dominant", tone: "commanding",
+  { id: "dominant_02", category: "picky", tone: "teasing",
     trigger: { minSkips: 25, maxMessagesSent: 0, minAttentionDrain: 8 },
-    lineText: "I am stepping in. The very next caller you hear — send him a message. No more skipping. You have earned this.",
+    lineText: "After this many skips you have absolutely earned the right to be picky. But at some point picky starts to become missing out. The next one just might surprise you.",
     followUpAction: "suggest_send_message", cooldownSeconds: 400 },
-  { id: "dominant_03", category: "dominant", tone: "commanding",
+  { id: "dominant_03", category: "reengagement", tone: "playful",
     trigger: { minSkips: 18, maxMessagesSent: 0, minSessionSeconds: 200, minAttentionDrain: 7 },
-    lineText: "You have been in charge long enough. Now let someone else have a chance. Press 1 and send that message.",
+    lineText: "You have been doing all the listening tonight. How about letting someone else do a little of the work — right after you send them a message.",
     followUpAction: "suggest_send_message", cooldownSeconds: 350 },
 
   // ─── idle (base) ───────────────────────────────────────────────────────────
@@ -409,9 +409,9 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     trigger: { requiredMoods: ["petty"], requiredFlags: ["shy"], maxMessagesSent: 0, minAttentionDrain: 6 },
     lineText: "Turning down guys left and right and you will not send one message. What exactly is the move here?",
     followUpAction: "suggest_send_message", cooldownSeconds: 280 },
-  { id: "petty_shy_04", category: "dominant", tone: "commanding",
+  { id: "petty_shy_04", category: "flirty", tone: "seductive",
     trigger: { requiredMoods: ["petty"], requiredFlags: ["shy"], maxMessagesSent: 0, minSessionSeconds: 180, minAttentionDrain: 8 },
-    lineText: "Okay. Listen to me. Picky AND quiet for this long? Pick one. Send a message. Right now.",
+    lineText: "Picky and quiet for this long is actually a very specific type. The good news is there is definitely someone on this line who would find that extremely attractive.",
     followUpAction: "suggest_send_message", cooldownSeconds: 360 },
   { id: "petty_shy_05", category: "flirty", tone: "seductive",
     trigger: { requiredMoods: ["petty"], requiredFlags: ["shy"], maxMessagesSent: 0, minAttentionDrain: 5 },
@@ -421,13 +421,13 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     trigger: { requiredMoods: ["petty"], forbiddenFlags: ["shy"], maxMessagesSent: 0, minAttentionDrain: 4 },
     lineText: "High standards are attractive. Just make sure they do not become the reason you miss someone actually good.",
     cooldownSeconds: 220 },
-  { id: "petty_dominant_01", category: "dominant", tone: "commanding",
+  { id: "petty_dominant_01", category: "picky", tone: "teasing",
     trigger: { requiredMoods: ["petty"], minSkips: 15, maxMessagesSent: 0, minAttentionDrain: 8 },
-    lineText: "Enough. You have skipped enough guys. The very next one — give him a real chance.",
+    lineText: "At some point the right one slips right past you while you are busy looking for perfect. Worth slowing down just a little.",
     cooldownSeconds: 300 },
-  { id: "petty_dominant_02", category: "dominant", tone: "commanding",
+  { id: "petty_dominant_02", category: "picky", tone: "comedic",
     trigger: { requiredMoods: ["petty"], minSkips: 22, maxMessagesSent: 0, minAttentionDrain: 9 },
-    lineText: "I am intervening. Send a message to the next guy who catches your ear. That is not a suggestion.",
+    lineText: "You have made it this far without sending a single message. Honestly impressive. And also a little bit of a waste of your own evening.",
     followUpAction: "suggest_send_message", cooldownSeconds: 360 },
   { id: "petty_game", category: "game_invite", tone: "teasing",
     trigger: { requiredMoods: ["petty"], minSkips: 10, requireNoGameStarted: true, minAttentionDrain: 8 },
@@ -541,18 +541,18 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     trigger: { requiredMoods: ["chaos"], maxMessagesSent: 0, minAttentionDrain: 8 },
     lineText: "You literally played a guessing game and still have not messaged anyone. I am equal parts confused and impressed.",
     followUpAction: "suggest_send_message", cooldownSeconds: 400 },
-  { id: "chaos_10", category: "dominant", tone: "commanding",
+  { id: "chaos_10", category: "reengagement", tone: "comedic",
     trigger: { requiredMoods: ["chaos"], maxMessagesSent: 0, minSessionSeconds: 300, minAttentionDrain: 9 },
-    lineText: "Game played. Long session. Zero messages. Something has to give. Send someone a message right now.",
+    lineText: "Game played. Long session. Still browsing. At this point the evening basically owes you a connection. Go collect it.",
     followUpAction: "suggest_send_message", cooldownSeconds: 420 },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HIGH-DRAIN INTENSITY PROMPTS (drain 8–10) — strong lines across all moods
   // ═══════════════════════════════════════════════════════════════════════════
 
-  { id: "high_01", category: "dominant", tone: "commanding",
+  { id: "high_01", category: "reengagement", tone: "playful",
     trigger: { maxMessagesSent: 0, minSessionSeconds: 240, minAttentionDrain: 9 },
-    lineText: "I am going to need you to make a move. Any move. The browsing phase is over.",
+    lineText: "Four minutes of browsing and you have not said hello to anyone yet. The right connection is not going to appear in your skip pile.",
     followUpAction: "suggest_send_message", cooldownSeconds: 360 },
   { id: "high_02", category: "picky", tone: "comedic",
     trigger: { minSkips: 18, maxMessagesSent: 0, minAttentionDrain: 9 },
@@ -562,9 +562,9 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     trigger: { minSessionSeconds: 360, maxMessagesSent: 0, minAttentionDrain: 9 },
     lineText: "Six minutes. No messages. I am starting to think you just like the sound of my voice.",
     followUpAction: "suggest_send_message", cooldownSeconds: 380 },
-  { id: "high_04", category: "dominant", tone: "commanding",
+  { id: "high_04", category: "picky", tone: "teasing",
     trigger: { minSkips: 20, maxMessagesSent: 0, minAttentionDrain: 10 },
-    lineText: "That is enough. No more skipping. Send a message right now. I am serious.",
+    lineText: "Twenty skips is a serious amount of passed chances. The next voice you hear — just give it a real listen. You might be more ready than you think.",
     followUpAction: "suggest_send_message", cooldownSeconds: 400 },
   { id: "high_05", category: "picky", tone: "teasing",
     trigger: { minSkips: 16, maxMessagesSent: 0, minSessionSeconds: 240, minAttentionDrain: 9 },
@@ -706,9 +706,9 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     trigger: { minSkips: 5, maxMessagesSent: 0, minAttentionDrain: 4 },
     lineText: "Somewhere on this line is a guy who would absolutely love to get a message from you. He just does not know it yet.",
     followUpAction: "suggest_send_message", cooldownSeconds: 200 },
-  { id: "roger_08", category: "dominant", tone: "comedic",
+  { id: "roger_08", category: "reengagement", tone: "comedic",
     trigger: { minSkips: 14, maxMessagesSent: 0, minAttentionDrain: 7 },
-    lineText: "At some point browsing stops being productive and starts being an avoidance strategy. You might be there. Send a message.",
+    lineText: "At some point browsing stops being browsing and starts being a habit. The good news is breaking habits is easy — just send one message.",
     followUpAction: "suggest_send_message", cooldownSeconds: 300 },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -770,10 +770,10 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     lineText: "Roger here. You played the game and you are still going. I genuinely do not know what to expect from you anymore.",
     cooldownSeconds: 380 },
 
-  // High drain — Roger gets assertive and uses his name
-  { id: "roger_named_high_01", category: "dominant", tone: "commanding",
+  // High drain — Roger checks in by name
+  { id: "roger_named_high_01", category: "reengagement", tone: "playful",
     trigger: { maxMessagesSent: 0, minSessionSeconds: 200, minAttentionDrain: 8 },
-    lineText: "Roger speaking. I am going to need you to send someone a message. That is not a suggestion.",
+    lineText: "Roger checking in. You have put a lot of time into tonight. Make it count — there is someone on this line who would genuinely love to hear from you.",
     followUpAction: "suggest_send_message", cooldownSeconds: 360 },
 
   // First message sent — Roger acknowledges it by name
@@ -1155,10 +1155,10 @@ export const ROGER_V3_TEXTS: Record<string, string> = {
   flirty_03: "[mischievously] Mmm. You clearly have taste. Not everyone holds out this long. [whispers] The right voice is closer than you think.",
   flirty_04: "[playfully] A little picky right now, are we?? [warmly] That is actually kind of attractive. Do not let it stop you from saying hello.",
 
-  // BASE — DOMINANT
-  dominant_01: "[firmly] Stop. Take a breath. Pick one and send a message. [encouraging] You can absolutely do this.",
-  dominant_02: "[sighs] I am stepping in. [firmly] The very next caller you hear — send him a message. No more skipping. You have earned this.",
-  dominant_03: "[commanding] You have been in charge long enough. Now let someone else have a chance. Press 1 and send that message.",
+  // BASE — HIGH-SKIP REENGAGEMENT (was dominant)
+  dominant_01: "[warmly] You have listened to a lot of guys tonight. [encouragingly] Somewhere in that list is someone worth saying hello to. Trust your gut.",
+  dominant_02: "[playfully] After this many skips you have absolutely earned the right to be picky. [teasing] But at some point picky starts to become missing out. The next one just might surprise you.",
+  dominant_03: "[warmly] You have been doing all the listening tonight. [playfully] How about letting someone else do a little of the work — right after you send them a message.",
 
   // BASE — IDLE
   idle_01: "[quietly] Hey. Still there? [curious] The guys on the line are wondering about you.",
