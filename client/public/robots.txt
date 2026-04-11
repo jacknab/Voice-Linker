@@ -6,4 +6,4 @@ Disallow: /admin
 # Crawl-delay for well-behaved bots
 Crawl-delay: 1
 
-Sitemap: https://1663575e-67dd-417d-b119-b0f5a3bbac99-00-11rlpsik6rdym.worf.replit.dev/sitemap.xml
+Sitemap: https://ec21bbd2-8c65-407c-a3ec-731e3b5b43a9-00-20rrdffu6l9hy.janeway.replit.dev/sitemap.xml

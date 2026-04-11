@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
   <url>
-    <loc>https://1663575e-67dd-417d-b119-b0f5a3bbac99-00-11rlpsik6rdym.worf.replit.dev/</loc>
+    <loc>https://ec21bbd2-8c65-407c-a3ec-731e3b5b43a9-00-20rrdffu6l9hy.janeway.replit.dev/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <lastmod>2026-04-10</lastmod>
+    <lastmod>2026-04-11</lastmod>
   </url>
   <url>
-    <loc>https://1663575e-67dd-417d-b119-b0f5a3bbac99-00-11rlpsik6rdym.worf.replit.dev/regions/</loc>
+    <loc>https://ec21bbd2-8c65-407c-a3ec-731e3b5b43a9-00-20rrdffu6l9hy.janeway.replit.dev/regions/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
-    <lastmod>2026-04-10</lastmod>
+    <lastmod>2026-04-11</lastmod>
+  </url>
+  <url>
+    <loc>https://ec21bbd2-8c65-407c-a3ec-731e3b5b43a9-00-20rrdffu6l9hy.janeway.replit.dev/regions/denver.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <lastmod>2026-04-11</lastmod>
   </url>
 </urlset>
