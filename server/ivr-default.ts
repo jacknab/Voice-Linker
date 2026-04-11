@@ -1784,12 +1784,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
-      gather.say(
+      const menuText =
         "If you have a promotional code press 1. " +
         planLines.join(" ") + " " +
         "To repeat these choices press 9. " +
-        "To cancel press pound."
-      );
+        "To cancel press pound.";
+      playPrompt(gather, req, "purchase_pre_menu.mp3", menuText);
     } catch (err) {
       console.error("[voice] /voice/purchase-pre-menu settings error:", err);
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
@@ -5362,7 +5362,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/payment-intro", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-payment-intro" });
-    gather.say(
+    playPrompt(gather, req, "payment_intro.mp3",
       "Your purchase, plus any applicable fees and taxes, will appear on your credit card statement as Toby Media. " +
       "When entering your card information: to correct an incorrect number, press star to delete the last digit entered. " +
       "To start over, press the star key twice. " +
