@@ -5236,56 +5236,92 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const callSid = req.body?.CallSid as string;
 
-    const session = paymentSessions.get(callSid);
-    if (!session) {
-      playPrompt(twiml, req, "payment_session_expired.mp3", "Your session has expired. Please start again.");
-      twiml.redirect("/voice/purchase-pre-menu");
-      res.type("text/xml");
-      return res.send(twiml.toString());
-    }
+    try {
+      const session = paymentSessions.get(callSid);
+      if (!session) {
+        console.warn(`[voice] run-payment: no session found for callSid=${callSid}`);
+        playPrompt(twiml, req, "payment_session_expired.mp3", "Your session has expired. Please start again.");
+        twiml.redirect("/voice/purchase-pre-menu");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
 
-    // Pre-flight: ensure Stripe is configured before launching <Pay>.
-    // Without STRIPE_SECRET_KEY the connector cannot process the charge.
-    if (!process.env.STRIPE_SECRET_KEY) {
-      console.error("[voice] run-payment: STRIPE_SECRET_KEY is not set — cannot process payment");
+      // Pre-flight: ensure both Stripe and Twilio Pay connector are configured.
+      const connectorName = process.env.TWILIO_PAY_CONNECTOR;
+      if (!process.env.STRIPE_SECRET_KEY || !connectorName) {
+        console.error(`[voice] run-payment: payment not configured — STRIPE_SECRET_KEY=${!!process.env.STRIPE_SECRET_KEY} TWILIO_PAY_CONNECTOR=${!!connectorName}`);
+        playPrompt(twiml, req, "payment_failed.mp3",
+          "Our payment system is not currently configured. Please contact customer support to complete your purchase.");
+        twiml.redirect("/voice/main-menu");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      // Pre-flight: verify the Twilio Pay connector exists and is reachable.
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      if (accountSid && authToken) {
+        try {
+          const authHeader = "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+          const connectorCheckUrl = `https://flex-api.twilio.com/v1/Connectors`;
+          const connectorRes = await fetch(connectorCheckUrl, { headers: { Authorization: authHeader } });
+          if (!connectorRes.ok) {
+            console.error(`[voice] run-payment: Twilio Pay connector check failed — HTTP ${connectorRes.status}. Twilio Pay may not be enabled on this account.`);
+            playPrompt(twiml, req, "payment_failed.mp3",
+              "Our payment system is temporarily unavailable. Please contact customer support to complete your purchase.");
+            twiml.redirect("/voice/main-menu");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+          const connectorData = await connectorRes.json() as any;
+          const connectors: any[] = connectorData?.flex_flow_sid ? [] : (connectorData?.connectors ?? []);
+          const connectorExists = connectors.some((c: any) => c.unique_name === connectorName || c.friendly_name === connectorName);
+          if (!connectorExists && connectors.length > 0) {
+            console.warn(`[voice] run-payment: connector "${connectorName}" not found in Twilio Pay connectors list. Available: ${connectors.map((c: any) => c.unique_name).join(", ")}`);
+          }
+        } catch (connectorErr) {
+          // Non-fatal — log and proceed; Twilio will report the error via handle-payment-complete
+          console.warn(`[voice] run-payment: connector pre-flight check error (proceeding):`, connectorErr);
+        }
+      }
+
+      const chargeAmount = (session.packagePriceCents / 100).toFixed(2);
+      console.log(`[voice] run-payment: launching <Pay> connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
+
+      const pay = twiml.pay({
+        action: `${baseUrl(req)}/voice/handle-payment-complete`,
+        chargeAmount,
+        currency: "usd",
+        description: `${session.packageLabel} Membership — VOICE PROTOCOL`,
+        paymentConnector: connectorName,
+        postalCode: false,
+        securityCode: true,
+        timeout: 30,
+        maxAttempts: 2,
+      } as any) as any;
+
+      // Custom prompts for each payment field — tell callers to press pound when done
+      pay.prompt({ ["for"]: "cardNumber" })
+        .say("Please enter your 16-digit card number, then press pound.");
+
+      pay.prompt({ ["for"]: "expirationDate" })
+        .say(
+          "Enter your expiration date, then press pound. " +
+          "Enter the 2-digit month, followed by the year. " +
+          "If your card shows a 4-digit year, enter only the last 2 digits. " +
+          "For example, for February 2027 enter 0 2 2 7, then press pound."
+        );
+
+      pay.prompt({ ["for"]: "securityCode" })
+        .say("Enter your 3 or 4 digit security code, then press pound.");
+
+    } catch (err) {
+      console.error("[voice] run-payment: unexpected error:", err);
+      paymentSessions.delete(callSid);
       playPrompt(twiml, req, "payment_failed.mp3",
-        "Our payment system is not currently configured. Please contact customer support to complete your purchase.");
+        "We encountered an unexpected error. Please try again or contact customer support.");
       twiml.redirect("/voice/main-menu");
-      res.type("text/xml");
-      return res.send(twiml.toString());
     }
-
-    const connectorName = process.env.TWILIO_PAY_CONNECTOR || "stripe";
-    const chargeAmount = (session.packagePriceCents / 100).toFixed(2);
-
-    console.log(`[voice] run-payment: launching <Pay> connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
-
-    const pay = twiml.pay({
-      action: `${baseUrl(req)}/voice/handle-payment-complete`,
-      chargeAmount,
-      currency: "usd",
-      description: `${session.packageLabel} Membership — VOICE PROTOCOL`,
-      paymentConnector: connectorName,
-      postalCode: false,
-      securityCode: true,
-      timeout: 30,
-      maxAttempts: 2,
-    } as any) as any;
-
-    // Custom prompts for each payment field — tell callers to press pound when done
-    pay.prompt({ ["for"]: "cardNumber" })
-      .say("Please enter your 16-digit card number, then press pound.");
-
-    pay.prompt({ ["for"]: "expirationDate" })
-      .say(
-        "Enter your expiration date, then press pound. " +
-        "Enter the 2-digit month, followed by the year. " +
-        "If your card shows a 4-digit year, enter only the last 2 digits. " +
-        "For example, for February 2027 enter 0 2 2 7, then press pound."
-      );
-
-    pay.prompt({ ["for"]: "securityCode" })
-      .say("Enter your 3 or 4 digit security code, then press pound.");
 
     res.type("text/xml");
     res.send(twiml.toString());
