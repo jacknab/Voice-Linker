@@ -156,6 +156,12 @@ interface CallerBrowseState {
 }
 const callerBrowseState = new Map<string, CallerBrowseState>();
 
+// Probability (0–1) that a newly-detected caller triggers an audible announcement.
+// When the roll fails the caller is still silently queued so they are eventually heard,
+// but no "new caller closest to you" / "new caller from [city]" interrupt fires.
+// Keeping this below 1.0 prevents the prompt from feeling routine.
+const NEW_CALLER_ANNOUNCE_PROBABILITY = 0.5;
+
 // Remove a specific userId from the browse queue for a given call session
 function removeFromBrowseQueue(callSid: string, userId: string): void {
   const state = callerBrowseState.get(callSid);
@@ -3948,35 +3954,49 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
             if (newLocalCaller) {
               state.announcedNewLocalIds.push(newLocalCaller.userId);
+              const announceLocal = Math.random() < NEW_CALLER_ANNOUNCE_PROBABILITY;
 
               if (!state.linkedRegionLoaded) {
-                // ── Home-region browsing: interrupt immediately ────────────────
-                console.log(`[voice] browse-profiles: announcing new home-region caller userId=${newLocalCaller.userId} to ${callSid}`);
-                const alertGather = twiml.gather({
-                  numDigits: 1,
-                  action: `/voice/handle-profile-menu?profileUserId=${newLocalCaller.userId}`,
-                  timeout: 10,
-                });
-                playPrompt(alertGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
-                if (newLocalCaller.nameRecordingUrl) {
-                  safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
+                if (announceLocal) {
+                  // ── Home-region browsing: interrupt immediately with announcement ──
+                  console.log(`[voice] browse-profiles: announcing new home-region caller userId=${newLocalCaller.userId} to ${callSid}`);
+                  const alertGather = twiml.gather({
+                    numDigits: 1,
+                    action: `/voice/handle-profile-menu?profileUserId=${newLocalCaller.userId}`,
+                    timeout: 10,
+                  });
+                  playPrompt(alertGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
+                  if (newLocalCaller.nameRecordingUrl) {
+                    safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
+                  }
+                  safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
+                  playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+                  twiml.redirect("/voice/browse-profiles");
+                  res.type("text/xml");
+                  return res.send(twiml.toString());
+                } else {
+                  // ── Silently splice as next in queue — no announcement ─────────
+                  console.log(`[voice] browse-profiles: silently queuing new home-region caller userId=${newLocalCaller.userId} for ${callSid} (random skip)`);
+                  state.queue.splice(state.index, 0, {
+                    userId: newLocalCaller.userId,
+                    recordingUrl: newLocalCaller.recordingUrl,
+                    nameRecordingUrl: newLocalCaller.nameRecordingUrl,
+                    regionId: null,   // null = no "closest to you" prefix when played
+                    regionName: null,
+                  });
+                  // Fall through — plays normally without fanfare
                 }
-                safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
-                playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-                twiml.redirect("/voice/browse-profiles");
-                res.type("text/xml");
-                return res.send(twiml.toString());
               } else {
                 // ── Linked-region browsing: splice into queue as the next item ─
-                // The playback logic will see regionId === callerRegionId and play
-                // "new caller closest to you" before their greeting automatically.
-                console.log(`[voice] browse-profiles: queuing home-region caller userId=${newLocalCaller.userId} as next in linked-region queue for ${callSid}`);
+                // When announced, regionId === callerRegionId triggers "closest to you" prefix.
+                // When silent, regionId is null so no prefix plays.
+                console.log(`[voice] browse-profiles: ${announceLocal ? "announcing" : "silently queuing"} home-region caller userId=${newLocalCaller.userId} in linked-region queue for ${callSid}`);
                 state.queue.splice(state.index, 0, {
                   userId: newLocalCaller.userId,
                   recordingUrl: newLocalCaller.recordingUrl,
                   nameRecordingUrl: newLocalCaller.nameRecordingUrl,
-                  regionId: state.callerRegionId,
-                  regionName: state.callerRegionName,
+                  regionId: announceLocal ? state.callerRegionId : null,
+                  regionName: announceLocal ? state.callerRegionName : null,
                 });
                 // Fall through — the current browse-profiles iteration will play this entry next
               }
@@ -3991,30 +4011,45 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
             if (newLinkedCaller) {
               state.announcedLinkedCallerIds.push(newLinkedCaller.userId);
-              console.log(`[voice] browse-profiles: announcing new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} to ${callSid}`);
+              const announceLinked = Math.random() < NEW_CALLER_ANNOUNCE_PROBABILITY;
 
-              const alertGather = twiml.gather({
-                numDigits: 1,
-                action: `/voice/handle-profile-menu?profileUserId=${newLinkedCaller.userId}`,
-                timeout: 10,
-              });
-              const linkedRegionRecord = await storage.getRegionById(snapshot.regionId).catch(() => null);
-              const linkedSlug = linkedRegionRecord?.slug ?? snapshot.regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-              const linkedCityFile = `city_${linkedSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
-              const linkedCityFilePath = path.join(UPLOADS_DIR, linkedCityFile);
-              if (fs.existsSync(linkedCityFilePath)) {
-                alertGather.play(`${baseUrl(req)}/uploads/${linkedCityFile}`);
+              if (announceLinked) {
+                // ── Announce with city audio interrupt ────────────────────────
+                console.log(`[voice] browse-profiles: announcing new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} to ${callSid}`);
+                const alertGather = twiml.gather({
+                  numDigits: 1,
+                  action: `/voice/handle-profile-menu?profileUserId=${newLinkedCaller.userId}`,
+                  timeout: 10,
+                });
+                const linkedRegionRecord = await storage.getRegionById(snapshot.regionId).catch(() => null);
+                const linkedSlug = linkedRegionRecord?.slug ?? snapshot.regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+                const linkedCityFile = `city_${linkedSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
+                const linkedCityFilePath = path.join(UPLOADS_DIR, linkedCityFile);
+                if (fs.existsSync(linkedCityFilePath)) {
+                  alertGather.play(`${baseUrl(req)}/uploads/${linkedCityFile}`);
+                } else {
+                  alertGather.say(`New caller from ${snapshot.regionName}.`);
+                }
+                if (newLinkedCaller.nameRecordingUrl) {
+                  safePlayRecording(alertGather, newLinkedCaller.nameRecordingUrl, req, "");
+                }
+                safePlayRecording(alertGather, newLinkedCaller.recordingUrl, req, "This profile's greeting is not available.");
+                playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+                twiml.redirect("/voice/browse-profiles");
+                res.type("text/xml");
+                return res.send(twiml.toString());
               } else {
-                alertGather.say(`New caller from ${snapshot.regionName}.`);
+                // ── Silently splice as next in queue — no announcement ────────
+                console.log(`[voice] browse-profiles: silently queuing new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} for ${callSid} (random skip)`);
+                state.queue.splice(state.index, 0, {
+                  userId: newLinkedCaller.userId,
+                  recordingUrl: newLinkedCaller.recordingUrl,
+                  nameRecordingUrl: newLinkedCaller.nameRecordingUrl,
+                  regionId: null,   // null = no "from [city]" prefix when played
+                  regionName: null,
+                });
+                // Fall through — plays normally without fanfare
               }
-              if (newLinkedCaller.nameRecordingUrl) {
-                safePlayRecording(alertGather, newLinkedCaller.nameRecordingUrl, req, "");
-              }
-              safePlayRecording(alertGather, newLinkedCaller.recordingUrl, req, "This profile's greeting is not available.");
-              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-              twiml.redirect("/voice/browse-profiles");
-              res.type("text/xml");
-              return res.send(twiml.toString());
             }
           }
 
