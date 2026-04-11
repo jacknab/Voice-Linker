@@ -3957,7 +3957,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                   action: `/voice/handle-profile-menu?profileUserId=${newLocalCaller.userId}`,
                   timeout: 10,
                 });
-                playPrompt(alertGather, req, "new_caller_close_to_you.mp3", "New caller close to you.");
+                playPrompt(alertGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
                 if (newLocalCaller.nameRecordingUrl) {
                   safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
                 }
