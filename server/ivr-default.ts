@@ -160,7 +160,7 @@ const callerBrowseState = new Map<string, CallerBrowseState>();
 // When the roll fails the caller is still silently queued so they are eventually heard,
 // but no "new caller closest to you" / "new caller from [city]" interrupt fires.
 // Keeping this below 1.0 prevents the prompt from feeling routine.
-const NEW_CALLER_ANNOUNCE_PROBABILITY = 0.5;
+const NEW_CALLER_ANNOUNCE_PROBABILITY = 0.1;
 
 // Remove a specific userId from the browse queue for a given call session
 function removeFromBrowseQueue(callSid: string, userId: string): void {
