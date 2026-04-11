@@ -691,10 +691,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Stop live billing if this call was in an active conference (handles unexpected hangups)
       stopLiveBillingByCallSid(callSid);
 
-      // Finalize call log with Twilio-reported duration
+      // Finalize call log with Twilio-reported duration (must complete before removeActiveCall)
       const callDuration = parseInt(req.body?.CallDuration ?? "0", 10);
       if (!isNaN(callDuration)) {
-        storage.finalizeCallLog(callSid, callDuration).catch(() => {});
+        await storage.finalizeCallLog(callSid, callDuration).catch(() => {});
       }
 
       try {

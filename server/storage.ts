@@ -553,24 +553,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async removeActiveCall(callSid: string): Promise<void> {
-    // Finalize the call log (calculate duration from startedAt) before removing
+    // Mark the call log as completed if not already done (duration is set by finalizeCallLog via Twilio's CallDuration)
     await db.execute(sql`
       UPDATE call_logs
-      SET duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (now() - started_at))::integer),
-          completed_at = now()
+      SET completed_at = now()
       WHERE call_sid = ${callSid} AND completed_at IS NULL
     `);
     await db.delete(activeCalls).where(eq(activeCalls.callSid, callSid));
   }
 
   async removeActiveCallsByUser(userId: string): Promise<void> {
-    // Find call SIDs for this user, finalize their logs, then remove
+    // Find call SIDs for this user, mark their logs complete, then remove
     const rows = await db.select({ callSid: activeCalls.callSid }).from(activeCalls).where(eq(activeCalls.userId, userId));
     for (const { callSid } of rows) {
       await db.execute(sql`
         UPDATE call_logs
-        SET duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (now() - started_at))::integer),
-            completed_at = now()
+        SET completed_at = now()
         WHERE call_sid = ${callSid} AND completed_at IS NULL
       `);
     }
