@@ -653,10 +653,13 @@ function RegionsTab() {
   );
 }
 
+const SEEDED_PREFIX = "+1720111";
+
 // ── VoiceProfilesTab ──────────────────────────────────────────────────────────
 function VoiceProfilesTab() {
   const { toast } = useToast();
   const [showUpload, setShowUpload] = useState(false);
+  const [profileView, setProfileView] = useState<"all" | "real" | "seeded">("real");
 
   const { data: profiles, isLoading } = useQuery<ProfileWithUser[]>({ queryKey: ["/api/admin/profiles"] });
   const { data: liveData } = useQuery<{ liveUserIds: string[] }>({ queryKey: ["/api/admin/simulator/live"], refetchInterval: 5000 });
@@ -675,9 +678,43 @@ function VoiceProfilesTab() {
     onError: () => toast({ title: "Delete failed", variant: "destructive" }),
   });
 
+  const allProfiles = profiles ?? [];
+  const visibleProfiles = profileView === "seeded"
+    ? allProfiles.filter(p => p.phoneNumber.startsWith(SEEDED_PREFIX))
+    : profileView === "real"
+      ? allProfiles.filter(p => !p.phoneNumber.startsWith(SEEDED_PREFIX))
+      : allProfiles;
+
+  const realCount   = allProfiles.filter(p => !p.phoneNumber.startsWith(SEEDED_PREFIX)).length;
+  const seededCount = allProfiles.filter(p =>  p.phoneNumber.startsWith(SEEDED_PREFIX)).length;
+
   return (
     <div className="space-y-4">
       {showUpload && <UploadDialog onClose={() => setShowUpload(false)} />}
+
+      {/* View toggle */}
+      <div className="flex items-center gap-1.5">
+        {([
+          { id: "real",   label: "Real Callers",    count: realCount },
+          { id: "seeded", label: "Seeded Profiles",  count: seededCount },
+          { id: "all",    label: "All",              count: allProfiles.length },
+        ] as const).map(opt => (
+          <button
+            key={opt.id}
+            data-testid={`btn-profile-view-${opt.id}`}
+            onClick={() => setProfileView(opt.id)}
+            className={`px-3 py-1.5 rounded font-mono text-xs tracking-widest uppercase transition-colors border ${
+              profileView === opt.id
+                ? "bg-[#f5a623] border-[#f5a623] text-black font-bold"
+                : "border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-300 bg-white"
+            }`}
+          >
+            {opt.label}
+            <span className="ml-1.5 opacity-70">({opt.count})</span>
+          </button>
+        ))}
+      </div>
+
       <div className="border border-gray-200 rounded-lg overflow-hidden">
         <table className="w-full">
           <thead>
@@ -693,18 +730,24 @@ function VoiceProfilesTab() {
           <tbody>
             {isLoading ? (
               <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING PROFILES...</td></tr>
-            ) : !profiles || profiles.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">NO PROFILES FOUND — UPLOAD ONE TO BEGIN</td></tr>
+            ) : visibleProfiles.length === 0 ? (
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-gray-400 font-mono text-xs tracking-widest">
+                {allProfiles.length === 0 ? "NO PROFILES FOUND — UPLOAD ONE TO BEGIN" : "NO PROFILES IN THIS VIEW"}
+              </td></tr>
             ) : (
-              profiles.map(profile => {
+              visibleProfiles.map(profile => {
                 const cat = profile.siteCategory ?? "MM";
                 const isMW = cat === "MW";
+                const isSeeded = profile.phoneNumber.startsWith(SEEDED_PREFIX);
                 return (
                   <tr key={profile.id} data-testid={`row-profile-${profile.id}`} className={C.row}>
                     <td className={C.td}>
                       <div className="flex items-center gap-2">
                         <Phone size={12} className="text-gray-400" />
                         <span data-testid={`text-phone-${profile.id}`} className="text-gray-800 font-mono text-sm">{profile.phoneNumber}</span>
+                        {isSeeded && (
+                          <span className="text-[10px] font-mono px-1 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-600 leading-none">SEED</span>
+                        )}
                       </div>
                     </td>
                     <td className={C.td}>
@@ -739,8 +782,8 @@ function VoiceProfilesTab() {
           </tbody>
         </table>
       </div>
-      {profiles && profiles.length > 0 && (
-        <div className="text-gray-400 font-mono text-xs">{profiles.length} record{profiles.length !== 1 ? "s" : ""}</div>
+      {!isLoading && allProfiles.length > 0 && (
+        <div className="text-gray-400 font-mono text-xs">{visibleProfiles.length} of {allProfiles.length} profile{allProfiles.length !== 1 ? "s" : ""}</div>
       )}
     </div>
   );
