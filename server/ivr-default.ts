@@ -5414,32 +5414,32 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      const accountSid = process.env.TWILIO_ACCOUNT_SID!;
-      const authToken = process.env.TWILIO_AUTH_TOKEN!;
-      const client = twilio(accountSid, authToken);
-
       const chargeAmount = (session.packagePriceCents / 100).toFixed(2);
-      console.log(`[voice] run-payment: creating Payment via REST API connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
+      console.log(`[voice] run-payment: launching <Pay> connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
 
-      const payment = await (client.calls(callSid) as any).payments.create({
-        idempotencyKey: callSid,
+      // Now that Pay is enabled, use <Pay> TwiML — it handles all prompting automatically.
+      const pay = twiml.pay({
+        action: `${baseUrl(req)}/voice/handle-payment-complete`,
         statusCallback: `${baseUrl(req)}/voice/payment-status`,
-        paymentConnector: connectorName,
         chargeAmount,
         currency: "usd",
         description: `${session.packageLabel} Membership - VOICE PROTOCOL`,
-        paymentMethod: "credit-card",
+        paymentConnector: connectorName,
         securityCode: true,
         timeout: 30,
         maxAttempts: 2,
-      });
+      } as any) as any;
 
-      console.log(`[voice] run-payment: Payment session created sid=${payment.sid} status=${payment.status}`);
-
-      // Keep call alive while Twilio prompts the caller for card details.
-      // The payment-status webhook will redirect the call when done.
-      twiml.pause({ length: 120 });
-      twiml.redirect("/voice/payment-timeout");
+      pay.prompt({ ["for"]: "cardNumber" })
+        .say("Please enter your 16-digit card number, then press pound.");
+      pay.prompt({ ["for"]: "expirationDate" })
+        .say(
+          "Enter your expiration date, then press pound. " +
+          "Enter the 2-digit month followed by the last 2 digits of the year. " +
+          "For example, for February 2027 enter 0 2 2 7, then press pound."
+        );
+      pay.prompt({ ["for"]: "securityCode" })
+        .say("Enter your 3 or 4 digit security code, then press pound.");
 
     } catch (err: any) {
       const errStatus = err.status ?? "?";
