@@ -5262,11 +5262,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       const pay = twiml.pay({
         action: `${baseUrl(req)}/voice/handle-payment-complete`,
+        statusCallback: `${baseUrl(req)}/voice/payment-status`,
         chargeAmount,
         currency: "usd",
-        description: `${session.packageLabel} Membership — VOICE PROTOCOL`,
+        description: `${session.packageLabel} Membership - VOICE PROTOCOL`,
         paymentConnector: connectorName,
-        postalCode: false,
         securityCode: true,
         timeout: 30,
         maxAttempts: 2,
@@ -5295,8 +5295,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       twiml.redirect("/voice/main-menu");
     }
 
+    const twimlStr = twiml.toString();
+    console.log(`[voice] run-payment: TwiML sent → ${twimlStr}`);
     res.type("text/xml");
-    res.send(twiml.toString());
+    res.send(twimlStr);
+  });
+
+  // ─── Pay Status Callback ───────────────────────────────────────────────────
+  // Twilio posts mid-session status updates here (card captured, etc.)
+  app.post("/voice/payment-status", (req, res) => {
+    console.log(`[voice] payment-status callback: ${JSON.stringify(req.body)}`);
+    res.sendStatus(204);
   });
 
   // ─── 15. Payment Result Handler ───────────────────────────────────────────
