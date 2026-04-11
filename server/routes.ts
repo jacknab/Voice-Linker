@@ -594,7 +594,8 @@ export async function registerRoutes(
   app.get("/api/admin/callers", async (_req, res) => {
     try {
       const callers = await storage.getAllCallersWithDetails();
-      res.json(callers);
+      const filtered = callers.filter(c => !c.phoneNumber.startsWith("+1720111"));
+      res.json(filtered);
     } catch (e) {
       console.error("[admin] /api/admin/callers GET error:", e);
       res.status(500).json({ message: "Failed to fetch callers" });
