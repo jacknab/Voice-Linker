@@ -1861,7 +1861,7 @@ function TTSTab() {
           </h3>
           <p className="text-gray-400 font-mono text-xs -mt-1">
             One audio file per region. Used in the linked-regions IVR menu when a caller has heard all local callers and is offered nearby cities.
-            The menu says: <span className="text-gray-600 italic">"You have heard all the callers close to you. Press 1 to hear [callers from Denver]. Press 2 to hear [callers from Boulder]. Press 3 to start over."</span>
+            The menu says: <span className="text-gray-600 italic">"You have heard all the callers close to you. Press 1 to hear [guys from Denver]. Press 2 to hear [guys from Boulder]. Press 3 to start over."</span>
             <br />The bracketed parts play from these pre-generated ElevenLabs files. New regions auto-generate on creation. This menu is triggered automatically — no manual setup needed.
           </p>
           <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -1889,7 +1889,7 @@ function TTSTab() {
                       </td>
                       <td className={C.td}>
                         <span className="font-mono text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">{filename}</span>
-                        <div className="text-gray-400 font-mono text-[10px] mt-0.5 italic">"{`callers from ${region.name}.`}"</div>
+                        <div className="text-gray-400 font-mono text-[10px] mt-0.5 italic">"{`guys from ${region.name}.`}"</div>
                       </td>
                       <td className={C.td}>
                         <span className={`${C.badge} ${exists ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-400"}`}>
