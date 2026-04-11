@@ -711,6 +711,77 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     lineText: "At some point browsing stops being productive and starts being an avoidance strategy. You might be there. Send a message.",
     followUpAction: "suggest_send_message", cooldownSeconds: 300 },
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ROGER SELF-INTRODUCTION — fires once early in the session so callers
+  // learn his name. Two variants cover different entry points.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  { id: "roger_selfintro_01", category: "idle", tone: "playful",
+    trigger: { maxSkips: 4, maxSessionSeconds: 150, minAttentionDrain: 3 },
+    lineText: "Hey — welcome to the line. I'm Roger, your host for tonight. Take your time browsing. I'll check in with you every now and then.",
+    cooldownSeconds: 99999 },
+
+  { id: "roger_selfintro_02", category: "idle", tone: "comedic",
+    trigger: { minSkips: 2, maxSkips: 8, maxSessionSeconds: 240, minAttentionDrain: 3 },
+    lineText: "Almost forgot to introduce myself. I'm Roger. I keep this whole thing running. Now — back to finding you someone worth talking to.",
+    cooldownSeconds: 99999 },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ROGER NAMED CHECK-INS — Roger says his name mid-session.
+  // Spread across moods and drain levels so he feels present throughout.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Normal mood
+  { id: "roger_named_normal_01", category: "idle", tone: "playful",
+    trigger: { requiredMoods: ["normal"], maxSkips: 3, minSessionSeconds: 90, minAttentionDrain: 3 },
+    lineText: "Roger checking in. Still with me? Good. The right voice is still out there.",
+    cooldownSeconds: 300 },
+
+  { id: "roger_named_normal_02", category: "flirty", tone: "seductive",
+    trigger: { requiredMoods: ["normal"], maxMessagesSent: 0, minSessionSeconds: 120, minAttentionDrain: 4 },
+    lineText: "Roger here. You have been quietly listening for a while now. Somebody on this line would really like to hear from you.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 320 },
+
+  // Petty mood
+  { id: "roger_named_petty_01", category: "picky", tone: "teasing",
+    trigger: { requiredMoods: ["petty"], maxMessagesSent: 0, minAttentionDrain: 5 },
+    lineText: "Roger here. Still watching you pass on everyone. I'll be here when you're ready.",
+    cooldownSeconds: 280 },
+
+  { id: "roger_named_petty_02", category: "picky", tone: "comedic",
+    trigger: { requiredMoods: ["petty"], minSkips: 10, maxMessagesSent: 0, minAttentionDrain: 6 },
+    lineText: "Roger checking in. The skip count is impressive. Genuinely impressive. Have you considered just saying hello to someone?",
+    followUpAction: "suggest_send_message", cooldownSeconds: 300 },
+
+  // Activated mood
+  { id: "roger_named_activated_01", category: "reward", tone: "playful",
+    trigger: { requiredMoods: ["activated"], minMessagesSent: 1, minAttentionDrain: 3 },
+    lineText: "Roger here. You are absolutely doing the right things on this line right now. Keep going.",
+    cooldownSeconds: 320 },
+
+  { id: "roger_named_activated_02", category: "reengagement", tone: "seductive",
+    trigger: { requiredMoods: ["activated"], minSessionSeconds: 240, minAttentionDrain: 5 },
+    lineText: "Roger checking in. Long session, real commitment. This is what the line is for.",
+    cooldownSeconds: 340 },
+
+  // Chaos mood (post-game)
+  { id: "roger_named_chaos_01", category: "reengagement", tone: "comedic",
+    trigger: { requiredMoods: ["chaos"], minAttentionDrain: 4 },
+    lineText: "Roger here. You played the game and you are still going. I genuinely do not know what to expect from you anymore.",
+    cooldownSeconds: 380 },
+
+  // High drain — Roger gets assertive and uses his name
+  { id: "roger_named_high_01", category: "dominant", tone: "commanding",
+    trigger: { maxMessagesSent: 0, minSessionSeconds: 200, minAttentionDrain: 8 },
+    lineText: "Roger speaking. I am going to need you to send someone a message. That is not a suggestion.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 360 },
+
+  // First message sent — Roger acknowledges it by name
+  { id: "roger_named_reward_01", category: "reward", tone: "playful",
+    trigger: { minMessagesSent: 1, minAttentionDrain: 3 },
+    lineText: "Roger here. You just sent a message. That is exactly what this line is all about.",
+    cooldownSeconds: 280 },
+
 ];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
