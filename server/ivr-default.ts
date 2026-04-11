@@ -5406,32 +5406,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const chargeAmount = (session.packagePriceCents / 100).toFixed(2);
       console.log(`[voice] run-payment: launching <Pay> connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
 
-      const pay = twiml.pay({
+      // Bare-minimum <Pay> — no custom prompts, no extras — for diagnostics
+      twiml.pay({
         action: `${baseUrl(req)}/voice/handle-payment-complete`,
         statusCallback: `${baseUrl(req)}/voice/payment-status`,
         chargeAmount,
-        currency: "usd",
-        description: `${session.packageLabel} Membership - VOICE PROTOCOL`,
         paymentConnector: connectorName,
-        securityCode: true,
-        timeout: 30,
-        maxAttempts: 2,
-      } as any) as any;
-
-      // Custom prompts for each payment field — tell callers to press pound when done
-      pay.prompt({ ["for"]: "cardNumber" })
-        .say("Please enter your 16-digit card number, then press pound.");
-
-      pay.prompt({ ["for"]: "expirationDate" })
-        .say(
-          "Enter your expiration date, then press pound. " +
-          "Enter the 2-digit month, followed by the year. " +
-          "If your card shows a 4-digit year, enter only the last 2 digits. " +
-          "For example, for February 2027 enter 0 2 2 7, then press pound."
-        );
-
-      pay.prompt({ ["for"]: "securityCode" })
-        .say("Enter your 3 or 4 digit security code, then press pound.");
+      } as any);
 
     } catch (err) {
       console.error("[voice] run-payment: unexpected error:", err);
