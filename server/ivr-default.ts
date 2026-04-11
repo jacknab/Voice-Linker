@@ -128,6 +128,17 @@ interface PaymentSession {
 }
 const paymentSessions = new Map<string, PaymentSession>();
 
+// Results from completed payment sessions — consumed by /voice/payment-done
+interface PaymentResult {
+  success: boolean;
+  packageLabel?: string;
+  priceLabel?: string;
+  totalMinutes?: number;
+  bonusMinutes?: number;
+  errorCode?: string;
+}
+const pendingPaymentResults = new Map<string, PaymentResult>();
+
 // Temporary store for the name recording URL between the save-name and save-profile steps
 const pendingNameRecordings = new Map<string, string>(); // CallSid → nameRecordingUrl
 
@@ -5376,8 +5387,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
-  // ─── Run Payment ───────────────────────────────────────────────────────────
-  // Plays the payment intro and launches the Twilio <Pay> verb.
+  // ─── Run Payment (REST API approach) ──────────────────────────────────────
+  // Uses the Twilio Payments REST API instead of <Pay> TwiML so we get real
+  // error codes if the account/connector is misconfigured.
   app.post("/voice/run-payment", async (req, res) => {
     const twiml = new VoiceResponse();
     const callSid = req.body?.CallSid as string;
@@ -5392,7 +5404,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      // Pre-flight: ensure both Stripe and Twilio Pay connector are configured.
       const connectorName = process.env.TWILIO_PAY_CONNECTOR;
       if (!process.env.STRIPE_SECRET_KEY || !connectorName) {
         console.error(`[voice] run-payment: payment not configured — STRIPE_SECRET_KEY=${!!process.env.STRIPE_SECRET_KEY} TWILIO_PAY_CONNECTOR=${!!connectorName}`);
@@ -5403,22 +5414,41 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
+      const accountSid = process.env.TWILIO_ACCOUNT_SID!;
+      const authToken = process.env.TWILIO_AUTH_TOKEN!;
+      const client = twilio(accountSid, authToken);
+
       const chargeAmount = (session.packagePriceCents / 100).toFixed(2);
-      console.log(`[voice] run-payment: launching <Pay> connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
+      console.log(`[voice] run-payment: creating Payment via REST API connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
 
-      // Bare-minimum <Pay> — no custom prompts, no extras — for diagnostics
-      twiml.pay({
-        action: `${baseUrl(req)}/voice/handle-payment-complete`,
+      const payment = await (client.calls(callSid) as any).payments.create({
+        idempotencyKey: callSid,
         statusCallback: `${baseUrl(req)}/voice/payment-status`,
-        chargeAmount,
         paymentConnector: connectorName,
-      } as any);
+        chargeAmount,
+        currency: "usd",
+        description: `${session.packageLabel} Membership - VOICE PROTOCOL`,
+        paymentMethod: "credit-card",
+        securityCode: true,
+        timeout: 30,
+        maxAttempts: 2,
+      });
 
-    } catch (err) {
-      console.error("[voice] run-payment: unexpected error:", err);
+      console.log(`[voice] run-payment: Payment session created sid=${payment.sid} status=${payment.status}`);
+
+      // Keep call alive while Twilio prompts the caller for card details.
+      // The payment-status webhook will redirect the call when done.
+      twiml.pause({ length: 120 });
+      twiml.redirect("/voice/payment-timeout");
+
+    } catch (err: any) {
+      const errStatus = err.status ?? "?";
+      const errCode = err.code ?? "?";
+      const errMsg = err.message ?? "unknown";
+      console.error(`[voice] run-payment: REST API FAILED status=${errStatus} code=${errCode} message=${errMsg}`);
       paymentSessions.delete(callSid);
       playPrompt(twiml, req, "payment_failed.mp3",
-        "We encountered an unexpected error. Please try again or contact customer support.");
+        "We encountered an error processing your payment. Please try again or contact customer support.");
       twiml.redirect("/voice/main-menu");
     }
 
@@ -5429,14 +5459,151 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   });
 
   // ─── Pay Status Callback ───────────────────────────────────────────────────
-  // Twilio posts mid-session status updates here (card captured, etc.)
-  app.post("/voice/payment-status", (req, res) => {
-    console.log(`[voice] payment-status callback: ${JSON.stringify(req.body)}`);
+  // Twilio POSTs here for every payment field captured and for the final result.
+  app.post("/voice/payment-status", async (req, res) => {
+    console.log(`[voice] payment-status: ${JSON.stringify(req.body)}`);
+
+    const callSid    = req.body?.CallSid as string;
+    const status     = (req.body?.Result ?? req.body?.Status ?? "") as string;
+    const errorCode  = req.body?.ErrorCode as string | undefined;
+    const fromNumber = req.body?.From as string;
+    const base       = baseUrl(req);
+
+    const FINAL = [
+      "payment-connector-success",
+      "payment-connector-error",
+      "payment-timeout",
+      "payment-card-decline-limit-reached",
+      "success",
+      "failed",
+    ];
+
+    if (!FINAL.includes(status)) {
+      // Mid-session capture event — nothing to do yet
+      return res.sendStatus(204);
+    }
+
+    const session = paymentSessions.get(callSid);
+    paymentSessions.delete(callSid);
+
+    const accountSid = process.env.TWILIO_ACCOUNT_SID!;
+    const authToken  = process.env.TWILIO_AUTH_TOKEN!;
+    const client     = twilio(accountSid, authToken);
+
+    if ((status === "payment-connector-success" || status === "success") && session) {
+      try {
+        const user = await getOrCreateUser(fromNumber);
+        const packages = await getMembershipPackages();
+        const pkg = Object.values(packages).find(p => p.name === session.packageName);
+        const baseMinutes = pkg?.minutes ?? (await getMembershipSettingsCached()).plan3Minutes;
+        const bonusMinutes = session.isFirstPurchase ? baseMinutes : 0;
+        const totalMinutes = baseMinutes + bonusMinutes;
+        const totalSeconds = totalMinutes * 60;
+
+        const membershipUpdate: Parameters<typeof storage.updateUserMembership>[1] = {
+          membershipTier: session.packageName,
+          remainingSeconds: totalSeconds,
+        };
+
+        if (!user.membershipNumber) {
+          const membershipNumber = await generateUniqueCardNumber();
+          membershipUpdate.membershipNumber = membershipNumber;
+          const card = await storage.createMembershipCard(membershipNumber, generateCardPin(), 0, "Issued on purchase");
+          await storage.linkCardToPhone(card.id, fromNumber);
+          console.log(`[voice] payment-status: issued card ${membershipNumber} to ${fromNumber}`);
+        }
+
+        await storage.updateUserMembership(user.id, membershipUpdate);
+        await storage.getOrCreateMailbox(user.id);
+
+        pendingPaymentResults.set(callSid, {
+          success: true,
+          packageLabel: session.packageLabel,
+          priceLabel: session.priceLabel,
+          totalMinutes,
+          bonusMinutes,
+        });
+        console.log(`[voice] payment-status: membership activated for ${fromNumber}`);
+      } catch (err) {
+        console.error("[voice] payment-status: membership activation error:", err);
+        pendingPaymentResults.set(callSid, { success: false, errorCode: "activation" });
+      }
+    } else {
+      console.warn(`[voice] payment-status: payment not successful status=${status} errorCode=${errorCode ?? "—"}`);
+      pendingPaymentResults.set(callSid, { success: false, errorCode });
+    }
+
+    // Redirect the live call to the result TwiML
+    try {
+      await client.calls(callSid).update({
+        url: `${base}/voice/payment-done`,
+        method: "POST",
+      } as any);
+    } catch (err: any) {
+      console.error(`[voice] payment-status: failed to redirect call: ${err.message}`);
+    }
+
     res.sendStatus(204);
   });
 
-  // ─── 15. Payment Result Handler ───────────────────────────────────────────
-  // Twilio posts here after <Pay> completes — with a token, never raw card data
+  // ─── Payment Done ──────────────────────────────────────────────────────────
+  // Twilio calls here (via REST redirect) after payment completes.
+  app.post("/voice/payment-done", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    const result = pendingPaymentResults.get(callSid);
+    pendingPaymentResults.delete(callSid);
+
+    if (result?.success) {
+      playPrompt(twiml, req, "payment_success_prefix.mp3", "Payment successful! You now have");
+      twiml.say(`${result.packageLabel} of access. Your card has been charged ${result.priceLabel}.`);
+      if (result.bonusMinutes && result.bonusMinutes > 0 && result.totalMinutes) {
+        playPrompt(twiml, req, "payment_success_bonus.mp3",
+          `Plus your first purchase bonus doubles your time — enjoy ${minutesToDurationLabel(result.totalMinutes)} total!`
+        );
+      }
+      playPrompt(twiml, req, "payment_success_suffix.mp3", "Thank you for joining. Returning to the main menu.");
+      try {
+        const motdCfg = await getMembershipSettingsCached();
+        if (motdCfg.motdPostPurchaseEnabled && motdCfg.motdPostPurchaseText) {
+          playPrompt(twiml, req, "motd_post_purchase.mp3", motdCfg.motdPostPurchaseText);
+        }
+      } catch (err) {
+        console.error("[voice] payment-done: motd error:", err);
+      }
+    } else {
+      const errCode = result?.errorCode;
+      if (errCode === "22001") {
+        playPrompt(twiml, req, "payment_declined.mp3", "Your card was declined. Please check your details and try again later.");
+      } else if (errCode === "activation") {
+        playPrompt(twiml, req, "payment_activation_error.mp3", "Your payment was received but there was an error activating your membership. Please contact support.");
+      } else {
+        playPrompt(twiml, req, "payment_failed.mp3", "We were unable to process your payment at this time. Please contact customer support.");
+      }
+    }
+
+    twiml.redirect("/voice/main-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Payment Timeout ───────────────────────────────────────────────────────
+  // Called if the 120-second <Pause> in run-payment expires with no result.
+  app.post("/voice/payment-timeout", (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+    paymentSessions.delete(callSid);
+    pendingPaymentResults.delete(callSid);
+    console.warn(`[voice] payment-timeout: callSid=${callSid}`);
+    playPrompt(twiml, req, "payment_failed.mp3", "Your payment session timed out. Please try again.");
+    twiml.redirect("/voice/main-menu");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 15. Payment Result Handler (legacy fallback) ─────────────────────────
+  // Kept as a fallback — primary path now goes through payment-status → payment-done
   app.post("/voice/handle-payment-complete", async (req, res) => {
     const twiml = new VoiceResponse();
     const callSid = req.body?.CallSid as string;
