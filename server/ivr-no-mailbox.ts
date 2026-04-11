@@ -4871,6 +4871,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         timeout: 10,
       });
       playPrompt(gather, req, "review_your_message.mp3", "Here is your recorded message.");
+      gather.pause({ length: 2 });
       safePlayRecording(gather, recordingUrl, req, "");
       gather.say("Press 1 to send. Press 2 to cancel.");
       // No input → cancel

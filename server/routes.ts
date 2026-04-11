@@ -202,12 +202,30 @@ export async function registerRoutes(
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${sid}.mp3`;
     const authHeader = "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64");
 
-    try {
-      const upstream = await fetch(twilioUrl, { headers: { Authorization: authHeader } });
-      console.log(`[audio] Twilio responded ${upstream.status} for SID=${sid}`);
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const maxAttempts = 6;
 
-      if (!upstream.ok) {
+    try {
+      let upstream: Response | null = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        upstream = await fetch(twilioUrl, { headers: { Authorization: authHeader } });
+        console.log(`[audio] Twilio responded ${upstream.status} for SID=${sid} (attempt ${attempt}/${maxAttempts})`);
+
+        if (upstream.ok) break;
+
+        // Recording may not be ready yet — retry with backoff for transient errors
+        if ((upstream.status === 404 || upstream.status === 503) && attempt < maxAttempts) {
+          const delay = attempt * 2000;
+          console.log(`[audio] Recording not ready (${upstream.status}), retrying in ${delay}ms...`);
+          await sleep(delay);
+          continue;
+        }
+
         return res.status(upstream.status).send("Failed to fetch recording from Twilio");
+      }
+
+      if (!upstream || !upstream.ok) {
+        return res.status(503).send("Recording not available after retries");
       }
 
       res.setHeader("Content-Type", "audio/mpeg");
