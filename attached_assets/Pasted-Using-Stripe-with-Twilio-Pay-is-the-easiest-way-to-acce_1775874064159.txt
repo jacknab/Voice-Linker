@@ -1,0 +1,25 @@
+Using Stripe with Twilio <Pay> is the easiest way to accept payments and create recurring charges over the phone. Connect phone payments with your web and in-person experience and manage your payments from one place with Stripe.
+
+With flexible APIs and a powerful payments infrastructure, companies can quickly build new product experiences. Stripe handles all the complexities of payments, such as maintaining global compliance and regulatory obligations while constantly maintaining and improving payments technology for you.
+
+Today, millions of businesses—from new startups to publicly-listed companies including Salesforce, Amazon, and Facebook—use Stripe to accept payments and run complex financial operations from over 100 countries.
+
+Example Integration using Twilio's TwiML. Please note that some payment methods require additional data to be collected by customers before invoking <Pay>.
+
+CreditCard	ACH
+Creating a Reusable Token	<Pay paymentConnector="myconnector" action="https://myactionurl"><Parameter name="CustomerPhone" value="123-456-7890"/></Pay><br>This method accepts "CustomerPhone" as an optional <Parameter>. PII MTL: 120 DAYS	<Pay paymentConnector="myconnector" paymentMethod="ach-debit" action="https://myactionurl"><Parameter name="AVSName" value="firstname lastname"/><Parameter name="AVSCountry" value="US"/><Parameter name="AVSCurrency" value="USD"/></Pay> <br>You must provide following data<br> - Customer name to be collected and passed as "AVSName" in <Parameter><br> - Country where the account exists to be passed as "AVSCountry" in <Parameter><br> - Currency of the transaction to be passed as "AVSCurrency" in <Parameter>
+Creating a One Time Token	<Pay paymentConnector="myconnector" tokenType="one-time" action="https://myactionurl"/>	<Pay  paymentConnector="myconnector" paymentMethod="ach-debit" tokenType="one-time" description="pizza" action="https://myactionurl"><Parameter name="AVSName" value="firstname lastname"/><Parameter name="AVSCountry" value="US"/><Parameter name="AVSCurrency" value="USD"/></Pay> <br>You must provide following data<br> - Customer name to be collected and passed as "AVSName" in <Parameter><br> - Country where the account exists to be passed as "AVSCountry" in <Parameter>.<br> - Currency of the transaction to be passed as "AVSCurrency" in <Parameter>
+Creating a Charge	<Pay paymentConnector="myconnector" chargeAmount="10.0" description="pizza" action="https://myactionurl"/>	Not supported
+Have questions or want to learn more? Contact us
+
+Payments: Online payments platform
+Stripe’s integrated payments platform lets you accept payments for almost any business model. Increase conversion by accepting the payment methods your customers prefer, and benefit from a global platform with security and compliance built in.
+
+Terminal: In-person payments
+Stripe Terminal lets you extend your phone and online presence into the physical world using modern developer tools. With Stripe Terminal, you can build a custom in-person checkout using a set of pre-certified card readers, JavaScript and mobile SDKs, and cloud-based fleet management.
+
+Billing: Subscriptions and invoicing
+Stripe Billing is a subscriptions and invoicing platform built on top of Stripe Payments. The flexible API supports custom recurring business models and makes it easy to experiment with pricing, while smart recovery tools help to reduce churn and streamline your billing operations.
+
+Radar: Fraud Prevention
+Radar is a set of fraud prevention tools built into the Stripe payments platform. Radar is powered by adaptive machine learning algorithms that learn from Stripe's global network of businesses to help block fraud, and offers tools and analytics to simplify fraud management through the Dashboard.
