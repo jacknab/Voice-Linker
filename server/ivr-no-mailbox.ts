@@ -5257,34 +5257,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      // Pre-flight: verify the Twilio Pay connector exists and is reachable.
-      const accountSid = process.env.TWILIO_ACCOUNT_SID;
-      const authToken = process.env.TWILIO_AUTH_TOKEN;
-      if (accountSid && authToken) {
-        try {
-          const authHeader = "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64");
-          const connectorCheckUrl = `https://flex-api.twilio.com/v1/Connectors`;
-          const connectorRes = await fetch(connectorCheckUrl, { headers: { Authorization: authHeader } });
-          if (!connectorRes.ok) {
-            console.error(`[voice] run-payment: Twilio Pay connector check failed — HTTP ${connectorRes.status}. Twilio Pay may not be enabled on this account.`);
-            playPrompt(twiml, req, "payment_failed.mp3",
-              "Our payment system is temporarily unavailable. Please contact customer support to complete your purchase.");
-            twiml.redirect("/voice/main-menu");
-            res.type("text/xml");
-            return res.send(twiml.toString());
-          }
-          const connectorData = await connectorRes.json() as any;
-          const connectors: any[] = connectorData?.flex_flow_sid ? [] : (connectorData?.connectors ?? []);
-          const connectorExists = connectors.some((c: any) => c.unique_name === connectorName || c.friendly_name === connectorName);
-          if (!connectorExists && connectors.length > 0) {
-            console.warn(`[voice] run-payment: connector "${connectorName}" not found in Twilio Pay connectors list. Available: ${connectors.map((c: any) => c.unique_name).join(", ")}`);
-          }
-        } catch (connectorErr) {
-          // Non-fatal — log and proceed; Twilio will report the error via handle-payment-complete
-          console.warn(`[voice] run-payment: connector pre-flight check error (proceeding):`, connectorErr);
-        }
-      }
-
       const chargeAmount = (session.packagePriceCents / 100).toFixed(2);
       console.log(`[voice] run-payment: launching <Pay> connector=${connectorName} amount=$${chargeAmount} callSid=${callSid}`);
 
