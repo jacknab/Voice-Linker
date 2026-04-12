@@ -151,9 +151,9 @@ interface CallerBrowseState {
   // Multi-region linking support
   linkedRegionSnapshots: { regionId: string; regionName: string; knownUserIds: string[] }[];
   announcedLinkedCallerIds: string[]; // user IDs announced as "new caller from [city]"
-  // Origin announcement throttling: max 5 announcements per 25 greetings (every 5th greeting)
+  // Origin announcement throttling: max 5 random announcements per 25-greeting window
   greetingsPlayed: number;
-  originAnnouncementsPlayed: number;
+  windowAnnouncementsUsed: number;
 }
 const callerBrowseState = new Map<string, CallerBrowseState>();
 
@@ -3855,7 +3855,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             linkedRegionSnapshots,
             announcedLinkedCallerIds: [],
             greetingsPlayed: 0,
-            originAnnouncementsPlayed: 0,
+            windowAnnouncementsUsed: 0,
           };
           // Only cache the state if the queue is non-empty.
           // If empty (seeds may be in an inactive phase), skip caching so the
@@ -4019,18 +4019,24 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             timeout: 10,
           });
 
-          // Announce caller origin only every 5th greeting, capped at 5 total per session.
-          const ANNOUNCE_EVERY_N = 5;
-          const ANNOUNCE_MAX = 5;
-          const shouldAnnounceOrigin =
-            profile.isNearby &&
-            state.originAnnouncementsPlayed < ANNOUNCE_MAX &&
-            state.greetingsPlayed > 0 &&
-            state.greetingsPlayed % ANNOUNCE_EVERY_N === 0;
+          // Announce caller origin randomly: max 5 injections per 25-greeting window.
+          // Uses a shrinking probability so budget is consumed at unpredictable positions.
+          const WINDOW_SIZE = 25;
+          const MAX_PER_WINDOW = 5;
+          const posInWindow = state.greetingsPlayed % WINDOW_SIZE;
+          if (posInWindow === 0 && state.greetingsPlayed > 0) {
+            state.windowAnnouncementsUsed = 0; // start of a new window — reset budget
+          }
+          const remainingInWindow = WINDOW_SIZE - posInWindow;
+          const remainingBudget = MAX_PER_WINDOW - state.windowAnnouncementsUsed;
+          const announceProbability = profile.isNearby && remainingBudget > 0
+            ? remainingBudget / remainingInWindow
+            : 0;
+          const shouldAnnounceOrigin = Math.random() < announceProbability;
 
           if (shouldAnnounceOrigin) {
             playPrompt(profileGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
-            state.originAnnouncementsPlayed++;
+            state.windowAnnouncementsUsed++;
           }
 
           state.greetingsPlayed++;

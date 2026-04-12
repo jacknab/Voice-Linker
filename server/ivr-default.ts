@@ -164,9 +164,9 @@ interface CallerBrowseState {
   // Multi-region linking support
   linkedRegionSnapshots: { regionId: string; regionName: string; knownUserIds: string[] }[];
   announcedLinkedCallerIds: string[]; // user IDs announced as "new caller from [city]"
-  // Origin announcement throttling: max 5 announcements per 25 greetings (every 5th greeting)
+  // Origin announcement throttling: max 5 random announcements per 25-greeting window
   greetingsPlayed: number;
-  originAnnouncementsPlayed: number;
+  windowAnnouncementsUsed: number;
 }
 const callerBrowseState = new Map<string, CallerBrowseState>();
 
@@ -3928,7 +3928,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             linkedRegionSnapshots,
             announcedLinkedCallerIds: [],
             greetingsPlayed: 0,
-            originAnnouncementsPlayed: 0,
+            windowAnnouncementsUsed: 0,
           };
           // Only cache the state if the queue is non-empty.
           // If empty (seeds may be in an inactive phase), skip caching so the
@@ -4147,14 +4147,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             timeout: 10,
           });
 
-          // Announce caller origin ("closest to you" / "from [city]") only every 5th greeting,
-          // capped at 5 announcements total per session (max 5 in a 25-greeting ratio).
-          const ANNOUNCE_EVERY_N = 5;
-          const ANNOUNCE_MAX = 5;
-          const shouldAnnounceOrigin =
-            state.originAnnouncementsPlayed < ANNOUNCE_MAX &&
-            state.greetingsPlayed > 0 &&
-            state.greetingsPlayed % ANNOUNCE_EVERY_N === 0;
+          // Announce caller origin ("closest to you" / "from [city]") randomly:
+          // max 5 injections per 25-greeting window, distributed at random positions.
+          // Uses a shrinking probability so budget is always fully consumed naturally.
+          const WINDOW_SIZE = 25;
+          const MAX_PER_WINDOW = 5;
+          const posInWindow = state.greetingsPlayed % WINDOW_SIZE;
+          if (posInWindow === 0 && state.greetingsPlayed > 0) {
+            state.windowAnnouncementsUsed = 0; // start of a new window — reset budget
+          }
+          const remainingInWindow = WINDOW_SIZE - posInWindow;
+          const remainingBudget = MAX_PER_WINDOW - state.windowAnnouncementsUsed;
+          const announceProbability = remainingBudget > 0 ? remainingBudget / remainingInWindow : 0;
+          const shouldAnnounceOrigin = Math.random() < announceProbability;
 
           if (shouldAnnounceOrigin) {
             if (!profile.regionId || profile.regionId === state.callerRegionId) {
@@ -4162,7 +4167,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             } else if (profile.regionName) {
               profileGather.say(`New caller from ${profile.regionName}.`);
             }
-            state.originAnnouncementsPlayed++;
+            state.windowAnnouncementsUsed++;
           }
 
           state.greetingsPlayed++;
