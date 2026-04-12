@@ -3972,10 +3972,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         : null;
 
       // Count available profiles: active callers + admin-uploaded greetings (region-scoped)
-      // On MW systems, only count opposite-gender profiles scoped to the MW siteCategory
+      // On MW systems, only count opposite-gender profiles scoped to the MW siteCategory.
+      // If the caller already has an active browse session (queue cached), skip the count
+      // check — seeds may cycle off briefly but the queue should keep playing.
       const browseSiteCategory = browseSiteConf.siteCategory ?? "MM";
-      const availableCount = await storage.getAvailableProfileCount(user.id, regionId, browseCallerGender, browseSiteCategory);
-      console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, callerGender=${browseCallerGender}, availableProfiles=${availableCount}`);
+      const hasActiveBrowseSession = callerBrowseState.has(callSid) &&
+        (callerBrowseState.get(callSid)!.queue.length > 0);
+      const availableCount = hasActiveBrowseSession
+        ? 1  // session active — bypass gate, queue handles empty state itself
+        : await storage.getAvailableProfileCount(user.id, regionId, browseCallerGender, browseSiteCategory);
+      console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, callerGender=${browseCallerGender}, availableProfiles=${availableCount}, sessionActive=${hasActiveBrowseSession}`);
 
       if (availableCount === 0) {
         playPrompt(twiml, req, "no_profiles.mp3", "There are no profiles available right now. Please call back later.");

@@ -674,10 +674,14 @@ export class DatabaseStorage implements IStorage {
       .from(activeCalls)
       .where(realCallerCondition);
 
-    // Virtual callers (seed sessions) — scoped to the same region when one is provided
-    // so the same seed profile doesn't appear simultaneously in two connected regions.
+    // Virtual callers (seed sessions) — scoped to the same region when one is provided.
+    // Seeds with NULL regionId are treated as global (visible in all regions), matching
+    // the getAllActiveProfiles behaviour so the count gate agrees with the queue builder.
     const virtualCondition = regionId
-      ? and(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`), eq(activeCalls.regionId, regionId))
+      ? and(
+          like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
+          or(eq(activeCalls.regionId, regionId), isNull(activeCalls.regionId))
+        )
       : like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`);
     const virtualUserIds = await db.select({ userId: activeCalls.userId })
       .from(activeCalls)
