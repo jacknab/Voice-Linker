@@ -3883,7 +3883,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           goLiveTotal += await storage.getActiveCallerCount(user.id, lr.id, goLiveCallerGender);
         }
       }
-      playCallerCount(twiml, req, goLiveTotal);
+      // Caller count is announced by browse-profiles at index 1 — do not duplicate here.
 
       // In per-minute billing, notify the caller that their time is now running.
       // In per-day billing or free mode, time is not deducted per-call, so skip this announcement.
@@ -4300,7 +4300,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
           playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-          twiml.redirect("/voice/main-menu");
+          twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profile.userId)}&attempt=1`);
         }
       }
     } catch (error) {
@@ -4806,6 +4806,34 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       console.error("[voice] /voice/handle-profile-menu error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the main menu.");
       twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Connector Idle Timeout ──────────────────────────────────────────────
+  // Fires when a caller makes no selection after a greeting + options prompt.
+  // attempt=1 → repeat the menu once more
+  // attempt=2 → play goodbye message and disconnect
+  app.post("/voice/connector-timeout", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const profileUserId = (req.query.profileUserId as string) || "";
+    const attempt = parseInt((req.query.attempt as string) || "1", 10);
+
+    if (attempt >= 2) {
+      playPrompt(twiml, req, "connector_idle_goodbye.mp3",
+        "You're apparently having issues right now, or have fallen asleep. Sweet dreams.");
+      twiml.hangup();
+    } else {
+      const repeatGather = twiml.gather({
+        numDigits: 1,
+        action: `/voice/handle-profile-menu?profileUserId=${encodeURIComponent(profileUserId)}`,
+        timeout: 10,
+      });
+      playPrompt(repeatGather, req, "profile_options.mp3",
+        "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+      twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profileUserId)}&attempt=2`);
     }
 
     res.type("text/xml");
