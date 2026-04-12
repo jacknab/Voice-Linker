@@ -71,6 +71,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getOrCreateUser(phoneNumber: string): Promise<User>;
   deleteUser(id: string): Promise<void>;
+  getLastCallTimestamp(fromPhoneNumber: string, excludeCallSid: string): Promise<Date | null>;
 
   getProfile(userId: string): Promise<Profile | undefined>;
   upsertProfile(profile: InsertProfile): Promise<Profile>;
@@ -428,6 +429,16 @@ export class DatabaseStorage implements IStorage {
     // mailboxes has ON DELETE CASCADE so it goes with the user, but delete explicitly for safety
     await db.delete(mailboxes).where(eq(mailboxes.userId, id));
     await db.delete(users).where(eq(users.id, id));
+  }
+
+  async getLastCallTimestamp(fromPhoneNumber: string, excludeCallSid: string): Promise<Date | null> {
+    const [log] = await db
+      .select({ startedAt: callLogs.startedAt })
+      .from(callLogs)
+      .where(and(eq(callLogs.fromPhoneNumber, fromPhoneNumber), not(eq(callLogs.callSid, excludeCallSid))))
+      .orderBy(desc(callLogs.startedAt))
+      .limit(1);
+    return log?.startedAt ?? null;
   }
 
   async getProfile(userId: string): Promise<Profile | undefined> {

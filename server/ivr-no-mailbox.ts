@@ -3,7 +3,7 @@ import { storage } from "./storage";
 import twilio from "twilio";
 import path from "path";
 import fs from "fs";
-import { generateTTS, getVoiceIdForFolder } from "./elevenlabs";
+import { generateTTS, getVoiceIdForFolder, getVoiceIdForRoger } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
@@ -1247,8 +1247,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       if (!user.membershipTier) {
-        // Brand new — never had an account, offer the free trial
-        twiml.redirect("/voice/free-trial-offer");
+        // Brand new — Roger will auto-activate the free trial and welcome them
+        twiml.redirect("/voice/roger-greeting");
       } else if (remainingSeconds <= 0) {
         // Access fully expired
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
@@ -1265,11 +1265,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           return res.send(twiml.toString());
         }
 
-        // Has time — announce remaining time to all callers at entry
-        playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
-        callTimeAnnounced.add(callSid); // prevent main-menu from repeating it
-        const siteConf = await getSiteSettingsCached();
-        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
+        // Returning caller with time — Roger greets them, then time is announced
+        twiml.redirect("/voice/roger-greeting");
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check error:", error);
@@ -1281,7 +1278,95 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
-  // ─── 1c. Free Trial Offer ─────────────────────────────────────────────────
+  // ─── 1c. Roger Greeting ───────────────────────────────────────────────────
+  // Personalized Roger welcome for every caller who passes entry-check.
+  // New callers: auto-activates their free trial, Roger explains the system.
+  // Returning callers: Roger greets them based on how long since their last call.
+
+  function rogerWelcomeText(isNewCaller: boolean, lastCallDate: Date | null): string {
+    if (isNewCaller || !lastCallDate) {
+      return `[warmly] Hi, this is the Male Box. My name is Roger — your cruise director. [chuckles] Oh, look at you... a first time caller. I see. [warmly] Well in that case — let me set you up with some free time so you can check out what we have going on in here. [cheerfully] Welcome to the party, honey.`;
+    }
+    const daysSince = Math.floor((Date.now() - lastCallDate.getTime()) / 86_400_000);
+    if (daysSince < 1) {
+      return `[warmly] Welcome back! Back again the same day? [playfully] I love the commitment. The boys are still here — let us get you in.`;
+    }
+    if (daysSince <= 3) {
+      return `[warmly] Hey, welcome back. [playfully] The boys have been asking about you. Well... one of them might have been. Good to see you again.`;
+    }
+    if (daysSince <= 14) {
+      return `[warmly] Welcome back! It has been a few days. [mischievously] We were starting to wonder if you found someone. Either way — glad you are back. Let us see what is going on tonight.`;
+    }
+    if (daysSince <= 30) {
+      return `[chuckles] Well, well, well. Look who remembered we exist. [warmly] I am kidding, relax. Welcome back. It has been a couple of weeks — let us see what is happening tonight.`;
+    }
+    return `[gasps] Oh my God. It has been a while, honey. [playfully] I was starting to think you found love on another chat line. [warmly] No hard feelings. Welcome back — we missed you.`;
+  }
+
+  function stripEmotionTags(text: string): string {
+    return text.replace(/\[[\w\s]+\]/g, " ").replace(/\s{2,}/g, " ").trim();
+  }
+
+  app.post("/voice/roger-greeting", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const isNewCaller = !user.membershipTier;
+      const lastCallDate = await storage.getLastCallTimestamp(fromNumber, callSid);
+      const script = rogerWelcomeText(isNewCaller, lastCallDate);
+      const filename = `roger_welcome_${callSid}.mp3`;
+      const filepath = path.join(UPLOADS_DIR, filename);
+
+      let audioReady = false;
+      try {
+        await generateTTS(script, filename, undefined, getVoiceIdForRoger(), "eleven_v3");
+        audioReady = fs.existsSync(filepath);
+      } catch (ttsErr) {
+        console.warn(`[roger-greeting] ElevenLabs v3 failed, falling back to twiml.say — ${ttsErr}`);
+      }
+
+      if (audioReady) {
+        twiml.play(`${baseUrl(req)}/uploads/${filename}`);
+        setTimeout(() => { try { if (fs.existsSync(filepath)) fs.unlinkSync(filepath); } catch {} }, 3 * 60 * 1000);
+      } else {
+        twiml.say({ voice: "alice" }, stripEmotionTags(script));
+      }
+
+      if (isNewCaller) {
+        const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
+        await storage.updateUserMembership(user.id, {
+          membershipTier: "free_trial",
+          remainingSeconds: freeTrialMinutes * 60,
+        });
+        await storage.getOrCreateMailbox(user.id);
+        console.log(`[roger-greeting] Auto-activated free trial — ${freeTrialMinutes} min for userId=${user.id}`);
+        playTimeRemaining(twiml, req, freeTrialMinutes);
+        playPrompt(twiml, req, "free_trial_terms.mp3",
+          "Your free trial will expire in seven days and it must be used from this phone number.");
+        callTimeAnnounced.add(callSid);
+      } else {
+        const remainingSeconds = user.remainingSeconds ?? 0;
+        if (remainingSeconds > 0) {
+          playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
+          callTimeAnnounced.add(callSid);
+        }
+      }
+
+      const siteConf = await getSiteSettingsCached();
+      twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
+    } catch (error) {
+      console.error("[voice] /voice/roger-greeting error:", error);
+      twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 1d. Free Trial Offer (legacy — kept for direct URL references) ────────
   // Shown to brand-new callers who have no account yet.
   // Press 1 = activate trial now. Press # = save for later (routed to main menu). Anything else = hangup.
   app.post("/voice/free-trial-offer", async (req, res) => {
