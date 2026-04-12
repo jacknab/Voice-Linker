@@ -1017,15 +1017,93 @@ The `region_links` table supports a many-to-many chain. The dynamic linked-regio
 
 ## 16. Regional Greeting Queue
 
-The profile browse queue is built per-region, not system-wide.
+This chapter describes exactly how the system selects, orders, and plays voice profile greetings to a caller who enters the browse section.
 
-- Profiles are filtered to only those associated with the caller's dialed region
-- Queue is shuffled on each call session
-- Caller index is tracked in memory (`CallerBrowseState`) and survives keypad navigation
-- When a new caller goes live and joins the queue mid-session, they are spliced at the correct position
-- After all local profiles are heard, the linked-region overflow mechanism engages (see Section 15)
+### Queue Built Once at Entry
 
-Caller count announcements (e.g. "There are 5 callers on the line") aggregate the local region plus all linked regions to give an accurate total.
+When a caller enters the browse section for the first time in a call session, the system builds a personalized queue and stores it in memory (keyed by Twilio `CallSid`). It does not pick a random greeting on each step — the full list is assembled upfront, then played through sequentially.
+
+**Queue build steps:**
+
+1. Fetch all currently active profiles from the `active_calls` and `profiles` tables for the caller's region
+2. Filter by gender in MW mode (callers only hear the opposite gender)
+3. Remove any profiles from callers the listener has blocked, or who have blocked the listener
+4. Include both real callers and virtual (simulator) callers — they appear identically
+5. Order the entire list using `ORDER BY RANDOM()` at the database level, so every caller gets a unique shuffled sequence
+6. Snapshot nearby linked-region user IDs for later new-caller detection
+
+The resulting ordered list is stored in `CallerBrowseState` alongside a current `index`, a `hasWrapped` flag, and announcement throttle counters.
+
+### Playback Advances Sequentially
+
+Each time the caller finishes hearing a greeting (or presses a key to skip), the system increments the index:
+
+```
+state.index = (state.index + 1) % state.queue.length
+```
+
+When the index wraps back to 0 (all profiles have been heard once), `state.hasWrapped` is set to `true`. At that point, the system redirects to the linked-region overflow offer instead of looping indefinitely (see Section 15).
+
+### What Plays for Each Greeting Slot
+
+Each slot is delivered inside a Twilio `<Gather>` block so the caller can press a key at any point to skip or interact. The sequence within a single slot is:
+
+| Step | Content | Condition |
+|---|---|---|
+| 1 | "New caller closest to you" or "New caller from [City]" | Random — see Origin Announcement Throttling below |
+| 2 | Caller's recorded name | Only if `nameRecordingUrl` is set |
+| 3 | Caller's main greeting recording | Always present (null profiles are filtered out before queue build) |
+| 4 | Options prompt (`profile_options.mp3`) | Always plays — "Press 1 to send a message, Press 2 to connect live…" |
+
+If a `<Play>` URL returns an error (e.g. a Twilio recording that was deleted), the audio proxy at `/audio/:sid` returns a 1-second silent WAV with HTTP 200 so the call is never dropped.
+
+### Origin Announcement Throttling
+
+To keep the browse experience natural, the "New caller closest to you" / "New caller from [City]" interjections are injected randomly rather than on a fixed schedule.
+
+**Rules:**
+- Maximum **5 injections per 25-greeting window**
+- Injections are placed at **completely random positions** within the window — no fixed interval
+- The probability for each slot is calculated as:
+
+```
+probability = remaining_budget / remaining_slots_in_window
+```
+
+For example: at the start of a window with budget 5 and 25 slots remaining, each slot has a 20% chance. If 2 fire early, by slot 15 the remaining probability adjusts so the budget is still likely consumed naturally by the end of the window.
+
+- At the boundary of each 25-greeting window, the window budget resets to 5
+- In `ivr-no-mailbox.ts`, the injection only fires for nearby callers (`profile.isNearby === true`); in `ivr-default.ts`, it fires for any profile, using the region comparison to choose "closest to you" vs. "from [City]"
+
+**State fields tracked per session:**
+
+| Field | Purpose |
+|---|---|
+| `greetingsPlayed` | Total greetings played in this browse session |
+| `windowAnnouncementsUsed` | How many injections have fired in the current 25-greeting window |
+
+### Live Injection of New Callers
+
+The queue is a snapshot of who was active when the caller entered browse. New callers who join *after* the queue was built are detected in real time on each queue advance step.
+
+**Detection:** The system compares the live `active_calls` table against `state.localUserIds` (the set of user IDs in the original snapshot). Any user ID present in the live table but not in the snapshot is considered "new."
+
+**Handling:** For each newly detected caller:
+- With 10% probability (`NEW_CALLER_ANNOUNCE_PROBABILITY = 0.1`): immediately interrupt the current position with a spoken "New caller closest to you" alert, then play their greeting next
+- Otherwise: silently splice their profile into the queue at the current index so their greeting plays naturally in the upcoming sequence without an explicit announcement
+
+**Linked-region new callers** (callers from linked nearby regions) are tracked separately in `state.announcedLinkedCallerIds` and use the same splice-or-announce logic.
+
+### Multi-Region Expansion
+
+Once `state.hasWrapped` is `true` (all local profiles heard), the caller is offered linked regions:
+
+- The system reads from `region_links` to find available nearby regions
+- Up to 3 regions are listed as numbered options ("Press 1 for Boston, Press 2 for Providence…")
+- On selection, profiles from that region are loaded into the queue and playback continues
+- "Press the last digit to start over" restarts the local queue from a fresh shuffle
+
+Caller count announcements ("There are N callers on the line") always aggregate the local region plus all currently linked regions to show an accurate total.
 
 ---
 
