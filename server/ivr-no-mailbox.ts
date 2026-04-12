@@ -4431,9 +4431,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           twiml.redirect("/voice/browse-profiles");
         } else {
           const user = await getOrCreateUser(fromNumber);
+          const liveConnectSettings = await getMembershipSettingsCached();
+          const liveConnectFreeMode = liveConnectSettings.freeMode === true;
 
-          // 1. Check initiator has ≥ 5 minutes (300 seconds) remaining
-          if ((user.remainingSeconds ?? 0) < 300) {
+          // 1. Check initiator has ≥ 5 minutes (300 seconds) remaining — skipped in free mode
+          if (!liveConnectFreeMode && (user.remainingSeconds ?? 0) < 300) {
             playPrompt(twiml, req, "live_connect_no_minutes.mp3",
               "You need at least 5 minutes remaining on your membership to connect live. Please add more time and try again.");
             twiml.redirect("/voice/browse-profiles");
@@ -4461,9 +4463,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             return res.send(twiml.toString());
           }
 
-          // 4. Check target has ≥ 5 minutes (300 seconds) remaining
+          // 4. Check target has ≥ 5 minutes (300 seconds) remaining — skipped in free mode
           const targetUser = await storage.getUserById(profileUserId);
-          if (!targetUser || (targetUser.remainingSeconds ?? 0) < 300) {
+          if (!liveConnectFreeMode && (!targetUser || (targetUser.remainingSeconds ?? 0) < 300)) {
             playPrompt(twiml, req, "live_connect_unavailable.mp3",
               "That caller does not have enough time remaining for a live connection.");
             twiml.redirect("/voice/browse-profiles");
