@@ -54,6 +54,7 @@ export class WebhookHandlers {
               membershipTier: planName.toLowerCase(),
               remainingSeconds: currentSeconds + addedSeconds,
               membershipStartedAt: phoneUser.membershipStartedAt ?? new Date(),
+              membershipPurchasedAt: new Date(),
             });
             console.log(`[stripe] webhook: Applied ${planName} to phone=${linkedPhone}, added ${addedSeconds}s`);
           }

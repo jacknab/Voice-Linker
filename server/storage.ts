@@ -120,7 +120,7 @@ export interface IStorage {
   }[]>;
   adminUnblockById(id: string): Promise<void>;
 
-  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string | null; membershipStartedAt?: Date | null }): Promise<User>;
+  updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string | null; membershipStartedAt?: Date | null; membershipPurchasedAt?: Date | null }): Promise<User>;
   deductSeconds(userId: string, seconds: number): Promise<User>;
   deductOneDayFromAllActiveMembers(): Promise<number>;
   getZipEntryByCode(code: string): Promise<ZipCode | undefined>;
@@ -897,7 +897,7 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string | null; membershipStartedAt?: Date | null }): Promise<User> {
+  async updateUserMembership(userId: string, data: { stripeCustomerId?: string; membershipTier?: string; remainingSeconds?: number; membershipNumber?: string; membershipPin?: string | null; membershipStartedAt?: Date | null; membershipPurchasedAt?: Date | null }): Promise<User> {
     // When a membership tier is being activated, record when it started.
     // This timestamp drives the 24-hour grace period for per_day billing so a member
     // who buys late at night isn't charged their first day deduction minutes later.

@@ -51,6 +51,9 @@ export const users = pgTable("users", {
   // Set when a membership is first activated; used by per_day billing to enforce
   // the 24-hour grace period before the first nightly deduction.
   membershipStartedAt: timestamp("membership_started_at"),
+  // Set (and reset) on every paid purchase. Used by per_24h billing mode to compute
+  // the remaining hours in the 24-hour access window from the purchase timestamp.
+  membershipPurchasedAt: timestamp("membership_purchased_at"),
   // Moderation status: "active" | "restricted" (no go-live) | "banned" (rejected at entry)
   accountStatus: text("account_status").notNull().default("active"),
   // Auto-mod recording rejection: set when a greeting/ad is rejected; cleared on re-record

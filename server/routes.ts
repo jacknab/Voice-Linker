@@ -1792,6 +1792,7 @@ export async function registerRoutes(
             membershipTier: planName.toLowerCase(),
             remainingSeconds: currentSeconds + addedSeconds,
             membershipStartedAt: phoneUser.membershipStartedAt ?? new Date(),
+            membershipPurchasedAt: new Date(),
           });
           console.log(`[paypal] IPN applied ${planName} to phone=${linkedPhone}, txn=${txnId}, added ${addedSeconds}s`);
         } else {
@@ -2000,6 +2001,7 @@ export async function registerRoutes(
               membershipTier: planName.toLowerCase(),
               remainingSeconds: currentSeconds + addedSeconds,
               membershipStartedAt: phoneUser.membershipStartedAt ?? new Date(),
+              membershipPurchasedAt: new Date(),
             });
             console.log(`[stripe] Applied ${planName} membership to phone=${linkedPhone}, added ${addedSeconds}s`);
           }

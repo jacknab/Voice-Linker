@@ -102,6 +102,19 @@ function playTimeRemaining(
     totalMinutes === 1 ? "minute remaining." : "minutes remaining.");
 }
 
+// Play the 24-hour pass expiry announcement using pre-recorded hourly audio files.
+// Files are named backdoor_expires_22hr.mp3, backdoor_expires_1hr.mp3, etc.
+// Falls back to TTS if the file hasn't been uploaded yet.
+function playBackdoorHoursRemaining(
+  twiml: { say: (text: string) => void; play: (url: string) => void },
+  req: Request,
+  hoursLeft: number
+): void {
+  const safeHours = Math.min(Math.max(Math.floor(hoursLeft), 0), 24);
+  playPrompt(twiml, req, `backdoor_expires_${safeHours}hr.mp3`,
+    `Your backdoor access pass expires in ${safeHours} hour${safeHours === 1 ? "" : "s"}.`);
+}
+
 // Play the active caller count announcement by chaining phrase + number audio files.
 function playCallerCount(
   twiml: { say: (text: string) => void; play: (url: string) => void },
@@ -522,7 +535,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // In per_day mode no call-time deductions are made — billing is handled nightly.
   async function syncBilling(callSid: string): Promise<void> {
     const settings = await getMembershipSettingsCached();
-    if (settings.billingMode === "per_day" || isFreeModeActive(settings)) return;
+    if (settings.billingMode === "per_day" || settings.billingMode === "per_24h" || isFreeModeActive(settings)) return;
     const checkpoint = billingCheckpoints.get(callSid);
     if (!checkpoint) return;
     const now = Date.now();
@@ -552,7 +565,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // In per_day mode, clears the checkpoint without any deduction.
   async function finalizeCallBilling(callSid: string): Promise<void> {
     const { billingMode } = await getMembershipSettingsCached();
-    if (billingMode === "per_day") {
+    if (billingMode === "per_day" || billingMode === "per_24h") {
       billingCheckpoints.delete(callSid);
       return;
     }
@@ -635,11 +648,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const client = twilio(accountSid, authToken);
 
         const tickSeconds = LIVE_TICK_MS / 1000;
-        // In per_day mode or free mode, calls are free — read balance without deducting.
+        // In per_day, per_24h, or free mode, calls are free — read balance without deducting.
         const liveSettings = await getMembershipSettingsCached();
         let initiatorUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
         let inviteeUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
-        if (liveSettings.billingMode === "per_day" || isFreeModeActive(liveSettings)) {
+        if (liveSettings.billingMode === "per_day" || liveSettings.billingMode === "per_24h" || isFreeModeActive(liveSettings)) {
           const [iu, vv] = await Promise.all([
             storage.getUserById(s.initiatorUserId),
             storage.getUserById(s.inviteeUserId),
@@ -1303,8 +1316,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else if (!user.membershipTier) {
         // Brand new — Roger will auto-activate the free trial and welcome them
         twiml.redirect("/voice/roger-greeting");
+      } else if (freeModeSettings.billingMode === "per_24h" && user.membershipTier !== "free_trial") {
+        // 24-hour pass: check wall-clock expiry from purchase timestamp
+        const purchasedAt = user.membershipPurchasedAt;
+        const hoursElapsed = purchasedAt ? (Date.now() - purchasedAt.getTime()) / 3_600_000 : 24;
+        if (hoursElapsed >= 24) {
+          playPrompt(twiml, req, "access_expired.mp3", "Your backdoor access pass has expired.");
+          twiml.redirect("/voice/membership-purchase");
+        } else {
+          twiml.redirect("/voice/roger-greeting");
+        }
       } else if (remainingSeconds <= 0) {
-        // Access fully expired
+        // Access fully expired (per_minute / per_day / free_trial with no time)
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         twiml.redirect("/voice/membership-purchase");
       } else {
@@ -1382,21 +1405,28 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.say({ voice: "alice" }, stripEmotionTags(script));
       }
 
+      const membershipConf = await getMembershipSettingsCached();
+
       // For new callers: auto-activate the free trial (no keypress required)
       if (isNewCaller) {
-        const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
         await storage.updateUserMembership(user.id, {
           membershipTier: "free_trial",
-          remainingSeconds: freeTrialMinutes * 60,
+          remainingSeconds: membershipConf.freeTrialMinutes * 60,
         });
         await storage.getOrCreateMailbox(user.id);
-        console.log(`[roger-greeting] Auto-activated free trial — ${freeTrialMinutes} min for userId=${user.id}`);
-        playTimeRemaining(twiml, req, freeTrialMinutes);
+        console.log(`[roger-greeting] Auto-activated free trial — ${membershipConf.freeTrialMinutes} min for userId=${user.id}`);
+        playTimeRemaining(twiml, req, membershipConf.freeTrialMinutes);
         playPrompt(twiml, req, "free_trial_terms.mp3",
           "Your free trial will expire in seven days and it must be used from this phone number.");
         callTimeAnnounced.add(callSid);
+      } else if (membershipConf.billingMode === "per_24h" && user.membershipTier !== "free_trial" && user.membershipPurchasedAt) {
+        // 24-hour pass: announce remaining hours (rounded down)
+        const hoursElapsed = (Date.now() - user.membershipPurchasedAt.getTime()) / 3_600_000;
+        const hoursLeft = Math.floor(24 - hoursElapsed);
+        playBackdoorHoursRemaining(twiml, req, hoursLeft);
+        callTimeAnnounced.add(callSid);
       } else {
-        // Returning caller — announce remaining time as before
+        // Returning caller — announce remaining time in minutes
         const remainingSeconds = user.remainingSeconds ?? 0;
         if (remainingSeconds > 0) {
           playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));

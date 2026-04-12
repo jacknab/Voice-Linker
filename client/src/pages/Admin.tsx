@@ -2261,7 +2261,7 @@ function MembershipsTab() {
   const [plan2Name, setPlan2Name] = useState(""); const [plan2Minutes, setPlan2Minutes] = useState(""); const [plan2Price, setPlan2Price] = useState("");
   const [plan3Name, setPlan3Name] = useState(""); const [plan3Minutes, setPlan3Minutes] = useState(""); const [plan3Price, setPlan3Price] = useState("");
   const [bonusPlanKey, setBonusPlanKey] = useState<string | null>(null);
-  const [billingMode, setBillingMode] = useState<"per_minute" | "per_day">("per_minute");
+  const [billingMode, setBillingMode] = useState<"per_minute" | "per_day" | "per_24h">("per_minute");
   const [paypalEmail, setPaypalEmail] = useState("");
   const [paypalSandbox, setPaypalSandbox] = useState(false);
   const [freeMode, setFreeMode] = useState(false);
@@ -2454,6 +2454,22 @@ function MembershipsTab() {
               </div>
             </div>
           </button>
+          <button
+            data-testid="btn-billing-mode-per-24h"
+            type="button"
+            onClick={() => setBillingMode("per_24h")}
+            className={`flex-1 flex items-start gap-3 px-4 py-3.5 rounded-lg border text-sm transition-colors ${billingMode === "per_24h" ? "border-purple-400 bg-purple-50" : "border-gray-200 bg-gray-50 hover:border-gray-300"}`}
+          >
+            <span className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${billingMode === "per_24h" ? "border-purple-400 bg-purple-400" : "border-gray-300"}`}>
+              {billingMode === "per_24h" && <span className="w-2 h-2 rounded-full bg-white" />}
+            </span>
+            <div className="text-left">
+              <div className={`font-mono font-bold tracking-widest uppercase text-xs ${billingMode === "per_24h" ? "text-purple-700" : "text-gray-500"}`}>24-Hour Pass</div>
+              <div className="text-xs font-normal text-gray-500 mt-1 leading-snug">
+                Access expires 24 hours after purchase, regardless of call time. Callers hear hours remaining at entry. No per-minute deduction.
+              </div>
+            </div>
+          </button>
         </div>
         {billingMode === "per_day" && (
           <div className="mt-3 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-xs leading-relaxed">
@@ -2461,6 +2477,11 @@ function MembershipsTab() {
             (1,440 min = 1 day, 14,400 min = 10 days, 43,200 min = 30 days). New members are protected by a
             24-hour grace period — the first deduction doesn't happen until a full day after purchase,
             even if they buy late at night.
+          </div>
+        )}
+        {billingMode === "per_24h" && (
+          <div className="mt-3 px-3 py-2.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 text-xs leading-relaxed">
+            <strong>How 24-hour pass works:</strong> Each purchase starts a 24-hour countdown from the moment of payment. Callers hear "Your backdoor access pass expires in X hours" when they call in. Upload 24 audio files named <code>backdoor_expires_1hr.mp3</code> through <code>backdoor_expires_24hr.mp3</code> via the Audio Manager for the best caller experience.
           </div>
         )}
       </div>
