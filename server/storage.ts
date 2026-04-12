@@ -70,6 +70,7 @@ export interface IStorage {
   getUserByMembershipNumber(membershipNumber: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getOrCreateUser(phoneNumber: string): Promise<User>;
+  deleteUser(id: string): Promise<void>;
 
   getProfile(userId: string): Promise<Profile | undefined>;
   upsertProfile(profile: InsertProfile): Promise<Profile>;
@@ -415,6 +416,18 @@ export class DatabaseStorage implements IStorage {
       user = await this.createUser({ phoneNumber });
     }
     return user;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(activeCalls).where(eq(activeCalls.userId, id));
+    await db.delete(messages).where(or(eq(messages.fromUserId, id), eq(messages.toUserId, id)));
+    await db.delete(blockedUsers).where(or(eq(blockedUsers.blockerId, id), eq(blockedUsers.blockedUserId, id)));
+    await db.delete(promoRedemptions).where(eq(promoRedemptions.userId, id));
+    await db.delete(moderationLogs).where(eq(moderationLogs.targetUserId, id));
+    await db.delete(profiles).where(eq(profiles.userId, id));
+    // mailboxes has ON DELETE CASCADE so it goes with the user, but delete explicitly for safety
+    await db.delete(mailboxes).where(eq(mailboxes.userId, id));
+    await db.delete(users).where(eq(users.id, id));
   }
 
   async getProfile(userId: string): Promise<Profile | undefined> {

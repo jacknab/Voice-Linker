@@ -611,6 +611,19 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/admin/callers/:id", async (req, res) => {
+    try {
+      const user = await storage.getUserById(req.params.id);
+      const label = user?.phoneNumber ?? req.params.id;
+      await storage.deleteUser(req.params.id);
+      logAudit("caller_deleted", { targetType: "caller", targetId: req.params.id, targetLabel: label });
+      res.status(204).send();
+    } catch (e) {
+      console.error("[admin] caller DELETE error:", e);
+      res.status(500).json({ message: "Failed to delete caller record" });
+    }
+  });
+
   // ── Moderation log viewer ───────────────────────────────────────────────────
   app.get("/api/admin/moderation-logs", async (req, res) => {
     try {

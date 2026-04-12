@@ -3750,6 +3750,7 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
   const [callHistoryPage, setCallHistoryPage] = useState(0);
   const [pinInput, setPinInput] = useState("");
   const [showPinInput, setShowPinInput] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data: detail, isLoading, refetch } = useQuery<CallerDetail>({
     queryKey: ["/api/admin/callers", callerId],
@@ -3803,6 +3804,16 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
     onError: () => toast({ title: "Failed to update account status", variant: "destructive" }),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => apiRequest("DELETE", `/api/admin/callers/${callerId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/callers"] });
+      toast({ title: "Caller record deleted" });
+      onBack();
+    },
+    onError: () => toast({ title: "Failed to delete caller record", variant: "destructive" }),
+  });
+
   // Build options for adding a new block — exclude self and already-blocked users
   const blockedIds = new Set(detail?.blockedByUser.map(b => b.phoneNumber) ?? []);
   const blockableCallers = allCallers.filter(c => c.id !== callerId && !blockedIds.has(c.phoneNumber));
@@ -3826,10 +3837,39 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
         <button data-testid="btn-back-to-directory" onClick={onBack} className={C.btnSecondary + " !py-1.5"}>
           <ChevronLeft size={13} /> Directory
         </button>
-        <div>
+        <div className="flex-1">
           <div className="text-gray-900 font-mono font-bold text-sm tracking-widest uppercase">{user.phoneNumber}</div>
           <div className="text-gray-400 font-mono text-xs">Caller Record</div>
         </div>
+        {!showDeleteConfirm ? (
+          <button
+            data-testid="btn-delete-caller"
+            onClick={() => setShowDeleteConfirm(true)}
+            className={C.btnDanger + " !py-1.5"}
+          >
+            Delete Record
+          </button>
+        ) : (
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded px-3 py-1.5">
+            <span className="text-red-700 font-mono text-xs font-semibold">Delete this caller permanently?</span>
+            <button
+              data-testid="btn-delete-caller-confirm"
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+              className={C.btnDanger + " !py-1"}
+            >
+              {deleteMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : null}
+              Yes, Delete
+            </button>
+            <button
+              data-testid="btn-delete-caller-cancel"
+              onClick={() => setShowDeleteConfirm(false)}
+              className={C.btnSecondary + " !py-1"}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Caller Information ── */}

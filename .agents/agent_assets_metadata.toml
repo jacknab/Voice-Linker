@@ -85,12 +85,6 @@ type = "image"
 title = "young man smiling talking on mobile phone"
 
 [[outputs]]
-id = "nSsB6_3lPlYwrbXL2bFMk"
-uri = "file://attached_assets/stock_images/guy_phone_call_3.jpg"
-type = "image"
-title = "young man smiling talking on mobile phone"
-
-[[outputs]]
 id = "jZjaj2Nv0YuvVp7z-UrDc"
 uri = "file://attached_assets/stock_images/guy_phone_call_4.jpg"
 type = "image"
