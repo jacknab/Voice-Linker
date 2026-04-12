@@ -151,6 +151,9 @@ interface CallerBrowseState {
   // Multi-region linking support
   linkedRegionSnapshots: { regionId: string; regionName: string; knownUserIds: string[] }[];
   announcedLinkedCallerIds: string[]; // user IDs announced as "new caller from [city]"
+  // Origin announcement throttling: max 5 announcements per 25 greetings (every 5th greeting)
+  greetingsPlayed: number;
+  originAnnouncementsPlayed: number;
 }
 const callerBrowseState = new Map<string, CallerBrowseState>();
 
@@ -3851,6 +3854,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             announcedNewLocalIds: [],
             linkedRegionSnapshots,
             announcedLinkedCallerIds: [],
+            greetingsPlayed: 0,
+            originAnnouncementsPlayed: 0,
           };
           // Only cache the state if the queue is non-empty.
           // If empty (seeds may be in an inactive phase), skip caching so the
@@ -4013,9 +4018,23 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             action: `/voice/handle-profile-menu?profileUserId=${profile.userId}`,
             timeout: 10,
           });
-          if (profile.isNearby) {
+
+          // Announce caller origin only every 5th greeting, capped at 5 total per session.
+          const ANNOUNCE_EVERY_N = 5;
+          const ANNOUNCE_MAX = 5;
+          const shouldAnnounceOrigin =
+            profile.isNearby &&
+            state.originAnnouncementsPlayed < ANNOUNCE_MAX &&
+            state.greetingsPlayed > 0 &&
+            state.greetingsPlayed % ANNOUNCE_EVERY_N === 0;
+
+          if (shouldAnnounceOrigin) {
             playPrompt(profileGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
+            state.originAnnouncementsPlayed++;
           }
+
+          state.greetingsPlayed++;
+
           if (profile.nameRecordingUrl) {
             safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
           }
