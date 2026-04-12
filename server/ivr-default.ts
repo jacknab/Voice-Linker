@@ -104,15 +104,23 @@ function playTimeRemaining(
 
 // Play the 24-hour pass expiry announcement using pre-recorded hourly audio files.
 // Files are named backdoor_expires_22hr.mp3, backdoor_expires_1hr.mp3, etc.
-// Falls back to TTS if the file hasn't been uploaded yet.
+// When less than 1 hour remains, switches to a minutes announcement.
+// Falls back to TTS if the specific file hasn't been uploaded yet.
 function playBackdoorHoursRemaining(
   twiml: { say: (text: string) => void; play: (url: string) => void },
   req: Request,
-  hoursLeft: number
+  hoursLeft: number  // raw (non-floored) hours remaining
 ): void {
-  const safeHours = Math.min(Math.max(Math.floor(hoursLeft), 0), 24);
-  playPrompt(twiml, req, `backdoor_expires_${safeHours}hr.mp3`,
-    `Your backdoor access pass expires in ${safeHours} hour${safeHours === 1 ? "" : "s"}.`);
+  if (hoursLeft < 1) {
+    // Less than 1 hour — announce in minutes instead
+    const minutesLeft = Math.max(Math.ceil(hoursLeft * 60), 1);
+    playPrompt(twiml, req, "backdoor_expires_soon.mp3",
+      `Your backdoor access pass expires in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`);
+  } else {
+    const safeHours = Math.min(Math.floor(hoursLeft), 24);
+    playPrompt(twiml, req, `backdoor_expires_${safeHours}hr.mp3`,
+      `Your backdoor access pass expires in ${safeHours} hour${safeHours === 1 ? "" : "s"}.`);
+  }
 }
 
 // Play the active caller count announcement by chaining phrase + number audio files.
@@ -1424,9 +1432,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           callTimeAnnounced.add(callSid);
         }
       } else if (!rogerFreeMode && membershipConf.billingMode === "per_24h" && user.membershipTier !== "free_trial" && user.membershipPurchasedAt) {
-        // 24-hour pass: announce remaining hours (rounded down)
+        // 24-hour pass: announce remaining hours (or minutes if < 1 hour left)
         const hoursElapsed = (Date.now() - user.membershipPurchasedAt.getTime()) / 3_600_000;
-        const hoursLeft = Math.floor(24 - hoursElapsed);
+        const hoursLeft = 24 - hoursElapsed;  // raw — let playBackdoorHoursRemaining floor/decide
         playBackdoorHoursRemaining(twiml, req, hoursLeft);
         callTimeAnnounced.add(callSid);
       } else if (!rogerFreeMode) {
