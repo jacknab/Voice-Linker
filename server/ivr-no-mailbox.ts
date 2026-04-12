@@ -506,6 +506,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // but the backend drains the exact seconds used on every sync.
   // When a membership override is active, deducts from the membership holder's account.
   // In per_day mode no call-time deductions are made — billing is handled nightly.
+
+  function isFreeModeActive(settings: { freeMode: boolean; freeModeScheduleDays: number[] | null }): boolean {
+    if (settings.freeMode) return true;
+    const today = new Date().getDay();
+    return (settings.freeModeScheduleDays ?? []).includes(today);
+  }
+
   async function syncBilling(callSid: string): Promise<void> {
     const { billingMode } = await getMembershipSettingsCached();
     if (billingMode === "per_day" || billingMode === "per_24h") return;
@@ -1259,11 +1266,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      if (!user.membershipTier) {
+      const nmEntrySettings = await getMembershipSettingsCached();
+
+      if (isFreeModeActive(nmEntrySettings)) {
+        // Free mode — skip balance checks, still route through Roger
+        twiml.redirect("/voice/roger-greeting");
+      } else if (!user.membershipTier) {
         // Brand new — Roger will auto-activate the free trial and welcome them
         twiml.redirect("/voice/roger-greeting");
       } else {
-        const { billingMode } = await getMembershipSettingsCached();
+        const { billingMode } = nmEntrySettings;
         if (billingMode === "per_24h" && user.membershipTier !== "free_trial") {
           // 24-hour pass: check wall-clock expiry from purchase timestamp
           const purchasedAt = user.membershipPurchasedAt;
@@ -1362,7 +1374,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       const membershipConf = await getMembershipSettingsCached();
+      const rogerFreeMode = isFreeModeActive(membershipConf);
 
+      // For new callers: auto-activate the free trial so the account exists for next time.
+      // In free mode, skip the time/terms announcement since minutes don't matter.
       if (isNewCaller) {
         await storage.updateUserMembership(user.id, {
           membershipTier: "free_trial",
@@ -1370,23 +1385,26 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         });
         await storage.getOrCreateMailbox(user.id);
         console.log(`[roger-greeting] Auto-activated free trial — ${membershipConf.freeTrialMinutes} min for userId=${user.id}`);
-        playTimeRemaining(twiml, req, membershipConf.freeTrialMinutes);
-        playPrompt(twiml, req, "free_trial_terms.mp3",
-          "Your free trial will expire in seven days and it must be used from this phone number.");
-        callTimeAnnounced.add(callSid);
-      } else if (membershipConf.billingMode === "per_24h" && user.membershipTier !== "free_trial" && user.membershipPurchasedAt) {
+        if (!rogerFreeMode) {
+          playTimeRemaining(twiml, req, membershipConf.freeTrialMinutes);
+          playPrompt(twiml, req, "free_trial_terms.mp3",
+            "Your free trial will expire in seven days and it must be used from this phone number.");
+          callTimeAnnounced.add(callSid);
+        }
+      } else if (!rogerFreeMode && membershipConf.billingMode === "per_24h" && user.membershipTier !== "free_trial" && user.membershipPurchasedAt) {
         // 24-hour pass: announce remaining hours (rounded down)
         const hoursElapsed = (Date.now() - user.membershipPurchasedAt.getTime()) / 3_600_000;
         const hoursLeft = Math.floor(24 - hoursElapsed);
         playBackdoorHoursRemaining(twiml, req, hoursLeft);
         callTimeAnnounced.add(callSid);
-      } else {
+      } else if (!rogerFreeMode) {
         const remainingSeconds = user.remainingSeconds ?? 0;
         if (remainingSeconds > 0) {
           playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
           callTimeAnnounced.add(callSid);
         }
       }
+      // In free mode, no time announcement — callers go straight through to the menu.
 
       const siteConf = await getSiteSettingsCached();
       twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");

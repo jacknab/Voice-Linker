@@ -1311,8 +1311,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // ── Free Mode: bypass all membership/trial/balance checks ───────────────
       const freeModeSettings = await getMembershipSettingsCached();
       if (isFreeModeActive(freeModeSettings)) {
-        const siteConf = await getSiteSettingsCached();
-        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
+        // Still route through Roger so callers get a personalized greeting
+        twiml.redirect("/voice/roger-greeting");
       } else if (!user.membershipTier) {
         // Brand new — Roger will auto-activate the free trial and welcome them
         twiml.redirect("/voice/roger-greeting");
@@ -1406,8 +1406,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       const membershipConf = await getMembershipSettingsCached();
+      const rogerFreeMode = isFreeModeActive(membershipConf);
 
-      // For new callers: auto-activate the free trial (no keypress required)
+      // For new callers: auto-activate the free trial so the account exists for next time.
+      // In free mode, skip the time/terms announcement since minutes don't matter.
       if (isNewCaller) {
         await storage.updateUserMembership(user.id, {
           membershipTier: "free_trial",
@@ -1415,17 +1417,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         });
         await storage.getOrCreateMailbox(user.id);
         console.log(`[roger-greeting] Auto-activated free trial — ${membershipConf.freeTrialMinutes} min for userId=${user.id}`);
-        playTimeRemaining(twiml, req, membershipConf.freeTrialMinutes);
-        playPrompt(twiml, req, "free_trial_terms.mp3",
-          "Your free trial will expire in seven days and it must be used from this phone number.");
-        callTimeAnnounced.add(callSid);
-      } else if (membershipConf.billingMode === "per_24h" && user.membershipTier !== "free_trial" && user.membershipPurchasedAt) {
+        if (!rogerFreeMode) {
+          playTimeRemaining(twiml, req, membershipConf.freeTrialMinutes);
+          playPrompt(twiml, req, "free_trial_terms.mp3",
+            "Your free trial will expire in seven days and it must be used from this phone number.");
+          callTimeAnnounced.add(callSid);
+        }
+      } else if (!rogerFreeMode && membershipConf.billingMode === "per_24h" && user.membershipTier !== "free_trial" && user.membershipPurchasedAt) {
         // 24-hour pass: announce remaining hours (rounded down)
         const hoursElapsed = (Date.now() - user.membershipPurchasedAt.getTime()) / 3_600_000;
         const hoursLeft = Math.floor(24 - hoursElapsed);
         playBackdoorHoursRemaining(twiml, req, hoursLeft);
         callTimeAnnounced.add(callSid);
-      } else {
+      } else if (!rogerFreeMode) {
         // Returning caller — announce remaining time in minutes
         const remainingSeconds = user.remainingSeconds ?? 0;
         if (remainingSeconds > 0) {
@@ -1433,6 +1437,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           callTimeAnnounced.add(callSid);
         }
       }
+      // In free mode, no time announcement — callers go straight through to the menu.
 
       const siteConf = await getSiteSettingsCached();
       twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
