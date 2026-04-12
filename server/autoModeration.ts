@@ -19,6 +19,9 @@
 
 import { storage } from "./storage";
 
+// Track URLs that have already been processed by the 65-second timer (prevents double-run)
+const autoModTimerFired = new Set<string>();
+
 const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 const TEN_MINUTES = 10 * 60 * 1000;
 
@@ -462,3 +465,85 @@ export async function runBlockAutoChecks(blockedUserId: string) {
     console.error("[automod] runBlockAutoChecks error:", err);
   }
 }
+
+// ─── Scheduled auto-mod timer (65 seconds after recording save) ──────────────
+/**
+ * Schedules a 65-second delayed auto-mod check for a newly saved recording.
+ * - If Twilio's transcription is available in the DB by then, runs full text checks.
+ * - If not available, skips text checks (avoids incorrectly rejecting valid recordings).
+ * - If the recording passes, queues it for human admin review.
+ * Guards against double-processing via autoModTimerFired set.
+ */
+export function scheduleAutoModCheck(
+  recordingUrl: string,
+  userId: string,
+  recordingType: "greeting" | "personal_ad",
+): void {
+  setTimeout(async () => {
+    if (autoModTimerFired.has(recordingUrl)) {
+      console.log(`[automod-timer] Already processed recordingUrl=${recordingUrl} — skipping`);
+      return;
+    }
+    autoModTimerFired.add(recordingUrl);
+    // Auto-clean the set after 1 hour to avoid unbounded memory growth
+    setTimeout(() => autoModTimerFired.delete(recordingUrl), 3_600_000);
+
+    try {
+      // ── 1. Check if the recording still exists in the DB ────────────────────
+      let transcriptionText: string | null = null;
+
+      if (recordingType === "greeting") {
+        const user = await storage.getUserByProfileRecordingUrl(recordingUrl);
+        if (!user) {
+          console.log(`[automod-timer] Profile already removed for recordingUrl=${recordingUrl} — skipping`);
+          return;
+        }
+        const profile = await storage.getProfile(user.id);
+        transcriptionText = profile?.transcription ?? null;
+      } else {
+        const user = await storage.getUserByMailboxAdRecordingUrl(recordingUrl);
+        if (!user) {
+          console.log(`[automod-timer] Mailbox ad already removed for recordingUrl=${recordingUrl} — skipping`);
+          return;
+        }
+        const mailbox = await storage.getMailboxByUserId(user.id);
+        transcriptionText = mailbox?.adTranscription ?? null;
+      }
+
+      // ── 2. Run text auto-mod only when transcription is available ───────────
+      if (transcriptionText !== null) {
+        console.log(`[automod-timer] Running text checks for recordingUrl=${recordingUrl}`);
+        await runTranscriptionAutoChecks(recordingUrl, transcriptionText);
+      } else {
+        console.log(`[automod-timer] No transcription after 65s for recordingUrl=${recordingUrl} — queuing for human review`);
+      }
+
+      // ── 3. If recording still exists (not rejected), queue for human review ──
+      let recordingStillExists = false;
+      if (recordingType === "greeting") {
+        const userAfter = await storage.getUserByProfileRecordingUrl(recordingUrl);
+        recordingStillExists = !!userAfter;
+      } else {
+        const userAfter = await storage.getUserByMailboxAdRecordingUrl(recordingUrl);
+        recordingStillExists = !!userAfter;
+      }
+
+      if (recordingStillExists) {
+        const reason = transcriptionText
+          ? "New recording — auto-mod passed, pending human review"
+          : "New recording — no transcription available, pending human review";
+        await storage.createFlaggedItem({
+          contentType: "profile",
+          contentId: userId,
+          reason,
+          status: "pending",
+          reportedByUserId: null,
+        });
+        console.log(`[automod-timer] Queued for human review: userId=${userId} type=${recordingType}`);
+      }
+    } catch (err) {
+      console.error("[automod-timer] scheduleAutoModCheck error:", err);
+    }
+  }, 65_000);
+}
+

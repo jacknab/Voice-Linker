@@ -6,7 +6,7 @@ import fs from "fs";
 import { generateTTS, getVoiceIdForFolder, getVoiceIdForRoger } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
-import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
+import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, scheduleAutoModCheck } from "./autoModeration";
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import * as engagementEngine from "./engagementEngine";
@@ -1615,6 +1615,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (saved) await storage.setProfileTranscriptionPending(saved.id);
       console.log(`[voice] Profile saved immediately for userId=${user.id} (dur=${recordingDuration}s)`);
 
+      // Schedule auto-mod + human review queue after 65 seconds
+      scheduleAutoModCheck(recordingUrl, user.id, "greeting");
+
       twiml.redirect("/voice/review-greeting");
     } catch (error) {
       console.error("[voice] /voice/save-profile error:", error);
@@ -2702,6 +2705,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
       await storage.updateMailboxTranscription(recordingUrl, null, "pending");
 
+      // Schedule auto-mod + human review queue after 65 seconds
+      scheduleAutoModCheck(recordingUrl, user.id, "personal_ad");
+
       twiml.say("Your mailbox greeting has been saved. Callers who enter your mailbox number will now hear this greeting.");
       twiml.redirect("/voice/my-mailbox");
     } catch (err) {
@@ -3206,6 +3212,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
       await storage.updateMailboxTranscription(recordingUrl, null, "pending");
 
+      // Schedule auto-mod + human review queue after 65 seconds
+      scheduleAutoModCheck(recordingUrl, user.id, "personal_ad");
+
       playPrompt(twiml, req, "mailbox_ad_recorded_pending.mp3",
         "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. " +
         "In the meantime you can browse other ads or visit the male box to check out who's on the line right now."
@@ -3240,12 +3249,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       await storage.updateMailboxTranscription(recordingUrl, status === "completed" ? text : null, status === "completed" ? "completed" : "failed");
       console.log(`[transcription] stored for recordingUrl=${recordingUrl} status=${status}`);
 
-      // Run auto-moderation checks on completed transcriptions
-      if (status === "completed") {
-        runTranscriptionAutoChecks(recordingUrl, text).catch((err) =>
-          console.error("[transcription] auto-mod error:", err)
-        );
-      }
+      // Auto-mod and human review queue are handled by the 65-second timer in save-profile
+      // and save-mailbox-greeting (via scheduleAutoModCheck). The transcription callback
+      // only needs to store the text so the timer can pick it up.
     } catch (err) {
       console.error("[transcription] callback error:", err);
     }
@@ -5108,7 +5114,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (returnTo === "mailbox" || returnTo === "category") {
           await syncBilling(callSid);
         }
-        await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
+        const sentMessage = await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
+        // Queue sent message for human admin review
+        storage.createFlaggedItem({
+          contentType: "message",
+          contentId: String(sentMessage.id),
+          reason: "New voice message — pending human review",
+          status: "pending",
+          reportedByUserId: null,
+        }).catch((err) => console.error("[voice] flaggedItem (message) creation error:", err));
         if (returnTo === "mailbox") {
           playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
           twiml.redirect("/voice/my-mailbox");
