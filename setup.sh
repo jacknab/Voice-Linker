@@ -772,10 +772,24 @@ PYEOF
             upsert_env "SESSION_SECRET" "${SESSION_SECRET}"
             info "SESSION_SECRET generated and added."
         fi
+        if ! grep -q "^ADMIN_SECRET_KEY=" "${APP_DIR}/.env"; then
+            local ADMIN_SECRET_KEY
+            ADMIN_SECRET_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" 2>/dev/null \
+                || openssl rand -hex 32)
+            upsert_env "ADMIN_SECRET_KEY" "${ADMIN_SECRET_KEY}"
+            info "ADMIN_SECRET_KEY generated and added."
+            warn "IMPORTANT: Copy this key — you will need it to log into the admin desktop app:"
+            echo -e "${YELLOW}  ADMIN_SECRET_KEY=${ADMIN_SECRET_KEY}${RESET}"
+        else
+            info "ADMIN_SECRET_KEY already set — skipping."
+        fi
         success ".env updated."
     else
         local SESSION_SECRET
         SESSION_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "change-me-$(date +%s)")
+        local ADMIN_SECRET_KEY
+        ADMIN_SECRET_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))" 2>/dev/null \
+            || openssl rand -hex 32)
         cat > "${APP_DIR}/.env" <<EOF
 # ─── Database ────────────────────────────────────────────────────────────────
 DATABASE_URL=${NEW_DB_URL}
@@ -786,6 +800,9 @@ PORT=${APP_PORT}
 
 # ─── Session ─────────────────────────────────────────────────────────────────
 SESSION_SECRET=${SESSION_SECRET}
+
+# ─── Admin Desktop App ───────────────────────────────────────────────────────
+ADMIN_SECRET_KEY=${ADMIN_SECRET_KEY}
 
 # ─── Twilio ──────────────────────────────────────────────────────────────────
 TWILIO_ACCOUNT_SID=
@@ -801,6 +818,8 @@ STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 EOF
         success ".env created."
+        warn "IMPORTANT: Copy this key — you will need it to log into the admin desktop app:"
+        echo -e "${YELLOW}  ADMIN_SECRET_KEY=${ADMIN_SECRET_KEY}${RESET}"
     fi
     chmod 600 "${APP_DIR}/.env"
     info ".env permissions set to 600."
