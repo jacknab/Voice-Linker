@@ -187,6 +187,41 @@ export async function registerRoutes(
 
 
   // --- Audio Proxy ---
+  //
+  // IMPORTANT: This endpoint MUST always return HTTP 200 with valid audio content.
+  // Twilio drops calls with "An error has occurred" if a <Play> URL returns non-2xx.
+  // When a recording cannot be fetched, we serve a short silent WAV instead.
+
+  function silentWav(seconds = 1): Buffer {
+    const sampleRate = 8000;
+    const numChannels = 1;
+    const bitsPerSample = 8;
+    const numSamples = sampleRate * seconds;
+    const dataSize = numSamples * numChannels * (bitsPerSample / 8);
+    const buf = Buffer.alloc(44 + dataSize);
+    buf.write("RIFF", 0);
+    buf.writeUInt32LE(36 + dataSize, 4);
+    buf.write("WAVE", 8);
+    buf.write("fmt ", 12);
+    buf.writeUInt32LE(16, 16);
+    buf.writeUInt16LE(1, 20);
+    buf.writeUInt16LE(numChannels, 22);
+    buf.writeUInt32LE(sampleRate, 24);
+    buf.writeUInt32LE(sampleRate * numChannels * (bitsPerSample / 8), 28);
+    buf.writeUInt16LE(numChannels * (bitsPerSample / 8), 32);
+    buf.writeUInt16LE(bitsPerSample, 34);
+    buf.write("data", 36);
+    buf.writeUInt32LE(dataSize, 40);
+    buf.fill(128, 44);
+    return buf;
+  }
+
+  function serveSilentAudio(res: Response, reason: string): void {
+    console.warn(`[audio] Serving silent audio — ${reason}`);
+    (res as any).setHeader("Content-Type", "audio/wav");
+    (res as any).status(200).send(silentWav(1));
+  }
+
   app.get("/audio/:sid", async (req, res) => {
     const { sid } = req.params;
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -195,8 +230,8 @@ export async function registerRoutes(
     console.log(`[audio] Proxy request for SID=${sid}`);
 
     if (!accountSid || !authToken) {
-      console.error("[audio] Twilio credentials not set");
-      return res.status(503).send("Audio credentials not configured");
+      console.error("[audio] Twilio credentials not set — serving silence");
+      return serveSilentAudio(res as any, "credentials not configured");
     }
 
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${sid}.mp3`;
@@ -213,6 +248,12 @@ export async function registerRoutes(
 
         if (upstream.ok) break;
 
+        // Auth failures are permanent — no point retrying
+        if (upstream.status === 401 || upstream.status === 403) {
+          console.error(`[audio] Auth error ${upstream.status} for SID=${sid} — check TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN`);
+          return serveSilentAudio(res as any, `Twilio auth error ${upstream.status}`);
+        }
+
         // Recording may not be ready yet — retry with backoff for transient errors
         if ((upstream.status === 404 || upstream.status === 503) && attempt < maxAttempts) {
           const delay = attempt * 2000;
@@ -221,11 +262,12 @@ export async function registerRoutes(
           continue;
         }
 
-        return res.status(upstream.status).send("Failed to fetch recording from Twilio");
+        console.error(`[audio] Unrecoverable error ${upstream.status} for SID=${sid}`);
+        return serveSilentAudio(res as any, `Twilio returned ${upstream.status}`);
       }
 
       if (!upstream || !upstream.ok) {
-        return res.status(503).send("Recording not available after retries");
+        return serveSilentAudio(res as any, "recording not available after retries");
       }
 
       res.setHeader("Content-Type", "audio/mpeg");
@@ -237,7 +279,7 @@ export async function registerRoutes(
       readable.pipe(res);
     } catch (error) {
       console.error("[audio] Error proxying recording:", error);
-      res.status(500).send("Error fetching audio");
+      return serveSilentAudio(res as any, `exception: ${error}`);
     }
   });
 

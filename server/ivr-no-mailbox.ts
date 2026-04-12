@@ -400,10 +400,15 @@ function hasTwilioCredentials(): boolean {
 // - Twilio-hosted recordings require credentials; if missing, speak fallbackText via TTS instead
 function safePlayRecording(
   node: { say: (text: string) => void; play: (url: string) => void },
-  recordingUrl: string,
+  recordingUrl: string | null | undefined,
   req: Request,
   fallbackText = ""
 ): void {
+  if (!recordingUrl) {
+    if (fallbackText) node.say(fallbackText);
+    console.warn("[audio] safePlayRecording called with empty URL — skipping");
+    return;
+  }
   const isLocal = recordingUrl.startsWith("/uploads/");
   if (isLocal || hasTwilioCredentials()) {
     node.play(audioProxyUrl(recordingUrl, req));
@@ -2756,7 +2761,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         state = {
           category,
-          queue: ads.map(m => ({ userId: m.userId, mailboxNumber: m.mailboxNumber, adRecordingUrl: m.adRecordingUrl! })),
+          queue: ads
+            .filter(m => !!m.adRecordingUrl)
+            .map(m => ({ userId: m.userId, mailboxNumber: m.mailboxNumber, adRecordingUrl: m.adRecordingUrl! })),
           index: 0,
         };
         categoryBrowseState.set(callSid, state);

@@ -1,0 +1,290 @@
+2026-04-09 15:21:30 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-09 15:21:30 +00:00: designed for a production environment, as it will leak
+2026-04-09 15:21:30 +00:00: memory, and will not scale past a single process.
+2026-04-10 01:32:38 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 01:32:38 +00:00: designed for a production environment, as it will leak
+2026-04-10 01:32:38 +00:00: memory, and will not scale past a single process.
+2026-04-10 14:20:31 +00:00: [status] Twilio credentials missing — cannot register status callback
+2026-04-10 14:25:35 +00:00: [status] Twilio credentials missing — cannot register status callback
+2026-04-10 15:12:49 +00:00: [status] Twilio credentials missing — cannot register status callback
+2026-04-10 15:34:42 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 15:34:42 +00:00: designed for a production environment, as it will leak
+2026-04-10 15:34:42 +00:00: memory, and will not scale past a single process.
+2026-04-10 15:44:42 +00:00: [admin/roger/generate] failed: Error: ELEVENLABS_API_KEY is not configured
+2026-04-10 15:44:42 +00:00:     at Qd (/apps/chatline/dist/index.cjs:354:21251)
+2026-04-10 15:44:42 +00:00:     at /apps/chatline/dist/index.cjs:909:24553
+2026-04-10 15:44:42 +00:00:     at io.handleRequest (/apps/chatline/dist/index.cjs:31:15879)
+2026-04-10 15:44:42 +00:00:     at p (/apps/chatline/dist/index.cjs:31:17794)
+2026-04-10 15:44:42 +00:00:     at no.dispatch (/apps/chatline/dist/index.cjs:31:17550)
+2026-04-10 15:44:42 +00:00:     at r (/apps/chatline/dist/index.cjs:31:21608)
+2026-04-10 15:44:42 +00:00:     at io.handleRequest (/apps/chatline/dist/index.cjs:31:15879)
+2026-04-10 15:44:42 +00:00:     at /apps/chatline/dist/index.cjs:31:20490
+2026-04-10 15:44:42 +00:00:     at qH (/apps/chatline/dist/index.cjs:31:22502)
+2026-04-10 15:44:42 +00:00:     at g (/apps/chatline/dist/index.cjs:31:20444)
+2026-04-10 15:54:40 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 15:54:40 +00:00: designed for a production environment, as it will leak
+2026-04-10 15:54:40 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:05:00 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:05:00 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:05:00 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:09:43 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:09:43 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:09:43 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:10:02 +00:00: [admin/roger/generate] failed: Error: ElevenLabs API error 400: {"detail":{"type":"invalid_request","code":"bad_request","message":"You need to be on the creator tier or above to use this voice.","status":"free_users_not_allowed","request_id":"0c78da9e779a7ef93efefc1795a4425d"}}
+2026-04-10 16:10:02 +00:00:     at Qd (/apps/chatline/dist/index.cjs:354:21619)
+2026-04-10 16:10:02 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-10 16:10:02 +00:00:     at async /apps/chatline/dist/index.cjs:909:24547
+2026-04-10 16:15:06 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:15:06 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:15:06 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:39:10 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:39:10 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:39:10 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:40:58 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:40:58 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:40:58 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:43:44 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:43:44 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:43:44 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:44:10 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:44:10 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:44:10 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:44:10 +00:00: (node:2616861) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 16:44:10 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 16:44:10 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-10 16:44:21 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:44:21 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:44:21 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:44:21 +00:00: (node:2617113) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 16:44:21 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 16:44:21 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-10 16:47:39 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:47:39 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:47:39 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:47:39 +00:00: (node:2620135) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 16:47:39 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 16:47:39 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-10 16:49:48 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:49:48 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:49:48 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:49:48 +00:00: (node:2622257) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 16:49:48 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 16:49:48 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-10 16:50:56 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:50:56 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:50:56 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:50:57 +00:00: (node:2623415) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 16:50:57 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 16:50:57 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-10 16:59:53 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 16:59:53 +00:00: designed for a production environment, as it will leak
+2026-04-10 16:59:53 +00:00: memory, and will not scale past a single process.
+2026-04-10 16:59:53 +00:00: (node:2631600) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 16:59:53 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 16:59:53 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-10 17:00:00 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 17:00:00 +00:00: designed for a production environment, as it will leak
+2026-04-10 17:00:00 +00:00: memory, and will not scale past a single process.
+2026-04-10 17:00:00 +00:00: (node:2631772) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 17:00:00 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 17:00:00 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-10 17:01:15 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 17:01:15 +00:00: designed for a production environment, as it will leak
+2026-04-10 17:01:15 +00:00: memory, and will not scale past a single process.
+2026-04-10 17:01:15 +00:00: (node:2633160) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 17:01:15 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 17:01:15 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-10 17:01:38 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 17:01:38 +00:00: designed for a production environment, as it will leak
+2026-04-10 17:01:38 +00:00: memory, and will not scale past a single process.
+2026-04-10 17:01:38 +00:00: (node:2633610) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 17:01:38 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 17:01:38 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-10 17:02:33 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-10 17:02:33 +00:00: designed for a production environment, as it will leak
+2026-04-10 17:02:33 +00:00: memory, and will not scale past a single process.
+2026-04-10 17:02:33 +00:00: (node:2634678) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-10 17:02:33 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-10 17:02:33 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-11 15:47:25 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-11 15:47:25 +00:00: designed for a production environment, as it will leak
+2026-04-11 15:47:25 +00:00: memory, and will not scale past a single process.
+2026-04-11 15:47:26 +00:00: (node:1251) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-11 15:47:26 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-11 15:47:26 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-11 16:29:06 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-11 16:29:06 +00:00: designed for a production environment, as it will leak
+2026-04-11 16:29:06 +00:00: memory, and will not scale past a single process.
+2026-04-11 16:29:06 +00:00: (node:33346) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-11 16:29:06 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-11 16:29:06 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-11 16:30:09 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-11 16:30:09 +00:00: designed for a production environment, as it will leak
+2026-04-11 16:30:09 +00:00: memory, and will not scale past a single process.
+2026-04-11 16:30:10 +00:00: (node:34188) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-11 16:30:10 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-11 16:30:10 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-11 16:30:49 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-11 16:30:49 +00:00: designed for a production environment, as it will leak
+2026-04-11 16:30:49 +00:00: memory, and will not scale past a single process.
+2026-04-11 16:30:49 +00:00: (node:34763) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-11 16:30:49 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-11 16:30:49 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-11 17:45:23 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-11 17:45:23 +00:00: designed for a production environment, as it will leak
+2026-04-11 17:45:23 +00:00: memory, and will not scale past a single process.
+2026-04-11 17:45:23 +00:00: (node:95408) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-11 17:45:23 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-11 17:45:23 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-12 03:02:00 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-12 03:02:00 +00:00: designed for a production environment, as it will leak
+2026-04-12 03:02:00 +00:00: memory, and will not scale past a single process.
+2026-04-12 03:02:00 +00:00: (node:478873) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-12 03:02:00 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-12 03:02:00 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-12 03:04:19 +00:00: [status] Failed to register status callback for CA92068ca66d2d66036dfad0f5fa93307b: RestException [Error]: Authenticate
+2026-04-12 03:04:19 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:04:19 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:04:19 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:04:19 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:04:19 +00:00:   status: 401,
+2026-04-12 03:04:19 +00:00:   code: 20003,
+2026-04-12 03:04:19 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:04:19 +00:00:   details: undefined
+2026-04-12 03:04:19 +00:00: }
+2026-04-12 03:04:32 +00:00: [status] Failed to register status callback for CA70e5ed06fcdeb80655be8bf254af07a6: RestException [Error]: Authenticate
+2026-04-12 03:04:32 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:04:32 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:04:32 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:04:32 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:04:32 +00:00:   status: 401,
+2026-04-12 03:04:32 +00:00:   code: 20003,
+2026-04-12 03:04:32 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:04:32 +00:00:   details: undefined
+2026-04-12 03:04:32 +00:00: }
+2026-04-12 03:08:23 +00:00: [status] Failed to register status callback for CA7bc03e4ad107c3a52a4f4a14a4d63e4d: RestException [Error]: Authenticate
+2026-04-12 03:08:23 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:08:23 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:08:23 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:08:23 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:08:23 +00:00:   status: 401,
+2026-04-12 03:08:23 +00:00:   code: 20003,
+2026-04-12 03:08:23 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:08:23 +00:00:   details: undefined
+2026-04-12 03:08:23 +00:00: }
+2026-04-12 03:10:12 +00:00: [status] Failed to register status callback for CAdbb14e5d24868203a9aa46e1afb6b7bf: RestException [Error]: Authenticate
+2026-04-12 03:10:12 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:10:12 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:10:12 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:10:12 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:10:12 +00:00:   status: 401,
+2026-04-12 03:10:12 +00:00:   code: 20003,
+2026-04-12 03:10:12 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:10:12 +00:00:   details: undefined
+2026-04-12 03:10:12 +00:00: }
+2026-04-12 03:10:36 +00:00: [status] Failed to register status callback for CA65e779dbab4a30527d12819f5a0c4d0f: RestException [Error]: Authenticate
+2026-04-12 03:10:36 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:10:36 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:10:36 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:10:36 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:10:36 +00:00:   status: 401,
+2026-04-12 03:10:36 +00:00:   code: 20003,
+2026-04-12 03:10:36 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:10:36 +00:00:   details: undefined
+2026-04-12 03:10:36 +00:00: }
+2026-04-12 03:17:12 +00:00: [status] Failed to register status callback for CAa3d5a2f2194750157bb1811158cf7abf: RestException [Error]: Authenticate
+2026-04-12 03:17:12 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:17:12 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:17:12 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:17:12 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:17:12 +00:00:   status: 401,
+2026-04-12 03:17:12 +00:00:   code: 20003,
+2026-04-12 03:17:12 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:17:12 +00:00:   details: undefined
+2026-04-12 03:17:12 +00:00: }
+2026-04-12 03:19:22 +00:00: Warning: connect.session() MemoryStore is not
+2026-04-12 03:19:22 +00:00: designed for a production environment, as it will leak
+2026-04-12 03:19:22 +00:00: memory, and will not scale past a single process.
+2026-04-12 03:19:22 +00:00: (node:490864) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+2026-04-12 03:19:22 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+2026-04-12 03:19:22 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-04-12 03:19:39 +00:00: [status] Failed to register status callback for CA8edb48bcbcc0b26a195d542af5f80b0b: RestException [Error]: Authenticate
+2026-04-12 03:19:39 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:19:39 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:19:39 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:19:39 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:19:39 +00:00:   status: 401,
+2026-04-12 03:19:39 +00:00:   code: 20003,
+2026-04-12 03:19:39 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:19:39 +00:00:   details: undefined
+2026-04-12 03:19:39 +00:00: }
+2026-04-12 03:20:04 +00:00: [status] Failed to register status callback for CA4ff51085e0b4408d411f421cdff70738: RestException [Error]: Authenticate
+2026-04-12 03:20:04 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:20:04 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:20:04 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:20:04 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:20:04 +00:00:   status: 401,
+2026-04-12 03:20:04 +00:00:   code: 20003,
+2026-04-12 03:20:04 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:20:04 +00:00:   details: undefined
+2026-04-12 03:20:04 +00:00: }
+2026-04-12 03:20:20 +00:00: [status] Failed to register status callback for CA5fdd8a651b1fc332b19719575202d88a: RestException [Error]: Authenticate
+2026-04-12 03:20:20 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:20:20 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:20:20 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:20:20 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:20:20 +00:00:   status: 401,
+2026-04-12 03:20:20 +00:00:   code: 20003,
+2026-04-12 03:20:20 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:20:20 +00:00:   details: undefined
+2026-04-12 03:20:20 +00:00: }
+2026-04-12 03:28:09 +00:00: [status] Failed to register status callback for CA0e0780b34f88bd9e11ff8275f1e66ab7: RestException [Error]: Authenticate
+2026-04-12 03:28:09 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:28:09 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:28:09 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:28:09 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:28:09 +00:00:   status: 401,
+2026-04-12 03:28:09 +00:00:   code: 20003,
+2026-04-12 03:28:09 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:28:09 +00:00:   details: undefined
+2026-04-12 03:28:09 +00:00: }
+2026-04-12 03:28:15 +00:00: [status] Failed to register status callback for CA7b3f9682f831213725b9f364084d5a10: RestException [Error]: Authenticate
+2026-04-12 03:28:15 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:28:15 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:28:15 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:28:15 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:28:15 +00:00:   status: 401,
+2026-04-12 03:28:15 +00:00:   code: 20003,
+2026-04-12 03:28:15 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:28:15 +00:00:   details: undefined
+2026-04-12 03:28:15 +00:00: }
+2026-04-12 03:28:21 +00:00: [status] Failed to register status callback for CAa924b6bed21fa9cb1e36950b34bdc9a2: RestException [Error]: Authenticate
+2026-04-12 03:28:21 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:28:21 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:28:21 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:28:21 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:28:21 +00:00:   status: 401,
+2026-04-12 03:28:21 +00:00:   code: 20003,
+2026-04-12 03:28:21 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:28:21 +00:00:   details: undefined
+2026-04-12 03:28:21 +00:00: }
+2026-04-12 03:29:23 +00:00: [status] Failed to register status callback for CAcbb59006bd052b70fd226adb9e1ab70a: RestException [Error]: Authenticate
+2026-04-12 03:29:23 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:29:23 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:29:23 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:29:23 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:29:23 +00:00:   status: 401,
+2026-04-12 03:29:23 +00:00:   code: 20003,
+2026-04-12 03:29:23 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:29:23 +00:00:   details: undefined
+2026-04-12 03:29:23 +00:00: }
+2026-04-12 03:32:16 +00:00: [status] Failed to register status callback for CAf257285a9a77c4cbb20819663bd0421a: RestException [Error]: Authenticate
+2026-04-12 03:32:16 +00:00:     at V2010.throwException (/apps/chatline/node_modules/twilio/lib/base/Version.js:50:15)
+2026-04-12 03:32:16 +00:00:     at /apps/chatline/node_modules/twilio/lib/base/Version.js:161:22
+2026-04-12 03:32:16 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-04-12 03:32:16 +00:00:     at async M$ (/apps/chatline/dist/index.cjs:347:89342) {
+2026-04-12 03:32:16 +00:00:   status: 401,
+2026-04-12 03:32:16 +00:00:   code: 20003,
+2026-04-12 03:32:16 +00:00:   moreInfo: 'https://www.twilio.com/docs/errors/20003',
+2026-04-12 03:32:16 +00:00:   details: undefined
+2026-04-12 03:32:16 +00:00: }
