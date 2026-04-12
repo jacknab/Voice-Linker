@@ -5,9 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
-import AdminLogin from "@/pages/AdminLogin";
-import SecureAdminLogin from "@/pages/SecureAdminLogin";
-import SecureAdminGuard from "@/components/SecureAdminGuard";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
@@ -46,9 +43,7 @@ function Router() {
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms" component={Terms} />
       <Route path="/setup" component={Home} />
-      <Route path="/admin/login" component={AdminLogin} />
-      <Route path="/admin/secure-login" component={SecureAdminLogin} />
-      <Route path="/admin" component={SecureAdminGuard} />
+      
       <Route component={NotFound} />
     </Switch>
   );

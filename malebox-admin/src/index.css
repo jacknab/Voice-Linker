@@ -1,0 +1,102 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Force dark retro theme */
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-display: 'Space Mono', monospace;
+
+  /* Retro Switchboard Palette */
+  --background: 0 0% 4%;       /* Very dark gray, almost black */
+  --foreground: 38 92% 50%;    /* Amber / Orange neon text */
+  
+  --card: 0 0% 7%;             /* Slightly lighter dark for panels */
+  --card-foreground: 38 92% 65%;
+  --card-border: 0 0% 15%;
+  
+  --popover: 0 0% 7%;
+  --popover-foreground: 38 92% 50%;
+  --popover-border: 0 0% 15%;
+  
+  --primary: 38 92% 50%;       /* Amber */
+  --primary-foreground: 0 0% 4%;
+  
+  --secondary: 0 0% 12%;       /* Dark gray for secondary elements */
+  --secondary-foreground: 38 20% 70%; /* Muted amber */
+  
+  --muted: 0 0% 10%;
+  --muted-foreground: 38 30% 50%;
+  
+  --accent: 38 92% 50%;
+  --accent-foreground: 0 0% 4%;
+  
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 4%;
+  
+  --border: 0 0% 20%;
+  --input: 0 0% 15%;
+  --ring: 38 92% 50%;
+
+  --radius: 0.25rem; /* Small radius for hardware feel */
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply font-mono antialiased bg-background text-foreground;
+    /* Subtle scanline background pattern */
+    background-image: linear-gradient(
+      transparent 50%,
+      rgba(0, 0, 0, 0.25) 50%
+    );
+    background-size: 100% 4px;
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-bold tracking-tight uppercase;
+  }
+}
+
+[data-landing] h1,
+[data-landing] h2,
+[data-landing] h3,
+[data-landing] h4,
+[data-landing] h5,
+[data-landing] h6 {
+  font-family: 'Inter', system-ui, sans-serif;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+@layer utilities {
+  .glow-text {
+    text-shadow: 0 0 10px hsla(var(--primary) / 0.5), 0 0 20px hsla(var(--primary) / 0.3);
+  }
+  
+  .glow-box {
+    box-shadow: 0 0 15px hsla(var(--primary) / 0.1), inset 0 0 15px hsla(var(--primary) / 0.05);
+  }
+
+  .glow-box-hover:hover {
+    box-shadow: 0 0 20px hsla(var(--primary) / 0.3), inset 0 0 20px hsla(var(--primary) / 0.1);
+    border-color: hsla(var(--primary) / 0.5);
+  }
+
+  /* Blinking recording indicator */
+  .animate-pulse-fast {
+    animation: pulse-fast 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-fast {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+}

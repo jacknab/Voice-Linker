@@ -420,6 +420,23 @@ export async function registerRoutes(
     }
   });
 
+  // ── Admin API Key Middleware ────────────────────────────────────────────────
+  // All /api/admin/* routes require X-Admin-Key header to match ADMIN_SECRET_KEY.
+  // Set ADMIN_SECRET_KEY in your environment. Without it the admin API is open
+  // (acceptable in dev; never ship to production without it).
+  app.use("/api/admin", (req: Request, res: Response, next: NextFunction) => {
+    const requiredKey = process.env.ADMIN_SECRET_KEY;
+    if (!requiredKey) {
+      console.warn("[admin] WARNING: ADMIN_SECRET_KEY not set — admin API unprotected.");
+      return next();
+    }
+    const provided = req.headers["x-admin-key"];
+    if (provided !== requiredKey) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    next();
+  });
+
   // --- Admin: List all profiles ---
   app.get("/api/admin/profiles", async (_req, res) => {
     try {
