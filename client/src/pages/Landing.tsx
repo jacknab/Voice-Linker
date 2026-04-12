@@ -228,7 +228,8 @@ export default function Landing() {
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "rgba(255,255,255,0.4)", fontSize: "1.1rem" }}>
                 <Loader2 className="w-4 h-4 animate-spin" /> Finding your local number…
               </div>
-            ) : localData?.linkedNumbers && localData.linkedNumbers.length > 0 ? (
+            ) : /* linked-region multi-number display disabled
+            localData?.linkedNumbers && localData.linkedNumbers.length > 0 ? (
               <div>
                 <p style={{ fontSize: "clamp(0.85rem, 3vw, 1.1rem)", color: "rgba(255,255,255,0.7)", fontWeight: 400, marginBottom: "0.75rem", textShadow: "1px 1px 0 #000, -1px -1px 0 #000" }}>
                   Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access numbers
@@ -247,7 +248,7 @@ export default function Landing() {
                   ))}
                 </div>
               </div>
-            ) : (
+            ) : */ (
               <div>
                 <p style={{ fontSize: "clamp(0.95rem, 4vw, 1.64rem)", color: "rgba(255,255,255,0.75)", fontWeight: 400, marginBottom: "0.2rem", textShadow: "1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000" }}>
                   Your local <strong style={{ color: "#fff", fontWeight: 700 }}>{cityLabel || "area"}</strong> access number
