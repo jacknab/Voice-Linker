@@ -152,7 +152,7 @@ const pendingGreetingDrafts = new Map<string, GreetingDraft>(); // CallSid → d
 
 // Per-caller profile browsing state: each caller gets their own queue + position
 interface CallerBrowseState {
-  queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; regionId?: string | null; regionName?: string | null }[];
+  queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; regionId?: string | null; regionName?: string | null; isPreExisting?: boolean }[];
   index: number;
   lastPlayedIndex: number | null; // index of the most-recently played profile (for Press 5 "go back")
   hasWrapped: boolean;        // true after the queue index cycled back to 0
@@ -3916,6 +3916,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               nameRecordingUrl: p.nameRecordingUrl,
               regionId: regionId ?? null,
               regionName: callerRegionName,
+              isPreExisting: true,
             })),
             index: 0,
             lastPlayedIndex: null,
@@ -4158,7 +4159,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           const remainingInWindow = WINDOW_SIZE - posInWindow;
           const remainingBudget = MAX_PER_WINDOW - state.windowAnnouncementsUsed;
-          const announceProbability = remainingBudget > 0 ? remainingBudget / remainingInWindow : 0;
+          // Only announce for callers who joined AFTER the listener — pre-existing callers play silently
+          const announceProbability = !profile.isPreExisting && remainingBudget > 0 ? remainingBudget / remainingInWindow : 0;
           const shouldAnnounceOrigin = Math.random() < announceProbability;
 
           if (shouldAnnounceOrigin) {
@@ -4281,6 +4283,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             nameRecordingUrl: p.nameRecordingUrl,
             regionId: chosenRegionId,
             regionName: chosenRegionName,
+            isPreExisting: true,
           }));
           state.index = 0;
           state.hasWrapped = false;

@@ -141,7 +141,7 @@ const pendingGreetingDrafts = new Map<string, GreetingDraft>(); // CallSid → d
 
 // Per-caller profile browsing state: each caller gets their own queue + position
 interface CallerBrowseState {
-  queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; isNearby?: boolean }[];
+  queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; isNearby?: boolean; isPreExisting?: boolean }[];
   index: number;
   lastPlayedIndex: number | null; // index of the most-recently played profile (for Press 5 "go back")
   hasWrapped: boolean;        // true after the queue index cycled back to 0
@@ -3845,6 +3845,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               recordingUrl: p.recordingUrl,
               nameRecordingUrl: p.nameRecordingUrl,
               isNearby: nearbySet.has(p.userId),
+              isPreExisting: true,
             })),
             index: 0,
             lastPlayedIndex: null,
@@ -4029,7 +4030,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           const remainingInWindow = WINDOW_SIZE - posInWindow;
           const remainingBudget = MAX_PER_WINDOW - state.windowAnnouncementsUsed;
-          const announceProbability = profile.isNearby && remainingBudget > 0
+          // Only announce for callers who joined AFTER the listener — pre-existing callers play silently
+          const announceProbability = !profile.isPreExisting && profile.isNearby && remainingBudget > 0
             ? remainingBudget / remainingInWindow
             : 0;
           const shouldAnnounceOrigin = Math.random() < announceProbability;
@@ -4118,7 +4120,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               : []
           );
           for (const p of profiles) {
-            allLinkedProfiles.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, isNearby: nearbySet.has(p.userId) });
+            allLinkedProfiles.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, isNearby: nearbySet.has(p.userId), isPreExisting: true });
           }
         }
 
