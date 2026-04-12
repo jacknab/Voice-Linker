@@ -3157,39 +3157,77 @@ interface IVRLogEntry {
   ts: number;
 }
 
+// ── colour tokens for the dark-navy phone-tester UI ──────────────────────────
+const PT = {
+  bg:        "#0d1424",
+  card:      "#131d30",
+  cardBorder:"#1e2d47",
+  keyBg:     "#1a2540",
+  keyBorder: "#2a3d5e",
+  keyText:   "#8fa3c8",
+  keyHover:  "#22345a",
+  purple:    "#6c42c9",
+  purpleHov: "#7c52d9",
+  green:     "#22c55e",
+  greenHov:  "#16a34a",
+  red:       "#ef4444",
+  logBg:     "#0b1120",
+  logBorder: "#1a2a42",
+  dimText:   "#4a6080",
+  mutedText: "#6b84a8",
+};
+
+function formatElapsed(cs: number): string {
+  const totalSec  = Math.floor(cs / 100);
+  const cents     = cs % 100;
+  const mins      = Math.floor(totalSec / 60);
+  const secs      = totalSec % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}.${cents.toString().padStart(2, "0")}`;
+}
+
 function IVRTesterTab() {
   const { toast } = useToast();
-  const logEndRef = useRef<HTMLDivElement>(null);
-  const [fromNumber, setFromNumber] = useState("+19999999999");
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [log, setLog] = useState<IVRLogEntry[]>([]);
-  const [connected, setConnected] = useState(false);
-  const [ended, setEnded] = useState(false);
-  const [waitingForInput, setWaitingForInput] = useState(false);
-  const [numDigits, setNumDigits] = useState<number | null>(null);
-  const [digitBuffer, setDigitBuffer] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const logEndRef   = useRef<HTMLDivElement>(null);
+  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Audio queue: play say/play entries sequentially
-  const audioQueue = useRef<IVRLogEntry[]>([]);
+  const [fromNumber,         setFromNumber]         = useState("+19999999999");
+  const [sessionId,          setSessionId]          = useState<string | null>(null);
+  const [log,                setLog]                = useState<IVRLogEntry[]>([]);
+  const [connected,          setConnected]          = useState(false);
+  const [ended,              setEnded]              = useState(false);
+  const [waitingForInput,    setWaitingForInput]    = useState(false);
+  const [waitingForRecording,setWaitingForRecording]= useState(false);
+  const [numDigits,          setNumDigits]          = useState<number | null>(null);
+  const [digitBuffer,        setDigitBuffer]        = useState("");
+  const [loading,            setLoading]            = useState(false);
+  const [elapsed,            setElapsed]            = useState(0); // centiseconds
+
+  // Audio queue
+  const audioQueue   = useRef<IVRLogEntry[]>([]);
   const audioPlaying = useRef(false);
   const currentAudio = useRef<HTMLAudioElement | null>(null);
-  const mutedRef = useRef(false);
 
+  // ── Timer ────────────────────────────────────────────────────────────────
+  function startTimer() {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setElapsed(0);
+    timerRef.current = setInterval(() => setElapsed(e => e + 1), 10);
+  }
+  function stopTimer() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }
+  useEffect(() => () => stopTimer(), []);
+
+  // ── Audio ─────────────────────────────────────────────────────────────────
   function stopAudio() {
-    if (currentAudio.current) {
-      currentAudio.current.pause();
-      currentAudio.current = null;
-    }
+    if (currentAudio.current) { currentAudio.current.pause(); currentAudio.current = null; }
     window.speechSynthesis?.cancel();
-    audioQueue.current = [];
+    audioQueue.current   = [];
     audioPlaying.current = false;
   }
 
   function processAudioQueue() {
     if (audioPlaying.current || audioQueue.current.length === 0) return;
-    if (mutedRef.current) return;
     const entry = audioQueue.current.shift()!;
     audioPlaying.current = true;
 
@@ -3201,8 +3239,8 @@ function IVRTesterTab() {
       audio.play().catch(() => { audioPlaying.current = false; processAudioQueue(); });
     } else if (entry.type === "say" && entry.content && window.speechSynthesis) {
       const utt = new SpeechSynthesisUtterance(entry.content);
-      utt.rate = 0.95;
-      utt.onend = () => { audioPlaying.current = false; processAudioQueue(); };
+      utt.rate = 0.92;
+      utt.onend  = () => { audioPlaying.current = false; processAudioQueue(); };
       utt.onerror = () => { audioPlaying.current = false; processAudioQueue(); };
       window.speechSynthesis.speak(utt);
     } else {
@@ -3213,37 +3251,47 @@ function IVRTesterTab() {
 
   function enqueueAudio(entries: IVRLogEntry[]) {
     for (const e of entries) {
-      if (e.type === "say" || e.type === "play") {
-        audioQueue.current.push(e);
-      }
+      if (e.type === "say" || e.type === "play") audioQueue.current.push(e);
     }
     processAudioQueue();
   }
 
   function scrollToBottom() {
-    setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    setTimeout(() => logEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
   }
 
-  function applyResult(result: { entries: IVRLogEntry[]; status: string; waitingForInput: boolean; numDigits: number | null }) {
+  // ── Apply API result ─────────────────────────────────────────────────────
+  function applyResult(result: {
+    entries: IVRLogEntry[];
+    status: string;
+    waitingForInput: boolean;
+    waitingForRecording: boolean;
+    numDigits: number | null;
+  }) {
     setLog(prev => [...prev, ...result.entries]);
     setWaitingForInput(result.waitingForInput);
+    setWaitingForRecording(result.waitingForRecording ?? false);
     setNumDigits(result.numDigits);
     if (result.status === "ended") {
       setEnded(true);
       setConnected(false);
+      stopTimer();
     }
     enqueueAudio(result.entries);
     scrollToBottom();
   }
 
+  // ── Connect / Disconnect ─────────────────────────────────────────────────
   async function handleConnect() {
     if (loading) return;
     stopAudio();
+    stopTimer();
     setLoading(true);
     setLog([]);
     setDigitBuffer("");
     setEnded(false);
     setWaitingForInput(false);
+    setWaitingForRecording(false);
     setNumDigits(null);
     try {
       const res = await fetch("/api/ivr-tester/connect", {
@@ -3255,6 +3303,7 @@ function IVRTesterTab() {
       const data = await res.json();
       setSessionId(data.sessionId);
       setConnected(true);
+      startTimer();
       applyResult(data);
     } catch (err: any) {
       toast({ title: "Connection failed", description: err.message, variant: "destructive" });
@@ -3265,30 +3314,26 @@ function IVRTesterTab() {
 
   async function handleDisconnect() {
     stopAudio();
-    if (!sessionId) return;
-    try {
-      await fetch(`/api/ivr-tester/${sessionId}`, { method: "DELETE" });
-    } catch { /* best effort */ }
+    stopTimer();
+    if (sessionId) {
+      try { await fetch(`/api/ivr-tester/${sessionId}`, { method: "DELETE" }); } catch { /* best effort */ }
+    }
     setLog(prev => [...prev, { type: "hangup", content: "Disconnected by admin.", ts: Date.now() }]);
     setConnected(false);
     setEnded(true);
     setSessionId(null);
     setWaitingForInput(false);
+    setWaitingForRecording(false);
     setDigitBuffer("");
     scrollToBottom();
   }
 
-  function toggleMute() {
-    const next = !muted;
-    setMuted(next);
-    mutedRef.current = next;
-    if (next) {
-      stopAudio();
-    }
-  }
-
+  // ── Send Digits ──────────────────────────────────────────────────────────
   async function sendDigits(digits: string) {
     if (!sessionId || !connected || ended || loading) return;
+
+    // Stop whatever is currently playing before sending the new input
+    stopAudio();
 
     let toSend = digits;
     if (numDigits && numDigits > 1) {
@@ -3318,202 +3363,334 @@ function IVRTesterTab() {
     }
   }
 
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"];
-  const keySub: Record<string, string> = {
-    "1": "", "2": "ABC", "3": "DEF", "4": "GHI", "5": "JKL", "6": "MNO",
-    "7": "PQRS", "8": "TUV", "9": "WXYZ", "*": "", "0": "+", "#": "",
+  // ── Keyboard listener ────────────────────────────────────────────────────
+  const canType = connected && !ended && waitingForInput && !loading;
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!canType) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key;
+      if (/^[0-9*#]$/.test(k)) { e.preventDefault(); sendDigits(k); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canType, sessionId, connected, ended, loading, numDigits, digitBuffer]);
+
+  // ── Keys layout ──────────────────────────────────────────────────────────
+  const keys = ["1","2","3","4","5","6","7","8","9","*","0","#"];
+  const keySub: Record<string,string> = {
+    "1":"","2":"ABC","3":"DEF","4":"GHI","5":"JKL","6":"MNO",
+    "7":"PQRS","8":"TUV","9":"WXYZ","*":"","0":"+","#":"",
   };
 
-  function entryIcon(type: IVRLogEntry["type"]) {
-    switch (type) {
-      case "say": return <Volume2 size={12} className="text-blue-500 flex-shrink-0 mt-0.5" />;
-      case "play": return <Play size={12} className="text-purple-500 flex-shrink-0 mt-0.5" />;
-      case "keypress": return <Phone size={12} className="text-amber-500 flex-shrink-0 mt-0.5" />;
-      case "record": return <Wand2 size={12} className="text-orange-500 flex-shrink-0 mt-0.5" />;
-      case "conference": return <Users size={12} className="text-green-500 flex-shrink-0 mt-0.5" />;
-      case "hangup": return <PhoneCall size={12} className="text-red-500 flex-shrink-0 mt-0.5" />;
-      case "pay": return <CreditCard size={12} className="text-teal-500 flex-shrink-0 mt-0.5" />;
-      default: return <Settings size={12} className="text-gray-400 flex-shrink-0 mt-0.5" />;
-    }
-  }
-
-  function entryLabel(type: IVRLogEntry["type"]) {
-    switch (type) {
-      case "say": return "SYSTEM";
-      case "play": return "AUDIO";
-      case "keypress": return "KEY";
-      case "record": return "RECORD";
-      case "conference": return "CONF";
-      case "hangup": return "END";
-      case "pay": return "PAY";
-      default: return "INFO";
-    }
-  }
-
-  function entryColor(type: IVRLogEntry["type"]) {
-    switch (type) {
-      case "say": return "text-white font-bold";
-      case "play": return "text-purple-300 font-bold";
-      case "keypress": return "text-amber-400 font-bold";
-      case "hangup": return "text-red-400 font-bold";
-      case "record": return "text-orange-300 font-bold";
-      case "conference": return "text-green-300 font-bold";
-      case "pay": return "text-teal-300 font-bold";
-      default: return "text-gray-400 italic font-bold";
-    }
-  }
-
-  function formatPlayContent(content: string): string {
-    const filename = content.split("/").pop() ?? content;
-    return `♪ ${filename}`;
-  }
-
-  const canType = connected && !ended && waitingForInput && !loading;
   const showBuffer = numDigits && numDigits > 1 && digitBuffer.length > 0;
 
+  // ── Log helpers ──────────────────────────────────────────────────────────
+  function getFilename(path: string): string {
+    return path.split("/").pop() ?? path;
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  const dialerCardStyle: React.CSSProperties = {
+    background: PT.card, border: `1px solid ${PT.cardBorder}`,
+    borderRadius: 16, padding: "1.5rem 1.25rem", display: "flex",
+    flexDirection: "column", gap: "1rem",
+  };
+
   return (
-    <div className="flex gap-6 p-4 min-h-0">
-      {/* Left: Config + Keypad */}
-      <div className="flex flex-col gap-4 w-64 flex-shrink-0">
-        {/* Phone number */}
-        <div className={C.panel}>
-          <div className={C.panelHeader}>Caller Number</div>
-          <div className="p-3">
-            <input
-              data-testid="input-ivr-from-number"
-              type="tel"
-              value={fromNumber}
-              onChange={e => setFromNumber(e.target.value)}
-              disabled={connected}
-              placeholder="+19999999999"
-              className="w-full border border-gray-300 rounded px-3 py-2 font-mono text-sm focus:outline-none focus:border-amber-400 disabled:bg-gray-50 disabled:text-gray-400"
-            />
-            <p className="text-gray-400 font-mono text-xs mt-1.5">Simulates calls from this number</p>
+    <div style={{ background: PT.bg, minHeight: "100%", padding: "1.5rem", display: "flex", gap: "1.25rem", alignItems: "flex-start" }}>
+
+      {/* ── Left: Dialer ─────────────────────────────────────────────────── */}
+      <div style={{ width: 310, flexShrink: 0, ...dialerCardStyle }}>
+
+        {/* Timer */}
+        <div style={{ textAlign: "center", paddingTop: "0.5rem" }}>
+          <div style={{ fontFamily: "monospace", fontSize: "2.6rem", fontWeight: 300, color: connected ? "#c8d8f0" : PT.dimText, letterSpacing: "0.06em", lineHeight: 1 }}>
+            {formatElapsed(elapsed)}
+          </div>
+          <div style={{ fontSize: "0.72rem", color: PT.mutedText, marginTop: "0.4rem" }}>
+            {connected
+              ? waitingForRecording
+                ? "Recording prompt active — press Play Greeting to skip"
+                : waitingForInput
+                  ? "Waiting for your input…"
+                  : loading ? "Processing…" : "On the line"
+              : ended
+                ? "Call ended"
+                : "Ready — press Start when your call connects"}
           </div>
         </div>
 
-        {/* Status + Connect/Disconnect */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 px-1">
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connected ? "bg-green-500 animate-pulse" : ended ? "bg-red-400" : "bg-gray-300"}`} />
-            <span className="font-mono text-xs text-gray-600 uppercase tracking-widest">
-              {connected ? "Connected" : ended ? "Call Ended" : "Idle"}
-            </span>
-          </div>
-          {!connected ? (
-            <button
-              data-testid="btn-ivr-connect"
-              onClick={handleConnect}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-green-600/40 text-white font-mono text-sm font-bold tracking-widest uppercase rounded transition-colors"
-            >
-              {loading ? <Loader2 size={15} className="animate-spin" /> : <Phone size={15} />}
-              {loading ? "Connecting…" : "Connect"}
-            </button>
-          ) : (
-            <button
-              data-testid="btn-ivr-disconnect"
-              onClick={handleDisconnect}
-              className="flex items-center justify-center gap-2 w-full py-3 bg-red-600 hover:bg-red-700 text-white font-mono text-sm font-bold tracking-widest uppercase rounded transition-colors"
-            >
-              <PhoneCall size={15} /> Disconnect
-            </button>
-          )}
-        </div>
+        {/* Caller number input (only when not connected) */}
+        {!connected && (
+          <input
+            data-testid="input-ivr-from-number"
+            type="tel"
+            value={fromNumber}
+            onChange={e => setFromNumber(e.target.value)}
+            placeholder="+19999999999"
+            style={{
+              width: "100%", boxSizing: "border-box", background: PT.keyBg,
+              border: `1px solid ${PT.keyBorder}`, borderRadius: 8, padding: "0.5rem 0.75rem",
+              fontFamily: "monospace", fontSize: "0.82rem", color: "#aabbd4",
+              outline: "none", textAlign: "center",
+            }}
+          />
+        )}
 
-        {/* Digit buffer display */}
+        {/* Digit buffer */}
         {showBuffer && (
-          <div className="border border-amber-300 bg-amber-50 rounded p-2 text-center font-mono text-lg tracking-widest text-amber-800">
-            {digitBuffer}
-            <span className="text-amber-400 animate-pulse">_</span>
-            <div className="text-amber-500 font-mono text-xs mt-1">{numDigits - digitBuffer.length} more digit{numDigits - digitBuffer.length !== 1 ? "s" : ""}</div>
+          <div style={{ background: "#1a1a00", border: "1px solid #5a5200", borderRadius: 8, padding: "0.5rem", textAlign: "center", fontFamily: "monospace" }}>
+            <span style={{ fontSize: "1.5rem", letterSpacing: "0.15em", color: "#f5d020" }}>{digitBuffer}</span>
+            <span style={{ color: "#f5d020", opacity: 0.5 }} className="animate-pulse">_</span>
+            <div style={{ fontSize: "0.68rem", color: "#a09000", marginTop: 2 }}>
+              {numDigits! - digitBuffer.length} more digit{numDigits! - digitBuffer.length !== 1 ? "s" : ""}
+            </div>
           </div>
         )}
 
-        {/* Telephone Keypad */}
-        <div className={C.panel}>
-          <div className={C.panelHeader}>Keypad</div>
-          <div className="p-3">
-            <div className="grid grid-cols-3 gap-2">
-              {keys.map(k => (
-                <button
-                  key={k}
-                  data-testid={`btn-ivr-key-${k}`}
-                  onClick={() => sendDigits(k)}
-                  disabled={!canType}
-                  className={`flex flex-col items-center justify-center py-3 rounded border font-mono font-bold text-lg transition-all select-none
-                    ${canType
-                      ? "border-gray-300 bg-white hover:bg-amber-50 hover:border-amber-400 active:scale-95 active:bg-amber-100 cursor-pointer text-gray-800"
-                      : "border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed"
-                    }`}
-                >
-                  <span>{k}</span>
-                  {keySub[k] && <span className="text-gray-400 text-[9px] font-normal mt-0.5">{keySub[k]}</span>}
-                </button>
-              ))}
-            </div>
-            {!canType && connected && (
-              <p className="text-gray-400 font-mono text-xs text-center mt-2">
-                {loading ? "Processing…" : "Waiting for prompt…"}
-              </p>
-            )}
-            {!connected && !ended && (
-              <p className="text-gray-400 font-mono text-xs text-center mt-2">Connect to enable keypad</p>
-            )}
-          </div>
+        {/* Keypad */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem" }}>
+          {keys.map(k => (
+            <button
+              key={k}
+              data-testid={`btn-ivr-key-${k}`}
+              onClick={() => sendDigits(k)}
+              disabled={!canType}
+              style={{
+                background: canType ? PT.keyBg : "#111826",
+                border: `1px solid ${canType ? PT.keyBorder : "#151e2d"}`,
+                borderRadius: 10, padding: "0.8rem 0.25rem",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                cursor: canType ? "pointer" : "not-allowed",
+                transition: "background 0.12s, border-color 0.12s, transform 0.08s",
+                userSelect: "none",
+              }}
+              onMouseEnter={e => { if (canType) { e.currentTarget.style.background = PT.keyHover; e.currentTarget.style.borderColor = "#3a5a8a"; } }}
+              onMouseLeave={e => { e.currentTarget.style.background = canType ? PT.keyBg : "#111826"; e.currentTarget.style.borderColor = canType ? PT.keyBorder : "#151e2d"; }}
+              onMouseDown={e => { if (canType) e.currentTarget.style.transform = "scale(0.93)"; }}
+              onMouseUp={e => { e.currentTarget.style.transform = "scale(1)"; }}
+            >
+              <span style={{ fontFamily: "monospace", fontSize: "1.4rem", fontWeight: 400, color: canType ? "#c5d9f0" : PT.dimText, lineHeight: 1 }}>{k}</span>
+              {keySub[k] && <span style={{ fontSize: "0.55rem", color: PT.dimText, marginTop: 2, letterSpacing: "0.12em" }}>{keySub[k]}</span>}
+            </button>
+          ))}
         </div>
+
+        {/* Play Greeting / Bypass button */}
+        <button
+          data-testid="btn-ivr-play-greeting"
+          onClick={() => {
+            if (waitingForRecording && connected) {
+              sendDigits("#"); // bypass recording — any key triggers submission of empty recording
+            }
+          }}
+          disabled={!connected || ended || (!waitingForRecording)}
+          style={{
+            width: "100%", padding: "0.8rem",
+            background: waitingForRecording ? PT.purple : "#1e2d47",
+            border: `1px solid ${waitingForRecording ? "#8f62e8" : PT.keyBorder}`,
+            borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
+            gap: "0.5rem", cursor: waitingForRecording ? "pointer" : "default",
+            transition: "background 0.15s",
+          }}
+          onMouseEnter={e => { if (waitingForRecording) e.currentTarget.style.background = PT.purpleHov; }}
+          onMouseLeave={e => { e.currentTarget.style.background = waitingForRecording ? PT.purple : "#1e2d47"; }}
+        >
+          <Wand2 size={16} style={{ color: waitingForRecording ? "#e0d0ff" : PT.dimText }} />
+          <span style={{ fontFamily: "monospace", fontSize: "0.85rem", fontWeight: 600, color: waitingForRecording ? "#e0d0ff" : PT.dimText, letterSpacing: "0.04em" }}>
+            {waitingForRecording ? "Skip Recording →" : "Play Greeting"}
+          </span>
+        </button>
+
+        {/* Start / End button */}
+        {!connected ? (
+          <button
+            data-testid="btn-ivr-connect"
+            onClick={handleConnect}
+            disabled={loading}
+            style={{
+              width: "100%", padding: "0.85rem",
+              background: loading ? "#145a2e" : PT.green,
+              border: "none", borderRadius: 10,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+              cursor: loading ? "not-allowed" : "pointer", transition: "background 0.15s",
+            }}
+            onMouseEnter={e => { if (!loading) e.currentTarget.style.background = PT.greenHov; }}
+            onMouseLeave={e => { e.currentTarget.style.background = loading ? "#145a2e" : PT.green; }}
+          >
+            {loading
+              ? <Loader2 size={17} style={{ color: "#fff", animation: "spin 1s linear infinite" }} />
+              : <Phone size={17} style={{ color: "#fff" }} />}
+            <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.9rem", color: "#fff", letterSpacing: "0.06em" }}>
+              {loading ? "Connecting…" : "Start"}
+            </span>
+          </button>
+        ) : (
+          <button
+            data-testid="btn-ivr-disconnect"
+            onClick={handleDisconnect}
+            style={{
+              width: "100%", padding: "0.85rem",
+              background: PT.red, border: "none", borderRadius: 10,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+              cursor: "pointer", transition: "background 0.15s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "#c53030"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = PT.red; }}
+          >
+            <PhoneCall size={17} style={{ color: "#fff" }} />
+            <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.9rem", color: "#fff", letterSpacing: "0.06em" }}>End Call</span>
+          </button>
+        )}
+
+        {/* Tip */}
+        <p style={{ fontSize: "0.68rem", color: PT.dimText, textAlign: "center", margin: 0 }}>
+          Tip: you can also use your keyboard (0–9, *, #) while connected
+        </p>
       </div>
 
-      {/* Right: Call Log */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <div className={C.panel + " flex-1 flex flex-col overflow-hidden"}>
-          <div className={C.panelHeader + " flex items-center justify-between"}>
-            <span>Call Log</span>
-            {log.length > 0 && (
-              <button
-                data-testid="btn-ivr-clear-log"
-                onClick={() => setLog([])}
-                className="text-gray-400 hover:text-white font-mono text-xs tracking-widest transition-colors"
-              >
-                CLEAR
-              </button>
-            )}
+      {/* ── Right: Activity Log ───────────────────────────────────────────── */}
+      <div style={{ flex: 1, minWidth: 0, background: PT.card, border: `1px solid ${PT.cardBorder}`, borderRadius: 16, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+
+        {/* Header */}
+        <div style={{ padding: "0.9rem 1.1rem", borderBottom: `1px solid ${PT.logBorder}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <Clock size={14} style={{ color: "#6b84a8" }} />
+            <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.8rem", color: "#8fa3c8", letterSpacing: "0.08em" }}>Activity Log</span>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-[400px] max-h-[600px] bg-gray-950 font-mono text-xs">
-            {log.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-40 text-gray-600">
-                <Phone size={28} className="mb-3 opacity-30" />
-                <span className="tracking-widest uppercase text-xs">Press Connect to start a test call</span>
-              </div>
-            )}
-            {log.map((entry, i) => (
-              <div
-                key={i}
-                data-testid={`log-entry-${i}`}
-                className={`flex items-start gap-2 py-1 border-b border-gray-800/50 last:border-0 ${entry.type === "keypress" ? "justify-end" : ""}`}
-              >
-                {entry.type !== "keypress" && (
-                  <>
-                    {entryIcon(entry.type)}
-                    <span className="text-gray-600 text-[10px] pt-0.5 w-12 flex-shrink-0">{entryLabel(entry.type)}</span>
-                  </>
-                )}
-                <span className={`flex-1 leading-relaxed ${entryColor(entry.type)} ${entry.type === "keypress" ? "text-right text-amber-400 font-bold text-sm" : ""}`}>
-                  {entry.type === "keypress" ? `▶ ${entry.content}` : entry.type === "play" ? formatPlayContent(entry.content) : entry.content}
-                </span>
-                {entry.type === "keypress" && entryIcon(entry.type)}
-              </div>
-            ))}
-            <div ref={logEndRef} />
-          </div>
-          {/* Legend */}
-          <div className="border-t border-gray-700 px-3 py-2 flex flex-wrap gap-3 bg-gray-950">
-            {([["say","SYSTEM (TTS)","text-white"],["play","AUDIO (MP3)","text-purple-300"],["keypress","KEY PRESS","text-amber-400"],["record","RECORD","text-orange-300"],["hangup","END","text-red-400"]] as const).map(([type, label, color]) => (
-              <span key={type} className={`flex items-center gap-1 font-mono text-[10px] font-bold ${color}`}>
-                {entryIcon(type as IVRLogEntry["type"])} {label}
-              </span>
-            ))}
-          </div>
+          {log.length > 0 && (
+            <button
+              data-testid="btn-ivr-clear-log"
+              onClick={() => setLog([])}
+              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "monospace", fontSize: "0.68rem", color: PT.dimText, letterSpacing: "0.08em" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "#8fa3c8")}
+              onMouseLeave={e => (e.currentTarget.style.color = PT.dimText)}
+            >CLEAR</button>
+          )}
+        </div>
+
+        {/* Entries */}
+        <div style={{ flex: 1, overflowY: "auto", background: PT.logBg, minHeight: 420, maxHeight: 620, padding: "0.75rem" }}>
+          {log.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", minHeight: 300, color: PT.dimText }}>
+              <Phone size={32} style={{ opacity: 0.25, marginBottom: "0.75rem" }} />
+              <div style={{ fontFamily: "monospace", fontSize: "0.8rem", color: PT.mutedText }}>No activity yet</div>
+              <div style={{ fontFamily: "monospace", fontSize: "0.7rem", color: PT.dimText, marginTop: "0.25rem" }}>Press Start once your call connects</div>
+            </div>
+          ) : (
+            log.map((entry, i) => {
+              const isKey = entry.type === "keypress";
+              return (
+                <div key={i} data-testid={`log-entry-${i}`}
+                  style={{
+                    display: "flex", alignItems: "flex-start", gap: "0.5rem",
+                    padding: "0.45rem 0.3rem", borderBottom: `1px solid ${PT.logBorder}`,
+                    justifyContent: isKey ? "flex-end" : "flex-start",
+                  }}>
+
+                  {/* Left-aligned entries */}
+                  {!isKey && (() => {
+                    if (entry.type === "play") {
+                      const filename = getFilename(entry.content);
+                      return (
+                        <>
+                          <Play size={11} style={{ color: "#a78bfa", flexShrink: 0, marginTop: 3 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ fontFamily: "monospace", fontSize: "0.65rem", color: "#6b84a8", letterSpacing: "0.06em", marginRight: "0.4rem" }}>MP3</span>
+                            <span style={{ fontFamily: "monospace", fontSize: "0.8rem", color: "#c4b5fd", fontWeight: 600, wordBreak: "break-all" }}>
+                              {filename}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    }
+                    if (entry.type === "say") {
+                      return (
+                        <>
+                          <Volume2 size={11} style={{ color: "#60a5fa", flexShrink: 0, marginTop: 3 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{
+                              fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700,
+                              background: "#7c3aed22", border: "1px solid #7c3aed55",
+                              borderRadius: 4, padding: "0 4px", color: "#a78bfa",
+                              marginRight: "0.4rem", letterSpacing: "0.06em",
+                            }}>TTS</span>
+                            <span style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "#cbd5e1" }}>
+                              {entry.content}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    }
+                    if (entry.type === "record") {
+                      return (
+                        <>
+                          <Wand2 size={11} style={{ color: "#f97316", flexShrink: 0, marginTop: 3 }} />
+                          <span style={{ fontFamily: "monospace", fontSize: "0.75rem", color: "#fdba74" }}>{entry.content}</span>
+                        </>
+                      );
+                    }
+                    if (entry.type === "conference") {
+                      return (
+                        <>
+                          <Users size={11} style={{ color: "#4ade80", flexShrink: 0, marginTop: 3 }} />
+                          <span style={{ fontFamily: "monospace", fontSize: "0.75rem", color: "#86efac" }}>{entry.content}</span>
+                        </>
+                      );
+                    }
+                    if (entry.type === "hangup") {
+                      return (
+                        <>
+                          <PhoneCall size={11} style={{ color: "#f87171", flexShrink: 0, marginTop: 3 }} />
+                          <span style={{ fontFamily: "monospace", fontSize: "0.75rem", color: "#fca5a5" }}>{entry.content}</span>
+                        </>
+                      );
+                    }
+                    if (entry.type === "pay") {
+                      return (
+                        <>
+                          <CreditCard size={11} style={{ color: "#2dd4bf", flexShrink: 0, marginTop: 3 }} />
+                          <span style={{ fontFamily: "monospace", fontSize: "0.75rem", color: "#99f6e4" }}>{entry.content}</span>
+                        </>
+                      );
+                    }
+                    // system / default
+                    return (
+                      <>
+                        <Settings size={11} style={{ color: "#6b84a8", flexShrink: 0, marginTop: 3 }} />
+                        <span style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#6b84a8", fontStyle: "italic" }}>{entry.content}</span>
+                      </>
+                    );
+                  })()}
+
+                  {/* Right-aligned key presses */}
+                  {isKey && (
+                    <>
+                      <span style={{ fontFamily: "monospace", fontSize: "0.85rem", fontWeight: 700, color: "#fbbf24" }}>▶ {entry.content}</span>
+                      <Phone size={11} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 3 }} />
+                    </>
+                  )}
+                </div>
+              );
+            })
+          )}
+          <div ref={logEndRef} />
+        </div>
+
+        {/* Legend */}
+        <div style={{ borderTop: `1px solid ${PT.logBorder}`, padding: "0.5rem 0.75rem", background: PT.logBg, display: "flex", flexWrap: "wrap", gap: "0.9rem" }}>
+          {[
+            { icon: <Play size={10} style={{ color: "#a78bfa" }} />, label: "MP3 File",   color: "#a78bfa" },
+            { icon: <Volume2 size={10} style={{ color: "#60a5fa" }} />, label: "TTS (no audio file)", color: "#60a5fa" },
+            { icon: <Phone size={10} style={{ color: "#fbbf24" }} />,  label: "Key Press", color: "#fbbf24" },
+            { icon: <Wand2 size={10} style={{ color: "#f97316" }} />,  label: "Record",    color: "#f97316" },
+            { icon: <PhoneCall size={10} style={{ color: "#f87171" }} />, label: "Hangup",  color: "#f87171" },
+          ].map(item => (
+            <span key={item.label} style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontFamily: "monospace", fontSize: "0.65rem", color: item.color }}>
+              {item.icon} {item.label}
+            </span>
+          ))}
         </div>
       </div>
     </div>

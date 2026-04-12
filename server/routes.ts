@@ -130,6 +130,7 @@ export async function registerRoutes(
           status: session.status,
           waitingForInput: session.waitingForInput,
           numDigits: session.numDigits,
+          waitingForRecording: !!session.recordAction,
         });
       } catch (err: any) {
         console.error("[ivr-tester] connect error:", err);
@@ -150,6 +151,7 @@ export async function registerRoutes(
           status: session.status,
           waitingForInput: session.waitingForInput,
           numDigits: session.numDigits,
+          waitingForRecording: !!session.recordAction,
         });
       } catch (err: any) {
         console.error("[ivr-tester] input error:", err);
