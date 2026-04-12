@@ -5360,12 +5360,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   });
 
   // ─── 14. Membership Purchase ──────────────────────────────────────────────
-  app.post("/voice/membership-purchase", async (req, res) => {
+  // Pass-through to purchase-pre-menu, which dynamically reads package prices
+  // from admin settings. The old hardcoded audio file is no longer used.
+  app.post("/voice/membership-purchase", (req, res) => {
     const twiml = new VoiceResponse();
-    const audioUrl = `${baseUrl(req)}/uploads/membership_packages_1774058642428.mp3`;
-    const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-package-selection", finishOnKey: "" });
-    gather.play(audioUrl);
-    twiml.redirect("/voice/membership-purchase");
+    twiml.redirect("/voice/purchase-pre-menu");
     res.type("text/xml");
     res.send(twiml.toString());
   });
