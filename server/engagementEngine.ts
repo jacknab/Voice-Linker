@@ -814,6 +814,110 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     lineText: "Roger here. You just sent a message. That is exactly what this line is all about.",
     cooldownSeconds: 280 },
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 20 NEW PROMPTS — v3 emotion-optimized, varied moods & categories
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  { id: "new_01", category: "picky", tone: "comedic",
+    trigger: { minSkips: 10, maxMessagesSent: 0, minAttentionDrain: 4 },
+    lineText: "You have sampled more profiles tonight than a man at a free buffet. At some point you have to commit to a plate.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 280 },
+
+  { id: "new_02", category: "flirty", tone: "seductive",
+    trigger: { requiredMoods: ["normal"], maxMessagesSent: 0, minSessionSeconds: 60, minAttentionDrain: 3 },
+    lineText: "I wonder if you know how much the right hello can change everything. Tonight could be that night.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 200 },
+
+  { id: "new_03", category: "idle", tone: "comedic",
+    trigger: { maxSkips: 2, minSessionSeconds: 55, minAttentionDrain: 3 },
+    lineText: "You have gone quiet on me. Either you are thinking very deeply... or you have another app open. Come back. We miss you.",
+    cooldownSeconds: 150 },
+
+  { id: "new_04", category: "reengagement", tone: "playful",
+    trigger: { minSkips: 6, minSessionSeconds: 180, maxMessagesSent: 0, minAttentionDrain: 5 },
+    lineText: "Some guys wait their whole session hoping somebody reaches out to them. Be the one that makes someone's night.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 240 },
+
+  { id: "new_05", category: "picky", tone: "teasing",
+    trigger: { requiredMoods: ["petty"], maxMessagesSent: 0, minSkips: 8, minAttentionDrain: 5 },
+    lineText: "You are not hard to please. You just have not heard the right voice yet. Or... you have and you were too nervous to do anything about it.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 260 },
+
+  { id: "new_06", category: "flirty", tone: "seductive",
+    trigger: { minSkips: 4, maxSkips: 12, maxMessagesSent: 0, minAttentionDrain: 3 },
+    lineText: "There is something about a man who takes his time. It tells me you know exactly what you want.",
+    cooldownSeconds: 200 },
+
+  { id: "new_07", category: "picky", tone: "comedic",
+    trigger: { requiredMoods: ["petty"], maxMessagesSent: 0, minAttentionDrain: 6 },
+    lineText: "I want you to know I am keeping a running tally over here. The numbers are impressive. Not in a good way.",
+    cooldownSeconds: 240 },
+
+  { id: "new_08", category: "reengagement", tone: "playful",
+    trigger: { requiredMoods: ["normal"], minSessionSeconds: 90, maxMessagesSent: 0, minAttentionDrain: 4 },
+    lineText: "You are closer to making a real connection tonight than you think. One message. That is literally all it takes.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 210 },
+
+  { id: "new_09", category: "reengagement", tone: "playful",
+    trigger: { minSessionSeconds: 200, minSkips: 7, maxMessagesSent: 0, minAttentionDrain: 6 },
+    lineText: "This is me officially nudging you. Not pushing — this is a gentle, very dignified nudge. Say something to someone.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 280 },
+
+  { id: "new_10", category: "picky", tone: "teasing",
+    trigger: { minSkips: 14, maxMessagesSent: 0, minSessionSeconds: 150, minAttentionDrain: 6 },
+    lineText: "At some point you stop browsing and start just... enjoying the company. Nothing wrong with that. But these guys would genuinely love to hear back.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 300 },
+
+  { id: "new_11", category: "flirty", tone: "seductive",
+    trigger: { minSkips: 5, maxMessagesSent: 0, minAttentionDrain: 4 },
+    lineText: "Someone out there is about to get a message from exactly the kind of person they were hoping for. It could be you. It should be you.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 220 },
+
+  { id: "new_12", category: "picky", tone: "comedic",
+    trigger: { requiredMoods: ["petty"], maxMessagesSent: 0, minAttentionDrain: 5 },
+    lineText: "Here is a thought. What if you are the intimidating one? What if they are sitting there right now hoping you reach out first?",
+    followUpAction: "suggest_send_message", cooldownSeconds: 250 },
+
+  { id: "new_13", category: "idle", tone: "seductive",
+    trigger: { maxSkips: 3, minSessionSeconds: 45, maxMessagesSent: 0, minAttentionDrain: 3 },
+    lineText: "Silence can feel safe. But so can a voice that actually writes you back.",
+    cooldownSeconds: 160 },
+
+  { id: "new_14", category: "reengagement", tone: "seductive",
+    trigger: { requiredMoods: ["activated"], minSessionSeconds: 120, minAttentionDrain: 6 },
+    lineText: "Now that you are warmed up — there is someone on this line tonight who was made for your kind of energy. Go find them.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 300 },
+
+  { id: "new_15", category: "picky", tone: "comedic",
+    trigger: { requiredMoods: ["chaos"], maxMessagesSent: 0, minAttentionDrain: 7 },
+    lineText: "I have given up trying to predict you. You are completely chaotic. I actually respect it. Now please — for the love of everything — send someone a message.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 340 },
+
+  { id: "new_16", category: "reward", tone: "playful",
+    trigger: { minMessagesSent: 1, minSessionSeconds: 90, minAttentionDrain: 0 },
+    lineText: "Look at that. You are out here actually doing it — reaching out. That is rarer than you think. Keep that energy.",
+    cooldownSeconds: 320 },
+
+  { id: "new_17", category: "flirty", tone: "teasing",
+    trigger: { requiredMoods: ["normal"], minSkips: 3, maxSkips: 9, maxMessagesSent: 0, minAttentionDrain: 3 },
+    lineText: "You know what is more interesting than just browsing all night? Being the one who actually makes a move.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 190 },
+
+  { id: "new_18", category: "picky", tone: "teasing",
+    trigger: { minSkips: 16, maxMessagesSent: 0, minAttentionDrain: 7 },
+    lineText: "Let me ask you something honestly. What would actually get you to send a message? Because I genuinely want to help you here.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 310 },
+
+  { id: "new_19", category: "flirty", tone: "playful",
+    trigger: { minSkips: 3, maxMessagesSent: 0, maxSessionSeconds: 150, minAttentionDrain: 3 },
+    lineText: "The difference between a great night on this line and a forgettable one? Usually just one message. Just one.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 200 },
+
+  { id: "new_20", category: "reengagement", tone: "comedic",
+    trigger: { requiredMoods: ["chaos"], maxMessagesSent: 0, minAttentionDrain: 7 },
+    lineText: "You are an enigma. A walking mystery. And somewhere on this line there is someone who absolutely wants to figure you out.",
+    followUpAction: "suggest_send_message", cooldownSeconds: 300 },
+
 ];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1233,4 +1337,26 @@ export const ROGER_V3_TEXTS: Record<string, string> = {
 
   // GAME INVITE
   activated_game: "[excited] Alright, gentlemen, [clear throat] it's time to mix it up a bit — I have activated the mini game called Busted. One of the guys on the line right now is an AI pretending to be real. Press 8 if you spot him — get it right and win free time.",
+
+  // NEW 20 PROMPTS
+  new_01: "[chuckles] You have sampled more profiles tonight than a man at a free buffet. [deadpan] At some point you have to commit to a plate.",
+  new_02: "[softly] I wonder if you know how much the right hello can change everything. [warmly] Tonight could be that night.",
+  new_03: "[laughs softly] You have gone quiet on me. Either you are thinking very deeply... [mischievously] or you have another app open. Come back. We miss you.",
+  new_04: "[warmly] Some guys wait their whole session hoping somebody reaches out to them. [encouraging] Be the one that makes someone's night.",
+  new_05: "[sighs] You are not hard to please. You just have not heard the right voice yet. [teasing] Or... you have and you were too nervous to do anything about it.",
+  new_06: "[warmly] There is something about a man who takes his time. [softly] It tells me you know exactly what you want.",
+  new_07: "[deadpan] I want you to know I am keeping a running tally over here. [flatly] The numbers are impressive. Not in a good way.",
+  new_08: "[warmly] You are closer to making a real connection tonight than you think. [encouraging] One message. That is literally all it takes.",
+  new_09: "[playfully] This is me officially nudging you. Not pushing — [gently] this is a gentle, very dignified nudge. Say something to someone.",
+  new_10: "[mischievously] At some point you stop browsing and start just... enjoying the company. [warmly] Nothing wrong with that. But these guys would genuinely love to hear back.",
+  new_11: "[softly] Someone out there is about to get a message from exactly the kind of person they were hoping for. [warmly] It could be you. It should be you.",
+  new_12: "[curious] Here is a thought. What if you are the intimidating one? [playfully] What if they are sitting there right now hoping you reach out first?",
+  new_13: "[softly] Silence can feel safe. [warmly] But so can a voice that actually writes you back.",
+  new_14: "[warmly] Now that you are warmed up — [seductively] there is someone on this line tonight who was made for your kind of energy. Go find them.",
+  new_15: "[sighs] I have given up trying to predict you. You are completely chaotic. [laughs] I actually respect it. [urgent] Now please — for the love of everything — send someone a message.",
+  new_16: "[warmly] Look at that. You are out here actually doing it — reaching out. [cheerfully] That is rarer than you think. Keep that energy.",
+  new_17: "[mischievously] You know what is more interesting than just browsing all night? [teasing] Being the one who actually makes a move.",
+  new_18: "[sighs] Let me ask you something honestly. [curious] What would actually get you to send a message? Because I genuinely want to help you here.",
+  new_19: "[warmly] The difference between a great night on this line and a forgettable one? [softly] Usually just one message. Just one.",
+  new_20: "[laughs] You are an enigma. A walking mystery. [warmly] And somewhere on this line there is someone who absolutely wants to figure you out.",
 };
