@@ -126,18 +126,27 @@ function playBackdoorHoursRemaining(
 }
 
 // Play the active caller count announcement by chaining phrase + number audio files.
+// isFemaleOnMW: true when the caller is female on a MW system — uses the _f variant files
+// so female callers hear "guys on the line" while male callers hear "women on the line".
 function playCallerCount(
   twiml: { say: (text: string) => void; play: (url: string) => void },
   req: Request,
-  count: number
+  count: number,
+  isFemaleOnMW = false
 ): void {
   const isSingular = count === 1;
   playPrompt(twiml, req, isSingular ? "phrase_there_is.mp3" : "phrase_there_are.mp3",
     isSingular ? "There is" : "There are");
   playNumber(twiml, req, count);
-  playPrompt(twiml, req,
-    isSingular ? "phrase_caller_on_the_line.mp3" : "phrase_callers_on_the_line.mp3",
-    isSingular ? "guy on the line." : "guys on the line.");
+  if (isFemaleOnMW) {
+    playPrompt(twiml, req,
+      isSingular ? "phrase_caller_on_the_line_f.mp3" : "phrase_callers_on_the_line_f.mp3",
+      isSingular ? "guy on the line." : "guys on the line.");
+  } else {
+    playPrompt(twiml, req,
+      isSingular ? "phrase_caller_on_the_line.mp3" : "phrase_callers_on_the_line.mp3",
+      isSingular ? "guy on the line." : "guys on the line.");
+  }
 }
 
 // In-memory payment sessions keyed by Twilio CallSid
@@ -4349,7 +4358,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
           // Announce caller count only at the very start of the queue
           if (state.index === 1) {
-            playCallerCount(twiml, req, activeCallerCount);
+            playCallerCount(twiml, req, activeCallerCount, browseCallerGender === "female");
           }
 
           // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one

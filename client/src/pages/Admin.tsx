@@ -1037,10 +1037,14 @@ const MW_SYSTEM_PROMPTS: typeof SYSTEM_PROMPTS = [
     if (p.filename === "live_connect_ended.mp3") return [{ ...p, text: "Your live connection has ended. Returning you to the live connector." }];
     if (p.filename === "live_connect_failed.mp3") return [{ ...p, text: "We were unable to connect your call. Returning you to the live connector." }];
     // Phrase fragments — gender-flipped for MW
-    if (p.filename === "phrase_callers_on_the_line.mp3") return [{ ...p, label: "Phrase — «women on the line»", text: "women on the line." }];
-    if (p.filename === "phrase_caller_on_the_line.mp3")  return [{ ...p, label: "Phrase — «woman on the line»", text: "woman on the line." }];
+    if (p.filename === "phrase_callers_on_the_line.mp3") return [{ ...p, label: "Phrase — «women on the line» (Male Callers)", text: "women on the line." }];
+    if (p.filename === "phrase_caller_on_the_line.mp3")  return [{ ...p, label: "Phrase — «woman on the line» (Male Callers)", text: "woman on the line." }];
     return [p];
   }),
+
+  // MW-exclusive: female-caller phrase files — played when a female caller browses male profiles
+  { group: "phrases", filename: "phrase_callers_on_the_line_f.mp3", label: "Phrase — «guys on the line» (Female Callers)", text: "guys on the line." },
+  { group: "phrases", filename: "phrase_caller_on_the_line_f.mp3",  label: "Phrase — «guy on the line» (Female Callers)",  text: "guy on the line." },
 ];
 
 // ── AutoResizeTextarea ────────────────────────────────────────────────────────
