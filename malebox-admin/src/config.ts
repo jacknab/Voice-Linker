@@ -28,3 +28,13 @@ export function saveConfig(config: AdminConfig): void {
 export function clearConfig(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
+
+// Resolve a relative URL like "/uploads/mm/file.mp3" against the configured
+// backend server URL so that <audio src> and new Audio() work from the desktop
+// app (which runs on a different origin than the backend).
+export function resolveUrl(url: string): string {
+  if (!url || !url.startsWith("/")) return url;
+  const config = getConfig();
+  if (!config) return url;
+  return config.serverUrl + url;
+}

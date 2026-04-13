@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { getConfig } from "../config";
+import { getConfig, resolveUrl } from "../config";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -149,7 +149,7 @@ function AudioPlayer({ src }: { src: string }) {
   }
   return (
     <div className="flex items-center gap-2">
-      <audio ref={audioRef} src={src} onEnded={() => setPlaying(false)} preload="none" />
+      <audio ref={audioRef} src={resolveUrl(src)} onEnded={() => setPlaying(false)} preload="none" />
       <button
         data-testid={`btn-play-${src}`}
         onClick={toggle}
@@ -1179,7 +1179,7 @@ function RogerSubTab() {
       return;
     }
     audioRef.current?.pause();
-    const audio = new Audio(entry.audioUrl);
+    const audio = new Audio(resolveUrl(entry.audioUrl ?? ""));
     audioRef.current = audio;
     setPlayingId(entry.id);
     audio.onended = () => { setPlayingId(null); audioRef.current = null; };
@@ -1732,7 +1732,7 @@ function TTSTab() {
       return;
     }
     promptAudioRef.current?.pause();
-    const audio = new Audio(url);
+    const audio = new Audio(resolveUrl(url));
     promptAudioRef.current = audio;
     setPlayingPromptKey(key);
     audio.onended = () => { setPlayingPromptKey(null); promptAudioRef.current = null; };
@@ -2965,7 +2965,7 @@ function MessagesTab() {
     if (audioRef.current) {
       audioRef.current.pause();
     }
-    const audio = new Audio(msg.recordingUrl);
+    const audio = new Audio(resolveUrl(msg.recordingUrl));
     audio.onended = () => setPlayingId(null);
     audio.play();
     audioRef.current = audio;
@@ -3302,7 +3302,7 @@ function IVRTesterTab() {
     scrollToBottom();
 
     if (entry.type === "play" && entry.content.startsWith("/")) {
-      const audio = new Audio(entry.content);
+      const audio = new Audio(resolveUrl(entry.content));
       currentAudio.current = audio;
       audio.onended = () => { audioPlaying.current = false; currentAudio.current = null; processAudioQueue(); };
       audio.onerror = () => { audioPlaying.current = false; currentAudio.current = null; processAudioQueue(); };
@@ -4705,7 +4705,7 @@ function FlaggedAudioPlayer({ url, label }: { url: string; label: string }) {
     <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
       <audio
         ref={audioRef}
-        src={url}
+        src={resolveUrl(url)}
         onTimeUpdate={e => {
           const a = e.currentTarget;
           setProgress(a.duration ? a.currentTime / a.duration : 0);
@@ -7000,7 +7000,7 @@ function SupportTicketsTab() {
                     <span className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleString()}</span>
                   </div>
                   {t.recordingUrl && (
-                    <audio data-testid={`ticket-audio-${t.id}`} controls src={t.recordingUrl} className="w-full max-w-sm h-8 mt-1" />
+                    <audio data-testid={`ticket-audio-${t.id}`} controls src={resolveUrl(t.recordingUrl)} className="w-full max-w-sm h-8 mt-1" />
                   )}
                   {t.notes && <p data-testid={`ticket-notes-${t.id}`} className="text-sm text-muted-foreground">{t.notes}</p>}
                 </div>
