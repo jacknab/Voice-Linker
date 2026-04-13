@@ -131,3 +131,9 @@ id = "lpSU0-n0vmVqs22Bkcfox"
 uri = "file://DOCUMENTATION.md"
 type = "text"
 title = "Male Box — Complete Developer & Operator Documentation"
+
+[[outputs]]
+id = "TmeA-mBveQs7LCzQkcR2s"
+uri = "file://docs/groq-transcription.md"
+type = "text"
+title = "Groq Transcription — Setup & Reference"
