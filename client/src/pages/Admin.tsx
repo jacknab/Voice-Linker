@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAdminKey, setAdminKey, clearAdminKey } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import {
@@ -7178,6 +7178,71 @@ export default function Admin({ onLogout }: AdminProps) {
   const [saveMembership, setSaveMembership] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // ── Admin key gate ────────────────────────────────────────────────────────
+  const [adminKey, setAdminKeyState] = useState<string | null>(() => getAdminKey());
+  const [keyInput, setKeyInput] = useState("");
+  const [keyError, setKeyError] = useState(false);
+
+  // Clear key and show entry screen whenever a request returns 403
+  useEffect(() => {
+    function handleForbidden() {
+      clearAdminKey();
+      setAdminKeyState(null);
+      queryClient.clear();
+      setKeyError(true);
+    }
+    window.addEventListener("admin-forbidden", handleForbidden);
+    return () => window.removeEventListener("admin-forbidden", handleForbidden);
+  }, []);
+
+  function handleSaveKey() {
+    const trimmed = keyInput.trim();
+    if (!trimmed) return;
+    setAdminKey(trimmed);
+    setAdminKeyState(trimmed);
+    setKeyInput("");
+    setKeyError(false);
+    queryClient.invalidateQueries();
+  }
+
+  if (!adminKey) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#111827]">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
+          <div className="flex flex-col items-center gap-2 mb-6">
+            <Shield size={36} className="text-[#111827]" />
+            <h1 className="text-xl font-bold text-gray-900">Admin Access</h1>
+            <p className="text-sm text-gray-500 text-center">Enter your admin secret key to continue.</p>
+          </div>
+          {keyError && (
+            <div className="mb-4 flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <AlertCircle size={15} />
+              Invalid key — please try again.
+            </div>
+          )}
+          <input
+            type="password"
+            placeholder="Admin secret key"
+            value={keyInput}
+            onChange={e => setKeyInput(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleSaveKey()}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            data-testid="input-admin-key"
+            autoFocus
+          />
+          <button
+            onClick={handleSaveKey}
+            disabled={!keyInput.trim()}
+            className="w-full bg-[#111827] text-white rounded-lg py-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-40 transition"
+            data-testid="button-admin-key-submit"
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Auto-collapse sidebar when switching to IVR Flow Map for more canvas space
   useEffect(() => {
     if (activeTab === "ivr-flow") setSidebarOpen(false);
@@ -7248,6 +7313,14 @@ export default function Admin({ onLogout }: AdminProps) {
 
         {/* Bottom */}
         <div className="px-2 py-3 border-t border-white/10 space-y-0.5 min-w-[208px]">
+          <button
+            data-testid="btn-change-admin-key"
+            onClick={() => { clearAdminKey(); setAdminKeyState(null); queryClient.clear(); }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-white/40 hover:text-white/70 hover:bg-white/5 font-mono text-xs tracking-widest uppercase transition-colors border-l-2 border-transparent pl-[10px]"
+          >
+            <ShieldOff size={15} />
+            Change Key
+          </button>
           <button
             data-testid="btn-admin-logout"
             onClick={() => logoutMutation.mutate()}

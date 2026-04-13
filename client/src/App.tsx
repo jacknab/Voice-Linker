@@ -21,6 +21,8 @@ import SafetyTips from "@/pages/SafetyTips";
 import About from "@/pages/About";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import Terms from "@/pages/Terms";
+import SecureAdminGuard from "@/components/SecureAdminGuard";
+import AdminLogin from "@/pages/AdminLogin";
 import { useEffect } from "react";
 
 function Router() {
@@ -43,7 +45,9 @@ function Router() {
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms" component={Terms} />
       <Route path="/setup" component={Home} />
-      
+      <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin" component={SecureAdminGuard} />
+
       <Route component={NotFound} />
     </Switch>
   );
