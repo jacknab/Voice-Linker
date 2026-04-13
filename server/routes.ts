@@ -1507,6 +1507,7 @@ export async function registerRoutes(
         plan3Name, plan3Minutes, plan3PriceCents,
         bonusPlanKey,
         billingMode,
+        stripeEnabled,
         paypalEmail,
         paypalSandbox,
         freeMode,
@@ -1525,7 +1526,8 @@ export async function registerRoutes(
       if (plan3Minutes !== undefined) data.plan3Minutes = parseInt(plan3Minutes);
       if (plan3PriceCents !== undefined) data.plan3PriceCents = parseInt(plan3PriceCents);
       if (bonusPlanKey !== undefined) data.bonusPlanKey = bonusPlanKey || null;
-      if (billingMode !== undefined) data.billingMode = billingMode === "per_day" ? "per_day" : "per_minute";
+      if (billingMode !== undefined) data.billingMode = ["per_day", "per_24h", "per_minute"].includes(billingMode) ? billingMode : "per_minute";
+      if (stripeEnabled !== undefined) data.stripeEnabled = Boolean(stripeEnabled);
       if (paypalEmail !== undefined) data.paypalEmail = paypalEmail ? String(paypalEmail).trim() : null;
       if (paypalSandbox !== undefined) data.paypalSandbox = Boolean(paypalSandbox);
       if (freeMode !== undefined) data.freeMode = Boolean(freeMode);

@@ -21,6 +21,7 @@ interface MembershipSettings {
   plan3Name: string; plan3Minutes: number; plan3PriceCents: number;
   bonusPlanKey: string | null;
   billingMode: string;
+  stripeEnabled: boolean;
   paypalEmail: string | null;
 }
 
@@ -96,6 +97,7 @@ export default function Membership() {
   });
 
   const paypalEnabled = !!(settings?.paypalEmail);
+  const stripeEnabled = settings?.stripeEnabled !== false;
 
   const stripeMutation = useMutation({
     mutationFn: async (planKey: string) => {
@@ -307,8 +309,8 @@ export default function Membership() {
 
                   {/* Payment buttons */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                    {/* Stripe / Card button */}
-                    <button
+                    {/* Stripe / Card button — only shown when Stripe is enabled */}
+                    {stripeEnabled && <button
                       data-testid={`button-buy-stripe-${plan.key}`}
                       onClick={() => handlePurchase(plan.key, "stripe")}
                       disabled={isBusy}
@@ -337,7 +339,7 @@ export default function Membership() {
                       ) : (
                         <><Lock size={14} />{me ? "Link phone to buy" : "Log in to buy"}</>
                       )}
-                    </button>
+                    </button>}
 
                     {/* PayPal button — only shown when PayPal is configured */}
                     {paypalEnabled && (
@@ -382,7 +384,7 @@ export default function Membership() {
         {/* Trust badges */}
         <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "2rem", marginTop: "3rem", paddingTop: "2rem", borderTop: "1px solid #1a1a1a" }}>
           {[
-            { icon: Shield, label: "Secure payment via Stripe" },
+            ...(stripeEnabled ? [{ icon: Shield, label: "Secure payment via Stripe" }] : []),
             ...(paypalEnabled ? [{ icon: SiPaypal as any, label: "PayPal accepted" }] : []),
             { icon: Lock, label: "256-bit SSL encryption" },
             { icon: CheckCircle, label: "Instant activation" },

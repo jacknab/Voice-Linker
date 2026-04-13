@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { getConfig } from "../config";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -2252,7 +2253,7 @@ function TTSTab() {
 // ── MembershipsTab ────────────────────────────────────────────────────────────
 function MembershipsTab() {
   const { toast } = useToast();
-  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; paypalEmail: string | null; paypalSandbox: boolean; freeMode: boolean; freeModeScheduleDays: number[]; }
+  interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; stripeEnabled: boolean; paypalEmail: string | null; paypalSandbox: boolean; freeMode: boolean; freeModeScheduleDays: number[]; }
 
   const { data: ms, isLoading } = useQuery<MembershipSettings>({ queryKey: ["/api/admin/membership-settings"] });
 
@@ -2262,6 +2263,7 @@ function MembershipsTab() {
   const [plan3Name, setPlan3Name] = useState(""); const [plan3Minutes, setPlan3Minutes] = useState(""); const [plan3Price, setPlan3Price] = useState("");
   const [bonusPlanKey, setBonusPlanKey] = useState<string | null>(null);
   const [billingMode, setBillingMode] = useState<"per_minute" | "per_day" | "per_24h">("per_minute");
+  const [stripeEnabled, setStripeEnabled] = useState(true);
   const [paypalEmail, setPaypalEmail] = useState("");
   const [paypalSandbox, setPaypalSandbox] = useState(false);
   const [freeMode, setFreeMode] = useState(false);
@@ -2274,7 +2276,8 @@ function MembershipsTab() {
     setPlan2Name(ms.plan2Name); setPlan2Minutes(String(ms.plan2Minutes)); setPlan2Price((ms.plan2PriceCents / 100).toFixed(2));
     setPlan3Name(ms.plan3Name); setPlan3Minutes(String(ms.plan3Minutes)); setPlan3Price((ms.plan3PriceCents / 100).toFixed(2));
     setBonusPlanKey(ms.bonusPlanKey ?? null);
-    setBillingMode((ms.billingMode ?? "per_minute") as "per_minute" | "per_day");
+    setBillingMode((ms.billingMode ?? "per_minute") as "per_minute" | "per_day" | "per_24h");
+    setStripeEnabled(ms.stripeEnabled !== false);
     setPaypalEmail(ms.paypalEmail ?? "");
     setPaypalSandbox(ms.paypalSandbox ?? false);
     setFreeMode(ms.freeMode ?? false);
@@ -2293,6 +2296,7 @@ function MembershipsTab() {
         plan3Name: plan3Name.trim() || "Plan 3", plan3Minutes: toMinutes(plan3Minutes), plan3PriceCents: toCents(plan3Price),
         bonusPlanKey: bonusPlanKey || "",
         billingMode,
+        stripeEnabled,
         paypalEmail: paypalEmail.trim() || null,
         paypalSandbox,
         freeMode,
@@ -2596,28 +2600,60 @@ function MembershipsTab() {
         </div>
       </div>
 
-      {/* ── Stripe Webhook Setup ─────────────────────────────────────────────── */}
+      {/* ── Stripe Setup ─────────────────────────────────────────────────────── */}
       <div className={C.card}>
-        <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase mb-1">Stripe Webhook Setup</h3>
-        <p className="text-gray-400 font-mono text-xs mb-4">
-          Paste this URL into your Stripe Dashboard under <strong className="text-gray-500">Developers → Webhooks → Add endpoint</strong>.
-          After creating the endpoint, copy the generated Signing Secret and save it as{" "}
-          <code className="bg-gray-100 px-1 rounded text-gray-600">STRIPE_WEBHOOK_SECRET</code> in your environment secrets.
+        <div className="flex items-center gap-2 mb-1">
+          <CreditCard size={14} className="text-indigo-500" />
+          <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase">Stripe Setup</h3>
+        </div>
+        <p className="text-gray-400 font-mono text-xs mb-4 leading-relaxed">
+          Stripe powers the credit card checkout on the membership page. Keys are stored as environment variables
+          on your VPS — not in the database. Toggle below controls whether the "Pay with Card" button appears to web users.
         </p>
+
+        {/* Enable/disable toggle */}
+        <div className="mb-4">
+          <label className={C.label}>Stripe Enabled</label>
+          <button
+            type="button"
+            data-testid="btn-stripe-enabled-toggle"
+            onClick={() => setStripeEnabled(v => !v)}
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm transition-colors ${stripeEnabled ? "border-indigo-300 bg-indigo-50" : "border-gray-200 bg-gray-50 hover:border-gray-300"}`}
+          >
+            <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${stripeEnabled ? "border-indigo-500 bg-indigo-500" : "border-gray-300"}`}>
+              {stripeEnabled && <span className="w-2 h-2 rounded-full bg-white" />}
+            </span>
+            <span className={stripeEnabled ? "text-indigo-700 font-medium" : "text-gray-500"}>
+              {stripeEnabled ? "Stripe is enabled — Pay with Card button is visible" : "Stripe is disabled — Pay with Card button is hidden"}
+            </span>
+          </button>
+        </div>
+
+        {/* VPS env var instructions */}
+        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+          <p className="font-mono text-xs text-gray-500 leading-relaxed mb-1">
+            <strong className="text-gray-600">Required on your VPS</strong> (add to <code className="bg-gray-100 px-1 rounded">.env</code> or environment secrets):
+          </p>
+          <code className="block font-mono text-xs text-gray-700 mt-1">STRIPE_SECRET_KEY=sk_live_...</code>
+          <code className="block font-mono text-xs text-gray-700">STRIPE_WEBHOOK_SECRET=whsec_...</code>
+        </div>
+
+        {/* Webhook URL */}
         <div>
-          <label className={C.label}>Stripe Webhook URL</label>
+          <label className={C.label}>Stripe Webhook URL (paste into Stripe Dashboard → Developers → Webhooks)</label>
           <div className="flex items-center gap-2">
             <code
               data-testid="text-stripe-webhook-url"
               className="flex-1 font-mono text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-gray-700 break-all select-all"
             >
-              {typeof window !== "undefined" ? window.location.origin : ""}/api/stripe/webhook
+              {getConfig()?.serverUrl ?? "https://your-server.com"}/api/stripe/webhook
             </code>
             <button
               type="button"
               data-testid="btn-copy-stripe-webhook"
               onClick={() => {
-                navigator.clipboard.writeText(`${window.location.origin}/api/stripe/webhook`);
+                const url = `${getConfig()?.serverUrl ?? ""}/api/stripe/webhook`;
+                navigator.clipboard.writeText(url);
                 toast({ title: "Webhook URL copied to clipboard" });
               }}
               className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors font-mono text-xs"
@@ -2627,9 +2663,7 @@ function MembershipsTab() {
             </button>
           </div>
           <p className="mt-2 font-mono text-xs text-gray-400 leading-relaxed">
-            Recommended Stripe events:{" "}
-            <code className="bg-gray-100 px-1 rounded text-gray-600">checkout.session.completed</code>,{" "}
-            <code className="bg-gray-100 px-1 rounded text-gray-600">payment_intent.succeeded</code>.
+            Recommended events: <code className="bg-gray-100 px-1 rounded text-gray-600">checkout.session.completed</code>.
           </p>
         </div>
       </div>
