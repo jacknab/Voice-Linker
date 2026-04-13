@@ -1157,7 +1157,15 @@ export class DatabaseStorage implements IStorage {
         r.id                          AS "regionId",
         r.name                        AS "regionName",
         COUNT(*)::int                 AS "callCount",
-        SUM(COALESCE(cl.duration_seconds, 0))::int AS "totalSeconds",
+        SUM(
+          CASE
+            WHEN cl.duration_seconds IS NOT NULL AND cl.duration_seconds > 0
+              THEN cl.duration_seconds
+            WHEN cl.completed_at IS NOT NULL
+              THEN GREATEST(0, EXTRACT(EPOCH FROM (cl.completed_at - cl.started_at))::int)
+            ELSE 0
+          END
+        )::int AS "totalSeconds",
         MAX(cl.started_at)            AS "lastCallAt"
       FROM call_logs cl
       LEFT JOIN regions r ON r.phone_number = cl.to_phone_number
