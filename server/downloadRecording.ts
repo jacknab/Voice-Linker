@@ -76,3 +76,16 @@ export function twilioUrlToLocalPath(twilioUrl: string): string {
   const sid = extractSid(twilioUrl);
   return sid ? `/uploads/${sid}.mp3` : twilioUrl;
 }
+
+export function deleteLocalRecording(url: string | null | undefined): void {
+  if (!url || !url.startsWith("/uploads/")) return;
+  const fullPath = path.join(process.cwd(), url.substring(1));
+  try {
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+      console.log(`[download] Deleted old recording: ${url}`);
+    }
+  } catch (err) {
+    console.warn(`[download] Could not delete old recording ${url}:`, err);
+  }
+}

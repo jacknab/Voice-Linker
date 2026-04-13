@@ -10,7 +10,7 @@ import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, sche
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import * as engagementEngine from "./engagementEngine";
-import { downloadRecording, twilioUrlToLocalPath } from "./downloadRecording";
+import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -1614,6 +1614,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       // Save immediately to DB so playback works right away at the review screen
       const user = await getOrCreateUser(fromNumber);
+
+      // Delete old local files if the caller is re-recording
+      const existingProfile = await storage.getProfile(user.id);
+      if (existingProfile) {
+        deleteLocalRecording(existingProfile.recordingUrl);
+        deleteLocalRecording(existingProfile.nameRecordingUrl);
+      }
+
       await storage.upsertProfile({
         userId: user.id,
         nameRecordingUrl,
@@ -2710,6 +2718,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const recordingUrl = await downloadRecording(rawRecordingUrl);
       const user = await getOrCreateUser(fromNumber);
       const mailbox = await storage.getMailboxByUserId(user.id);
+      // Delete old local file if the caller is re-recording their mailbox greeting
+      deleteLocalRecording(mailbox?.adRecordingUrl);
       // Keep the existing category if set, otherwise use a default
       const category = mailbox?.category || "quick_hot_talk";
       await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
@@ -3220,6 +3230,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       const recordingUrl = await downloadRecording(rawRecordingUrl);
       const user = await getOrCreateUser(fromNumber);
+      // Delete old local file if the caller is re-recording their category ad
+      const existingMailbox = await storage.getMailboxByUserId(user.id);
+      deleteLocalRecording(existingMailbox?.adRecordingUrl);
       await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
       // Clear any previous recording rejection — this new recording will go through auto-mod again
       await storage.clearUserRecordingRejection(user.id);
