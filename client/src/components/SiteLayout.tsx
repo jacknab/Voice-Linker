@@ -58,7 +58,7 @@ export function SiteNav({ siteName, onMenuToggle, mobileOpen }: {
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: "79px" }}>
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.625rem", textDecoration: "none", cursor: "pointer" }} data-testid="nav-logo">
           <MaleBoxLogo size={38} />
-          <span style={{ fontSize: "1.15rem" }}><MaleBoxWordmark /></span>
+          <span style={{ fontSize: "1.45rem" }}><MaleBoxWordmark /></span>
         </Link>
 
         <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.95rem", fontWeight: 500 }}>
