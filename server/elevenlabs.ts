@@ -3,13 +3,16 @@ import path from "path";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
-// Returns the correct ElevenLabs voice ID for a given folder (mm/mw) or falls back to the legacy var.
+// Returns the correct ElevenLabs voice ID for a given folder (mm/mw/mw_m) or falls back to the legacy var.
 export function getVoiceIdForFolder(folder?: string | null): string {
   if (folder === "mm") {
     return process.env.ELEVENLABS_VOICE_ID_MM || process.env.ELEVENLABS_VOICE_ID || "wLoW00IP5kfH8oiOBAPp";
   }
   if (folder === "mw") {
     return process.env.ELEVENLABS_VOICE_ID_MW || process.env.ELEVENLABS_VOICE_ID || "4tRn1lSkEn13EVTuqb0g";
+  }
+  if (folder === "mw_m") {
+    return process.env.ELEVENLABS_VOICE_ID_MW_M || process.env.ELEVENLABS_VOICE_ID || "wLoW00IP5kfH8oiOBAPp";
   }
   return process.env.ELEVENLABS_VOICE_ID || "wLoW00IP5kfH8oiOBAPp";
 }

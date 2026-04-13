@@ -1038,8 +1038,8 @@ export async function registerRoutes(
         }
       }
 
-      // Category subfolders (mm/ and mw/)
-      for (const cat of ["mm", "mw"]) {
+      // Category subfolders (mm/, mw/, mw_m/)
+      for (const cat of ["mm", "mw", "mw_m"]) {
         const catDir = path.join(UPLOADS_DIR, cat);
         if (fs.existsSync(catDir) && fs.statSync(catDir).isDirectory()) {
           for (const f of fs.readdirSync(catDir)) {
@@ -1064,7 +1064,7 @@ export async function registerRoutes(
       if (!text?.trim()) return res.status(400).json({ message: "text is required" });
       if (!filename?.trim()) return res.status(400).json({ message: "filename is required" });
 
-      const validFolders = ["mm", "mw"];
+      const validFolders = ["mm", "mw", "mw_m"];
       const targetFolder = folder && validFolders.includes(folder.toLowerCase()) ? folder.toLowerCase() : null;
 
       // Enforce .mp3 extension and sanitize (strip extension first, then sanitize base, then re-add)
@@ -1090,7 +1090,7 @@ export async function registerRoutes(
       if (!text?.trim()) return res.status(400).json({ message: "text is required" });
 
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      const validFolders = ["mm", "mw"];
+      const validFolders = ["mm", "mw", "mw_m"];
       const resolvedFolder = folder && validFolders.includes(folder.toLowerCase()) ? folder.toLowerCase() : null;
       const voiceId = getVoiceIdForFolder(resolvedFolder);
       if (!apiKey) return res.status(500).json({ message: "ELEVENLABS_API_KEY is not configured" });
@@ -1128,7 +1128,7 @@ export async function registerRoutes(
 
       if (!filename.endsWith(".mp3")) return res.status(400).json({ message: "Invalid filename" });
 
-      const validFolders = ["mm", "mw"];
+      const validFolders = ["mm", "mw", "mw_m"];
       const targetFolder = folder && validFolders.includes(folder.toLowerCase()) ? folder.toLowerCase() : null;
 
       const filePath = targetFolder
@@ -1188,11 +1188,12 @@ export async function registerRoutes(
     }
   });
 
-  // Return current voice ID settings for MM and MW
+  // Return current voice ID settings for MM, MW, and MW Male Voice
   app.get("/api/admin/tts/settings", (_req, res) => {
     res.json({
       voiceIdMM: getVoiceIdForFolder("mm"),
       voiceIdMW: getVoiceIdForFolder("mw"),
+      voiceIdMW_M: getVoiceIdForFolder("mw_m"),
     });
   });
 

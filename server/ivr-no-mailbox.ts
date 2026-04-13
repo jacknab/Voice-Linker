@@ -126,27 +126,21 @@ function playBackdoorHoursRemaining(
 }
 
 // Play the active caller count announcement by chaining phrase + number audio files.
-// isFemaleOnMW: true when the caller is female on a MW system — uses the _f variant files
-// so female callers hear "guys on the line" while male callers hear "women on the line".
+// priorityFolder: pass "mw_m" for female callers on MW so they hear the male-voice phrase files
+// ("guys on the line") while male callers hear the female-voice files ("women on the line").
 function playCallerCount(
   twiml: { say: (text: string) => void; play: (url: string) => void },
   req: Request,
   count: number,
-  isFemaleOnMW = false
+  priorityFolder?: string
 ): void {
   const isSingular = count === 1;
   playPrompt(twiml, req, isSingular ? "phrase_there_is.mp3" : "phrase_there_are.mp3",
-    isSingular ? "There is" : "There are");
+    isSingular ? "There is" : "There are", priorityFolder);
   playNumber(twiml, req, count);
-  if (isFemaleOnMW) {
-    playPrompt(twiml, req,
-      isSingular ? "phrase_caller_on_the_line_f.mp3" : "phrase_callers_on_the_line_f.mp3",
-      isSingular ? "guy on the line." : "guys on the line.");
-  } else {
-    playPrompt(twiml, req,
-      isSingular ? "phrase_caller_on_the_line.mp3" : "phrase_callers_on_the_line.mp3",
-      isSingular ? "guy on the line." : "guys on the line.");
-  }
+  playPrompt(twiml, req,
+    isSingular ? "phrase_caller_on_the_line.mp3" : "phrase_callers_on_the_line.mp3",
+    isSingular ? "guy on the line." : "guys on the line.", priorityFolder);
 }
 
 // In-memory payment sessions keyed by Twilio CallSid
@@ -393,15 +387,27 @@ function getRecordingSid(url: string): string | null {
 //              ↳ MW intentionally skips the shared uploads/ root so MM audio never bleeds in.
 //
 // The admin Audio Manager exposes separate Shared / MM / MW folders to match this logic.
+// priorityFolder: when set, this folder is checked first before the site-category folder.
+// Used on MW systems to play male-voice files (mw_m/) for female callers.
 function playPrompt(
   node: { say: (...args: any[]) => any; play: (url: string) => void },
   req: Request,
   filename: string,
-  fallbackText: string
+  fallbackText: string,
+  priorityFolder?: string
 ): void {
   const category = getRawSiteSettingsCache()?.siteCategory?.toLowerCase();
 
-  // Check the category-specific subfolder first (uploads/mm/ or uploads/mw/)
+  // Priority folder (e.g. mw_m for female callers on MW) — checked first
+  if (priorityFolder) {
+    const priPath = path.join(UPLOADS_DIR, priorityFolder, filename);
+    if (fs.existsSync(priPath)) {
+      node.play(`${baseUrl(req)}/uploads/${priorityFolder}/${filename}`);
+      return;
+    }
+  }
+
+  // Check the category-specific subfolder next (uploads/mm/ or uploads/mw/)
   if (category) {
     const catPath = path.join(UPLOADS_DIR, category, filename);
     if (fs.existsSync(catPath)) {
@@ -1514,9 +1520,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Play the male box welcome intro — gender-aware for MW systems
       if (isMW) {
         if (isFemale) {
-          // Female caller on MW hears guys' greetings
+          // Female caller on MW hears guys' greetings — uses mw_m/ folder (male voice)
           playPrompt(twiml, req, "phone_booth_welcome.mp3",
-            "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
+            "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.",
+            "mw_m");
         } else {
           // Male caller on MW hears women's greetings
           playPrompt(twiml, req, "phone_booth_welcome.mp3",
@@ -1544,8 +1551,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (!profile) {
         // No profile yet — need to record their name first (gender-aware for MW)
         if (isMW && isFemale) {
+          // Female caller on MW — uses mw_m/ folder (male voice)
           playPrompt(twiml, req, "welcome_record_name.mp3",
-            "You need to record a greeting to introduce yourself to the guys first. Let's record the name you want to use. After the tone, record just your first name.");
+            "You need to record a greeting to introduce yourself to the guys first. Let's record the name you want to use. After the tone, record just your first name.",
+            "mw_m");
         } else if (isMW) {
           playPrompt(twiml, req, "welcome_record_name.mp3",
             "You need to record a greeting to introduce yourself to the women first. Let's record the name you want to use. After the tone, record just your first name.");
@@ -4357,8 +4366,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           console.log(`[voice] Playing profile userId=${profile.userId} (position ${state.index}/${state.queue.length})`);
 
           // Announce caller count only at the very start of the queue
+          // Female callers on MW get the mw_m/ folder (male voice: "guys on the line")
           if (state.index === 1) {
-            playCallerCount(twiml, req, activeCallerCount, browseCallerGender === "female");
+            playCallerCount(twiml, req, activeCallerCount, browseCallerGender === "female" ? "mw_m" : undefined);
           }
 
           // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one

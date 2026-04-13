@@ -1038,14 +1038,34 @@ const MW_SYSTEM_PROMPTS: typeof SYSTEM_PROMPTS = [
     if (p.filename === "live_connect_ended.mp3") return [{ ...p, text: "Your live connection has ended. Returning you to the live connector." }];
     if (p.filename === "live_connect_failed.mp3") return [{ ...p, text: "We were unable to connect your call. Returning you to the live connector." }];
     // Phrase fragments — gender-flipped for MW
-    if (p.filename === "phrase_callers_on_the_line.mp3") return [{ ...p, label: "Phrase — «women on the line» (Male Callers)", text: "women on the line." }];
-    if (p.filename === "phrase_caller_on_the_line.mp3")  return [{ ...p, label: "Phrase — «woman on the line» (Male Callers)", text: "woman on the line." }];
+    if (p.filename === "phrase_callers_on_the_line.mp3") return [{ ...p, label: "Phrase — «women on the line»", text: "women on the line." }];
+    if (p.filename === "phrase_caller_on_the_line.mp3")  return [{ ...p, label: "Phrase — «woman on the line»", text: "woman on the line." }];
     return [p];
   }),
 
-  // MW-exclusive: female-caller phrase files — played when a female caller browses male profiles
-  { group: "phrases", filename: "phrase_callers_on_the_line_f.mp3", label: "Phrase — «guys on the line» (Female Callers)", text: "guys on the line." },
-  { group: "phrases", filename: "phrase_caller_on_the_line_f.mp3",  label: "Phrase — «guy on the line» (Female Callers)",  text: "guy on the line." },
+];
+
+
+// ── MW_MALE_SYSTEM_PROMPTS ────────────────────────────────────────────────────
+// MW Male Voice — played to female callers. Stored in uploads/mw_m/.
+// Same structure as MW_SYSTEM_PROMPTS but with male-perspective overrides.
+const MW_MALE_SYSTEM_PROMPTS: typeof SYSTEM_PROMPTS = [
+  // Derived from SYSTEM_PROMPTS with male-voice overrides for female callers
+  ...SYSTEM_PROMPTS.flatMap(p => {
+    // Replace MM main menu with MW version
+    if (p.filename === "main_menu.mp3") return [{ ...p, filename: "mw_main_menu.mp3", label: "MW Main Menu", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." }];
+    // Phone booth welcome — mentions guys for female callers
+    if (p.filename === "phone_booth_welcome.mp3") return [{ ...p, label: "Live Connector — Welcome (Female Caller)", text: "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." }];
+    // Name recording prompt — mentions guys for female callers
+    if (p.filename === "welcome_record_name.mp3") return [{ ...p, label: "Record Your Name — Prompt (Female Caller)", text: "You need to record a greeting to introduce yourself to the guys first. Let's record the name you want to use. After the tone, record just your first name." }];
+    // Live connect ending — remove "male box" reference
+    if (p.filename === "live_connect_ended.mp3") return [{ ...p, text: "Your live connection has ended. Returning you to the live connector." }];
+    if (p.filename === "live_connect_failed.mp3") return [{ ...p, text: "We were unable to connect your call. Returning you to the live connector." }];
+    // Phrase fragments — guys for female callers
+    if (p.filename === "phrase_callers_on_the_line.mp3") return [{ ...p, label: "Phrase — «guys on the line»", text: "guys on the line." }];
+    if (p.filename === "phrase_caller_on_the_line.mp3")  return [{ ...p, label: "Phrase — «guy on the line»",  text: "guy on the line." }];
+    return [p];
+  }),
 ];
 
 // ── AutoResizeTextarea ────────────────────────────────────────────────────────
@@ -1517,7 +1537,7 @@ const GROUP_TABS = [
 
 function TTSTab() {
   const { toast } = useToast();
-  const [audioGenTab, setAudioGenTab] = useState<"mm" | "mw" | "roger">("mm");
+  const [audioGenTab, setAudioGenTab] = useState<"mm" | "mw" | "mw_m" | "roger">("mm");
   const [customText, setCustomText] = useState("");
   const [customFilename, setCustomFilename] = useState("");
   const [editingText, setEditingText] = useState<Record<string, string>>({});
@@ -1572,12 +1592,12 @@ function TTSTab() {
     savePromptsMutation.mutate(editingText);
   }
 
-  const { data: settings } = useQuery<{ voiceIdMM: string; voiceIdMW: string }>({ queryKey: ["/api/admin/tts/settings"] });
+  const { data: settings } = useQuery<{ voiceIdMM: string; voiceIdMW: string; voiceIdMW_M: string }>({ queryKey: ["/api/admin/tts/settings"] });
   const { data: siteSettings } = useQuery<{ siteCategory: string }>({ queryKey: ["/api/site-settings"] });
   // Active folder is controlled by the selected audio tab (MM or MW), not site settings
-  const categoryFolder: "mm" | "mw" = audioGenTab === "mw" ? "mw" : "mm";
+  const categoryFolder: "mm" | "mw" | "mw_m" = audioGenTab === "mw" ? "mw" : audioGenTab === "mw_m" ? "mw_m" : "mm";
   // Prompt list switches with the active tab — MW gets gender-aware texts + MW-exclusive prompts
-  const activePrompts = audioGenTab === "mw" ? MW_SYSTEM_PROMPTS : SYSTEM_PROMPTS;
+  const activePrompts = audioGenTab === "mw" ? MW_SYSTEM_PROMPTS : audioGenTab === "mw_m" ? MW_MALE_SYSTEM_PROMPTS : SYSTEM_PROMPTS;
   const { data: existingFiles } = useQuery<{ filename: string; url: string; size: number; folder: string }[]>({ queryKey: ["/api/admin/tts/prompts"] });
   const { data: zipEntries = [] } = useQuery<ZipEntry[]>({ queryKey: ["/api/admin/zip-codes"] });
   const neighborhoodEntries = zipEntries.filter(e => e.audioFile && e.neighborhood);
@@ -1804,7 +1824,8 @@ function TTSTab() {
     <div className="flex border-b border-gray-200 gap-1 mb-6">
       {([
         { id: "mm",    label: "MM Prompts" },
-        { id: "mw",    label: "MW Prompts" },
+        { id: "mw",    label: "MW Female Voice" },
+        { id: "mw_m",  label: "MW Male Voice" },
         { id: "roger", label: "Roger" },
       ] as const).map(tab => (
         <button
@@ -1835,7 +1856,7 @@ function TTSTab() {
   return (
     <div className="space-y-6">
       {subTabBar}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <div className={C.cardAlt}>
           <div className={C.label}>Active Mode</div>
           <div className="flex items-center gap-2 mt-1">
@@ -1851,9 +1872,14 @@ function TTSTab() {
           <div className="text-gray-400 font-mono text-xs">Set via ELEVENLABS_VOICE_ID_MM in .env</div>
         </div>
         <div className={C.cardAlt}>
-          <div className={C.label}>MW Voice ID</div>
+          <div className={C.label}>MW Female Voice ID</div>
           <div className="text-[#f5a623] font-mono text-sm break-all">{settings?.voiceIdMW ?? "Loading..."}</div>
           <div className="text-gray-400 font-mono text-xs">Set via ELEVENLABS_VOICE_ID_MW in .env</div>
+        </div>
+        <div className={C.cardAlt}>
+          <div className={C.label}>MW Male Voice ID</div>
+          <div className="text-[#f5a623] font-mono text-sm break-all">{settings?.voiceIdMW_M ?? "Loading..."}</div>
+          <div className="text-gray-400 font-mono text-xs">Set via ELEVENLABS_VOICE_ID_MW_M in .env</div>
         </div>
       </div>
 
@@ -1862,12 +1888,13 @@ function TTSTab() {
           <Settings size={14} className="text-[#f5a623]" /> Active Audio Folder
         </h3>
         <p className="text-gray-400 font-mono text-xs -mt-1">
-          Audio is generated into the <span className="text-[#f5a623] font-bold">{categoryFolder.toUpperCase()}</span> folder. Use the <span className="text-white font-bold">MM Prompts</span> / <span className="text-purple-400 font-bold">MW Prompts</span> tabs above to switch folders and prompt sets independently.
+          Audio is generated into the <span className="text-[#f5a623] font-bold">{categoryFolder.toUpperCase()}</span> folder. Use the tabs above to switch between MM, MW Female Voice, and MW Male Voice prompt sets.
         </p>
         <div className="flex gap-2 mt-2">
           {([
-            { id: "mm", label: "MM", hint: "Men seeking Men" },
-            { id: "mw", label: "MW", hint: "Men seeking Women" },
+            { id: "mm",   label: "MM",   hint: "Men seeking Men" },
+            { id: "mw",   label: "MW ♀",  hint: "MW Female Voice (heard by male callers)" },
+            { id: "mw_m", label: "MW ♂",  hint: "MW Male Voice (heard by female callers)" },
           ] as const).map(opt => (
             <div
               key={opt.id}
