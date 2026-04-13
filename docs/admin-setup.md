@@ -4,11 +4,28 @@ The admin console is a standalone desktop web app that runs locally on your Wind
 
 ---
 
-## Prerequisites
+## Required Software
 
-- **Node.js** must be installed on your Windows machine.
-  Download it from [nodejs.org](https://nodejs.org) (choose the LTS version).
-- The `malebox-admin/` folder must be on your machine (copy it from the project).
+### Node.js
+
+Node.js is required to run the admin console. Without it, `admin_setup.bat` will fail immediately.
+
+1. Go to **[nodejs.org](https://nodejs.org)**
+2. Click the **LTS** download button (Long Term Support — the stable version recommended for most users)
+3. Run the installer and follow the prompts — all default options are fine
+4. **Restart your terminal** after installation so the new commands are recognized
+
+**Verify it installed correctly** — open PowerShell or Command Prompt and run:
+```
+node --version
+```
+You should see a version number like `v20.x.x`. If you get "not recognized", restart your terminal or reinstall Node.js.
+
+---
+
+## Other Requirements
+
+- The `malebox-admin/` folder must be present on your machine (copy it from the project).
 
 ---
 
