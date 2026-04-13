@@ -294,7 +294,7 @@ export default function Landing() {
           </h2>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "1.5rem", fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", marginTop: "0.5rem", flexWrap: "wrap" }}>
             <span>{taglineSubtags[0]}</span>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#3b82f6", display: "inline-block", flexShrink: 0 }} />
+            <MaleBoxLogo size={22} />
             <span>{taglineSubtags[1]}</span>
           </div>
         </div>
