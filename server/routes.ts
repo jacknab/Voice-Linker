@@ -243,7 +243,7 @@ export async function registerRoutes(
     const maxAttempts = 6;
 
     try {
-      let upstream: Response | null = null;
+      let upstream: globalThis.Response | null = null;
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         upstream = await fetch(twilioUrl, { headers: { Authorization: authHeader } });
         console.log(`[audio] Twilio responded ${upstream.status} for SID=${sid} (attempt ${attempt}/${maxAttempts})`);

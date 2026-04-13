@@ -4275,7 +4275,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               : []
           );
           for (const p of profiles) {
-            allLinkedProfiles.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, isNearby: nearbySet.has(p.userId), isPreExisting: true });
+            allLinkedProfiles.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, isNearby: nearbySet.has(p.userId) });
           }
         }
 

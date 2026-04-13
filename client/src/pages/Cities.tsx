@@ -61,7 +61,7 @@ export default function Cities() {
 
   // Determine unique states to pick the layout
   const uniqueStates = new Set(activeRegions.map(r => r.stateAbbreviation ?? "__none__"));
-  const stateCount = [...uniqueStates].filter(s => s !== "__none__").length;
+  const stateCount = Array.from(uniqueStates).filter(s => s !== "__none__").length;
 
   // Layout modes:
   //   "single"  → 1 state (or all no-state): current card grid
