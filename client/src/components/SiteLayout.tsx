@@ -61,74 +61,15 @@ export function SiteNav({ siteName, onMenuToggle, mobileOpen }: {
           <span style={{ fontSize: "1.15rem" }}><MaleBoxWordmark /></span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-6" style={{ fontSize: "0.95rem", fontWeight: 500 }}>
-          <Link href="/membership"
-            style={{ color: "#ccc", textDecoration: "none", transition: "color 0.15s" }}
-            onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
-            onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
-            data-testid="nav-buy-time">
-            Buy Time
-          </Link>
-          <div style={{ width: "1px", height: "18px", background: "#222" }} />
-          <Link href="/faq"
-            style={{ color: "#ccc", textDecoration: "none", transition: "color 0.15s" }}
-            onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
-            onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
-            data-testid="nav-faq">
-            FAQ
-          </Link>
-          <div style={{ width: "1px", height: "18px", background: "#222" }} />
-          <Link href="/login"
-            style={{ color: "#ccc", textDecoration: "none", transition: "color 0.15s" }}
-            onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
-            onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
-            data-testid="nav-sign-in">
-            Log in
-          </Link>
+        <div style={{ fontSize: "0.95rem", fontWeight: 500 }}>
           <Link href="/register"
-            style={{ background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.92rem", fontWeight: 700, padding: "0.4rem 0.875rem", borderRadius: "7px", transition: "background 0.15s" }}
-            onMouseEnter={(e: any) => (e.currentTarget.style.background = "#1e40af")}
-            onMouseLeave={(e: any) => (e.currentTarget.style.background = "#1d4ed8")}
-            data-testid="nav-register">
-            Register
+            style={{ color: "#ccc", textDecoration: "none", transition: "color 0.15s" }}
+            onMouseEnter={(e: any) => (e.currentTarget.style.color = "#fff")}
+            onMouseLeave={(e: any) => (e.currentTarget.style.color = "#ccc")}
+            data-testid="nav-my-account">
+            My Account
           </Link>
         </div>
-
-        <button className="md:hidden" onClick={onMenuToggle}
-          style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", padding: "0.25rem" }}>
-          {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
-      </div>
-
-      {mobileOpen && (
-        <div style={{ background: "#111", borderTop: "1px solid #222", padding: "0.5rem 1.5rem 1.25rem" }}>
-          <Link href="/register" onClick={onMenuToggle}
-            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
-            data-testid="mobile-nav-register">
-            Create Account
-          </Link>
-          <Link href="/membership" onClick={onMenuToggle}
-            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
-            data-testid="mobile-nav-free-trial">
-            Free Trial
-          </Link>
-          <Link href="/membership" onClick={onMenuToggle}
-            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
-            data-testid="mobile-nav-memberships">
-            Memberships
-          </Link>
-          <Link href="/faq" onClick={onMenuToggle}
-            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
-            data-testid="mobile-nav-faq">
-            FAQ
-          </Link>
-          <Link href="/support" onClick={onMenuToggle}
-            style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0" }}
-            data-testid="mobile-nav-support">
-            Support
-          </Link>
-        </div>
-      )}
     </nav>
   );
 }
