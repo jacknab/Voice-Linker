@@ -11,6 +11,7 @@ import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsC
 import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
+import { transcribeLocalFile } from "./transcribeAudio";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -1609,7 +1610,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     pendingNameRecordings.set(callSid, await downloadRecording(nameRecordingUrl));
 
     playPrompt(twiml, req, "name_saved_record_greeting.mp3", "Great. Now record your greeting for other callers. After the tone, press any key when done.");
-    twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+    twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" } as any);
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -1633,7 +1634,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Reject greetings shorter than 3 seconds — play error audio and re-prompt
       if (recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That greeting was too short. Please try again after the tone. Press any key when done.");
-        twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -1663,9 +1664,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       });
       // Clear any previous recording rejection — this new recording will go through auto-mod again
       await storage.clearUserRecordingRejection(user.id);
-      // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
+      // Mark transcription as pending, then transcribe locally via Groq Whisper (async, non-blocking)
       const saved = await storage.getProfile(user.id);
-      if (saved) await storage.setProfileTranscriptionPending(saved.id);
+      if (saved) {
+        await storage.setProfileTranscriptionPending(saved.id);
+        transcribeLocalFile(recordingUrl).then(async ({ text, status }) => {
+          const storeStatus = status === "silent" ? "completed" : status;
+          await storage.updateProfileTranscription(recordingUrl, text, storeStatus);
+          console.log(`[transcribe] Profile stored for userId=${user.id}: status=${storeStatus}`);
+        }).catch(err => console.error("[transcribe] save-profile error:", err));
+      }
       console.log(`[voice] Profile saved immediately for userId=${user.id} (dur=${recordingDuration}s)`);
 
       // Schedule auto-mod + human review queue after 65 seconds
@@ -2692,7 +2700,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.redirect("/voice/my-mailbox");
       } else {
         twiml.say("Record your mailbox greeting after the tone. Press any key when done.");
-        twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting" } as any);
       }
     } catch (err) {
       console.error("[voice] /voice/record-mailbox-greeting error:", err);
@@ -2715,7 +2723,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       if (digit === "1") {
         twiml.say("Record your mailbox greeting after the tone. Press any key when done.");
-        twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting" } as any);
       } else if (digit === "2") {
         if (mailbox?.adRecordingUrl) {
           safePlayRecording(twiml, mailbox.adRecordingUrl, req, "Your greeting is not available for playback.");
@@ -2747,7 +2755,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       if (!rawRecordingUrl || recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone. Press any key when done.");
-        twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting" } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -2762,8 +2770,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
       // Clear any previous recording rejection — this new recording will go through auto-mod again
       await storage.clearUserRecordingRejection(user.id);
-      // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
+      // Mark transcription as pending, then transcribe locally via Groq Whisper (async, non-blocking)
       await storage.updateMailboxTranscription(recordingUrl, null, "pending");
+      transcribeLocalFile(recordingUrl).then(async ({ text, status }) => {
+        const storeStatus = status === "silent" ? "completed" : status;
+        await storage.updateMailboxTranscription(recordingUrl, text, storeStatus);
+        console.log(`[transcribe] Mailbox ad stored for userId=${user.id}: status=${storeStatus}`);
+      }).catch(err => console.error("[transcribe] save-mailbox-greeting error:", err));
 
       // Schedule auto-mod + human review queue after 65 seconds
       scheduleAutoModCheck(recordingUrl, user.id, "personal_ad");
@@ -3199,7 +3212,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(twiml, req, "mailbox_ad_record.mp3",
           `Record your ${categoryLabel} mailbox ad after the tone. Tell guys about yourself. Press any key when done.`
         );
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}` } as any);
       }
     } catch (err) {
       console.error("[voice] /voice/record-category-ad error:", err);
@@ -3222,7 +3235,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(twiml, req, "mailbox_ad_record.mp3",
           "Record your mailbox ad after the tone. Press any key when done."
         );
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}` } as any);
       } else if (digit === "2") {
         const user = await getOrCreateUser(fromNumber);
         const mailbox = await storage.getMailboxByUserId(user.id);
@@ -3260,7 +3273,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       if (!rawRecordingUrl || recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone. Press any key when done.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -3273,8 +3286,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
       // Clear any previous recording rejection — this new recording will go through auto-mod again
       await storage.clearUserRecordingRejection(user.id);
-      // Mark transcription as pending — Twilio will POST the result to /voice/transcription-callback
+      // Mark transcription as pending, then transcribe locally via Groq Whisper (async, non-blocking)
       await storage.updateMailboxTranscription(recordingUrl, null, "pending");
+      transcribeLocalFile(recordingUrl).then(async ({ text, status }) => {
+        const storeStatus = status === "silent" ? "completed" : status;
+        await storage.updateMailboxTranscription(recordingUrl, text, storeStatus);
+        console.log(`[transcribe] Mailbox ad stored for userId=${user.id}: status=${storeStatus}`);
+      }).catch(err => console.error("[transcribe] save-mailbox-greeting error:", err));
 
       // Schedule auto-mod + human review queue after 65 seconds
       scheduleAutoModCheck(recordingUrl, user.id, "personal_ad");
