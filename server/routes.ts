@@ -13,6 +13,7 @@ import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
 import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger } from "./elevenlabs";
+import { triggerLocationAudio } from "./audioAutogen";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
@@ -784,6 +785,7 @@ export async function registerRoutes(
       const lon = longitude !== undefined && longitude !== "" ? parseFloat(longitude) : undefined;
       const entry = await storage.upsertAdminZipEntry(code.trim(), neighborhood.trim(), lat, lon);
       logAudit("zip_code_created", { targetType: "zip_code", targetId: entry.id, targetLabel: code });
+      triggerLocationAudio(neighborhood.trim());
       res.json(entry);
     } catch (e) {
       console.error("[admin] /api/admin/zip-codes POST error:", e);
@@ -801,6 +803,7 @@ export async function registerRoutes(
       const lon = longitude !== undefined && longitude !== "" ? parseFloat(longitude) : undefined;
       const entry = await storage.updateZipEntry(req.params.id, neighborhood.trim(), lat, lon);
       logAudit("zip_code_updated", { targetType: "zip_code", targetId: req.params.id, detail: { neighborhood, latitude: lat, longitude: lon } });
+      triggerLocationAudio(neighborhood.trim());
       res.json(entry);
     } catch (e) {
       console.error("[admin] /api/admin/zip-codes PATCH error:", e);

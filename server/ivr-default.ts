@@ -12,7 +12,7 @@ import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
-import { locationToFilename } from "./audioAutogen";
+import { locationToFilename, triggerLocationAudio } from "./audioAutogen";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -4081,6 +4081,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           console.log(`[voice] zip saved: userId=${user.id}, zip=${digits}, city=${geo.city}, state=${geo.state}, lat=${geo.latitude}, lon=${geo.longitude}, zipEntryId=${zipEntry.id}`);
         } else {
           console.log(`[voice] zip saved: userId=${user.id}, zip=${digits}, zipEntryId=${zipEntry.id} (no geo data found)`);
+        }
+        // Trigger location audio generation in the background — caller does not wait
+        if (geo) {
+          (async () => {
+            try {
+              let loc: string | null = geoRaw?.neighborhood || geo.city || null;
+              if (!loc && geo.latitude && geo.longitude) {
+                loc = await reverseGeocodeNeighborhood(geo.latitude, geo.longitude);
+              }
+              if (loc) triggerLocationAudio(loc);
+            } catch {}
+          })();
         }
         playPrompt(twiml, req, "zip_code_saved.mp3", "Got it. We'll use your zip code to show you nearby callers.");
       }

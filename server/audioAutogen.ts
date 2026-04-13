@@ -235,7 +235,7 @@ async function runAudioAutogen(): Promise<void> {
   }
 }
 
-// ── Location audio helpers ─────────────────────────────────────────────────
+// ── Location audio helpers ──────────────────────────────────────────────────
 
 /**
  * Convert a neighborhood/city string into a safe MP3 filename.
@@ -253,6 +253,38 @@ export function locationToFilename(location: string): string {
 /** Full announcement text for a given location. */
 function locationText(location: string): string {
   return `This caller is located in ${location}. To send them a message, press 1.`;
+}
+
+/**
+ * Immediately generate location audio for all three voice folders.
+ * Internal — always awaited sequentially.
+ */
+async function generateLocationForAllFolders(location: string): Promise<void> {
+  const filename = locationToFilename(location);
+  const text = locationText(location);
+  for (const folder of ["mm", "mw", "mw_m"]) {
+    const filePath = path.join(UPLOADS_DIR, folder, filename);
+    if (fs.existsSync(filePath)) continue;
+    try {
+      await generateTTS(text, filename, folder);
+      console.log(`[audio-autogen] trigger: generated ${folder}/${filename}`);
+      await sleep(DELAY_MS);
+    } catch (err: any) {
+      console.error(`[audio-autogen] trigger: failed ${folder}/${filename}: ${err?.message ?? err}`);
+      await sleep(DELAY_MS);
+    }
+  }
+}
+
+/**
+ * Fire-and-forget trigger: call this whenever a new neighborhood is added.
+ * Returns immediately — generation happens in the background.
+ */
+export function triggerLocationAudio(location: string): void {
+  if (!process.env.ELEVENLABS_API_KEY) return;
+  generateLocationForAllFolders(location).catch(err =>
+    console.error(`[audio-autogen] triggerLocationAudio error for "${location}":`, err)
+  );
 }
 
 /**
