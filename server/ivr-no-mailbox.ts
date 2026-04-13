@@ -37,14 +37,14 @@ function minutesToDurationLabel(minutes: number): string {
   return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
 }
 
-type MembershipPackage = { name: string; label: string; minutes: number; priceCents: number; priceLabel: string };
+type MembershipPackage = { name: string; displayName: string; label: string; minutes: number; priceCents: number; priceLabel: string };
 
 async function getMembershipPackages(): Promise<Record<string, MembershipPackage>> {
   const s = await getMembershipSettingsCached();
   return {
-    "2": { name: "plan1", label: minutesToDurationLabel(s.plan1Minutes), minutes: s.plan1Minutes, priceCents: s.plan1PriceCents, priceLabel: centsToLabel(s.plan1PriceCents) },
-    "3": { name: "plan2", label: minutesToDurationLabel(s.plan2Minutes), minutes: s.plan2Minutes, priceCents: s.plan2PriceCents, priceLabel: centsToLabel(s.plan2PriceCents) },
-    "4": { name: "plan3", label: minutesToDurationLabel(s.plan3Minutes), minutes: s.plan3Minutes, priceCents: s.plan3PriceCents, priceLabel: centsToLabel(s.plan3PriceCents) },
+    "2": { name: "plan1", displayName: s.plan1Name, label: minutesToDurationLabel(s.plan1Minutes), minutes: s.plan1Minutes, priceCents: s.plan1PriceCents, priceLabel: centsToLabel(s.plan1PriceCents) },
+    "3": { name: "plan2", displayName: s.plan2Name, label: minutesToDurationLabel(s.plan2Minutes), minutes: s.plan2Minutes, priceCents: s.plan2PriceCents, priceLabel: centsToLabel(s.plan2PriceCents) },
+    "4": { name: "plan3", displayName: s.plan3Name, label: minutesToDurationLabel(s.plan3Minutes), minutes: s.plan3Minutes, priceCents: s.plan3PriceCents, priceLabel: centsToLabel(s.plan3PriceCents) },
   };
 }
 
@@ -143,6 +143,7 @@ function playCallerCount(
 // In-memory payment sessions keyed by Twilio CallSid
 interface PaymentSession {
   packageName: string;
+  packageDisplayName: string;
   packageLabel: string;
   packageMinutes: number;
   packagePriceCents: number;
@@ -5543,6 +5544,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     paymentSessions.set(callSid, {
       packageName: pkg.name,
+      packageDisplayName: pkg.displayName,
       packageLabel: pkg.label,
       packageMinutes: pkg.minutes,
       packagePriceCents: pkg.priceCents,
@@ -5572,9 +5574,25 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
 
     const mins = session.packageMinutes;
-    const dynamicPart = session.isFirstPurchase
-      ? `${mins.toLocaleString()} minutes — plus ${mins.toLocaleString()} bonus minutes for your first purchase, giving you ${(mins * 2).toLocaleString()} minutes total, for ${session.priceLabel}.`
-      : `${mins.toLocaleString()} minutes for ${session.priceLabel}.`;
+    const settings = await getMembershipSettingsCached();
+    const billingMode = settings.billingMode;
+
+    let dynamicPart: string;
+    if (billingMode === 'per_24h') {
+      const planName = session.packageDisplayName;
+      dynamicPart = session.isFirstPurchase
+        ? `the ${planName} package — plus a bonus ${planName} pass for your first purchase, for ${session.priceLabel}.`
+        : `the ${planName} package for ${session.priceLabel}.`;
+    } else if (billingMode === 'per_day') {
+      const days = Math.round(mins / 1440);
+      dynamicPart = session.isFirstPurchase
+        ? `${session.packageLabel} — plus ${session.packageLabel} bonus for your first purchase, giving you ${days * 2} day${days * 2 !== 1 ? 's' : ''} total, for ${session.priceLabel}.`
+        : `${session.packageLabel} for ${session.priceLabel}.`;
+    } else {
+      dynamicPart = session.isFirstPurchase
+        ? `${mins.toLocaleString()} minutes — plus ${mins.toLocaleString()} bonus minutes for your first purchase, giving you ${(mins * 2).toLocaleString()} minutes total, for ${session.priceLabel}.`
+        : `${mins.toLocaleString()} minutes for ${session.priceLabel}.`;
+    }
 
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-confirm-package" });
     if (session.isFirstPurchase) {
