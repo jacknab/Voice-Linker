@@ -3571,26 +3571,211 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
-  // ─── 4a4. Customer Service ────────────────────────────────────────────────
+  // ─── 4a4. Customer Service — Automated Membership & Billing Receptionist ────
+  // All responses use Amazon Polly Daniel voice (en-US Neural) via Twilio TTS.
+  // Helper: speak with Daniel voice on any TwiML node (Response or Gather)
+  function dSay(parent: any, text: string): void {
+    parent.say({ voice: "Polly.Daniel" }, text);
+  }
+
+  // Format seconds into a natural spoken string: "3 hours and 12 minutes"
+  function formatTime(seconds: number): string {
+    if (seconds <= 0) return "no time remaining";
+    const totalMins = Math.floor(seconds / 60);
+    const hrs  = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    if (hrs > 0 && mins > 0) return `${hrs} hour${hrs !== 1 ? "s" : ""} and ${mins} minute${mins !== 1 ? "s" : ""} remaining`;
+    if (hrs > 0) return `${hrs} hour${hrs !== 1 ? "s" : ""} remaining`;
+    return `${mins} minute${mins !== 1 ? "s" : ""} remaining`;
+  }
+
+  // Entry point — greet the caller with a live account snapshot then show the menu
   app.post("/voice/customer-service", async (req, res) => {
     const twiml = new VoiceResponse();
-    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-customer-service" });
-    gather.say("Customer service. For billing or account questions, please visit our website or call us during business hours. Press 9 to return to the main menu.");
-    twiml.redirect("/voice/main-menu");
+    const fromNumber = req.body?.From as string;
+
+    let snapshot = "";
+    try {
+      const user  = await getOrCreateUser(fromNumber);
+      const remaining = user.remainingSeconds ?? 0;
+      const tier = user.membershipTier === "free_trial" ? "a free trial"
+        : user.membershipTier ? "a paid membership"
+        : "no active membership";
+      const statusLabel = user.accountStatus === "banned" ? "suspended"
+        : user.accountStatus === "restricted" ? "restricted"
+        : "active";
+      snapshot = `Your account is ${statusLabel}. You are on ${tier} with ${formatTime(remaining)}.`;
+    } catch {
+      snapshot = "I was unable to retrieve your account at this time.";
+    }
+
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-customer-service", timeout: 10 });
+    dSay(gather,
+      `Customer service. ${snapshot} ` +
+      `Press 1 for your full account details. ` +
+      `Press 2 to add time to your account. ` +
+      `Press 3 for billing information. ` +
+      `Press 4 to leave a message for our billing team. ` +
+      `Press star to return to the main menu.`
+    );
+    twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
   });
 
   app.post("/voice/handle-customer-service", async (req, res) => {
     const twiml = new VoiceResponse();
-    const digit = req.body?.Digits;
+    const digit  = req.body?.Digits as string;
+    if      (digit === "1") twiml.redirect("/voice/cs-account-status");
+    else if (digit === "2") twiml.redirect("/voice/purchase-pre-menu");
+    else if (digit === "3") twiml.redirect("/voice/cs-billing-info");
+    else if (digit === "4") twiml.redirect("/voice/cs-leave-message");
+    else if (digit === "*") twiml.redirect("/voice/main-menu");
+    else                    twiml.redirect("/voice/customer-service");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
 
-    if (digit === "9") {
-      twiml.redirect("/voice/main-menu");
-    } else {
-      twiml.redirect("/voice/main-menu");
+  // ─── Full account details screen ──────────────────────────────────────────
+  app.post("/voice/cs-account-status", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    try {
+      const user    = await getOrCreateUser(fromNumber);
+      const profile = await storage.getProfile(user.id);
+      const remaining = user.remainingSeconds ?? 0;
+      const tier = user.membershipTier === "free_trial" ? "Free trial"
+        : user.membershipTier ? "Paid membership"
+        : "No active membership";
+      const statusLabel = user.accountStatus === "banned" ? "suspended"
+        : user.accountStatus === "restricted" ? "restricted"
+        : "active and in good standing";
+      const greetingLine = profile?.recordingUrl
+        ? "You have a greeting recorded."
+        : "You do not have a greeting recorded yet. You must record a greeting before other callers can hear you.";
+      const cardLine = user.membershipNumber
+        ? `Your membership card number is: ${user.membershipNumber.split("").join(", ")}.`
+        : "";
+      const memberSince = user.createdAt
+        ? `Member since ${user.createdAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+        : "";
+
+      const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-cs-account-status", timeout: 10 });
+      dSay(gather,
+        `Account details. ` +
+        `Status: ${statusLabel}. ` +
+        `Membership type: ${tier}. ` +
+        `Time remaining: ${formatTime(remaining)}. ` +
+        `${greetingLine} ` +
+        `${cardLine} ` +
+        `${memberSince} ` +
+        `Press 2 to add more time. ` +
+        `Press 9 to return to customer service. ` +
+        `Press star for the main menu.`
+      );
+    } catch {
+      const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-cs-account-status", timeout: 10 });
+      dSay(gather,
+        "We were unable to retrieve your account information at this time. " +
+        "Press 9 to return to customer service. Press star for the main menu."
+      );
     }
+    twiml.redirect("/voice/customer-service");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
 
+  app.post("/voice/handle-cs-account-status", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit  = req.body?.Digits as string;
+    if      (digit === "2") twiml.redirect("/voice/purchase-pre-menu");
+    else if (digit === "*") twiml.redirect("/voice/main-menu");
+    else                    twiml.redirect("/voice/customer-service");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Billing information screen ───────────────────────────────────────────
+  app.post("/voice/cs-billing-info", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    let planContext = "";
+    try {
+      const [user, settings] = await Promise.all([
+        getOrCreateUser(fromNumber),
+        getMembershipSettingsCached(),
+      ]);
+      if (user.membershipTier === "free_trial") {
+        planContext = `You are currently on a free trial which includes ${settings.freeTrialMinutes} minutes of access. `;
+      } else if (user.membershipTier) {
+        planContext = "You are currently on a paid membership. ";
+      } else {
+        planContext = "You do not currently have an active membership. ";
+      }
+    } catch {}
+
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-cs-billing-info", timeout: 10 });
+    dSay(gather,
+      `Billing information. ${planContext}` +
+      `Time is deducted from your membership while you are connected to the system. ` +
+      `You can add more time at any time by pressing 2 from the main menu. ` +
+      `If you were recently charged and your time has not been applied, please leave a message for our billing team and we will investigate promptly. ` +
+      `Press 2 to add time now. ` +
+      `Press 4 to leave a message for the billing team. ` +
+      `Press 9 to return to customer service. ` +
+      `Press star for the main menu.`
+    );
+    twiml.redirect("/voice/customer-service");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-cs-billing-info", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit  = req.body?.Digits as string;
+    if      (digit === "2") twiml.redirect("/voice/purchase-pre-menu");
+    else if (digit === "4") twiml.redirect("/voice/cs-leave-message");
+    else if (digit === "*") twiml.redirect("/voice/main-menu");
+    else                    twiml.redirect("/voice/customer-service");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Leave a voicemail for the billing team ───────────────────────────────
+  app.post("/voice/cs-leave-message", async (req, res) => {
+    const twiml = new VoiceResponse();
+    dSay(twiml,
+      "Please describe your billing question or issue after the tone. " +
+      "Press any key when you are done."
+    );
+    twiml.record({
+      action: "/voice/cs-save-message",
+      finishOnKey: "any",
+      maxLength: 180,
+      timeout: 5,
+    });
+    twiml.redirect("/voice/customer-service");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/cs-save-message", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber  = req.body?.From as string;
+    const recordingUrl = req.body?.RecordingUrl as string;
+    if (recordingUrl && fromNumber) {
+      try {
+        await storage.createSupportTicket({ fromPhone: fromNumber, recordingUrl: `${recordingUrl}.mp3` });
+      } catch (err) {
+        console.error("[cs] Failed to save support ticket:", err);
+      }
+    }
+    dSay(twiml,
+      "Your message has been received. Our billing team will review it and follow up with you as soon as possible. " +
+      "Thank you for calling."
+    );
+    twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
   });

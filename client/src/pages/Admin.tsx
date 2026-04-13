@@ -10,7 +10,7 @@ import {
   CreditCard, Save, LogOut, Settings, Users, ChevronLeft, ChevronRight, ShieldOff,
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
-  BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send,
+  BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send, Headphones,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import {
@@ -48,7 +48,7 @@ interface Region {
   messagesRelayed: number;
 }
 
-type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing";
+type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
 
 interface FlaggedItem {
   id: string;
@@ -6660,6 +6660,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "audit-log",      label: "Audit Log",         icon: <TrendingUp size={15} /> },
   { id: "mod-log",        label: "Moderation Log",    icon: <ShieldAlert size={15} /> },
   { id: "sms-marketing",  label: "SMS Marketing",     icon: <Send size={15} /> },
+  { id: "support",        label: "Support Tickets",   icon: <Headphones size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",     icon: <PhoneCall size={15} /> },
   { id: "ivr-flow",       label: "IVR Flow Map",      icon: <GitBranch size={15} /> },
   { id: "phone-numbers",  label: "Phone Numbers",     icon: <Phone size={15} /> },
@@ -6884,6 +6885,168 @@ function SmsMarketingTab() {
   );
 }
 
+// ── Support Tickets Tab ────────────────────────────────────────────────────────
+function SupportTicketsTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "resolved">("open");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState("");
+
+  const { data: tickets = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/support-tickets", statusFilter],
+    queryFn: async () => {
+      const url = statusFilter === "all"
+        ? "/api/admin/support-tickets"
+        : `/api/admin/support-tickets?status=${statusFilter}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load tickets");
+      return res.json();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, status, notes }: { id: string; status?: string; notes?: string }) => {
+      await apiRequest("PATCH", `/api/admin/support-tickets/${id}`, { status, notes });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/support-tickets"] });
+      setEditingId(null);
+      toast({ title: "Ticket updated" });
+    },
+    onError: () => toast({ title: "Failed to update ticket", variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/support-tickets/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/support-tickets"] });
+      toast({ title: "Ticket deleted" });
+    },
+    onError: () => toast({ title: "Failed to delete ticket", variant: "destructive" }),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Support Tickets</h2>
+        <div className="flex gap-2">
+          {(["open", "resolved", "all"] as const).map((s) => (
+            <button
+              key={s}
+              data-testid={`filter-support-${s}`}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1 rounded text-sm capitalize border ${statusFilter === s ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-muted"}`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+          <Loader2 className="animate-spin" size={18} />
+          <span>Loading tickets…</span>
+        </div>
+      ) : tickets.length === 0 ? (
+        <p className="text-muted-foreground text-sm py-8 text-center">No {statusFilter === "all" ? "" : statusFilter} tickets.</p>
+      ) : (
+        <div className="space-y-3">
+          {tickets.map((t: any) => (
+            <div key={t.id} data-testid={`ticket-card-${t.id}`} className="border border-border rounded-lg p-4 space-y-2 bg-card">
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1 flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span data-testid={`ticket-phone-${t.id}`} className="font-mono text-sm font-medium">{t.fromPhone}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${t.status === "open" ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"}`}>
+                      {t.status}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleString()}</span>
+                  </div>
+                  {t.recordingUrl && (
+                    <audio data-testid={`ticket-audio-${t.id}`} controls src={t.recordingUrl} className="w-full max-w-sm h-8 mt-1" />
+                  )}
+                  {t.notes && <p data-testid={`ticket-notes-${t.id}`} className="text-sm text-muted-foreground">{t.notes}</p>}
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  {t.status === "open" ? (
+                    <button
+                      data-testid={`ticket-resolve-${t.id}`}
+                      title="Mark resolved"
+                      onClick={() => updateMutation.mutate({ id: t.id, status: "resolved" })}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-green-600"
+                    >
+                      <CheckCircle size={16} />
+                    </button>
+                  ) : (
+                    <button
+                      data-testid={`ticket-reopen-${t.id}`}
+                      title="Reopen"
+                      onClick={() => updateMutation.mutate({ id: t.id, status: "open" })}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-orange-500"
+                    >
+                      <RefreshCw size={16} />
+                    </button>
+                  )}
+                  <button
+                    data-testid={`ticket-edit-${t.id}`}
+                    title="Add/edit notes"
+                    onClick={() => { setEditingId(t.id); setEditNotes(t.notes ?? ""); }}
+                    className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary"
+                  >
+                    <Pencil size={16} />
+                  </button>
+                  <button
+                    data-testid={`ticket-delete-${t.id}`}
+                    title="Delete ticket"
+                    onClick={() => deleteMutation.mutate(t.id)}
+                    className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {editingId === t.id && (
+                <div className="flex gap-2 pt-1">
+                  <textarea
+                    data-testid={`ticket-notes-input-${t.id}`}
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    placeholder="Notes for this ticket…"
+                    rows={2}
+                    className="flex-1 text-sm border border-border rounded px-2 py-1 bg-background resize-none"
+                  />
+                  <div className="flex flex-col gap-1">
+                    <button
+                      data-testid={`ticket-save-notes-${t.id}`}
+                      onClick={() => updateMutation.mutate({ id: t.id, notes: editNotes })}
+                      disabled={updateMutation.isPending}
+                      className="px-3 py-1 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      Save
+                    </button>
+                    <button
+                      data-testid={`ticket-cancel-notes-${t.id}`}
+                      onClick={() => setEditingId(null)}
+                      className="px-3 py-1 text-xs rounded border border-border hover:bg-muted"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Section-level action buttons ──────────────────────────────────────────────
 function SectionActions({ activeTab, onAddProfile, onAddRegion, onSaveMembership, isSavingMembership }: {
   activeTab: Tab;
@@ -7092,6 +7255,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "ivr-flow"       && <IvrFlowMap />}
           {activeTab === "site-settings"  && <WebsiteSettingsTab />}
           {activeTab === "sms-marketing"  && <SmsMarketingTab />}
+          {activeTab === "support"        && <SupportTicketsTab />}
         </div>
       </div>
     </div>

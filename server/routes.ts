@@ -1434,6 +1434,42 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Admin: Support Tickets ───────────────────────────────────────────────
+
+  app.get("/api/admin/support-tickets", async (req, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const tickets = await storage.getSupportTickets(status);
+      res.json(tickets);
+    } catch (e) {
+      console.error("[admin/support-tickets] Failed to get tickets:", e);
+      res.status(500).json({ message: "Failed to fetch support tickets" });
+    }
+  });
+
+  app.patch("/api/admin/support-tickets/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, notes } = req.body as { status?: string; notes?: string };
+      const ticket = await storage.updateSupportTicket(id, { status, notes });
+      res.json(ticket);
+    } catch (e) {
+      console.error("[admin/support-tickets] Failed to update ticket:", e);
+      res.status(500).json({ message: "Failed to update support ticket" });
+    }
+  });
+
+  app.delete("/api/admin/support-tickets/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteSupportTicket(id);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("[admin/support-tickets] Failed to delete ticket:", e);
+      res.status(500).json({ message: "Failed to delete support ticket" });
+    }
+  });
+
   // ─── Admin: Membership Settings ───────────────────────────────────────────
 
   // ─── Site Settings (public read, admin write) ─────────────────────────────

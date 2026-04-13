@@ -510,3 +510,19 @@ export const personalityProfiles = pgTable("personality_profiles", {
 export const insertPersonalityProfileSchema = createInsertSchema(personalityProfiles).omit({ id: true });
 export type PersonalityProfile = typeof personalityProfiles.$inferSelect;
 export type InsertPersonalityProfile = z.infer<typeof insertPersonalityProfileSchema>;
+
+// ── Support Tickets ───────────────────────────────────────────────────────────
+// Voicemail messages left via the automated customer service phone menu.
+// Callers can record a billing question; the admin reviews and resolves here.
+export const supportTickets = pgTable("support_tickets", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  fromPhone: text("from_phone").notNull(),
+  recordingUrl: text("recording_url"),
+  status: text("status").notNull().default("open"), // "open" | "resolved"
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({ id: true, createdAt: true });
+export type SupportTicket = typeof supportTickets.$inferSelect;
+export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;

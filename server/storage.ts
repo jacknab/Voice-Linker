@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, personalityProfiles, rogerPromptHistory, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate, type PersonalityProfile, type InsertPersonalityProfile } from "@shared/schema";
+import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, personalityProfiles, rogerPromptHistory, supportTickets, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate, type PersonalityProfile, type InsertPersonalityProfile, type SupportTicket } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -281,6 +281,12 @@ export interface IStorage {
   // Roger Prompt History
   recordRogerPromptPlay(callerId: string, rogerId: string): Promise<void>;
   getExcludedRogerPromptIds(callerId: string, librarySize: number): Promise<Set<string>>;
+
+  // Support Tickets
+  createSupportTicket(data: { fromPhone: string; recordingUrl?: string }): Promise<SupportTicket>;
+  getSupportTickets(status?: string): Promise<SupportTicket[]>;
+  updateSupportTicket(id: string, data: { status?: string; notes?: string }): Promise<SupportTicket>;
+  deleteSupportTicket(id: string): Promise<void>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -2284,6 +2290,33 @@ export class DatabaseStorage implements IStorage {
     // Last resort: return empty set so selection never fails
     console.log(`[roger-history] callerId=${callerId} all windows exhausted — returning empty exclusion set`);
     return new Set<string>();
+  }
+
+  // ── Support Tickets ────────────────────────────────────────────────────────
+
+  async createSupportTicket(data: { fromPhone: string; recordingUrl?: string }): Promise<SupportTicket> {
+    const [ticket] = await db.insert(supportTickets).values({
+      fromPhone: data.fromPhone,
+      recordingUrl: data.recordingUrl ?? null,
+      status: "open",
+    }).returning();
+    return ticket;
+  }
+
+  async getSupportTickets(status?: string): Promise<SupportTicket[]> {
+    if (status) {
+      return db.select().from(supportTickets).where(eq(supportTickets.status, status)).orderBy(desc(supportTickets.createdAt));
+    }
+    return db.select().from(supportTickets).orderBy(desc(supportTickets.createdAt));
+  }
+
+  async updateSupportTicket(id: string, data: { status?: string; notes?: string }): Promise<SupportTicket> {
+    const [ticket] = await db.update(supportTickets).set(data).where(eq(supportTickets.id, id)).returning();
+    return ticket;
+  }
+
+  async deleteSupportTicket(id: string): Promise<void> {
+    await db.delete(supportTickets).where(eq(supportTickets.id, id));
   }
 }
 
