@@ -10,6 +10,7 @@ import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, sche
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
 import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
+import { downloadRecording, twilioUrlToLocalPath } from "./downloadRecording";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -1604,8 +1605,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       return res.send(twiml.toString());
     }
 
-    // Hold the name recording until the greeting is saved
-    pendingNameRecordings.set(callSid, nameRecordingUrl);
+    // Download from Twilio to local server, then hold until the greeting is saved
+    pendingNameRecordings.set(callSid, await downloadRecording(nameRecordingUrl));
 
     playPrompt(twiml, req, "name_saved_record_greeting.mp3", "Great. Now record your greeting for other callers. After the tone, press any key when done.");
     twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
@@ -1622,11 +1623,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     try {
       const fromNumber = req.body?.From;
       const callSid = req.body?.CallSid as string;
-      const recordingUrl = req.body?.RecordingUrl;
+      const rawRecordingUrl = req.body?.RecordingUrl;
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
 
-      if (!fromNumber || !recordingUrl) {
-        throw new Error(`Missing fields: From=${fromNumber}, RecordingUrl=${recordingUrl}`);
+      if (!fromNumber || !rawRecordingUrl) {
+        throw new Error(`Missing fields: From=${fromNumber}, RecordingUrl=${rawRecordingUrl}`);
       }
 
       // Reject greetings shorter than 3 seconds — play error audio and re-prompt
@@ -1636,6 +1637,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         res.type("text/xml");
         return res.send(twiml.toString());
       }
+
+      // Download greeting recording from Twilio to local server
+      const recordingUrl = await downloadRecording(rawRecordingUrl);
 
       // Consume any pending name recording from the prior step
       const nameRecordingUrl = pendingNameRecordings.get(callSid) ?? undefined;
@@ -2730,16 +2734,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       const fromNumber = req.body?.From as string;
-      const recordingUrl = req.body?.RecordingUrl as string;
+      const rawRecordingUrl = req.body?.RecordingUrl as string;
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
 
-      if (!recordingUrl || recordingDuration < 3) {
+      if (!rawRecordingUrl || recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone. Press any key when done.");
         twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting", transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
+      const recordingUrl = await downloadRecording(rawRecordingUrl);
       const user = await getOrCreateUser(fromNumber);
       const mailbox = await storage.getMailboxByUserId(user.id);
       // Keep the existing category if set, otherwise use a default
@@ -3238,18 +3243,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       const fromNumber = req.body?.From as string;
-      const recordingUrl = req.body?.RecordingUrl as string;
+      const rawRecordingUrl = req.body?.RecordingUrl as string;
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
       const category = req.query.category as string;
       const categoryLabel = MAILBOX_CATEGORIES[category] || category;
 
-      if (!recordingUrl || recordingDuration < 3) {
+      if (!rawRecordingUrl || recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}`, transcribe: true, transcribeCallback: `${baseUrl(req)}/voice/transcription-callback` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
+      const recordingUrl = await downloadRecording(rawRecordingUrl);
       const user = await getOrCreateUser(fromNumber);
       await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
       // Clear any previous recording rejection — this new recording will go through auto-mod again
@@ -3280,7 +3286,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/transcription-callback", async (req, res) => {
     const status = (req.body?.TranscriptionStatus as string) || "";
     const text = (req.body?.TranscriptionText as string) || null;
-    const recordingUrl = (req.body?.RecordingUrl as string) || "";
+    const twilioRecordingUrl = (req.body?.RecordingUrl as string) || "";
+    // Twilio posts back the original Twilio URL; we store local paths — convert for DB lookup
+    const recordingUrl = twilioUrlToLocalPath(twilioRecordingUrl) || twilioRecordingUrl;
 
     console.log(`[transcription] callback: status=${status} recordingUrl=${recordingUrl}`);
 
@@ -3763,10 +3771,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/cs-save-message", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber  = req.body?.From as string;
-    const recordingUrl = req.body?.RecordingUrl as string;
-    if (recordingUrl && fromNumber) {
+    const rawRecordingUrl = req.body?.RecordingUrl as string;
+    if (rawRecordingUrl && fromNumber) {
       try {
-        await storage.createSupportTicket({ fromPhone: fromNumber, recordingUrl: `${recordingUrl}.mp3` });
+        const recordingUrl = await downloadRecording(rawRecordingUrl);
+        await storage.createSupportTicket({ fromPhone: fromNumber, recordingUrl });
       } catch (err) {
         console.error("[cs] Failed to save support ticket:", err);
       }
@@ -5402,20 +5411,21 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/review-message", async (req, res) => {
     const twiml = new VoiceResponse();
     const callSid = req.body?.CallSid as string;
-    const recordingUrl = req.body?.RecordingUrl as string;
+    const rawRecordingUrl = req.body?.RecordingUrl as string;
     const duration = parseInt(req.body?.RecordingDuration || "0", 10);
     const toUserId = req.query.toUserId as string;
     const returnTo = (req.query.returnTo as string) || "";
     const category = (req.query.category as string) || "";
 
     try {
-      if (!recordingUrl || duration === 0) {
+      if (!rawRecordingUrl || duration === 0) {
         playPrompt(twiml, req, "no_recording.mp3", "No recording was detected.");
         twiml.redirect(cancelReturnPath(returnTo, category));
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
+      const recordingUrl = await downloadRecording(rawRecordingUrl);
       pendingMessages.set(callSid, { recordingUrl, toUserId, returnTo, category });
 
       const gather = twiml.gather({
@@ -5509,13 +5519,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     try {
       const fromNumber = req.body?.From;
       const callSid = req.body?.CallSid as string;
-      const recordingUrl = req.body?.RecordingUrl;
+      const rawRecordingUrl = req.body?.RecordingUrl;
       const toUserId = req.query.toUserId as string;
 
-      if (!fromNumber || !recordingUrl || !toUserId) {
-        throw new Error(`Missing fields: From=${fromNumber}, RecordingUrl=${recordingUrl}, toUserId=${toUserId}`);
+      if (!fromNumber || !rawRecordingUrl || !toUserId) {
+        throw new Error(`Missing fields: From=${fromNumber}, RecordingUrl=${rawRecordingUrl}, toUserId=${toUserId}`);
       }
 
+      const recordingUrl = await downloadRecording(rawRecordingUrl);
       const returnTo = req.query.returnTo as string;
       const category = req.query.category as string;
       const user = await getOrCreateUser(fromNumber);
