@@ -10,6 +10,7 @@
 import fs from "fs";
 import path from "path";
 import { generateTTS } from "./elevenlabs";
+import { reverseGeocodeNeighborhood } from "./zipLookup";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -234,6 +235,85 @@ async function runAudioAutogen(): Promise<void> {
   }
 }
 
+// ── Location audio helpers ─────────────────────────────────────────────────
+
+/**
+ * Convert a neighborhood/city string into a safe MP3 filename.
+ * e.g. "Westwood, CA" → "loc_westwood_ca.mp3"
+ * Exported so IVR handlers can build the filename from the resolved location.
+ */
+export function locationToFilename(location: string): string {
+  const safe = location
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return `loc_${safe}.mp3`;
+}
+
+/** Full announcement text for a given location. */
+function locationText(location: string): string {
+  return `This caller is located in ${location}. To send them a message, press 1.`;
+}
+
+/**
+ * Scan the zip_codes table, resolve a display location for every entry, and
+ * generate a `loc_*.mp3` in each voice folder (mm / mw / mw_m) if missing.
+ */
+async function runLocationAutogen(): Promise<void> {
+  const { storage } = await import("./storage");
+  const allZips = await storage.getAllZipCodes();
+
+  if (allZips.length === 0) return;
+
+  const uniqueLocations = new Set<string>();
+
+  for (const zip of allZips) {
+    let location: string | null = null;
+
+    // Prefer live reverse-geocode when coordinates are available
+    if (zip.latitude != null && zip.longitude != null) {
+      try {
+        location = await reverseGeocodeNeighborhood(zip.latitude, zip.longitude);
+      } catch {
+        // swallow — fall through to stored fields
+      }
+    }
+
+    if (!location) location = zip.neighborhood ?? zip.city ?? null;
+    if (location) uniqueLocations.add(location);
+  }
+
+  const voiceFolders = ["mm", "mw", "mw_m"];
+  let generated = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const location of uniqueLocations) {
+    const filename = locationToFilename(location);
+    const text = locationText(location);
+
+    for (const folder of voiceFolders) {
+      const filePath = path.join(UPLOADS_DIR, folder, filename);
+      if (fs.existsSync(filePath)) { skipped++; continue; }
+
+      try {
+        await generateTTS(text, filename, folder);
+        console.log(`[audio-autogen] generated location audio: ${folder}/${filename}`);
+        generated++;
+        await sleep(DELAY_MS);
+      } catch (err: any) {
+        console.error(`[audio-autogen] failed location audio ${folder}/${filename}: ${err?.message ?? err}`);
+        failed++;
+        await sleep(DELAY_MS);
+      }
+    }
+  }
+
+  if (generated > 0 || failed > 0) {
+    console.log(`[audio-autogen] locations: generated ${generated}, failed ${failed}, existed ${skipped}`);
+  }
+}
+
 let running = false;
 
 async function safeRun() {
@@ -244,6 +324,7 @@ async function safeRun() {
   running = true;
   try {
     await runAudioAutogen();
+    await runLocationAutogen();
   } finally {
     running = false;
   }

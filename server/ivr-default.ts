@@ -12,6 +12,7 @@ import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
+import { locationToFilename } from "./audioAutogen";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -4986,7 +4987,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             timeout: 10,
           });
           if (location) {
-            locationGather.say(`This caller is located in: ${location}. To send them a message, press 1.`);
+            playPrompt(locationGather, req, locationToFilename(location),
+              `This caller is located in ${location}. To send them a message, press 1.`);
           } else {
             locationGather.say("This caller's location is not available. To send them a message, press 1.");
           }
