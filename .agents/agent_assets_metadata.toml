@@ -137,3 +137,9 @@ id = "TmeA-mBveQs7LCzQkcR2s"
 uri = "file://docs/groq-transcription.md"
 type = "text"
 title = "Groq Transcription — Setup & Reference"
+
+[[outputs]]
+id = "NC_y-qjyFBoLiX1uYKpWw"
+uri = "file://docs/admin-setup.md"
+type = "text"
+title = "Admin Console — Setup Guide"
