@@ -1,0 +1,40 @@
+building client...
+vite v7.3.0 building client environment for production...
+transforming (1) src/main.tsxBrowserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 2043 modules transformed.
+../dist/public/index.html                                   2.02 kB │ gzip:   0.77 kB
+../dist/public/assets/hero_mm_guy_phone-GTmna1w8.png    1,263.77 kB
+../dist/public/assets/image_1775035245108-n3r1Xh97.png  1,497.84 kB
+../dist/public/assets/index-MK5thAUv.css                  104.14 kB │ gzip:  16.49 kB
+../dist/public/assets/index-DAM3F4-6.js                   631.20 kB │ gzip: 178.97 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 7.62s
+building server...
+✘ [ERROR] Unexpected "<<"
+
+    server/ivr-default.ts:1659:0:
+      1659 │ <<<<<<< Updated upstream
+           ╵ ~~
+
+1 error
+Error: Build failed with 1 error:
+server/ivr-default.ts:1659:0: ERROR: Unexpected "<<"
+    at failureErrorWithLog (/apps/chatline/node_modules/esbuild/lib/main.js:1467:15)
+    at /apps/chatline/node_modules/esbuild/lib/main.js:926:25
+    at /apps/chatline/node_modules/esbuild/lib/main.js:878:52
+    at buildResponseToResult (/apps/chatline/node_modules/esbuild/lib/main.js:924:7)
+    at /apps/chatline/node_modules/esbuild/lib/main.js:951:16
+    at responseCallbacks.<computed> (/apps/chatline/node_modules/esbuild/lib/main.js:603:9)
+    at handleIncomingPacket (/apps/chatline/node_modules/esbuild/lib/main.js:658:12)
+    at Socket.readFromStdout (/apps/chatline/node_modules/esbuild/lib/main.js:581:7)
+    at Socket.emit (node:events:524:28)
+    at addChunk (node:internal/streams/readable:561:12) {
+  errors: [Getter/Setter],
+  warnings: [Getter/Setter]
+}
