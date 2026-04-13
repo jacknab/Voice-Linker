@@ -2563,9 +2563,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       if (unreadMessage) {
         // In per-minute billing, start the deduction clock while the caller listens to messages.
-        // In per-day billing or free mode, time is not deducted per-call, so skip starting the billing checkpoint.
+        // In per-day, per_24h billing or free mode, time is not deducted per-call, so skip starting the billing checkpoint.
         const mailboxSettings = await getMembershipSettingsCached();
-        if (mailboxSettings.billingMode !== "per_day" && !mailboxSettings.freeMode) {
+        if (mailboxSettings.billingMode !== "per_day" && mailboxSettings.billingMode !== "per_24h" && !mailboxSettings.freeMode) {
           startBilling(callSid, fromNumber);
         }
         const senderProfile = await storage.getProfile(unreadMessage.fromUserId);
@@ -2805,9 +2805,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.redirect("/voice/my-mailbox");
       } else if (digit === "9") {
         // Exiting the mailbox messages area — in per-minute billing notify caller deductions have stopped.
-        // In per-day billing or free mode, time is not deducted per-call, so skip the announcement.
+        // In per-day, per_24h billing or free mode, time is not deducted per-call, so skip the announcement.
         const mailboxExitSettings = await getMembershipSettingsCached();
-        if (mailboxExitSettings.billingMode !== "per_day" && !mailboxExitSettings.freeMode) {
+        if (mailboxExitSettings.billingMode !== "per_day" && mailboxExitSettings.billingMode !== "per_24h" && !mailboxExitSettings.freeMode) {
           playPrompt(twiml, req, "time_deduction_stop.mp3",
             "Time is no longer being deducted from your membership.");
         }
@@ -3905,9 +3905,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Caller count is announced by browse-profiles at index 1 — do not duplicate here.
 
       // In per-minute billing, notify the caller that their time is now running.
-      // In per-day billing or free mode, time is not deducted per-call, so skip this announcement.
+      // In per-day, per_24h billing or free mode, time is not deducted per-call, so skip this announcement.
       const goLiveSettings = await getMembershipSettingsCached();
-      if (goLiveSettings.billingMode !== "per_day" && !goLiveSettings.freeMode) {
+      if (goLiveSettings.billingMode !== "per_day" && goLiveSettings.billingMode !== "per_24h" && !goLiveSettings.freeMode) {
         playPrompt(twiml, req, "time_deduction_start.mp3",
           "Time is now being deducted from your membership.");
       }
@@ -4816,9 +4816,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
       } else if (digit === "9") {
         // Exiting the male box — in per-minute billing notify caller deductions have stopped.
-        // In per-day billing or free mode, time is not deducted per-call, so skip the announcement.
+        // In per-day, per_24h billing or free mode, time is not deducted per-call, so skip the announcement.
         const boothExitSettings = await getMembershipSettingsCached();
-        if (boothExitSettings.billingMode !== "per_day" && !boothExitSettings.freeMode) {
+        if (boothExitSettings.billingMode !== "per_day" && boothExitSettings.billingMode !== "per_24h" && !boothExitSettings.freeMode) {
           playPrompt(twiml, req, "time_deduction_stop.mp3",
             "Time is no longer being deducted from your membership.");
         }
