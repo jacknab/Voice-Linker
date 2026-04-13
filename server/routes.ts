@@ -17,6 +17,9 @@ import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
 import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached, getMembershipSettingsCached } from "./settings-cache";
+import { db } from "./db";
+import { profiles } from "@shared/schema";
+import { eq, isNull, or } from "drizzle-orm";
 import { PROMPT_LIBRARY, ROGER_V3_TEXTS } from "./engagementEngine";
 import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage } from "./seoPageGenerator";
 
@@ -1467,6 +1470,97 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[admin/support-tickets] Failed to delete ticket:", e);
       res.status(500).json({ message: "Failed to delete support ticket" });
+    }
+  });
+
+  // ─── Admin: Cleanup Tool ──────────────────────────────────────────────────
+  // Scans for and removes four categories of bloat:
+  //  1. Failed transcriptions → reset to null so background job can retry
+  //  2. Stuck-pending transcriptions → reset to null
+  //  3. Profiles pointing to missing audio files → clear broken recordingUrl
+  //  4. Orphaned recording files on disk → delete files not referenced by any profile
+
+  app.post("/api/admin/cleanup", async (_req, res) => {
+    try {
+      // ── 1+2. Fetch all profiles that have recording issues ─────────────────
+      const allProfiles = await db.select({
+        id: profiles.id,
+        recordingUrl: profiles.recordingUrl,
+        transcriptionStatus: profiles.transcriptionStatus,
+      }).from(profiles);
+
+      // Reset failed transcriptions so the background job will retry them
+      const failedIds = allProfiles
+        .filter(p => p.transcriptionStatus === "failed" && p.recordingUrl)
+        .map(p => p.id);
+      if (failedIds.length > 0) {
+        for (const id of failedIds) {
+          await db.update(profiles)
+            .set({ transcriptionStatus: null, transcription: null })
+            .where(eq(profiles.id, id));
+        }
+      }
+
+      // Reset stuck pending transcriptions
+      const pendingIds = allProfiles
+        .filter(p => p.transcriptionStatus === "pending")
+        .map(p => p.id);
+      if (pendingIds.length > 0) {
+        for (const id of pendingIds) {
+          await db.update(profiles)
+            .set({ transcriptionStatus: null })
+            .where(eq(profiles.id, id));
+        }
+      }
+
+      // ── 3. Fix profiles pointing to missing files ──────────────────────────
+      const localProfiles = allProfiles.filter(p => p.recordingUrl?.startsWith("/uploads/"));
+      let fixedBrokenLinks = 0;
+      for (const p of localProfiles) {
+        const filePath = path.join(process.cwd(), (p.recordingUrl as string).substring(1));
+        if (!fs.existsSync(filePath)) {
+          await db.update(profiles)
+            .set({ transcriptionStatus: null, transcription: null })
+            .where(eq(profiles.id, p.id));
+          fixedBrokenLinks++;
+        }
+      }
+
+      // ── 4. Delete orphaned recording files from disk ───────────────────────
+      // Caller recording files use the multer pattern: <timestamp>-<random>.(mp3|wav)
+      // System audio files have descriptive names and live in subdirectories.
+      const referencedUrls = new Set(
+        allProfiles.map(p => p.recordingUrl).filter(Boolean) as string[]
+      );
+      const uploadsRoot = path.join(process.cwd(), "uploads");
+      const orphanPattern = /^\d{12,14}-\d+\.(mp3|wav)$/i;
+      let deletedOrphanFiles = 0;
+      if (fs.existsSync(uploadsRoot)) {
+        for (const f of fs.readdirSync(uploadsRoot)) {
+          if (!orphanPattern.test(f)) continue;
+          const fileUrl = `/uploads/${f}`;
+          if (!referencedUrls.has(fileUrl)) {
+            try {
+              fs.unlinkSync(path.join(uploadsRoot, f));
+              deletedOrphanFiles++;
+            } catch (unlinkErr) {
+              console.warn("[cleanup] Could not delete orphan file:", f, unlinkErr);
+            }
+          }
+        }
+      }
+
+      console.log(`[cleanup] retriedFailed=${failedIds.length} resetPending=${pendingIds.length} fixedBroken=${fixedBrokenLinks} deletedOrphans=${deletedOrphanFiles}`);
+
+      res.json({
+        retriedFailed: failedIds.length,
+        resetStuckPending: pendingIds.length,
+        fixedBrokenLinks,
+        deletedOrphanFiles,
+      });
+    } catch (e) {
+      console.error("[admin/cleanup] error:", e);
+      res.status(500).json({ message: "Cleanup failed" });
     }
   });
 

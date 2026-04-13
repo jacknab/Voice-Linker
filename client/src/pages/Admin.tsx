@@ -6529,6 +6529,13 @@ function ModerationLogTab() {
 // ── TranscriptionsTab ─────────────────────────────────────────────────────────
 function TranscriptionsTab() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [cleanupResult, setCleanupResult] = useState<{
+    retriedFailed: number;
+    resetStuckPending: number;
+    fixedBrokenLinks: number;
+    deletedOrphanFiles: number;
+  } | null>(null);
+
   const { data: profiles, isLoading } = useQuery<ProfileWithUser[]>({
     queryKey: ["/api/admin/transcriptions"],
   });
@@ -6539,6 +6546,17 @@ function TranscriptionsTab() {
       if (!res.ok) throw new Error("Failed to dismiss");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/transcriptions"] }),
+  });
+
+  const cleanupMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/cleanup");
+      return res.json() as Promise<{ retriedFailed: number; resetStuckPending: number; fixedBrokenLinks: number; deletedOrphanFiles: number }>;
+    },
+    onSuccess: (data) => {
+      setCleanupResult(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/transcriptions"] });
+    },
   });
 
   const statusBadge = (status: string | null) => {
@@ -6555,7 +6573,43 @@ function TranscriptionsTab() {
           <h2 className={`${C.heading} text-base`}>Greeting Transcriptions</h2>
           <p className={`${C.subtext} mt-1`}>Auto-generated transcripts of caller-recorded greetings. New recordings are transcribed automatically.</p>
         </div>
+        <button
+          data-testid="btn-run-cleanup"
+          onClick={() => cleanupMutation.mutate()}
+          disabled={cleanupMutation.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-gray-300 rounded hover:bg-gray-50 text-gray-600 disabled:opacity-50 transition-colors"
+        >
+          {cleanupMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+          {cleanupMutation.isPending ? "Cleaning…" : "Run Auto-Cleanup"}
+        </button>
       </div>
+
+      {cleanupResult && (
+        <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-4 space-y-2">
+          <p className="text-xs font-mono font-semibold text-emerald-800 uppercase tracking-wide">Cleanup Complete</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-1">
+            <div className="text-center">
+              <div className="text-2xl font-bold font-mono text-emerald-700">{cleanupResult.retriedFailed}</div>
+              <div className="text-[10px] font-mono text-emerald-600 mt-0.5">Failed → Retrying</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold font-mono text-emerald-700">{cleanupResult.resetStuckPending}</div>
+              <div className="text-[10px] font-mono text-emerald-600 mt-0.5">Stuck Pending Reset</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold font-mono text-emerald-700">{cleanupResult.fixedBrokenLinks}</div>
+              <div className="text-[10px] font-mono text-emerald-600 mt-0.5">Broken Links Fixed</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold font-mono text-emerald-700">{cleanupResult.deletedOrphanFiles}</div>
+              <div className="text-[10px] font-mono text-emerald-600 mt-0.5">Orphan Files Deleted</div>
+            </div>
+          </div>
+          {cleanupResult.retriedFailed === 0 && cleanupResult.resetStuckPending === 0 && cleanupResult.fixedBrokenLinks === 0 && cleanupResult.deletedOrphanFiles === 0 && (
+            <p className="text-xs text-emerald-600 font-mono">Everything is clean — no issues found.</p>
+          )}
+        </div>
+      )}
       <div className="border border-gray-200 rounded-lg overflow-hidden">
         <table className="w-full">
           <thead>
