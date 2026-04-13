@@ -1755,7 +1755,22 @@ function TTSTab() {
 
   useEffect(() => {
     if (savedPromptTexts && !initialized) {
-      setEditingText(savedPromptTexts);
+      // Migrate old bare-filename keys (e.g. "main_menu.mp3") to compound keys
+      // (e.g. "mm:main_menu.mp3") so each folder has its own independent text.
+      // Keys that already contain ":" are already in the new format and pass through as-is.
+      const migrated: Record<string, string> = {};
+      for (const [k, v] of Object.entries(savedPromptTexts)) {
+        if (k.includes(":")) {
+          migrated[k] = v;
+        } else {
+          // Copy old shared value into all three folder variants so existing saved
+          // overrides are not silently lost after the migration.
+          migrated[`mm:${k}`]    = v;
+          migrated[`mw:${k}`]    = v;
+          migrated[`mw_m:${k}`]  = v;
+        }
+      }
+      setEditingText(migrated);
       setInitialized(true);
     }
   }, [savedPromptTexts, initialized]);
@@ -1779,8 +1794,9 @@ function TTSTab() {
   });
 
   function handleTextChange(filename: string, value: string) {
-    setEditingText(prev => ({ ...prev, [filename]: value }));
-    setDirtyKeys(prev => new Set(prev).add(filename));
+    const key = `${categoryFolder}:${filename}`;
+    setEditingText(prev => ({ ...prev, [key]: value }));
+    setDirtyKeys(prev => new Set(prev).add(key));
   }
 
   function handleSaveAll() {
@@ -1914,7 +1930,7 @@ function TTSTab() {
     let done = 0;
     for (const prompt of prompts) {
       if (generateAllAbortRef.current) break;
-      const text = editingText[prompt.filename] ?? prompt.text;
+      const text = editingText[`${categoryFolder}:${prompt.filename}`] ?? editingText[prompt.filename] ?? prompt.text;
       const key = `${categoryFolder}:${prompt.filename}`;
       setGenerating(key);
       setGenerateAllProgress({ done, total: prompts.length, currentLabel: prompt.label });
@@ -1980,7 +1996,7 @@ function TTSTab() {
     let done = 0;
     for (const prompt of missing) {
       if (generateAllAbortRef.current) break;
-      const text = editingText[prompt.filename] ?? prompt.text;
+      const text = editingText[`${categoryFolder}:${prompt.filename}`] ?? editingText[prompt.filename] ?? prompt.text;
       if (!text.trim()) { done++; continue; }
       const key = `${categoryFolder}:${prompt.filename}`;
       setGenerating(key);
@@ -2518,7 +2534,9 @@ function TTSTab() {
                 const exists = promptExists(prompt.filename);
                 const isGen = generating === `${categoryFolder}:${prompt.filename}`;
                 const existingFile = getFileIn(categoryFolder, prompt.filename) ?? getFileIn("shared", prompt.filename);
-                const currentText = editingText[prompt.filename] ?? prompt.text;
+                const promptKey = `${categoryFolder}:${prompt.filename}`;
+                const currentText = editingText[promptKey] ?? editingText[prompt.filename] ?? prompt.text;
+                const isDirty = dirtyKeys.has(promptKey);
                 const isPlaying = playingPromptKey === prompt.filename;
                 return (
                   <tr key={prompt.filename} data-testid={`row-prompt-${prompt.filename}`} className={C.row}>
@@ -2532,9 +2550,9 @@ function TTSTab() {
                           data-testid={`textarea-prompt-${prompt.filename}`}
                           value={currentText}
                           onChange={v => handleTextChange(prompt.filename, v)}
-                          className={`w-full bg-gray-50 border rounded px-2.5 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none transition-colors ${dirtyKeys.has(prompt.filename) ? "border-amber-400 bg-amber-50 focus:border-amber-500" : "border-gray-200 focus:border-[#f5a623]"}`}
+                          className={`w-full bg-gray-50 border rounded px-2.5 py-1.5 text-gray-700 font-mono text-xs placeholder-gray-400 focus:outline-none transition-colors ${isDirty ? "border-amber-400 bg-amber-50 focus:border-amber-500" : "border-gray-200 focus:border-[#f5a623]"}`}
                         />
-                        {dirtyKeys.has(prompt.filename) && (
+                        {isDirty && (
                           <span className="absolute top-1 right-1.5 text-[9px] font-bold text-amber-500 font-mono select-none pointer-events-none">unsaved</span>
                         )}
                       </div>
