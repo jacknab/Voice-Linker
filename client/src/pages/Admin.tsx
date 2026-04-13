@@ -1602,6 +1602,8 @@ function TTSTab() {
   const neighborhoodEntries = zipEntries.filter(e => e.audioFile && e.neighborhood);
   const { data: allRegions = [] } = useQuery<Region[]>({ queryKey: ["/api/regions"] });
   const [generatingCity, setGeneratingCity] = useState<string | null>(null);
+  const [generateAllCitiesProgress, setGenerateAllCitiesProgress] = useState<{ done: number; total: number; currentLabel: string } | null>(null);
+  const generateAllCitiesAbortRef = useRef(false);
 
   const generateCityMutation = useMutation({
     mutationFn: async (regionId: string) => {
@@ -1807,6 +1809,45 @@ function TTSTab() {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
     if (!wasCancelled) {
       toast({ title: "Generate Missing complete", description: `${done} of ${missing.length} missing prompts generated.` });
+    }
+  }
+
+  async function handleGenerateAllCities() {
+    if (generateAllCitiesProgress) {
+      generateAllCitiesAbortRef.current = true;
+      return;
+    }
+    const regions = allRegions;
+    if (regions.length === 0) {
+      toast({ title: "No regions", description: "Add regions first." });
+      return;
+    }
+    generateAllCitiesAbortRef.current = false;
+    setGenerateAllCitiesProgress({ done: 0, total: regions.length, currentLabel: regions[0]?.name ?? "" });
+    let done = 0;
+    for (const region of regions) {
+      if (generateAllCitiesAbortRef.current) break;
+      setGeneratingCity(region.id);
+      setGenerateAllCitiesProgress({ done, total: regions.length, currentLabel: region.name });
+      try {
+        const res = await fetch(`/api/admin/regions/${region.id}/regenerate-city-audio`, { method: "POST" });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ message: "Failed" }));
+          toast({ title: `Failed: ${region.name}`, description: err.message, variant: "destructive" });
+        }
+      } catch {
+        toast({ title: `Error: ${region.name}`, description: "Network error", variant: "destructive" });
+      }
+      done++;
+      if (!generateAllCitiesAbortRef.current) await new Promise(r => setTimeout(r, 30000));
+    }
+    const wasCancelled = generateAllCitiesAbortRef.current;
+    setGeneratingCity(null);
+    setGenerateAllCitiesProgress(null);
+    generateAllCitiesAbortRef.current = false;
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
+    if (!wasCancelled) {
+      toast({ title: "City audio complete", description: `${done} of ${regions.length} city files generated.` });
     }
   }
 
@@ -2035,14 +2076,44 @@ function TTSTab() {
 
       {allRegions.length > 0 && (
         <div className={C.card}>
-          <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
-            <MapPin size={14} className="text-[#f5a623]" /> City Name Audio Files
-          </h3>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+              <MapPin size={14} className="text-[#f5a623]" /> City Name Audio Files
+            </h3>
+            <button
+              data-testid="btn-generate-all-cities"
+              onClick={handleGenerateAllCities}
+              disabled={!!generatingCity && !generateAllCitiesProgress}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-bold border transition-colors ${
+                generateAllCitiesProgress
+                  ? "bg-red-50 border-red-300 text-red-600 hover:bg-red-100"
+                  : "bg-[#f5a623] border-[#f5a623] text-white hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              }`}
+            >
+              {generateAllCitiesProgress
+                ? <><X size={12} /> Cancel</>
+                : <><Wand2 size={12} /> Generate All ({allRegions.length})</>}
+            </button>
+          </div>
           <p className="text-gray-400 font-mono text-xs -mt-1">
             One audio file per region. Used in the linked-regions IVR menu when a caller has heard all local callers and is offered nearby cities.
             The menu says: <span className="text-gray-600 italic">"You have heard all the callers close to you. Press 1 to hear [guys from Denver]. Press 2 to hear [guys from Boulder]. Press 3 to start over."</span>
             <br />The bracketed parts play from these pre-generated ElevenLabs files. New regions auto-generate on creation. This menu is triggered automatically — no manual setup needed.
           </p>
+          {generateAllCitiesProgress && (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-mono text-gray-500">
+                <span className="truncate max-w-xs">{generateAllCitiesProgress.currentLabel}</span>
+                <span className="flex-shrink-0 ml-2 text-[#f5a623] font-bold">{generateAllCitiesProgress.done} / {generateAllCitiesProgress.total}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-[#f5a623] h-1.5 rounded-full transition-all duration-300"
+                  style={{ width: `${(generateAllCitiesProgress.done / generateAllCitiesProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
           <div className="border border-gray-200 rounded-lg overflow-hidden">
             <table className="w-full">
               <thead>
