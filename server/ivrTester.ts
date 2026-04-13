@@ -4,6 +4,7 @@ import { storage } from "./storage";
 export interface IVRLogEntry {
   type: "say" | "play" | "keypress" | "system" | "record" | "conference" | "hangup" | "pay";
   content: string;
+  text?: string;
   ts: number;
 }
 
@@ -24,12 +25,80 @@ export interface IVRStepResult {
   entries: IVRLogEntry[];
   status: "active" | "ended";
   waitingForInput: boolean;
+  waitingForRecording: boolean;
   numDigits: number | null;
 }
 
 export const ivrTestSessions = new Map<string, IVRTestSession>();
 
 const MAX_REDIRECTS = 15;
+
+// ── Expected text lookup table ────────────────────────────────────────────────
+// Maps audio filenames to the text the IVR expects the audio to speak.
+// Used by the admin tester to surface mismatches between recorded audio and IVR intent.
+const PROMPT_TEXTS: Record<string, string> = {
+  "system_greeting.mp3":          "Welcome to the Male Box. This service assumes no responsibility for personal meetings.",
+  "disclaimer.mp3":               "(disclaimer — content policy audio)",
+  "gender_select.mp3":            "Guys, press one to talk to women. Women, press two to talk to guys.",
+  "free_mode_announcement.mp3":   "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now.",
+  "membership_entry_prompt.mp3":  "If you have a membership card, enter your card number now. Otherwise press the pound key.",
+  "main_menu.mp3":                "Main menu. To enter the male box press star. For mailboxes and personal ads press 1. To add time or purchase a membership press 2. For information on membership prices press 3. To manage your membership press 4. For customer service press 0. To repeat these choices press 9.",
+  "mw_main_menu.mp3":             "Main menu. To enter the male box press star. For mailboxes and personal ads press 1. To add time or purchase a membership press 2. For information on membership prices press 3. To manage your membership press 4. For customer service press 0. To repeat these choices press 9.",
+  "free_trial_offer.mp3":         "We would like to offer you a free trial. To get your free trial now press 1. To get your free trial later press the pound key.",
+  "free_trial_terms.mp3":         "Your free trial will expire in seven days and it must be used from this phone number.",
+  "phone_booth_welcome.mp3":      "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.",
+  "welcome_record_name.mp3":      "You need to record a greeting to introduce yourself to the other guys first. Let's record the name you want to use. After the tone, record just your first name.",
+  "no_caller_id.mp3":             "We could not identify your call. Goodbye.",
+  "error_generic.mp3":            "An error occurred. Please try again later.",
+  "invalid_choice.mp3":           "Invalid choice.",
+  "membership_linked.mp3":        "Your membership has been verified. Welcome.",
+  "membership_invalid.mp3":       "We could not find a card with that number. Please check your card and try again.",
+  "link_code_invalid.mp3":        "That code is invalid or has expired. Please generate a new code from your web account and try again.",
+  "access_expired.mp3":           "Your access has expired.",
+  "goodbye.mp3":                  "Thank you for calling. Goodbye.",
+  "name_retry.mp3":               "We didn't catch your name. Please try again.",
+  "name_saved_record_greeting.mp3": "Great. Now record your greeting for other callers. After the tone, press any key when done.",
+  "greeting_error.mp3":           "That greeting was too short. Please try again after the tone. Press any key when done.",
+  "profile_save_error.mp3":       "We could not save your profile. Please try again.",
+  "package_cancelled.mp3":        "Cancelled. Returning to the main menu.",
+  "mailbox_setup_dob_invalid.mp3":"We did not receive a valid date of birth. Please try again.",
+  "mailbox_setup_cancelled.mp3":  "Mailbox setup cancelled.",
+  "mailbox_setup_passcode_reenter.mp3": "Please re-enter your four digit passcode.",
+  "record_reply.mp3":             "Record your reply after the tone. Press any key when done.",
+  "record_message.mp3":           "Record your message after the tone. Press any key when done.",
+  "no_greeting_found.mp3":        "No greeting found.",
+  "no_profiles.mp3":              "There are no profiles available right now. Please call back later.",
+  "profile_saved.mp3":            "Your greeting has been saved.",
+  "live_invite_options.mp3":      "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4.",
+  "message_options.mp3":          "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 4 to block this caller. Press 7 to flag this message for review. Press 9 to return to the main menu.",
+  "new_caller_closest_to_you.mp3":"New caller closest to you.",
+  "profile_options.mp3":          "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.",
+  "nearby_callers_offer.mp3":     "You have heard all the callers close to you.",
+  "zip_code_saved.mp3":           "Got it. We'll use your zip code to show you nearby callers.",
+  "motd.mp3":                     "(message of the day)",
+  "motd_phone_booth.mp3":         "(phone booth message of the day)",
+  "motd_main_menu.mp3":           "(main menu message of the day)",
+  "backdoor_expires_soon.mp3":    "Your backdoor access pass expires soon.",
+  "time_deduction_start.mp3":     "(time deduction start notification)",
+  "time_deduction_stop.mp3":      "(time deduction stop notification)",
+  "phrase_you_have.mp3":          "You have",
+  "phrase_minute_of_pbtr.mp3":    "minute of phone booth time remaining.",
+  "phrase_minutes_of_pbtr.mp3":   "minutes of phone booth time remaining.",
+  "phrase_there_is.mp3":          "There is",
+  "phrase_there_are.mp3":         "There are",
+};
+
+function lookupPromptText(audioPath: string): string | undefined {
+  const filename = audioPath.split("/").pop() ?? audioPath;
+  if (PROMPT_TEXTS[filename]) return PROMPT_TEXTS[filename];
+  // num_XXX.mp3 → the number itself
+  const numMatch = filename.match(/^num_(\d+)\.mp3$/);
+  if (numMatch) return numMatch[1];
+  // backdoor_expires_Xhr.mp3
+  const bdMatch = filename.match(/^backdoor_expires_(\d+)hr\.mp3$/);
+  if (bdMatch) return `Your backdoor access pass expires in ${bdMatch[1]} hour${bdMatch[1] === "1" ? "" : "s"}.`;
+  return undefined;
+}
 
 function extractAudioPath(rawUrl: string, serverBase: string): string {
   if (!rawUrl) return "";
@@ -64,7 +133,7 @@ function parseTwiMLAndAdvance(
   for (const m of Array.from(xmlWithoutGather.matchAll(topPlayRe))) {
     const rawUrl = m[1].trim();
     const audioPath = extractAudioPath(rawUrl, serverBase);
-    session.log.push({ type: "play", content: audioPath, ts });
+    session.log.push({ type: "play", content: audioPath, text: lookupPromptText(audioPath), ts });
   }
 
   // ── Gather ──
@@ -91,7 +160,7 @@ function parseTwiMLAndAdvance(
     for (const m of Array.from(inner.matchAll(/<Play[^>]*>([\s\S]*?)<\/Play>/g))) {
       const rawUrl = m[1].trim();
       const audioPath = extractAudioPath(rawUrl, serverBase);
-      session.log.push({ type: "play", content: audioPath, ts });
+      session.log.push({ type: "play", content: audioPath, text: lookupPromptText(audioPath), ts });
     }
 
     return { redirect: null, hangup: false, waitingForInput: true };

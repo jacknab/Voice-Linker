@@ -3154,6 +3154,7 @@ function PlaceholderTab({ label }: { label: string }) {
 interface IVRLogEntry {
   type: "say" | "play" | "keypress" | "system" | "record" | "conference" | "hangup" | "pay";
   content: string;
+  text?: string;
   ts: number;
 }
 
@@ -3231,6 +3232,10 @@ function IVRTesterTab() {
     const entry = audioQueue.current.shift()!;
     audioPlaying.current = true;
 
+    // Reveal this entry in the log exactly when it starts playing
+    setLog(prev => [...prev, entry]);
+    scrollToBottom();
+
     if (entry.type === "play" && entry.content.startsWith("/")) {
       const audio = new Audio(entry.content);
       currentAudio.current = audio;
@@ -3250,6 +3255,7 @@ function IVRTesterTab() {
   }
 
   function enqueueAudio(entries: IVRLogEntry[]) {
+    // Only queue audio entries — they reveal themselves one-by-one as each plays
     for (const e of entries) {
       if (e.type === "say" || e.type === "play") audioQueue.current.push(e);
     }
@@ -3268,7 +3274,10 @@ function IVRTesterTab() {
     waitingForRecording: boolean;
     numDigits: number | null;
   }) {
-    setLog(prev => [...prev, ...result.entries]);
+    // Non-audio entries (system messages, keypress, record, hangup, etc.) appear immediately.
+    // Audio entries (play, say) are revealed one-at-a-time via processAudioQueue as each plays.
+    const immediate = result.entries.filter(e => e.type !== "play" && e.type !== "say");
+    if (immediate.length > 0) setLog(prev => [...prev, ...immediate]);
     setWaitingForInput(result.waitingForInput);
     setWaitingForRecording(result.waitingForRecording ?? false);
     setNumDigits(result.numDigits);
@@ -3597,10 +3606,22 @@ function IVRTesterTab() {
                         <>
                           <Play size={11} style={{ color: "#a78bfa", flexShrink: 0, marginTop: 3 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{ fontFamily: "monospace", fontSize: "0.65rem", color: "#6b84a8", letterSpacing: "0.06em", marginRight: "0.4rem" }}>MP3</span>
-                            <span style={{ fontFamily: "monospace", fontSize: "0.8rem", color: "#c4b5fd", fontWeight: 600, wordBreak: "break-all" }}>
-                              {filename}
-                            </span>
+                            <div>
+                              <span style={{ fontFamily: "monospace", fontSize: "0.65rem", color: "#6b84a8", letterSpacing: "0.06em", marginRight: "0.4rem" }}>MP3</span>
+                              <span style={{ fontFamily: "monospace", fontSize: "0.8rem", color: "#c4b5fd", fontWeight: 600, wordBreak: "break-all" }}>
+                                {filename}
+                              </span>
+                            </div>
+                            {entry.text ? (
+                              <div style={{ marginTop: "0.2rem", borderLeft: "2px solid #3a3060", paddingLeft: "0.4rem" }}>
+                                <span style={{ fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700, color: "#7c5fa8", letterSpacing: "0.05em", marginRight: "0.3rem" }}>EXPECTED:</span>
+                                <span style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#a89ec8", fontStyle: "italic" }}>{entry.text}</span>
+                              </div>
+                            ) : (
+                              <div style={{ marginTop: "0.15rem", paddingLeft: "0.4rem", borderLeft: "2px solid #2a2040" }}>
+                                <span style={{ fontFamily: "monospace", fontSize: "0.6rem", color: "#4a3a60", fontStyle: "italic" }}>no expected text mapped</span>
+                              </div>
+                            )}
                           </div>
                         </>
                       );
