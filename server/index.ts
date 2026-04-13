@@ -6,6 +6,7 @@ import session from "express-session";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { startSimulator } from "./simulator";
+import { startAudioAutogen } from "./audioAutogen";
 import { createServer } from "http";
 
 const app = express();
@@ -127,6 +128,9 @@ app.use((req, res, next) => {
 
   // Start the virtual caller simulator after a short delay to let the DB settle
   setTimeout(() => startSimulator().catch(err => console.error("[simulator] startup error:", err)), 3000);
+
+  // Start the hourly audio auto-generation cron (generates any missing prompt MP3s via ElevenLabs)
+  startAudioAutogen();
 
   // Periodically purge any active_calls rows that are more than 20 minutes old.
   // This catches calls where Twilio's status callback never fired (e.g. network issues).
