@@ -1606,10 +1606,14 @@ function TTSTab() {
   const generateAllCitiesAbortRef = useRef(false);
 
   const generateCityMutation = useMutation({
-    mutationFn: async (regionId: string) => {
-      const res = await fetch(`/api/admin/regions/${regionId}/regenerate-city-audio`, { method: "POST" });
+    mutationFn: async ({ regionId, folder }: { regionId: string; folder: string }) => {
+      const res = await fetch(`/api/admin/regions/${regionId}/regenerate-city-audio`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ folder }),
+      });
       if (!res.ok) { const err = await res.json().catch(() => ({ message: "Failed" })); throw new Error(err.message); }
-      return res.json() as Promise<{ filename: string; url: string }>;
+      return res.json() as Promise<{ filename: string; url: string; folder: string }>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
@@ -1830,7 +1834,11 @@ function TTSTab() {
       setGeneratingCity(region.id);
       setGenerateAllCitiesProgress({ done, total: regions.length, currentLabel: region.name });
       try {
-        const res = await fetch(`/api/admin/regions/${region.id}/regenerate-city-audio`, { method: "POST" });
+        const res = await fetch(`/api/admin/regions/${region.id}/regenerate-city-audio`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folder: categoryFolder }),
+        });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ message: "Failed" }));
           toast({ title: `Failed: ${region.name}`, description: err.message, variant: "destructive" });
@@ -1847,7 +1855,7 @@ function TTSTab() {
     generateAllCitiesAbortRef.current = false;
     queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
     if (!wasCancelled) {
-      toast({ title: "City audio complete", description: `${done} of ${regions.length} city files generated.` });
+      toast({ title: "City audio complete", description: `${done} of ${regions.length} ${categoryFolder.toUpperCase()} city files generated.` });
     }
   }
 
@@ -2128,8 +2136,8 @@ function TTSTab() {
                 {allRegions.map(region => {
                   const slug = region.slug.replace(/[^a-z0-9_\-]/g, "_");
                   const filename = `city_${slug}.mp3`;
-                  const exists = fileExistsIn("shared", filename);
-                  const existingFile = getFileIn("shared", filename);
+                  const exists = fileExistsIn(categoryFolder, filename);
+                  const existingFile = getFileIn(categoryFolder, filename);
                   const isGen = generatingCity === region.id;
                   return (
                     <tr key={region.id} data-testid={`row-city-audio-${region.id}`} className={C.row}>
@@ -2138,7 +2146,7 @@ function TTSTab() {
                         <div className="text-gray-400 font-mono text-[10px] mt-0.5">{region.slug}</div>
                       </td>
                       <td className={C.td}>
-                        <span className="font-mono text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">{filename}</span>
+                        <span className="font-mono text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">{categoryFolder}/{filename}</span>
                         <div className="text-gray-400 font-mono text-[10px] mt-0.5 italic">"{`guys from ${region.name}.`}"</div>
                       </td>
                       <td className={C.td}>
@@ -2151,7 +2159,7 @@ function TTSTab() {
                         <div className="flex items-center gap-1.5">
                           <button
                             data-testid={`btn-generate-city-${region.id}`}
-                            onClick={() => { setGeneratingCity(region.id); generateCityMutation.mutate(region.id); }}
+                            onClick={() => { setGeneratingCity(region.id); generateCityMutation.mutate({ regionId: region.id, folder: categoryFolder }); }}
                             disabled={!!generatingCity}
                             className={C.btnGhost + " text-[10px]"}
                           >
@@ -2162,7 +2170,7 @@ function TTSTab() {
                           {exists && (
                             <button
                               data-testid={`btn-delete-city-${region.id}`}
-                              onClick={() => deleteMutation.mutate({ filename, folder: "shared" })}
+                              onClick={() => deleteMutation.mutate({ filename, folder: categoryFolder })}
                               className={C.btnDanger + " text-[10px]"}
                             >
                               <Trash2 size={10} />

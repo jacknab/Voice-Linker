@@ -28,11 +28,14 @@ import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeR
 // Generates a shared ElevenLabs audio file for a region's city name so the
 // linked-regions IVR menu can play it instead of falling back to Twilio TTS.
 // File is saved to uploads/city_{slug}.mp3 (shared folder, works for MM + MW).
-async function generateCityAudio(regionName: string, regionSlug: string): Promise<void> {
+async function generateCityAudio(regionName: string, regionSlug: string, folder?: string): Promise<void> {
   try {
     const filename = `city_${regionSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
-    await generateTTS(`new caller from ${regionName}.`, filename);
-    console.log(`[city-audio] Generated ${filename} for region "${regionName}"`);
+    const validFolders = ["mm", "mw", "mw_m"];
+    const targetFolder = folder && validFolders.includes(folder) ? folder : undefined;
+    await generateTTS(`new caller from ${regionName}.`, filename, targetFolder);
+    const dest = targetFolder ? `${targetFolder}/${filename}` : filename;
+    console.log(`[city-audio] Generated ${dest} for region "${regionName}"`);
   } catch (err: any) {
     console.error(`[city-audio] Failed to generate audio for "${regionName}":`, err.message);
   }
@@ -1868,9 +1871,12 @@ export async function registerRoutes(
     try {
       const region = await storage.getRegionById(req.params.id);
       if (!region) return res.status(404).json({ message: "Region not found" });
-      await generateCityAudio(region.name, region.slug);
+      const validFolders = ["mm", "mw", "mw_m"];
+      const folder: string | undefined = req.body?.folder && validFolders.includes(req.body.folder) ? req.body.folder : undefined;
+      await generateCityAudio(region.name, region.slug, folder);
       const filename = `city_${region.slug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
-      res.json({ filename, url: `/uploads/${filename}` });
+      const url = folder ? `/uploads/${folder}/${filename}` : `/uploads/${filename}`;
+      res.json({ filename, url, folder: folder ?? "shared" });
     } catch (e: any) {
       res.status(500).json({ message: e?.message ?? "Failed to generate city audio" });
     }
