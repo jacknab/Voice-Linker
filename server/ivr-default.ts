@@ -4011,7 +4011,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         } else {
           // Profile is already saved; confirm and continue
           playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
-          twiml.redirect("/voice/go-live");
+          twiml.redirect("/voice/zip-code-prompt");
         }
       } else if (digit === "2") {
         // Re-record from scratch — restart name step
