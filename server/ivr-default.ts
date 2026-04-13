@@ -4271,7 +4271,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           msgGather.say("You have a new message.");
         }
         safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available for playback.");
-        playPrompt(msgGather, req, "message_options.mp3", "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 4 to block this caller. Press 7 to flag this message for review. Press 9 to return to the main menu.");
+        playPrompt(msgGather, req, "message_options.mp3", "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to connect live with this caller. Press 4 to continue browsing profiles. Press 5 to block this caller. Press 7 to flag this message for review. Press 9 to return to the main menu.");
         twiml.redirect("/voice/main-menu");
       } else {
         // Build the queue once per caller, then advance position on each visit
@@ -4734,9 +4734,68 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         senderGather.say("Press 1 to send a message. Press 2 to continue browsing. Press 9 for main menu.");
         twiml.redirect("/voice/main-menu");
       } else if (digit === "3") {
+        // ── Connect live with the message sender ─────────────────────────────
+        const fromNumber = req.body?.From as string;
+        const callSid = req.body?.CallSid as string;
+        if (!fromNumber || !senderId || !callSid) {
+          playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to profiles.");
+          twiml.redirect("/voice/browse-profiles");
+        } else {
+          const user = await getOrCreateUser(fromNumber);
+          const liveConnectSettings = await getMembershipSettingsCached();
+          const liveConnectFreeMode = liveConnectSettings.freeMode === true;
+          if (!liveConnectFreeMode && (user.remainingSeconds ?? 0) < 300) {
+            playPrompt(twiml, req, "live_connect_no_minutes.mp3", "You need at least 5 minutes remaining on your membership to connect live. Please add more time and try again.");
+            twiml.redirect("/voice/browse-profiles");
+          } else {
+            const targetProfile = await storage.getProfile(senderId);
+            if (!targetProfile || targetProfile.isAdminUploaded) {
+              playPrompt(twiml, req, "live_connect_unavailable.mp3", "This caller is not available for a live connection.");
+              twiml.redirect("/voice/browse-profiles");
+            } else {
+              const targetActiveCall = await storage.getActiveCallByUserId(senderId);
+              if (!targetActiveCall || targetActiveCall.callSid.startsWith("VIRTUAL-")) {
+                playPrompt(twiml, req, "live_connect_left_line.mp3", "Sorry, that caller has left the line.");
+                twiml.redirect("/voice/browse-profiles");
+              } else {
+                const targetUser = await storage.getUserById(senderId);
+                if (!liveConnectFreeMode && (!targetUser || (targetUser.remainingSeconds ?? 0) < 300)) {
+                  playPrompt(twiml, req, "live_connect_unavailable.mp3", "That caller does not have enough time remaining for a live connection.");
+                  twiml.redirect("/voice/browse-profiles");
+                } else if (liveConnectionUserIds.has(senderId)) {
+                  playPrompt(twiml, req, "live_connect_busy.mp3", "That caller is already connected with someone else. Please try again later.");
+                  twiml.redirect("/voice/browse-profiles");
+                } else {
+                  const isBlocked = await storage.isUserBlocked(senderId, user.id);
+                  if (isBlocked) {
+                    playPrompt(twiml, req, "live_connect_unavailable.mp3", "That caller is not available for a live connection.");
+                    twiml.redirect("/voice/browse-profiles");
+                  } else {
+                    await storage.markMessageRead(msgId);
+                    const callerProfile = await storage.getProfile(user.id);
+                    const conferenceRoom = `live-${callSid}`;
+                    pendingLiveInvites.set(senderId, {
+                      initiatorCallSid: callSid,
+                      initiatorUserId: user.id,
+                      initiatorNameRecordingUrl: callerProfile?.nameRecordingUrl ?? null,
+                      initiatorGreetingUrl: callerProfile?.recordingUrl ?? "",
+                      conferenceRoom,
+                      createdAt: Date.now(),
+                      status: "pending",
+                    });
+                    console.log(`[live-connect] Message menu invite: userId=${user.id} → senderId=${senderId}, room=${conferenceRoom}`);
+                    playPrompt(twiml, req, "live_connect_disclaimer.mp3", "Please be respectful and kind. You are about to request a live one on one connection.");
+                    twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(senderId)}`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else if (digit === "4") {
         await storage.markMessageRead(msgId);
         twiml.redirect("/voice/browse-profiles");
-      } else if (digit === "4") {
+      } else if (digit === "5") {
         // ── Block the message sender ─────────────────────────────────────────
         const fromNumber = req.body?.From as string;
         const callSid = req.body?.CallSid as string;
