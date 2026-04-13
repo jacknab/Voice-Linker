@@ -1,0 +1,31 @@
+chunk-WERSD76P.js?v=d605a17c:21551 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+:5173/favicon.ico:1  Failed to load resource: the server responded with a status of 404 (Not Found)
+(index):1 Access to fetch at 'https://malebox.net/api/admin/mailbox-stats' from origin 'http://localhost:5173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+malebox.net/api/admin/mailbox-stats:1  Failed to load resource: net::ERR_FAILED
+(index):1 Access to fetch at 'https://malebox.net/api/stats' from origin 'http://localhost:5173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+malebox.net/api/stats:1  Failed to load resource: net::ERR_FAILED
+(index):1 Access to fetch at 'https://malebox.net/api/site-settings' from origin 'http://localhost:5173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+malebox.net/api/site-settings:1  Failed to load resource: net::ERR_FAILED
+(index):1 Access to fetch at 'https://malebox.net/api/stats' from origin 'http://localhost:5173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+malebox.net/api/stats:1  Failed to load resource: net::ERR_FAILED
+(index):1 Access to fetch at 'https://malebox.net/api/stats' from origin 'http://localhost:5173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+malebox.net/api/stats:1  Failed to load resource: net::ERR_FAILED
+(index):1 Access to fetch at 'https://malebox.net/api/stats' from origin 'http://localhost:5173' has been blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+main.tsx:40  GET https://malebox.net/api/stats net::ERR_FAILED
+window.fetch @ main.tsx:40
+(anonymous) @ queryClient.ts:31
+fetchFn @ @tanstack_react-query.js?v=36b0dabb:1149
+run @ @tanstack_react-query.js?v=36b0dabb:842
+start @ @tanstack_react-query.js?v=36b0dabb:885
+fetch @ @tanstack_react-query.js?v=36b0dabb:1196
+executeFetch_fn @ @tanstack_react-query.js?v=36b0dabb:1706
+(anonymous) @ @tanstack_react-query.js?v=36b0dabb:1740
+main.tsx:40 Fetch failed loading: GET "https://malebox.net/api/stats".
+window.fetch @ main.tsx:40
+(anonymous) @ queryClient.ts:31
+fetchFn @ @tanstack_react-query.js?v=36b0dabb:1149
+run @ @tanstack_react-query.js?v=36b0dabb:842
+start @ @tanstack_react-query.js?v=36b0dabb:885
+fetch @ @tanstack_react-query.js?v=36b0dabb:1196
+executeFetch_fn @ @tanstack_react-query.js?v=36b0dabb:1706
+(anonymous) @ @tanstack_react-query.js?v=36b0dabb:1740

@@ -16,6 +16,26 @@ const httpServer = createServer(app);
 // every request after login comes back as 401.
 app.set("trust proxy", 1);
 
+// ── Admin Desktop App CORS ────────────────────────────────────────────────────
+// Allows the standalone admin app running on localhost to reach the API.
+// Only localhost/127.0.0.1 origins are permitted — no external site can abuse this.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin ?? "";
+  const isLocalhost =
+    origin.startsWith("http://localhost") ||
+    origin.startsWith("http://127.0.0.1");
+  if (isLocalhost) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Admin-Key");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+  }
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
