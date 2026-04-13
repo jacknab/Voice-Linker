@@ -22,6 +22,15 @@ export function getVoiceIdForRoger(): string {
   return process.env.ELEVENLABS_VOICE_ID_ROGER || process.env.ELEVENLABS_VOICE_ID || "wSqOdjeNqDrHcoK0zorF";
 }
 
+/**
+ * Returns the voice ID used for Busted Game AI caller greetings.
+ * Set ELEVENLABS_VOICE_ID_GAME in .env to use a dedicated male voice
+ * that sounds like a real caller (not Roger's host voice).
+ */
+export function getVoiceIdForGame(): string {
+  return process.env.ELEVENLABS_VOICE_ID_GAME || process.env.ELEVENLABS_VOICE_ID || "wSqOdjeNqDrHcoK0zorF";
+}
+
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export async function generateTTS(

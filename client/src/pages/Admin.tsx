@@ -1518,6 +1518,202 @@ function RogerSubTab() {
   );
 }
 
+// ── BustedGameSubTab ──────────────────────────────────────────────────────────
+interface GameGreetingEntry {
+  index: number;
+  filename: string;
+  audioUrl: string | null;
+  plain: string;
+  v3: string;
+}
+
+function BustedGameSubTab() {
+  const { toast } = useToast();
+  const [generating, setGenerating] = useState<number | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const bulkAbortRef = useRef(false);
+  const [playingIdx, setPlayingIdx] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const { data: entries = [], isLoading, refetch } = useQuery<GameGreetingEntry[]>({
+    queryKey: ["/api/admin/game-greetings"],
+  });
+
+  async function handleGenerate(entry: GameGreetingEntry) {
+    setGenerating(entry.index);
+    try {
+      const res = await fetch("/api/admin/game-greetings/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index: entry.index, model: "eleven_v3" }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      toast({ title: `Greeting ${entry.index} generated` });
+      refetch();
+    } catch (e: any) {
+      toast({ title: "Generation failed", description: e.message, variant: "destructive" });
+    } finally {
+      setGenerating(null);
+    }
+  }
+
+  async function handleGenerateAll() {
+    bulkAbortRef.current = false;
+    const missing = entries.filter(e => !e.audioUrl);
+    if (missing.length === 0) {
+      toast({ title: "All greetings already generated" });
+      return;
+    }
+    setBulkProgress({ done: 0, total: missing.length });
+    for (let i = 0; i < missing.length; i++) {
+      if (bulkAbortRef.current) break;
+      const entry = missing[i];
+      setGenerating(entry.index);
+      try {
+        const res = await fetch("/api/admin/game-greetings/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ index: entry.index, model: "eleven_v3" }),
+        });
+        if (!res.ok) throw new Error((await res.json()).message);
+      } catch (e: any) {
+        toast({ title: `Greeting ${entry.index} failed`, description: e.message, variant: "destructive" });
+      }
+      setBulkProgress({ done: i + 1, total: missing.length });
+      setGenerating(null);
+      if (i < missing.length - 1 && !bulkAbortRef.current) await new Promise(r => setTimeout(r, 4000));
+    }
+    setBulkProgress(null);
+    refetch();
+    toast({ title: "Done generating game greetings" });
+  }
+
+  async function handleDelete(entry: GameGreetingEntry) {
+    try {
+      await fetch(`/api/admin/game-greetings/${entry.index}`, { method: "DELETE" });
+      refetch();
+    } catch {
+      toast({ title: "Delete failed", variant: "destructive" });
+    }
+  }
+
+  function handlePlay(entry: GameGreetingEntry) {
+    if (!entry.audioUrl) return;
+    if (playingIdx === entry.index) {
+      audioRef.current?.pause();
+      setPlayingIdx(null);
+      return;
+    }
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    const a = new Audio(entry.audioUrl);
+    a.onended = () => setPlayingIdx(null);
+    audioRef.current = a;
+    a.play();
+    setPlayingIdx(entry.index);
+  }
+
+  const missingCount = entries.filter(e => !e.audioUrl).length;
+  const NAMES = ["Derek", "Marcus", "Jason", "Chris", "Tony"];
+
+  return (
+    <div className="space-y-4">
+      <div className={`${C.card} border-indigo-200 bg-indigo-50`}>
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="font-semibold text-indigo-900 flex items-center gap-2">
+              Busted Game — AI Caller Greetings
+            </div>
+            <div className="text-xs text-indigo-600 mt-0.5">
+              5 pre-written AI caller greetings used as the Busted game imposter. Generated using eleven_v3.
+              {missingCount > 0 && <span className="ml-2 font-semibold text-amber-700">{missingCount} missing</span>}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {bulkProgress ? (
+              <>
+                <div className="text-xs text-indigo-700 self-center">{bulkProgress.done}/{bulkProgress.total}</div>
+                <button className={`${C.btnAmber} text-xs`} onClick={() => { bulkAbortRef.current = true; }} data-testid="btn-game-cancel-bulk">Cancel</button>
+              </>
+            ) : (
+              <button
+                className={`${C.btnAmber} text-xs`}
+                onClick={handleGenerateAll}
+                disabled={missingCount === 0}
+                data-testid="btn-game-generate-all"
+              >
+                Generate Missing
+              </button>
+            )}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="text-center py-6 text-gray-400 text-sm">Loading…</div>
+        ) : (
+          <div className="space-y-2">
+            {entries.map(entry => {
+              const name = NAMES[entry.index - 1] ?? `Caller ${entry.index}`;
+              const isGen = generating === entry.index;
+              const isPlaying = playingIdx === entry.index;
+              return (
+                <div key={entry.index} className="flex items-start gap-3 p-3 rounded-lg bg-white border border-indigo-100" data-testid={`row-game-greeting-${entry.index}`}>
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center mt-0.5">{entry.index}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm text-gray-800">{name}</span>
+                      {entry.audioUrl ? (
+                        <span className="px-1.5 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700 font-medium">Generated</span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-600 font-medium">Missing</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 leading-relaxed line-clamp-2">{entry.plain}</div>
+                  </div>
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    {entry.audioUrl && (
+                      <button
+                        className={`px-2 py-1 rounded text-xs font-medium border ${isPlaying ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+                        onClick={() => handlePlay(entry)}
+                        data-testid={`btn-game-play-${entry.index}`}
+                      >
+                        {isPlaying ? "■" : "▶"}
+                      </button>
+                    )}
+                    <button
+                      className={`px-2 py-1 rounded text-xs font-medium border ${isGen ? "opacity-50" : "bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
+                      onClick={() => handleGenerate(entry)}
+                      disabled={isGen || !!bulkProgress}
+                      data-testid={`btn-game-gen-${entry.index}`}
+                    >
+                      {isGen ? "…" : entry.audioUrl ? "Regen" : "Generate"}
+                    </button>
+                    {entry.audioUrl && (
+                      <button
+                        className="px-2 py-1 rounded text-xs font-medium border bg-white text-red-500 border-red-200 hover:bg-red-50"
+                        onClick={() => handleDelete(entry)}
+                        data-testid={`btn-game-delete-${entry.index}`}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-4 pt-3 border-t border-indigo-100">
+          <div className="text-xs text-indigo-600 space-y-1">
+            <div><span className="font-semibold">How it works:</span> When Roger activates the Busted game, one of these 5 greetings is randomly selected and injected at a random position (2–7 profiles ahead) in the caller's browse queue.</div>
+            <div><span className="font-semibold">Voice:</span> Controlled by <code className="bg-indigo-100 px-1 rounded">ELEVENLABS_VOICE_ID_GAME</code> env var. Set a realistic male voice distinct from Roger for best results.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── TTSTab ────────────────────────────────────────────────────────────────────
 // Group filter tabs for the system prompts section (mirrors Roger's mood tabs)
 // ── GROUP_TABS ────────────────────────────────────────────────────────────────
@@ -1536,7 +1732,7 @@ const GROUP_TABS = [
 
 function TTSTab() {
   const { toast } = useToast();
-  const [audioGenTab, setAudioGenTab] = useState<"mm" | "mw" | "mw_m" | "roger">("mm");
+  const [audioGenTab, setAudioGenTab] = useState<"mm" | "mw" | "mw_m" | "roger" | "game">("mm");
   const [customText, setCustomText] = useState("");
   const [customFilename, setCustomFilename] = useState("");
   const [editingText, setEditingText] = useState<Record<string, string>>({});
@@ -1875,6 +2071,7 @@ function TTSTab() {
         { id: "mw",    label: "MW Female Voice" },
         { id: "mw_m",  label: "MW Male Voice" },
         { id: "roger", label: "Roger" },
+        { id: "game",  label: "Busted Game" },
       ] as const).map(tab => (
         <button
           key={tab.id}
@@ -1897,6 +2094,15 @@ function TTSTab() {
       <div className="space-y-6">
         {subTabBar}
         <RogerSubTab />
+      </div>
+    );
+  }
+
+  if (audioGenTab === "game") {
+    return (
+      <div className="space-y-6">
+        {subTabBar}
+        <BustedGameSubTab />
       </div>
     );
   }

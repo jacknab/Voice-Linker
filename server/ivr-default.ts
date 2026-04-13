@@ -4486,21 +4486,34 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             return res.send(twiml.toString());
           }
 
-          // ── Busted Game: inject target profile once after game starts ────────
+          // ── Busted Game: inject AI imposter at a random queue position ────────
           const engState = engagementEngine.getEngagementState(callSid);
-          if (engState?.gameStarted && engState.gameBustTargetUserId && !engState.gameBustTargetInjected) {
-            const gameTargetProfile = await storage.getProfile(engState.gameBustTargetUserId);
-            if (gameTargetProfile?.recordingUrl) {
-              const insertAt = Math.min(state.index + 1, state.queue.length);
+          if (engState?.gameStarted && engState.gameBustTargetUserId === engagementEngine.BUST_GAME_AI_USER_ID && !engState.gameBustTargetInjected) {
+            // Pick one of the 5 pre-generated AI greeting files at random
+            const greetingIndex = 1 + Math.floor(Math.random() * engagementEngine.GAME_AI_GREETING_COUNT);
+            const greetingFile  = `game_greeting_${greetingIndex}.mp3`;
+            const greetingPath  = path.join(UPLOADS_DIR, greetingFile);
+
+            if (fs.existsSync(greetingPath)) {
+              // Inject at a random offset (2–7 profiles ahead, not always immediately next)
+              // so repeat callers cannot learn the pattern.
+              const remaining  = state.queue.length - state.index;
+              const maxOffset  = Math.max(2, Math.min(remaining, 7));
+              const offset     = 1 + Math.floor(Math.random() * maxOffset);
+              const insertAt   = Math.min(state.index + offset, state.queue.length);
+
               state.queue.splice(insertAt, 0, {
-                userId: engState.gameBustTargetUserId,
-                recordingUrl: gameTargetProfile.recordingUrl,
-                nameRecordingUrl: gameTargetProfile.nameRecordingUrl ?? null,
+                userId: engagementEngine.BUST_GAME_AI_USER_ID,
+                recordingUrl: `/uploads/${greetingFile}`,
+                nameRecordingUrl: null,
                 regionId: regionId ?? null,
                 regionName: null,
               });
               engagementEngine.markGameTargetInjected(callSid);
-              console.log(`[engagement] Injected game target userId=${engState.gameBustTargetUserId} at queue[${insertAt}] (queue len now ${state.queue.length})`);
+              console.log(`[engagement] Injected AI imposter (${greetingFile}) at queue[${insertAt}] — offset=${offset} from current index=${state.index}`);
+            } else {
+              // Audio file not yet generated — skip injection silently this pass
+              console.warn(`[engagement] Game greeting file not found: ${greetingFile} — re-trying on next browse cycle`);
             }
           }
 
@@ -4886,15 +4899,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const profileUserId = req.query.profileUserId as string;
 
       if (digit === "1") {
-        // If the game target was played and the caller chose to message instead of bust, end the game
-        if (profileUserId) {
-          const callSid1 = req.body?.CallSid as string;
-          if (engagementEngine.isGameTarget(callSid1, profileUserId)) {
+        const callSid1 = req.body?.CallSid as string;
+        if (profileUserId === engagementEngine.BUST_GAME_AI_USER_ID) {
+          // Caller tried to message the AI imposter — not possible, game over
+          engagementEngine.markGameTargetPassed(callSid1);
+          twiml.say("You can't message an AI. Nice try though. Back to browsing.");
+          twiml.redirect("/voice/browse-profiles");
+        } else {
+          // If the game target was played and caller chose to message instead of bust, end the game
+          if (profileUserId && engagementEngine.isGameTarget(callSid1, profileUserId)) {
             engagementEngine.markGameTargetPassed(callSid1);
           }
+          playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
+          twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
         }
-        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
       } else if (digit === "2") {
         const callSid2 = req.body?.CallSid as string;
         engagementEngine.trackSkip(callSid2);
@@ -5197,15 +5215,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       if (followUp === "start_game" && callSid) {
-        // Gather admin-uploaded profiles to choose a bust target from
         try {
-          const adminProfiles = await storage.getAdminUploadedProfiles();
-          const adminUserIds = adminProfiles
-            .filter(p => p.recordingUrl)
-            .map(p => p.userId);
-          const targetUserId = engagementEngine.startBustedGame(callSid, adminUserIds);
+          const targetUserId = engagementEngine.startBustedGame(callSid);
           if (targetUserId) {
-            console.log(`[engagement] Busted game started for callSid=${callSid}, target=${targetUserId}`);
+            console.log(`[engagement] Busted game started for callSid=${callSid}, AI imposter will be injected at a random queue position`);
           }
         } catch (err) {
           console.error("[engagement] engagement-interrupt: failed to start game:", err);

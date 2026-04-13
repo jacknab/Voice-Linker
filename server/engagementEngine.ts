@@ -29,6 +29,38 @@
  * Busted Game: inject AI voice, award bonus time on correct guess.
  */
 
+// ─── Busted Game constants ─────────────────────────────────────────────────────
+
+/** Fixed userId used as the queue entry for the AI imposter during the Busted game. */
+export const BUST_GAME_AI_USER_ID = "BUST_GAME_AI";
+
+/** Number of AI greeting files available (game_greeting_1.mp3 … game_greeting_N.mp3). */
+export const GAME_AI_GREETING_COUNT = 5;
+
+/** Plain-text + v3 emotion-tagged scripts for each AI greeting file. */
+export const GAME_AI_GREETING_SCRIPTS: { plain: string; v3: string }[] = [
+  {
+    plain: "Hey, it's Derek. Thirty-four from Phoenix. Work in logistics, pretty laid back. Looking to connect with someone cool. Leave me something and I'll hit you back.",
+    v3: "[quietly] Hey, it's Derek. Thirty-four from Phoenix. Work in logistics, pretty laid back. Looking to connect with someone cool. Leave me something and I'll hit you back.",
+  },
+  {
+    plain: "What's up, Marcus here. Twenty-eight, east side. I work construction, get off late most nights. Looking for a real connection, not just small talk. Drop me a message.",
+    v3: "[warmly] What's up, Marcus here. Twenty-eight, east side. I work construction, get off late most nights. Looking for a real connection, not just small talk. Drop me a message.",
+  },
+  {
+    plain: "Hey this is Jason, twenty-six. Just got off a long shift. I'm into sports, working out, good conversation. Leave me a message and I'll get back to you when I can.",
+    v3: "[softly] Hey this is Jason, twenty-six. Just got off a long shift. I'm into sports, working out, good conversation. Leave me a message and I'll get back to you when I can.",
+  },
+  {
+    plain: "Hey, Chris here. Thirty-one. Work in IT, pretty low-key. Been on the line a couple times before. If something clicked for you just send me a message, I'll get back to you.",
+    v3: "[softly] Hey, Chris here. Thirty-one. Work in IT, pretty low-key. Been on the line a couple times before. If something clicked for you just send me a message, I'll get back to you.",
+  },
+  {
+    plain: "What's good. Tony, forty years old. I know what I want and I'm not gonna waste your time. Looking for something genuine, not just to kill time. Leave a message if you're serious.",
+    v3: "[quietly] What's good. Tony, forty years old. I know what I want and I'm not gonna waste your time. Looking for something genuine, not just to kill time. Leave a message if you're serious.",
+  },
+];
+
 // ── Core types ────────────────────────────────────────────────────────────────
 
 export type PromptCategory =
@@ -497,7 +529,7 @@ export const PROMPT_LIBRARY: EngagementPrompt[] = [
     cooldownSeconds: 300 },
   { id: "activated_game", category: "game_invite", tone: "playful",
     trigger: { requiredMoods: ["activated"], minSessionSeconds: 200, requireNoGameStarted: true, minAttentionDrain: 8 },
-    lineText: "You have been on here long enough to earn a little game. One of the next guys is an AI pretending to be real. Press 8 if you spot him — get it right and win free time.",
+    lineText: "Alright, gentlemen — it's time to mix it up a bit. I have activated the mini game called Busted. One of the guys on the line right now is an AI pretending to be real. Press 8 if you spot him — get it right and win free time.",
     followUpAction: "start_game", cooldownSeconds: 99999 },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1088,18 +1120,17 @@ export function getInterruption(callSid: string, excludedPromptIds: Set<string> 
   return null;
 }
 
-export function startBustedGame(callSid: string, adminUserIds: string[]): string | null {
+export function startBustedGame(callSid: string): string | null {
   const s = states.get(callSid);
-  if (!s || s.gameStarted || adminUserIds.length === 0) return null;
-  const target = adminUserIds[Math.floor(Math.random() * adminUserIds.length)];
+  if (!s || s.gameStarted) return null;
   s.gameStarted = true;
-  s.gameBustTargetUserId = target;
+  s.gameBustTargetUserId = BUST_GAME_AI_USER_ID;
   s.gameBustTargetInjected = false;
   // Game start reduces drain significantly and boosts streak
   s.attentionDrainScore = Math.max(0, s.attentionDrainScore - 10);
   s.engagementStreak    = Math.min(10, s.engagementStreak + 3);
   s.forceMoodRecalc = true;
-  return target;
+  return BUST_GAME_AI_USER_ID;
 }
 
 export function markGameTargetInjected(callSid: string): void {
@@ -1199,4 +1230,7 @@ export const ROGER_V3_TEXTS: Record<string, string> = {
   roger_05: "[chuckles] Eleven skips. [deadpan] I have started giving them all nicknames. Skip. Skipped. Also Skipped. Another Skip.",
   roger_06: "[warmly] You know what I have never heard anyone regret? [playfully] Sending a message. Just something to think about.",
   roger_07: "[mischievously] Somewhere on this line is a guy who would absolutely love to get a message from you. [whispers] He just does not know it yet.",
+
+  // GAME INVITE
+  activated_game: "[excited] Alright, gentlemen, [clear throat] it's time to mix it up a bit — I have activated the mini game called Busted. One of the guys on the line right now is an AI pretending to be real. Press 8 if you spot him — get it right and win free time.",
 };

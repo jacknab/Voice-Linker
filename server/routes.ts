@@ -12,7 +12,7 @@ import fs from "fs";
 import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
-import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger } from "./elevenlabs";
+import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger, getVoiceIdForGame } from "./elevenlabs";
 import { triggerLocationAudio } from "./audioAutogen";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
@@ -21,7 +21,7 @@ import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSite
 import { db } from "./db";
 import { profiles } from "@shared/schema";
 import { eq, isNull, or } from "drizzle-orm";
-import { PROMPT_LIBRARY, ROGER_V3_TEXTS } from "./engagementEngine";
+import { PROMPT_LIBRARY, ROGER_V3_TEXTS, GAME_AI_GREETING_SCRIPTS, GAME_AI_GREETING_COUNT } from "./engagementEngine";
 import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage } from "./seoPageGenerator";
 
 // ─── City Audio Helper ────────────────────────────────────────────────────────
@@ -1242,6 +1242,77 @@ export async function registerRoutes(
     const id = getVoiceIdForRoger();
     const masked = id.length > 8 ? `${id.slice(0, 4)}${"•".repeat(id.length - 8)}${id.slice(-4)}` : id;
     res.json({ voiceId: id, masked });
+  });
+
+  // ─── Admin: Busted Game — AI Caller Greeting Files ────────────────────────
+
+  // Returns the status of all GAME_AI_GREETING_COUNT greeting files.
+  app.get("/api/admin/game-greetings", (_req, res) => {
+    try {
+      const entries = GAME_AI_GREETING_SCRIPTS.map((script, i) => {
+        const idx      = i + 1;
+        const filename = `game_greeting_${idx}.mp3`;
+        const filePath = path.join(UPLOADS_DIR, filename);
+        const exists   = fs.existsSync(filePath);
+        return {
+          index: idx,
+          filename,
+          audioUrl: exists ? `/uploads/${filename}` : null,
+          plain: script.plain,
+          v3: script.v3,
+        };
+      });
+      res.json(entries);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load game greeting status" });
+    }
+  });
+
+  // Generate one AI caller greeting file.  index = 1..GAME_AI_GREETING_COUNT.
+  app.post("/api/admin/game-greetings/generate", async (req, res) => {
+    try {
+      const { index, model: requestedModel } = req.body as { index?: number; model?: string };
+      if (!index || index < 1 || index > GAME_AI_GREETING_COUNT) {
+        return res.status(400).json({ message: `index must be 1–${GAME_AI_GREETING_COUNT}` });
+      }
+
+      const script   = GAME_AI_GREETING_SCRIPTS[index - 1];
+      const filename = `game_greeting_${index}.mp3`;
+      const voiceId  = getVoiceIdForGame();
+
+      const ALLOWED_MODELS = ["eleven_turbo_v2", "eleven_turbo_v2_5", "eleven_v3", "eleven_multilingual_v2"];
+      const modelId  = (requestedModel && ALLOWED_MODELS.includes(requestedModel))
+        ? requestedModel
+        : "eleven_v3"; // default to v3 for natural delivery
+
+      const text = modelId === "eleven_v3" ? script.v3 : script.plain;
+      await generateTTS(text, filename, undefined, voiceId, modelId);
+
+      logAudit("audio_generated", {
+        targetType: "audio",
+        targetLabel: filename,
+        detail: { voice: "game", model: modelId } as unknown as Record<string, unknown>,
+      });
+      res.json({ filename, url: `/uploads/${filename}`, index, model: modelId });
+    } catch (e: any) {
+      console.error("[admin/game-greetings/generate] failed:", e);
+      res.status(500).json({ message: e?.message ?? "Game greeting TTS generation failed" });
+    }
+  });
+
+  // Delete one AI caller greeting file.
+  app.delete("/api/admin/game-greetings/:index", (req, res) => {
+    try {
+      const idx = parseInt(req.params.index, 10);
+      if (isNaN(idx) || idx < 1 || idx > GAME_AI_GREETING_COUNT) {
+        return res.status(400).json({ message: "Invalid index" });
+      }
+      const filePath = path.join(UPLOADS_DIR, `game_greeting_${idx}.mp3`);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      res.json({ deleted: true });
+    } catch (e: any) {
+      res.status(500).json({ message: e?.message ?? "Delete failed" });
+    }
   });
 
   // ─── Admin: System Prompt Text Overrides ──────────────────────────────────
