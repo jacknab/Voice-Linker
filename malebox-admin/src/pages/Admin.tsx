@@ -2286,7 +2286,7 @@ function MembershipsTab() {
   const { toast } = useToast();
   interface MembershipSettings { freeTrialMinutes: number; plan1Name: string; plan1Minutes: number; plan1PriceCents: number; plan2Name: string; plan2Minutes: number; plan2PriceCents: number; plan3Name: string; plan3Minutes: number; plan3PriceCents: number; bonusPlanKey: string | null; billingMode: string; stripeEnabled: boolean; paypalEmail: string | null; paypalSandbox: boolean; freeMode: boolean; freeModeScheduleDays: number[]; }
 
-  const { data: ms, isLoading } = useQuery<MembershipSettings>({ queryKey: ["/api/admin/membership-settings"] });
+  const { data: ms, isLoading, isFetching } = useQuery<MembershipSettings>({ queryKey: ["/api/admin/membership-settings"] });
 
   const [freeTrialMinutes, setFreeTrialMinutes] = useState("");
   const [plan1Name, setPlan1Name] = useState(""); const [plan1Minutes, setPlan1Minutes] = useState(""); const [plan1Price, setPlan1Price] = useState("");
@@ -2301,7 +2301,7 @@ function MembershipsTab() {
   const [freeModeScheduleDays, setFreeModeScheduleDays] = useState<number[]>([]);
   const [initialized, setInitialized] = useState(false);
 
-  if (ms && !initialized) {
+  if (ms && !isFetching && !initialized) {
     setFreeTrialMinutes(String(ms.freeTrialMinutes));
     setPlan1Name(ms.plan1Name); setPlan1Minutes(String(ms.plan1Minutes)); setPlan1Price((ms.plan1PriceCents / 100).toFixed(2));
     setPlan2Name(ms.plan2Name); setPlan2Minutes(String(ms.plan2Minutes)); setPlan2Price((ms.plan2PriceCents / 100).toFixed(2));
