@@ -3,13 +3,12 @@ import { storage } from "./storage";
 import twilio from "twilio";
 import path from "path";
 import fs from "fs";
-import { generateTTS, getVoiceIdForFolder, getVoiceIdForRoger } from "./elevenlabs";
+import { generateTTS, getVoiceIdForFolder } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, scheduleAutoModCheck } from "./autoModeration";
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
-import * as engagementEngine from "./engagementEngine";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
 import { locationToFilename, triggerLocationAudio } from "./audioAutogen";
@@ -774,7 +773,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       pendingNewPinSetup.delete(callSid);
       pendingCardFirstUse.delete(callSid);
       femaleCallers.delete(callSid);
-      engagementEngine.cleanupEngagementState(callSid);
 
       // Clean up any live connect invite that this caller initiated
       for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
@@ -1296,11 +1294,31 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const nmEntrySettings = await getMembershipSettingsCached();
 
       if (isFreeModeActive(nmEntrySettings)) {
-        // Free mode — skip balance checks, still route through Roger
-        twiml.redirect("/voice/roger-greeting");
+        // Free mode — no balance checks; auto-activate new callers and go straight in
+        if (!user.membershipTier) {
+          await storage.updateUserMembership(user.id, {
+            membershipTier: "free_trial",
+            remainingSeconds: nmEntrySettings.freeTrialMinutes * 60,
+          });
+          await storage.getOrCreateMailbox(user.id);
+          console.log(`[entry-check] Auto-activated free trial (free mode) — ${nmEntrySettings.freeTrialMinutes} min for userId=${user.id}`);
+        }
+        const siteConf = await getSiteSettingsCached();
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
       } else if (!user.membershipTier) {
-        // Brand new — Roger will auto-activate the free trial and welcome them
-        twiml.redirect("/voice/roger-greeting");
+        // Brand new caller — auto-activate free trial and announce time
+        await storage.updateUserMembership(user.id, {
+          membershipTier: "free_trial",
+          remainingSeconds: nmEntrySettings.freeTrialMinutes * 60,
+        });
+        await storage.getOrCreateMailbox(user.id);
+        console.log(`[entry-check] Auto-activated free trial — ${nmEntrySettings.freeTrialMinutes} min for userId=${user.id}`);
+        playTimeRemaining(twiml, req, nmEntrySettings.freeTrialMinutes);
+        playPrompt(twiml, req, "free_trial_terms.mp3",
+          "Your free trial will expire in seven days and it must be used from this phone number.");
+        callTimeAnnounced.add(callSid);
+        const siteConf = await getSiteSettingsCached();
+        twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
       } else {
         const { billingMode } = nmEntrySettings;
         if (billingMode === "per_24h" && user.membershipTier !== "free_trial") {
@@ -1311,7 +1329,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             playPrompt(twiml, req, "access_expired.mp3", "Your backdoor access pass has expired.");
             twiml.redirect("/voice/membership-purchase");
           } else {
-            twiml.redirect("/voice/roger-greeting");
+            const hoursLeft = 24 - hoursElapsed;
+            playBackdoorHoursRemaining(twiml, req, hoursLeft);
+            callTimeAnnounced.add(callSid);
+            const siteConf = await getSiteSettingsCached();
+            twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
           }
         } else if (remainingSeconds <= 0) {
           // Access fully expired (per_minute / per_day / free_trial with no time)
@@ -1319,7 +1341,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           twiml.redirect("/voice/membership-purchase");
         } else {
           // ── Recording rejection gate ───────────────────────────────────────
-          // If the auto-moderator rejected a greeting, intercept before going live
           if (user.recordingRejectionReason && user.recordingRejectionType === "greeting") {
             const rejectionRoute = user.recordingRejectionReason === "phone_number"
               ? "/voice/recording-rejected-phone-number"
@@ -1329,115 +1350,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             return res.send(twiml.toString());
           }
 
-          // Returning caller with time — Roger greets them, then time is announced
-          twiml.redirect("/voice/roger-greeting");
+          // Returning caller with time — announce remaining time (per_minute only)
+          if (billingMode !== "per_day" && billingMode !== "per_24h") {
+            playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
+            callTimeAnnounced.add(callSid);
+          }
+          const siteConf = await getSiteSettingsCached();
+          twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
         }
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
       twiml.hangup();
-    }
-
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  // ─── 1c. Roger Greeting ───────────────────────────────────────────────────
-  // Personalized Roger welcome for every caller who passes entry-check.
-  // New callers: auto-activates their free trial, Roger explains the system.
-  // Returning callers: Roger greets them based on how long since their last call.
-
-  function rogerWelcomeText(isNewCaller: boolean, lastCallDate: Date | null): string {
-    if (isNewCaller || !lastCallDate) {
-      return `[warmly] Hi, this is the Male Box. My name is Roger — your cruise director. [chuckles] Oh, look at you... a first time caller. I see. [warmly] Well in that case — let me set you up with some free time so you can check out what we have going on in here. [cheerfully] Welcome to the party, honey.`;
-    }
-    const daysSince = Math.floor((Date.now() - lastCallDate.getTime()) / 86_400_000);
-    if (daysSince < 1) {
-      return `[warmly] Welcome back! Back again the same day? [playfully] I love the commitment. The boys are still here — let us get you in.`;
-    }
-    if (daysSince <= 3) {
-      return `[warmly] Hey, welcome back. [playfully] The boys have been asking about you. Well... one of them might have been. Good to see you again.`;
-    }
-    if (daysSince <= 14) {
-      return `[warmly] Welcome back! It has been a few days. [mischievously] We were starting to wonder if you found someone. Either way — glad you are back. Let us see what is going on tonight.`;
-    }
-    if (daysSince <= 30) {
-      return `[chuckles] Well, well, well. Look who remembered we exist. [warmly] I am kidding, relax. Welcome back. It has been a couple of weeks — let us see what is happening tonight.`;
-    }
-    return `[gasps] Oh my God. It has been a while, honey. [playfully] I was starting to think you found love on another chat line. [warmly] No hard feelings. Welcome back — we missed you.`;
-  }
-
-  function stripEmotionTags(text: string): string {
-    return text.replace(/\[[\w\s]+\]/g, " ").replace(/\s{2,}/g, " ").trim();
-  }
-
-  app.post("/voice/roger-greeting", async (req, res) => {
-    const twiml = new VoiceResponse();
-    const fromNumber = req.body?.From as string;
-    const callSid = req.body?.CallSid as string;
-
-    try {
-      const user = await getOrCreateUser(fromNumber);
-      const isNewCaller = !user.membershipTier;
-      const lastCallDate = await storage.getLastCallTimestamp(fromNumber, callSid);
-      const script = rogerWelcomeText(isNewCaller, lastCallDate);
-      const filename = `roger_welcome_${callSid}.mp3`;
-      const filepath = path.join(UPLOADS_DIR, filename);
-
-      let audioReady = false;
-      try {
-        await generateTTS(script, filename, undefined, getVoiceIdForRoger(), "eleven_v3");
-        audioReady = fs.existsSync(filepath);
-      } catch (ttsErr) {
-        console.warn(`[roger-greeting] ElevenLabs v3 failed, falling back to twiml.say — ${ttsErr}`);
-      }
-
-      if (audioReady) {
-        twiml.play(`${baseUrl(req)}/uploads/${filename}`);
-        setTimeout(() => { try { if (fs.existsSync(filepath)) fs.unlinkSync(filepath); } catch {} }, 3 * 60 * 1000);
-      } else {
-        twiml.say({ voice: "alice" }, stripEmotionTags(script));
-      }
-
-      const membershipConf = await getMembershipSettingsCached();
-      const rogerFreeMode = isFreeModeActive(membershipConf);
-
-      // For new callers: auto-activate the free trial so the account exists for next time.
-      // In free mode, skip the time/terms announcement since minutes don't matter.
-      if (isNewCaller) {
-        await storage.updateUserMembership(user.id, {
-          membershipTier: "free_trial",
-          remainingSeconds: membershipConf.freeTrialMinutes * 60,
-        });
-        await storage.getOrCreateMailbox(user.id);
-        console.log(`[roger-greeting] Auto-activated free trial — ${membershipConf.freeTrialMinutes} min for userId=${user.id}`);
-        if (!rogerFreeMode) {
-          playTimeRemaining(twiml, req, membershipConf.freeTrialMinutes);
-          playPrompt(twiml, req, "free_trial_terms.mp3",
-            "Your free trial will expire in seven days and it must be used from this phone number.");
-          callTimeAnnounced.add(callSid);
-        }
-      } else if (!rogerFreeMode && membershipConf.billingMode === "per_24h" && user.membershipTier !== "free_trial" && user.membershipPurchasedAt) {
-        // 24-hour pass: announce remaining hours (or minutes if < 1 hour left)
-        const hoursElapsed = (Date.now() - user.membershipPurchasedAt.getTime()) / 3_600_000;
-        const hoursLeft = 24 - hoursElapsed;  // raw — let playBackdoorHoursRemaining floor/decide
-        playBackdoorHoursRemaining(twiml, req, hoursLeft);
-        callTimeAnnounced.add(callSid);
-      } else if (!rogerFreeMode) {
-        const remainingSeconds = user.remainingSeconds ?? 0;
-        if (remainingSeconds > 0) {
-          playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
-          callTimeAnnounced.add(callSid);
-        }
-      }
-      // In free mode, no time announcement — callers go straight through to the menu.
-
-      const siteConf = await getSiteSettingsCached();
-      twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
-    } catch (error) {
-      console.error("[voice] /voice/roger-greeting error:", error);
-      twiml.redirect("/voice/main-menu");
     }
 
     res.type("text/xml");
@@ -4233,8 +4158,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           if (state.queue.length > 0) {
             callerBrowseState.set(callSid, state);
           }
-          // ── Initialize Roger Mood Engine for this session ────────────────────
-          engagementEngine.initEngagementState(callSid, user.id);
           console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid} (${nearbySet.size} nearby, ${linkedRegions.length} linked regions)`);
         }
 
@@ -4323,47 +4246,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               twiml.redirect("/voice/browse-profiles");
               res.type("text/xml");
               return res.send(twiml.toString());
-            }
-          }
-
-          // ── Engagement Engine interrupt check ────────────────────────────────
-          // Fetch prompts this caller has already heard in the last 24h so the
-          // engine can skip them and Roger always sounds fresh.
-          let excludedRogerIds = new Set<string>();
-          try {
-            excludedRogerIds = await storage.getExcludedRogerPromptIds(
-              fromNumber,
-              engagementEngine.PROMPT_LIBRARY.length,
-            );
-          } catch (err) {
-            console.error("[engagement] failed to fetch roger prompt history:", err);
-          }
-
-          const engInterruption = engagementEngine.getInterruption(callSid, excludedRogerIds);
-          if (engInterruption) {
-            const encodedText = encodeURIComponent(engInterruption.lineText);
-            const followUp = encodeURIComponent(engInterruption.followUpAction ?? "");
-            const pid = encodeURIComponent(engInterruption.id);
-            console.log(`[engagement] Interrupting browse with prompt=${engInterruption.id}, followUp=${engInterruption.followUpAction ?? "none"}`);
-            twiml.redirect(`/voice/engagement-interrupt?text=${encodedText}&followUp=${followUp}&pid=${pid}`);
-            res.type("text/xml");
-            return res.send(twiml.toString());
-          }
-
-          // ── Busted Game: inject target profile once after game starts ────────
-          const engState = engagementEngine.getEngagementState(callSid);
-          if (engState?.gameStarted && engState.gameBustTargetUserId && !engState.gameBustTargetInjected) {
-            const gameTargetProfile = await storage.getProfile(engState.gameBustTargetUserId);
-            if (gameTargetProfile?.recordingUrl) {
-              const insertAt = Math.min(state.index + 1, state.queue.length);
-              state.queue.splice(insertAt, 0, {
-                userId: engState.gameBustTargetUserId,
-                recordingUrl: gameTargetProfile.recordingUrl,
-                nameRecordingUrl: gameTargetProfile.nameRecordingUrl ?? null,
-                isNearby: false,
-              });
-              engagementEngine.markGameTargetInjected(callSid);
-              console.log(`[engagement] Injected game target userId=${engState.gameBustTargetUserId} at queue[${insertAt}] (queue len now ${state.queue.length})`);
             }
           }
 
@@ -4715,22 +4597,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const profileUserId = req.query.profileUserId as string;
 
       if (digit === "1") {
-        // If the game target was played and the caller chose to message instead of bust, end the game
-        if (profileUserId) {
-          const callSid1 = req.body?.CallSid as string;
-          if (engagementEngine.isGameTarget(callSid1, profileUserId)) {
-            engagementEngine.markGameTargetPassed(callSid1);
-          }
-        }
         playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
       } else if (digit === "2") {
-        const callSid2 = req.body?.CallSid as string;
-        engagementEngine.trackSkip(callSid2);
-        // If the caller skipped the game target without pressing 8, the game is over
-        if (profileUserId && engagementEngine.isGameTarget(callSid2, profileUserId)) {
-          engagementEngine.markGameTargetPassed(callSid2);
-        }
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "3") {
         // ── Live 1-on-1 Connect ─────────────────────────────────────────────
@@ -4913,35 +4782,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         playPrompt(twiml, req, "profile_flagged.mp3", "This profile has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
-      } else if (digit === "8") {
-        // ── Busted Game bust attempt (one chance only) ───────────────────────
-        const callSid8 = req.body?.CallSid as string;
-        const bustResult = engagementEngine.processBust(callSid8, profileUserId ?? "");
-        if (bustResult.result === "win") {
-          // Award bonus time — amount depends on billing mode
-          const bustSettings = await getMembershipSettingsCached();
-          const bonusSeconds = bustSettings.billingMode === "per_day" ? 3600 : 900;
-          const fromNumber8 = req.body?.From as string;
-          if (fromNumber8) {
-            const winUser = await getOrCreateUser(fromNumber8);
-            await storage.adjustUserCredits(winUser.id, bonusSeconds);
-            console.log(`[engagement] Bust WIN: userId=${winUser.id} +${bonusSeconds}s (billingMode=${bustSettings.billingMode})`);
-          }
-          const bonusLabel = bustSettings.billingMode === "per_day"
-            ? "one hour of bonus time"
-            : "fifteen bonus minutes";
-          const winHost = engagementEngine.getActivePersonalityName(callSid8);
-          twiml.say(`${winHost} here. You got it! That was our A I voice. ${bonusLabel} has been added to your account. Nice ear.`);
-          twiml.redirect("/voice/browse-profiles");
-        } else if (bustResult.result === "miss") {
-          const missHost = engagementEngine.getActivePersonalityName(callSid8);
-          twiml.say(`${missHost} here. Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing.`);
-          twiml.redirect("/voice/browse-profiles");
-        } else {
-          // No active game — treat as invalid choice
-          playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
-          twiml.redirect("/voice/browse-profiles");
-        }
       } else if (digit === "9") {
         // Exiting the male box — in per-minute billing notify caller deductions have stopped.
         // In per-day, per_24h billing or free mode, time is not deducted per-call, so skip the announcement.
@@ -4989,61 +4829,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profileUserId)}&attempt=2`);
     }
 
-    res.type("text/xml");
-    res.send(twiml.toString());
-  });
-
-  // ─── 8a-Roger. Engagement Interrupt — Roger speaks to the caller ─────────
-  app.post("/voice/engagement-interrupt", async (req, res) => {
-    const twiml = new VoiceResponse();
-    try {
-      const callSid = req.body?.CallSid as string;
-      const rawText = req.query.text as string;
-      const followUp = (req.query.followUp as string) ?? "";
-      const promptId = (req.query.pid as string) ?? "";
-      const promptText = rawText ? decodeURIComponent(rawText) : "";
-
-      if (promptText) {
-        // Use pre-generated Roger audio file if it exists, otherwise fall back to twiml.say
-        const rogerAudioFile = promptId ? path.join(UPLOADS_DIR, `roger_${promptId}.mp3`) : null;
-        if (rogerAudioFile && fs.existsSync(rogerAudioFile)) {
-          twiml.play(`${baseUrl(req)}/uploads/roger_${promptId}.mp3`);
-          console.log(`[engagement-interrupt] Playing Roger audio file: roger_${promptId}.mp3`);
-        } else {
-          const hostName = callSid ? engagementEngine.getActivePersonalityName(callSid) : "Roger";
-          twiml.say({ voice: "alice" }, `${hostName} here. ${promptText}`);
-        }
-
-        // Record this prompt in per-caller history so Roger never repeats within 24h
-        const fromNumber = req.body?.From as string;
-        if (promptId && fromNumber) {
-          storage.recordRogerPromptPlay(fromNumber, promptId).catch(err =>
-            console.error("[roger-history] failed to record prompt play:", err),
-          );
-        }
-      }
-
-      if (followUp === "start_game" && callSid) {
-        // Gather admin-uploaded profiles to choose a bust target from
-        try {
-          const adminProfiles = await storage.getAdminUploadedProfiles();
-          const adminUserIds = adminProfiles
-            .filter(p => p.recordingUrl)
-            .map(p => p.userId);
-          const targetUserId = engagementEngine.startBustedGame(callSid, adminUserIds);
-          if (targetUserId) {
-            console.log(`[engagement] Busted game started for callSid=${callSid}, target=${targetUserId}`);
-          }
-        } catch (err) {
-          console.error("[engagement] engagement-interrupt: failed to start game:", err);
-        }
-      }
-
-      twiml.redirect("/voice/browse-profiles");
-    } catch (error) {
-      console.error("[voice] /voice/engagement-interrupt error:", error);
-      twiml.redirect("/voice/browse-profiles");
-    }
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -5470,7 +5255,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
-      engagementEngine.trackMessageSent(callSid);
       if (returnTo === "mailbox") {
         playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
         twiml.redirect("/voice/my-mailbox");
