@@ -1018,6 +1018,31 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "phrases", filename: "num_900.mp3", label: "Number — 900", text: "nine hundred" },
 ];
 
+// ── MW_SYSTEM_PROMPTS ─────────────────────────────────────────────────────────
+// MW (Men/Women) variant — all prompts use the MW voice (ELEVENLABS_VOICE_ID_MW).
+// Derived from SYSTEM_PROMPTS with gender-appropriate text overrides and MW-exclusive prompts.
+const MW_SYSTEM_PROMPTS: typeof SYSTEM_PROMPTS = [
+  // MW-exclusive: gender gate heard at the very start of every call
+  { group: "entry", filename: "gender_select.mp3", label: "Gender Selection (MW Exclusive)", text: "Guys, press one to talk to women. Women, press two to talk to guys." },
+
+  // All MM prompts in order, with MW-specific text overrides applied
+  ...SYSTEM_PROMPTS.flatMap(p => {
+    // Replace MM main menu with MW version (different menu structure — no mailbox option)
+    if (p.filename === "main_menu.mp3") return [{ ...p, filename: "mw_main_menu.mp3", label: "MW Main Menu (MW Exclusive)", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." }];
+    // Phone booth welcome — mentions women for male callers (most common caller on MW)
+    if (p.filename === "phone_booth_welcome.mp3") return [{ ...p, label: "Live Connector — Welcome (Male Caller)", text: "Welcome to the live connector. Greetings from all the local women here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." }];
+    // Name recording prompt — mentions women for male callers
+    if (p.filename === "welcome_record_name.mp3") return [{ ...p, label: "Record Your Name — Prompt (Male Caller)", text: "You need to record a greeting to introduce yourself to the women first. Let's record the name you want to use. After the tone, record just your first name." }];
+    // Live connect ending — remove "male box" reference for MW
+    if (p.filename === "live_connect_ended.mp3") return [{ ...p, text: "Your live connection has ended. Returning you to the live connector." }];
+    if (p.filename === "live_connect_failed.mp3") return [{ ...p, text: "We were unable to connect your call. Returning you to the live connector." }];
+    // Phrase fragments — gender-flipped for MW
+    if (p.filename === "phrase_callers_on_the_line.mp3") return [{ ...p, label: "Phrase — «women on the line»", text: "women on the line." }];
+    if (p.filename === "phrase_caller_on_the_line.mp3")  return [{ ...p, label: "Phrase — «woman on the line»", text: "woman on the line." }];
+    return [p];
+  }),
+];
+
 // ── AutoResizeTextarea ────────────────────────────────────────────────────────
 function AutoResizeTextarea({
   value,
@@ -1487,7 +1512,7 @@ const GROUP_TABS = [
 
 function TTSTab() {
   const { toast } = useToast();
-  const [audioGenTab, setAudioGenTab] = useState<"system" | "roger">("system");
+  const [audioGenTab, setAudioGenTab] = useState<"mm" | "mw" | "roger">("mm");
   const [customText, setCustomText] = useState("");
   const [customFilename, setCustomFilename] = useState("");
   const [editingText, setEditingText] = useState<Record<string, string>>({});
@@ -1544,8 +1569,10 @@ function TTSTab() {
 
   const { data: settings } = useQuery<{ voiceIdMM: string; voiceIdMW: string }>({ queryKey: ["/api/admin/tts/settings"] });
   const { data: siteSettings } = useQuery<{ siteCategory: string }>({ queryKey: ["/api/site-settings"] });
-  // Active folder is always determined by the site category — not manually selectable
-  const categoryFolder: "mm" | "mw" = (siteSettings?.siteCategory ?? "MM").toLowerCase() === "mw" ? "mw" : "mm";
+  // Active folder is controlled by the selected audio tab (MM or MW), not site settings
+  const categoryFolder: "mm" | "mw" = audioGenTab === "mw" ? "mw" : "mm";
+  // Prompt list switches with the active tab — MW gets gender-aware texts + MW-exclusive prompts
+  const activePrompts = audioGenTab === "mw" ? MW_SYSTEM_PROMPTS : SYSTEM_PROMPTS;
   const { data: existingFiles } = useQuery<{ filename: string; url: string; size: number; folder: string }[]>({ queryKey: ["/api/admin/tts/prompts"] });
   const { data: zipEntries = [] } = useQuery<ZipEntry[]>({ queryKey: ["/api/admin/zip-codes"] });
   const neighborhoodEntries = zipEntries.filter(e => e.audioFile && e.neighborhood);
@@ -1656,7 +1683,7 @@ function TTSTab() {
       return;
     }
     generateAllAbortRef.current = false;
-    const prompts = SYSTEM_PROMPTS;
+    const prompts = activePrompts;
     setGenerateAllProgress({ done: 0, total: prompts.length, currentLabel: prompts[0]?.label ?? "" });
     let done = 0;
     for (const prompt of prompts) {
@@ -1718,7 +1745,7 @@ function TTSTab() {
       return;
     }
     generateAllAbortRef.current = false;
-    const missing = SYSTEM_PROMPTS.filter(p => !promptExists(p.filename));
+    const missing = activePrompts.filter(p => !promptExists(p.filename));
     if (missing.length === 0) {
       toast({ title: "Nothing to generate", description: "All prompts already have audio files." });
       return;
@@ -1759,29 +1786,33 @@ function TTSTab() {
     }
   }
 
-  const groupFiltered = groupFilter === "all" ? SYSTEM_PROMPTS : SYSTEM_PROMPTS.filter(p => p.group === groupFilter);
+  const groupFiltered = groupFilter === "all" ? activePrompts : activePrompts.filter(p => p.group === groupFilter);
   const filtered = groupFiltered.filter(p =>
     !searchText ||
     p.label.toLowerCase().includes(searchText.toLowerCase()) ||
     p.filename.toLowerCase().includes(searchText.toLowerCase())
   );
-  const generatedCount = SYSTEM_PROMPTS.filter(p => promptExists(p.filename)).length;
-  const missingCount = SYSTEM_PROMPTS.length - generatedCount;
+  const generatedCount = activePrompts.filter(p => promptExists(p.filename)).length;
+  const missingCount = activePrompts.length - generatedCount;
 
   const subTabBar = (
     <div className="flex border-b border-gray-200 gap-1 mb-6">
-      {(["system", "roger"] as const).map(tab => (
+      {([
+        { id: "mm",    label: "MM Prompts" },
+        { id: "mw",    label: "MW Prompts" },
+        { id: "roger", label: "Roger" },
+      ] as const).map(tab => (
         <button
-          key={tab}
-          data-testid={`btn-audio-gen-tab-${tab}`}
-          onClick={() => setAudioGenTab(tab)}
+          key={tab.id}
+          data-testid={`btn-audio-gen-tab-${tab.id}`}
+          onClick={() => setAudioGenTab(tab.id)}
           className={`px-4 py-2 text-sm font-mono font-semibold border-b-2 -mb-px transition-colors ${
-            audioGenTab === tab
+            audioGenTab === tab.id
               ? "border-[#f5a623] text-[#f5a623]"
               : "border-transparent text-gray-500 hover:text-gray-700"
           }`}
         >
-          {tab === "system" ? "System Prompts" : "Roger"}
+          {tab.label}
         </button>
       ))}
     </div>
@@ -1806,7 +1837,7 @@ function TTSTab() {
             <span className={`px-3 py-1 rounded font-mono text-sm font-bold text-white ${categoryFolder === "mw" ? "bg-purple-600" : "bg-blue-600"}`}>
               {categoryFolder.toUpperCase()}
             </span>
-            <span className="text-gray-400 text-xs">Set in Website Settings</span>
+            <span className="text-gray-400 text-xs">Switch via the MM / MW tabs above</span>
           </div>
         </div>
         <div className={C.cardAlt}>
@@ -1826,7 +1857,7 @@ function TTSTab() {
           <Settings size={14} className="text-[#f5a623]" /> Active Audio Folder
         </h3>
         <p className="text-gray-400 font-mono text-xs -mt-1">
-          Audio is generated into the <span className="text-[#f5a623] font-bold">{categoryFolder.toUpperCase()}</span> folder based on your Website Settings. To switch between MM and MW, change the Site Category under Website Settings.
+          Audio is generated into the <span className="text-[#f5a623] font-bold">{categoryFolder.toUpperCase()}</span> folder. Use the <span className="text-white font-bold">MM Prompts</span> / <span className="text-purple-400 font-bold">MW Prompts</span> tabs above to switch folders and prompt sets independently.
         </p>
         <div className="flex gap-2 mt-2">
           {([
@@ -2052,7 +2083,7 @@ function TTSTab() {
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex gap-3">
             <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[72px]"}>
-              <div className="font-mono text-xl font-bold text-gray-800">{SYSTEM_PROMPTS.length}</div>
+              <div className="font-mono text-xl font-bold text-gray-800">{activePrompts.length}</div>
               <div className={C.label}>Total</div>
             </div>
             <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[72px]"}>
@@ -2125,7 +2156,7 @@ function TTSTab() {
         {/* Group filter chips + search */}
         <div className="flex items-center gap-1 flex-wrap">
           {GROUP_TABS.map(tab => {
-            const count = tab.id === "all" ? SYSTEM_PROMPTS.length : SYSTEM_PROMPTS.filter(p => p.group === tab.id).length;
+            const count = tab.id === "all" ? activePrompts.length : activePrompts.filter(p => p.group === tab.id).length;
             return (
               <button
                 key={tab.id}
