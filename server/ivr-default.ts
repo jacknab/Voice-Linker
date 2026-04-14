@@ -3521,10 +3521,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-manage-membership" });
       if (isMW) {
-        gather.say(`${tierMsg} Press 1 to purchase a membership. Press 9 to return to the main menu.`);
+        gather.say(`${tierMsg} Press 1 to purchase a membership. Press 3 to unblock all callers. Press 9 to return to the main menu.`);
       } else {
         const pinStatus = user.membershipPin ? "You have a PIN set." : "You do not have a PIN set.";
-        gather.say(`${tierMsg} ${pinStatus} Press 1 to purchase a membership. Press 2 to set or change your access PIN. Press 9 to return to the main menu.`);
+        gather.say(`${tierMsg} ${pinStatus} Press 1 to purchase a membership. Press 2 to set or change your access PIN. Press 3 to unblock all callers. Press 9 to return to the main menu.`);
       }
       twiml.redirect("/voice/manage-membership");
     } catch (error) {
@@ -3549,6 +3549,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       twiml.redirect("/voice/purchase-pre-menu");
     } else if (digit === "2" && !isMW) {
       twiml.redirect("/voice/set-pin");
+    } else if (digit === "3") {
+      twiml.redirect("/voice/unblock-all-confirm");
     } else if (digit === "9") {
       twiml.redirect("/voice/main-menu");
     } else {
@@ -3556,6 +3558,42 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       twiml.redirect("/voice/manage-membership");
     }
 
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Unblock All Callers ───────────────────────────────────────────────────
+  app.post("/voice/unblock-all-confirm", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-unblock-all-confirm", timeout: 10 });
+    gather.say("To confirm you want to unblock all callers, press 1. Press any other key to cancel and return to the previous menu.");
+    twiml.redirect("/voice/manage-membership");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-unblock-all-confirm", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits;
+    const fromNumber = req.body?.From as string;
+
+    if (digit === "1") {
+      try {
+        const user = await storage.getUserByPhone(fromNumber);
+        if (user) {
+          await storage.unblockAllByUser(user.id);
+          console.log(`[voice] unblock-all: userId=${user.id} phone=${fromNumber}`);
+        }
+        twiml.say("All callers are unblocked.");
+      } catch (err) {
+        console.error("[voice] unblock-all error:", err);
+        twiml.say("An error occurred. Please try again.");
+      }
+    } else {
+      twiml.say("Cancelled. Returning to the previous menu.");
+    }
+
+    twiml.redirect("/voice/manage-membership");
     res.type("text/xml");
     res.send(twiml.toString());
   });
