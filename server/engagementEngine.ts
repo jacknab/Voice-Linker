@@ -1337,6 +1337,17 @@ export const ROGER_V3_TEXTS: Record<string, string> = {
 
   // GAME INVITE
   activated_game: "[excited] Alright, gentlemen, [clear throat] it's time to mix it up a bit — I have activated the mini game called Busted. One of the guys on the line right now is an AI pretending to be real. Press 8 if you spot him — get it right and win free time.",
+  // TIME VARIANT v3 texts (morning / afternoon variants — evening = default above)
+  dominant_01_morning:   "[warmly] You have listened to a lot of guys this morning. [encouragingly] Somewhere in that list is someone worth saying hello to. Trust your gut.",
+  dominant_01_afternoon: "[warmly] You have listened to a lot of guys this afternoon. [encouragingly] Somewhere in that list is someone worth saying hello to. Trust your gut.",
+  dominant_03_morning:   "[warmly] You have been doing all the listening this morning. [playfully] How about letting someone else do a little of the work — right after you send them a message.",
+  dominant_03_afternoon: "[warmly] You have been doing all the listening this afternoon. [playfully] How about letting someone else do a little of the work — right after you send them a message.",
+  new_01_morning:   "[chuckles] You have sampled more profiles this morning than a man at a free buffet. [deadpan] At some point you have to commit to a plate.",
+  new_01_afternoon: "[chuckles] You have sampled more profiles this afternoon than a man at a free buffet. [deadpan] At some point you have to commit to a plate.",
+  new_08_morning:   "[warmly] You are closer to making a real connection this morning than you think. [encouraging] One message. That is literally all it takes.",
+  new_08_afternoon: "[warmly] You are closer to making a real connection this afternoon than you think. [encouraging] One message. That is literally all it takes.",
+  new_14_morning:   "[warmly] Now that you are warmed up — [seductively] there is someone on this line this morning who was made for your kind of energy. Go find them.",
+  new_14_afternoon: "[warmly] Now that you are warmed up — [seductively] there is someone on this line this afternoon who was made for your kind of energy. Go find them.",
 
   // NEW 20 PROMPTS
   new_01: "[chuckles] You have sampled more profiles tonight than a man at a free buffet. [deadpan] At some point you have to commit to a plate.",
@@ -1359,4 +1370,61 @@ export const ROGER_V3_TEXTS: Record<string, string> = {
   new_18: "[sighs] Let me ask you something honestly. [curious] What would actually get you to send a message? Because I genuinely want to help you here.",
   new_19: "[warmly] The difference between a great night on this line and a forgettable one? [softly] Usually just one message. Just one.",
   new_20: "[laughs] You are an enigma. A walking mystery. [warmly] And somewhere on this line there is someone who absolutely wants to figure you out.",
+};
+
+// ─── Time-Variant Prompt System ───────────────────────────────────────────────
+// These 7 prompts contain "tonight" which sounds wrong during morning/afternoon.
+// The IVR picks roger_{id}_{variant}.mp3 first, then falls back to roger_{id}.mp3.
+
+export type TimeVariant = "morning" | "afternoon" | "evening";
+
+export const TIME_VARIANT_PROMPT_IDS: readonly string[] = [
+  "dominant_01", "dominant_03", "roger_selfintro_01",
+  "roger_named_high_01", "new_01", "new_08", "new_14",
+];
+
+export function getTimeVariant(): TimeVariant {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 12) return "morning";
+  if (hour >= 12 && hour < 18) return "afternoon";
+  return "evening";
+}
+
+// Plain text for each variant (used for non-v3 TTS and as generate input)
+export const TIME_VARIANT_PLAIN: Record<string, Record<TimeVariant, string>> = {
+  dominant_01: {
+    morning:   "You have listened to a lot of guys this morning. Somewhere in that list is someone worth saying hello to. Trust your gut.",
+    afternoon: "You have listened to a lot of guys this afternoon. Somewhere in that list is someone worth saying hello to. Trust your gut.",
+    evening:   "You have listened to a lot of guys tonight. Somewhere in that list is someone worth saying hello to. Trust your gut.",
+  },
+  dominant_03: {
+    morning:   "You have been doing all the listening this morning. How about letting someone else do a little of the work — right after you send them a message.",
+    afternoon: "You have been doing all the listening this afternoon. How about letting someone else do a little of the work — right after you send them a message.",
+    evening:   "You have been doing all the listening tonight. How about letting someone else do a little of the work — right after you send them a message.",
+  },
+  roger_selfintro_01: {
+    morning:   "Hey — welcome to the line. I'm Roger, your host for this morning. Take your time browsing. I'll check in with you every now and then.",
+    afternoon: "Hey — welcome to the line. I'm Roger, your host for this afternoon. Take your time browsing. I'll check in with you every now and then.",
+    evening:   "Hey — welcome to the line. I'm Roger, your host for tonight. Take your time browsing. I'll check in with you every now and then.",
+  },
+  roger_named_high_01: {
+    morning:   "Roger checking in. You have put a lot of time into this morning. Make it count — there is someone on this line who would genuinely love to hear from you.",
+    afternoon: "Roger checking in. You have put a lot of time into this afternoon. Make it count — there is someone on this line who would genuinely love to hear from you.",
+    evening:   "Roger checking in. You have put a lot of time into tonight. Make it count — there is someone on this line who would genuinely love to hear from you.",
+  },
+  new_01: {
+    morning:   "You have sampled more profiles this morning than a man at a free buffet. At some point you have to commit to a plate.",
+    afternoon: "You have sampled more profiles this afternoon than a man at a free buffet. At some point you have to commit to a plate.",
+    evening:   "You have sampled more profiles tonight than a man at a free buffet. At some point you have to commit to a plate.",
+  },
+  new_08: {
+    morning:   "You are closer to making a real connection this morning than you think. One message. That is literally all it takes.",
+    afternoon: "You are closer to making a real connection this afternoon than you think. One message. That is literally all it takes.",
+    evening:   "You are closer to making a real connection tonight than you think. One message. That is literally all it takes.",
+  },
+  new_14: {
+    morning:   "Now that you are warmed up — there is someone on this line this morning who was made for your kind of energy. Go find them.",
+    afternoon: "Now that you are warmed up — there is someone on this line this afternoon who was made for your kind of energy. Go find them.",
+    evening:   "Now that you are warmed up — there is someone on this line tonight who was made for your kind of energy. Go find them.",
+  },
 };
