@@ -1609,6 +1609,9 @@ function BustedGameSubTab() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [pushing, setPushing] = useState<Set<number>>(new Set());
   const [pushingAll, setPushingAll] = useState(false);
+  const [uploading, setUploading] = useState<Set<number>>(new Set());
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadTargetRef = useRef<number | null>(null);
 
   const { data: entries = [], isLoading, refetch } = useQuery<GameGreetingEntry[]>({
     queryKey: ["/api/admin/game-greetings"],
@@ -1617,6 +1620,33 @@ function BustedGameSubTab() {
   const { data: gameVoice } = useQuery<{ voiceId: string; masked: string }>({
     queryKey: ["/api/admin/game/voice"],
   });
+
+  function triggerUpload(index: number) {
+    uploadTargetRef.current = index;
+    uploadInputRef.current?.click();
+  }
+
+  async function handleUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const index = uploadTargetRef.current;
+    if (!file || index == null) return;
+    e.target.value = "";
+    setUploading(prev => new Set(prev).add(index));
+    try {
+      const filename = `game_greeting_${index}.mp3`;
+      const form = new FormData();
+      form.append("audio", file, filename);
+      form.append("filename", filename);
+      const res = await fetch("/api/admin/receive-audio", { method: "POST", body: form });
+      if (!res.ok) throw new Error((await res.json()).message);
+      toast({ title: `Greeting ${index} uploaded`, description: filename });
+      refetch();
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setUploading(prev => { const s = new Set(prev); s.delete(index); return s; });
+    }
+  }
 
   async function handleGenerate(entry: GameGreetingEntry) {
     setGenerating(entry.index);
@@ -1723,6 +1753,14 @@ function BustedGameSubTab() {
 
   return (
     <div className="space-y-4">
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".mp3,audio/mpeg"
+        className="hidden"
+        onChange={handleUploadFile}
+        data-testid="input-game-upload-file"
+      />
       <div className={`${C.card} border-indigo-200 bg-indigo-50`}>
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -1810,6 +1848,15 @@ function BustedGameSubTab() {
                       data-testid={`btn-game-gen-${entry.index}`}
                     >
                       {isGen ? "…" : entry.audioUrl ? "Regen" : "Generate"}
+                    </button>
+                    <button
+                      className={`px-2 py-1 rounded text-xs font-medium border ${uploading.has(entry.index) ? "opacity-50" : "bg-white text-violet-600 border-violet-200 hover:bg-violet-50"}`}
+                      onClick={() => triggerUpload(entry.index)}
+                      disabled={uploading.has(entry.index) || !!bulkProgress}
+                      data-testid={`btn-game-upload-${entry.index}`}
+                      title="Upload your own MP3 file"
+                    >
+                      {uploading.has(entry.index) ? "…" : "↑ MP3"}
                     </button>
                     {entry.audioUrl && (
                       <button
