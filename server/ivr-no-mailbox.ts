@@ -834,6 +834,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
 
     try {
+      // Load site settings first so the raw cache is populated before any playPrompt call.
+      // playPrompt uses getRawSiteSettingsCache() synchronously to pick the right audio folder
+      // (mm/ vs mw/), so it must be primed before the first call.
+      const entrySiteConf = await getSiteSettingsCached();
+
       playPrompt(twiml, req, "system_greeting.mp3",
         "Welcome to the Male Box. this service assumes no responsibility for personal meetings.");
 
@@ -847,7 +852,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       // MW systems prompt for gender before membership — women are always free.
       // MM systems go straight to optional membership number entry.
-      const entrySiteConf = await getSiteSettingsCached();
       if (entrySiteConf.siteCategory === "MW") {
         twiml.redirect("/voice/gender-select");
       } else {
