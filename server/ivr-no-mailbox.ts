@@ -1128,9 +1128,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       numDigits: 4,
       finishOnKey: "",
       action: "/voice/handle-membership-pin-entry",
-      timeout: 10,
+      timeout: 30,
     });
-    gather.say("Please enter your 4-digit PIN.");
+    playPrompt(gather, req, "membership_pin_prompt.mp3", "Please enter your 4-digit PIN.");
     twiml.redirect("/voice/entry-check");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -1189,9 +1189,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       numDigits: 4,
       finishOnKey: "",
       action: "/voice/handle-membership-card-pin-entry",
-      timeout: 10,
+      timeout: 30,
     });
-    gather.say("Please enter your 4-digit PIN.");
+    playPrompt(gather, req, "membership_pin_prompt.mp3", "Please enter your 4-digit PIN.");
     // No input / timeout → skip membership and continue
     twiml.redirect("/voice/entry-check");
     res.type("text/xml");

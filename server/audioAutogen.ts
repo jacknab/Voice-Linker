@@ -28,6 +28,7 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "goodbye.mp3",            text: "Thank you for calling. Goodbye." },
 
   { filename: "membership_entry_prompt.mp3", text: "If you have a membership card, enter your card number now. Otherwise press the pound key." },
+  { filename: "membership_pin_prompt.mp3",   text: "Please enter your 4-digit PIN." },
   { filename: "link_code_invalid.mp3",       text: "That code is invalid or has expired. Please generate a new code from your web account and try again." },
   { filename: "membership_invalid.mp3",      text: "We could not find a card with that number. Please check your card and try again." },
   { filename: "membership_linked.mp3",       text: "Card accepted." },
