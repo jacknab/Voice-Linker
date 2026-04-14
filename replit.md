@@ -11,6 +11,13 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - **Voice**: Twilio TwiML IVR system
 - **Payments**: Stripe (web checkout + IVR card entry) + PayPal Standard (web checkout via IPN)
 
+## Replit Runtime
+
+- Development workflow: `npm run dev`, serving the Express/Vite app on port 5000.
+- Build command: `npm run build`.
+- Production run command: `node ./dist/index.cjs`.
+- Database schema is managed with Drizzle using `drizzle.config.ts`; sync with `npm run db:push`.
+
 ## Roger Mood + Attention Drain Engine
 
 **Roger** is the single AI host character that interjects between profile plays. He has 4 moods and a behavioral timing system:
