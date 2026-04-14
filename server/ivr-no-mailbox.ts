@@ -3516,7 +3516,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 4a4. Customer Service — Automated Membership & Billing Receptionist ────
   function dSay(parent: any, text: string): void {
-    parent.say({ voice: "Polly.Daniel" }, text);
+    parent.say({ voice: "Polly.Matthew" }, text);
   }
   function formatTime(seconds: number): string {
     if (seconds <= 0) return "no time remaining";

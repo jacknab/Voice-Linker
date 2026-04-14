@@ -3643,10 +3643,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   });
 
   // ─── 4a4. Customer Service — Automated Membership & Billing Receptionist ────
-  // All responses use Amazon Polly Daniel voice (en-US Neural) via Twilio TTS.
-  // Helper: speak with Daniel voice on any TwiML node (Response or Gather)
+  // All responses use Amazon Polly Matthew voice (en-US Standard) via Twilio TTS.
+  // Helper: speak with Matthew voice on any TwiML node (Response or Gather)
   function dSay(parent: any, text: string): void {
-    parent.say({ voice: "Polly.Daniel" }, text);
+    parent.say({ voice: "Polly.Matthew" }, text);
   }
 
   // Format seconds into a natural spoken string: "3 hours and 12 minutes"
