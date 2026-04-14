@@ -395,6 +395,15 @@ The **Generate All** button in the System Prompts section header generates every
 6. On completion, shows a toast with the count of prompts generated and the target folder
 7. Invalidates the file list cache so the status column updates immediately
 
+### VPS Audio Health Check
+The Audio Gen tab includes a health-check card backed by `GET /api/admin/tts/health`. It verifies:
+- `ELEVENLABS_API_KEY` is configured and can reach ElevenLabs
+- `uploads/`, `uploads/mm/`, `uploads/mw/`, and `uploads/mw_m/` exist and are writable
+- Current MP3 file counts on the connected server
+- Missing/generated counts for the selected prompt tab in the admin UI
+
+Use this panel on the VPS-hosted admin page to confirm audio generation is ready before running bulk generation.
+
 ### Custom Audio File
 Manually generate a single named file outside the system prompts list. Enter a filename (`.mp3` is appended automatically) and the text to speak, then click **Generate**. Files are saved to the selected category folder.
 

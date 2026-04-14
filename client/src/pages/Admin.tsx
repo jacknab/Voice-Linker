@@ -48,6 +48,31 @@ interface Region {
   messagesRelayed: number;
 }
 
+interface AudioHealth {
+  checkedAt: string;
+  elevenLabs: {
+    apiKeyConfigured: boolean;
+    apiKeyMasked: string | null;
+    connectionOk: boolean | null;
+    message: string;
+  };
+  uploadFolders: {
+    folder: "shared" | "mm" | "mw" | "mw_m";
+    path: string;
+    exists: boolean;
+    writable: boolean;
+    error: string | null;
+  }[];
+  fileCounts: Record<string, number>;
+  voiceIds: {
+    mm: string;
+    mw: string;
+    mw_m: string;
+    roger: string;
+    game: string;
+  };
+}
+
 type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
 
 interface FlaggedItem {
@@ -1913,6 +1938,7 @@ function TTSTab() {
   // Prompt list switches with the active tab — MW gets gender-aware texts + MW-exclusive prompts
   const activePrompts = audioGenTab === "mw" ? MW_SYSTEM_PROMPTS : audioGenTab === "mw_m" ? MW_MALE_SYSTEM_PROMPTS : SYSTEM_PROMPTS;
   const { data: existingFiles } = useQuery<{ filename: string; url: string; size: number; folder: string }[]>({ queryKey: ["/api/admin/tts/prompts"] });
+  const { data: audioHealth, isLoading: audioHealthLoading, isFetching: audioHealthFetching, refetch: refetchAudioHealth } = useQuery<AudioHealth>({ queryKey: ["/api/admin/tts/health"] });
   const { data: zipEntries = [] } = useQuery<ZipEntry[]>({ queryKey: ["/api/admin/zip-codes"] });
   const neighborhoodEntries = zipEntries.filter(e => e.audioFile && e.neighborhood);
   const { data: allRegions = [] } = useQuery<Region[]>({ queryKey: ["/api/regions"] });
@@ -2209,6 +2235,11 @@ function TTSTab() {
   );
   const generatedCount = activePrompts.filter(p => promptExists(p.filename)).length;
   const missingCount = activePrompts.length - generatedCount;
+  const activeFolderHealth = audioHealth?.uploadFolders.find(f => f.folder === categoryFolder);
+  const allUploadFoldersOk = audioHealth?.uploadFolders.every(f => f.exists && f.writable) ?? false;
+  const elevenLabsOk = !!audioHealth?.elevenLabs.apiKeyConfigured && audioHealth.elevenLabs.connectionOk !== false;
+  const audioHealthReady = !!audioHealth && allUploadFoldersOk && elevenLabsOk;
+  const activeVoiceId = audioHealth?.voiceIds[categoryFolder];
 
   async function handlePushPromptToVps(filename: string, folder: string) {
     const url = `/uploads/${folder}/${filename}`;
@@ -2302,6 +2333,85 @@ function TTSTab() {
   return (
     <div className="space-y-6">
       {subTabBar}
+
+      <div data-testid="card-audio-health" className={C.card}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+              {audioHealthReady ? <CheckCircle size={14} className="text-emerald-600" /> : <AlertCircle size={14} className="text-amber-600" />}
+              VPS Audio Health Check
+            </h3>
+            <p className="text-gray-400 font-mono text-xs -mt-1">
+              Checks the server this admin page is connected to: ElevenLabs, upload folder permissions, and current missing audio counts.
+            </p>
+          </div>
+          <button
+            data-testid="btn-refresh-audio-health"
+            type="button"
+            onClick={() => refetchAudioHealth()}
+            disabled={audioHealthFetching}
+            className={C.btnGhost}
+          >
+            <RefreshCw size={12} className={audioHealthFetching ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50" data-testid="status-elevenlabs-health">
+            <div className={C.label}>ElevenLabs</div>
+            {audioHealthLoading ? (
+              <div className="text-gray-500 font-mono text-xs flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Checking...</div>
+            ) : (
+              <>
+                <div className={`font-mono text-sm font-bold flex items-center gap-1.5 ${elevenLabsOk ? "text-emerald-700" : "text-amber-700"}`}>
+                  {elevenLabsOk ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
+                  {elevenLabsOk ? "Ready" : "Needs setup"}
+                </div>
+                <div className="text-gray-500 font-mono text-xs mt-1 break-words">{audioHealth?.elevenLabs.message ?? "Unable to check"}</div>
+                <div className="text-gray-400 font-mono text-[10px] mt-1">Key: {audioHealth?.elevenLabs.apiKeyMasked ?? "not set"}</div>
+              </>
+            )}
+          </div>
+
+          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50" data-testid="status-upload-health">
+            <div className={C.label}>Upload Folders</div>
+            <div className={`font-mono text-sm font-bold flex items-center gap-1.5 ${allUploadFoldersOk ? "text-emerald-700" : "text-amber-700"}`}>
+              {allUploadFoldersOk ? <CheckCircle size={13} /> : <AlertCircle size={13} />}
+              {allUploadFoldersOk ? "Writable" : "Check permissions"}
+            </div>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {(audioHealth?.uploadFolders ?? []).map(folder => (
+                <span
+                  key={folder.folder}
+                  title={folder.error ?? folder.path}
+                  className={`px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold ${
+                    folder.exists && folder.writable
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                      : "bg-amber-50 border-amber-200 text-amber-700"
+                  }`}
+                >
+                  {folder.folder.toUpperCase()}
+                </span>
+              ))}
+            </div>
+            <div className="text-gray-400 font-mono text-[10px] mt-2">Active folder: {activeFolderHealth?.writable ? "writable" : "not writable"}</div>
+          </div>
+
+          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50" data-testid="status-missing-audio-counts">
+            <div className={C.label}>Selected Tab Counts</div>
+            <div className="flex items-baseline gap-2">
+              <span className="font-mono text-xl font-bold text-emerald-600">{generatedCount}</span>
+              <span className="text-gray-400 font-mono text-xs">ready</span>
+              <span className="font-mono text-xl font-bold text-amber-600 ml-2">{missingCount}</span>
+              <span className="text-gray-400 font-mono text-xs">missing</span>
+            </div>
+            <div className="text-gray-500 font-mono text-xs mt-1">{categoryFolder.toUpperCase()} voice: {activeVoiceId ?? "loading..."}</div>
+            <div className="text-gray-400 font-mono text-[10px] mt-1">Server MP3 total: {audioHealth?.fileCounts.total ?? 0}</div>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div className={C.cardAlt}>
           <div className={C.label}>Active Mode</div>

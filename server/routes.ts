@@ -51,6 +51,41 @@ for (const cat of ["mm", "mw"]) {
   if (!fs.existsSync(catDir)) fs.mkdirSync(catDir, { recursive: true });
 }
 
+function maskSecret(value?: string): string | null {
+  if (!value) return null;
+  if (value.length <= 8) return `${value.slice(0, 2)}••••`;
+  return `${value.slice(0, 4)}${"•".repeat(Math.min(value.length - 8, 12))}${value.slice(-4)}`;
+}
+
+function checkUploadFolder(folder: "shared" | "mm" | "mw" | "mw_m") {
+  const dir = folder === "shared" ? UPLOADS_DIR : path.join(UPLOADS_DIR, folder);
+  let exists = fs.existsSync(dir);
+  let writable = false;
+  let error: string | null = null;
+
+  try {
+    if (!exists) {
+      fs.mkdirSync(dir, { recursive: true });
+      exists = true;
+    }
+
+    const testPath = path.join(dir, `.audio-health-${Date.now()}-${Math.round(Math.random() * 1e6)}.tmp`);
+    fs.writeFileSync(testPath, "ok");
+    fs.unlinkSync(testPath);
+    writable = true;
+  } catch (e: any) {
+    error = e?.message ?? "Folder is not writable";
+  }
+
+  return { folder, path: dir, exists, writable, error };
+}
+
+function countMp3Files(folder: "shared" | "mm" | "mw" | "mw_m"): number {
+  const dir = folder === "shared" ? UPLOADS_DIR : path.join(UPLOADS_DIR, folder);
+  if (!fs.existsSync(dir)) return 0;
+  return fs.readdirSync(dir).filter(f => f.endsWith(".mp3") && fs.statSync(path.join(dir, f)).isFile()).length;
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
@@ -1223,6 +1258,52 @@ export async function registerRoutes(
       voiceIdMM: getVoiceIdForFolder("mm"),
       voiceIdMW: getVoiceIdForFolder("mw"),
       voiceIdMW_M: getVoiceIdForFolder("mw_m"),
+    });
+  });
+
+  app.get("/api/admin/tts/health", async (_req, res) => {
+    const folders: ("shared" | "mm" | "mw" | "mw_m")[] = ["shared", "mm", "mw", "mw_m"];
+    const uploadFolders = folders.map(checkUploadFolder);
+    const fileCounts = Object.fromEntries(folders.map(folder => [folder, countMp3Files(folder)]));
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    let connectionOk: boolean | null = null;
+    let connectionMessage = apiKey ? "Not checked" : "ELEVENLABS_API_KEY is not configured";
+
+    if (apiKey) {
+      try {
+        const response = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
+          headers: { "xi-api-key": apiKey },
+        });
+        connectionOk = response.ok;
+        connectionMessage = response.ok
+          ? "ElevenLabs API key is valid"
+          : `ElevenLabs API returned ${response.status}`;
+      } catch (e: any) {
+        connectionOk = false;
+        connectionMessage = e?.message ?? "Could not reach ElevenLabs";
+      }
+    }
+
+    res.json({
+      checkedAt: new Date().toISOString(),
+      elevenLabs: {
+        apiKeyConfigured: !!apiKey,
+        apiKeyMasked: maskSecret(apiKey),
+        connectionOk,
+        message: connectionMessage,
+      },
+      uploadFolders,
+      fileCounts: {
+        ...fileCounts,
+        total: Object.values(fileCounts).reduce((sum, count) => sum + Number(count), 0),
+      },
+      voiceIds: {
+        mm: getVoiceIdForFolder("mm"),
+        mw: getVoiceIdForFolder("mw"),
+        mw_m: getVoiceIdForFolder("mw_m"),
+        roger: getVoiceIdForRoger(),
+        game: getVoiceIdForGame(),
+      },
     });
   });
 
