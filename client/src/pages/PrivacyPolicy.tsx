@@ -23,85 +23,127 @@ export default function PrivacyPolicy() {
 
   const sections = [
     {
-      title: "1. Information We Collect",
+      title: "1. Who We Are",
       body: [
-        `When you call in to ${siteName}, we log your phone number (Caller ID) in order to associate your account, membership, and settings with your number. This is required for the service to function.`,
-        "When you create a web account, we collect your email address and any profile information you voluntarily provide.",
-        "When you purchase a membership, your payment is processed by Stripe. We do not store your full credit card number on our servers — only a tokenized reference provided by Stripe.",
-        "We may log call metadata (duration, timestamps, region) for billing and fraud prevention purposes.",
-        "We record voice greetings and messages that you create within the system. These recordings are stored to make them available to other callers and are deleted when you re-record or close your account.",
+        `${siteName} is a live telephone chatline service operated by TJ Benjamin Group ("the Company", "we", "us", or "our"). This Privacy Policy describes how we collect, use, store, and protect the personal information of callers and web account holders who use the ${siteName} service.`,
+        "By using the service — whether by phone or through our website — you consent to the practices described in this Privacy Policy.",
       ],
     },
     {
-      title: "2. How We Use Your Information",
+      title: "2. Information We Collect",
       body: [
-        "To operate the voice chatline service and maintain your account.",
-        "To process payments and manage your membership balance.",
-        "To connect you with other callers in your region.",
-        "To enforce our Terms of Use, including age verification and blocking requirements.",
-        "To respond to customer support inquiries.",
-        "We do not sell, rent, or share your personal information with third parties for marketing purposes.",
+        "Phone Number (Caller ID): When you call in to the service, we log your phone number via Caller ID. This is required for the service to function — it is how we identify your account, maintain your membership balance, and apply your settings. You cannot use the voice service anonymously from a blocked or unknown number.",
+        "Voice Recordings: We store the voice greetings and voice messages you record within the service. These recordings are retained to make them available to other callers and are deleted when you re-record them, delete your account, or when our data retention schedule requires.",
+        "Call Metadata: We log call-level data including call duration, timestamps, and the local access number dialed. This data is used for billing, service quality monitoring, and fraud prevention.",
+        "Web Account Information: If you create a web account, we collect your email address and any profile details you voluntarily provide (such as membership card number). We do not require your real name.",
+        "Payment Information: When you purchase a membership, your payment is processed by Stripe. We do not store your full credit card number, CVV, or full banking details. Stripe provides us with a tokenized reference used only to manage your subscription.",
+        "Support Communications: If you contact our support team by phone, email, or through the website, we retain the content of those communications to assist you and improve our service.",
+        "Technical Data: Our website may collect standard server log data including your IP address, browser type, and pages visited, used for security and performance monitoring.",
       ],
     },
     {
-      title: "3. Your Phone Number & Anonymity",
+      title: "3. How We Use Your Information",
       body: [
-        `Your phone number is never displayed to other callers on ${siteName}. All voice connections are routed through our telephony system.`,
-        "Other callers can only hear your recorded voice greeting and any information you voluntarily share within it.",
-        "Your phone number may be used internally to associate your account, detect fraud, and comply with legal obligations.",
+        "To operate, maintain, and improve the telephone chatline service.",
+        "To identify your account and apply your membership balance when you call in.",
+        "To connect you with other callers in your area.",
+        "To process payments, send billing receipts, and manage your membership.",
+        "To enforce our Terms of Service, including age verification, blocked caller lists, and moderation.",
+        "To respond to customer support requests and resolve billing disputes.",
+        "To detect and prevent fraud, abuse, and unauthorized use of the service.",
+        "To comply with applicable laws, regulations, and lawful requests from law enforcement or courts.",
+        "We do not use your information for behavioral advertising. We do not sell, rent, or trade your personal information to third parties for their own marketing purposes.",
       ],
     },
     {
-      title: "4. Cookies & Web Analytics",
+      title: "4. Caller Anonymity",
       body: [
-        "Our website may use cookies to maintain your login session and remember your preferences.",
-        "We may use anonymized analytics data (page views, session duration) to improve the website. This data is not linked to your personal identity.",
-        "You can disable cookies in your browser settings. Some website features may not function properly without cookies.",
+        `${siteName} is designed with caller anonymity as a core feature. Your phone number is never revealed to other callers. All live connections between callers are routed through our telephony infrastructure so that neither party's actual phone number is disclosed during or after a conversation.`,
+        "Other callers can only hear your recorded voice greeting and any personal information you voluntarily share within that greeting. We strongly recommend against sharing your real name, location, or contact details in your greeting.",
+        "Your phone number is used internally only, as described in this Privacy Policy.",
       ],
     },
     {
-      title: "5. Data Retention",
+      title: "5. Voice Message Privacy",
       body: [
-        "Voice greetings and messages are retained as long as your account is active or until you re-record them.",
-        "Call metadata is retained for up to 12 months for billing and fraud prevention.",
-        "Web account data is retained until you request account deletion.",
-        "To request deletion of your data, contact us using the information below.",
+        "Private voice messages exchanged between callers are stored on our servers and are accessible only to the intended recipient. They are not publicly broadcast.",
+        "We do not routinely listen to or review private voice messages. However, we may access message content to investigate reported violations of our Terms of Service, respond to lawful legal process, or prevent harm.",
+        "Voice messages are deleted from our servers once both parties have had a reasonable opportunity to listen to them, or upon account deletion.",
       ],
     },
     {
-      title: "6. Third-Party Services",
+      title: "6. Cookies & Website Tracking",
       body: [
-        "We use Stripe for payment processing. Stripe's privacy policy governs how they handle your payment information.",
-        "We use Twilio to provide voice telephony services. Call metadata is processed through Twilio's infrastructure.",
-        "We may use ElevenLabs for text-to-speech audio generation of system prompts.",
-        "These service providers are bound by their own privacy policies and applicable law.",
+        "Our website uses session cookies to maintain your login state and keep you signed in to your web account. These cookies are essential to the website's functionality.",
+        "We may use anonymized, aggregate analytics data (such as total page views and session counts) to understand how the website is being used and improve it. This data is not linked to individual identities.",
+        "We do not use tracking cookies for advertising or cross-site profiling.",
+        "You can disable cookies in your browser settings. Note that disabling cookies will prevent you from remaining logged in to your web account.",
       ],
     },
     {
-      title: "7. Children's Privacy",
+      title: "7. Data Retention",
       body: [
-        `${siteName} is intended for adults 18 years of age and older. We do not knowingly collect personal information from anyone under the age of 18. If you believe a minor has used the service, please contact us immediately.`,
+        "Phone number and account records: Retained for as long as your account is active plus a period of up to 12 months following inactivity, after which records may be purged.",
+        "Voice greetings: Retained until you re-record or delete them, or until your account is closed.",
+        "Private voice messages: Retained for a reasonable playback window after delivery, then deleted.",
+        "Call metadata (duration, timestamps): Retained for up to 12 months for billing verification and fraud prevention.",
+        "Payment records: Retained for a minimum of 7 years as required by applicable financial record-keeping laws.",
+        "Support communications: Retained for up to 24 months.",
+        "To request early deletion of your data, please contact us using the information in Section 12.",
       ],
     },
     {
-      title: "8. Security",
+      title: "8. Third-Party Service Providers",
       body: [
-        "We take reasonable technical and organizational measures to protect your information from unauthorized access, disclosure, or misuse.",
-        "Payment data is handled exclusively by Stripe using PCI-DSS compliant infrastructure.",
-        "No method of transmission over the internet or method of electronic storage is 100% secure. We cannot guarantee absolute security.",
+        "Stripe, Inc. — payment processing. Your payment data is handled under Stripe's Privacy Policy and PCI-DSS compliance standards.",
+        "Twilio, Inc. — telephone infrastructure, call routing, and voice recording storage. Call data is processed through Twilio's infrastructure under their Data Protection Addendum.",
+        "ElevenLabs — text-to-speech technology used to generate certain automated system voice prompts. No caller personal data is shared with ElevenLabs.",
+        "These providers act as our data processors. They are contractually required to handle your data only as directed by us and in accordance with applicable privacy law.",
+        "We do not sell or share your personal information with any third party for their own independent marketing purposes.",
       ],
     },
     {
-      title: "9. Changes to This Policy",
+      title: "9. Children's Privacy",
       body: [
-        "We may update this Privacy Policy from time to time. The date at the top of this page reflects when it was last revised.",
-        "Continued use of the service after changes are posted constitutes your acceptance of the updated policy.",
+        `${siteName} is strictly an adult service for persons 18 years of age and older. We do not knowingly collect, store, or use personal information from anyone under 18.`,
+        "If we become aware that a minor has accessed the service or provided us with personal information, we will take immediate steps to delete that information and terminate the account.",
+        "If you believe a minor has used the service, please contact us immediately using the information in Section 12.",
       ],
     },
     {
-      title: "10. Contact Us",
+      title: "10. Data Security",
       body: [
-        `If you have questions about this Privacy Policy or wish to request deletion of your data, please contact us:${csEmail ? "\n\nEmail: " + csEmail : ""}${csPhone ? "\n\nPhone: " + formatPhone(csPhone) : ""}`,
+        "We take reasonable technical and organizational measures to protect your personal information from unauthorized access, disclosure, alteration, or destruction.",
+        "Payment data is handled exclusively by Stripe using PCI-DSS compliant infrastructure. We never transmit or store raw credit card numbers.",
+        "Access to account data within our organization is restricted to personnel who need it to provide or support the service.",
+        "No method of data transmission over the internet or method of electronic storage is completely secure. While we strive to use commercially acceptable means to protect your information, we cannot guarantee absolute security.",
+        "In the event of a data breach affecting your personal information, we will notify you as required by applicable law.",
+      ],
+    },
+    {
+      title: "11. Your Rights & Choices",
+      body: [
+        "Access: You may request a summary of the personal information we hold about your account.",
+        "Correction: If any of your account information is inaccurate, you may request a correction.",
+        "Deletion: You may request deletion of your account and associated personal data at any time, subject to our legal retention obligations.",
+        "Opt-out: If you have provided an email address and no longer wish to receive service-related emails, you may contact us to opt out.",
+        "To exercise any of these rights, please contact us using the details in Section 12. We will respond to verified requests within 30 days.",
+        "Please note that certain data (such as call records needed for billing disputes) may need to be retained even after account deletion to comply with our legal obligations.",
+      ],
+    },
+    {
+      title: "12. Changes to This Policy",
+      body: [
+        "We may update this Privacy Policy from time to time to reflect changes in our practices, the service, or applicable law. The updated date at the top of this page indicates when the Policy was last revised.",
+        "If we make material changes to how we handle your personal information, we will post a notice on our website prior to the changes taking effect.",
+        "Your continued use of the service after any changes to this Privacy Policy constitutes your acceptance of the updated Policy.",
+      ],
+    },
+    {
+      title: "13. Contact Us",
+      body: [
+        `If you have questions about this Privacy Policy, wish to exercise your data rights, or need to report a privacy concern, please contact us:${csEmail ? "\n\nEmail: " + csEmail : ""}${csPhone ? "\n\nPhone: " + formatPhone(csPhone) : ""}`,
+        "TJ Benjamin Group — Operator of " + siteName,
       ],
     },
   ];
@@ -120,7 +162,7 @@ export default function PrivacyPolicy() {
         <div style={{ maxWidth: "720px", margin: "0 auto" }}>
 
           <p style={{ fontSize: "0.95rem", color: "rgba(255,255,255,0.6)", lineHeight: 1.85, marginBottom: "3rem", borderLeft: "3px solid #1d4ed8", paddingLeft: "1.25rem" }}>
-            {siteName} ("we," "us," or "our") is committed to protecting your privacy. This Privacy Policy explains what information we collect, how we use it, and your choices regarding your data.
+            TJ Benjamin Group, operator of {siteName}, is committed to protecting your privacy. This Privacy Policy explains what personal information we collect when you use our telephone chatline service and website, how we use and protect that information, and your rights regarding it.
           </p>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>

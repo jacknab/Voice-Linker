@@ -149,7 +149,7 @@ export function SiteFooter({ siteName, csPhone, csEmail }: {
 
   return (
     <footer style={{ textAlign: "center", padding: "24px", fontSize: "0.78rem", color: "rgba(255,255,255,0.16)", borderTop: "1px solid rgba(255,255,255,0.05)", background: "#080808" }}>
-      <p>© {new Date().getFullYear()} {siteName}</p>
+      <p>© {new Date().getFullYear()} {siteName} — a service by TJ Benjamin Group</p>
       <nav aria-label="Footer links" style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "18px", marginTop: "8px" }}>
         {footerLinks.map(link => (
           <a key={link.label} href={link.href}
