@@ -1761,10 +1761,12 @@ function BustedGameSubTab() {
         onChange={handleUploadFile}
         data-testid="input-game-upload-file"
       />
+
+      {/* Header / bulk actions card */}
       <div className={`${C.card} border-indigo-200 bg-indigo-50`}>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <div className="font-semibold text-indigo-900 flex items-center gap-2">
+            <div className="font-semibold text-indigo-900 text-sm flex items-center gap-2">
               Busted Game — AI Caller Greetings
             </div>
             <div className="text-xs text-indigo-600 mt-0.5">
@@ -1778,7 +1780,7 @@ function BustedGameSubTab() {
               <span className="ml-1 text-indigo-400">(ELEVENLABS_VOICE_ID_GAME)</span>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {bulkProgress ? (
               <>
                 <div className="text-xs text-indigo-700 self-center">{bulkProgress.done}/{bulkProgress.total}</div>
@@ -1808,90 +1810,118 @@ function BustedGameSubTab() {
             )}
           </div>
         </div>
+        <div className="mt-3 pt-3 border-t border-indigo-100 text-xs text-indigo-600 space-y-1">
+          <div><span className="font-semibold">How it works:</span> When Roger activates the Busted game, one of these 6 greetings is randomly selected and injected at a random position (2–7 profiles ahead) in the caller's browse queue.</div>
+          <div><span className="font-semibold">Voice:</span> Controlled by <code className="bg-indigo-100 px-1 rounded">ELEVENLABS_VOICE_ID_GAME</code> env var. Entry #6 (Gary) is the seeded game greeting — generated with eleven_v3 emotion tags for best delivery.</div>
+        </div>
+      </div>
 
-        {isLoading ? (
-          <div className="text-center py-6 text-gray-400 text-sm">Loading…</div>
-        ) : (
-          <div className="space-y-2">
-            {entries.map(entry => {
-              const name = NAMES[entry.index - 1] ?? `Caller ${entry.index}`;
-              const isGen = generating === entry.index;
-              const isPlaying = playingIdx === entry.index;
-              return (
-                <div key={entry.index} className="flex items-start gap-3 p-3 rounded-lg bg-white border border-indigo-100" data-testid={`row-game-greeting-${entry.index}`}>
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center mt-0.5">{entry.index}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm text-gray-800">{name}</span>
+      {/* Individual greeting cards */}
+      {isLoading ? (
+        <div className="text-center py-10 text-gray-400 text-sm">Loading…</div>
+      ) : (
+        entries.map(entry => {
+          const name = NAMES[entry.index - 1] ?? `Caller ${entry.index}`;
+          const isGen = generating === entry.index;
+          const isPlaying = playingIdx === entry.index;
+          return (
+            <div
+              key={entry.index}
+              className={`${C.card} border ${entry.audioUrl ? "border-indigo-100" : "border-amber-200 bg-amber-50/40"}`}
+              data-testid={`row-game-greeting-${entry.index}`}
+            >
+              {/* Card header */}
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 text-sm font-bold flex items-center justify-center shrink-0">
+                    {entry.index}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-900">{name}</span>
                       {entry.audioUrl ? (
                         <span className="px-1.5 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700 font-medium">Generated</span>
                       ) : (
-                        <span className="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-600 font-medium">Missing</span>
+                        <span className="px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-700 font-medium">Missing</span>
                       )}
                     </div>
-                    <div className="text-xs text-gray-500 leading-relaxed line-clamp-2">{entry.plain}</div>
-                  </div>
-                  <div className="flex gap-1.5 flex-shrink-0">
-                    {entry.audioUrl && (
-                      <button
-                        className={`px-2 py-1 rounded text-xs font-medium border ${isPlaying ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
-                        onClick={() => handlePlay(entry)}
-                        data-testid={`btn-game-play-${entry.index}`}
-                      >
-                        {isPlaying ? "■" : "▶"}
-                      </button>
-                    )}
-                    <button
-                      className={`px-2 py-1 rounded text-xs font-medium border ${isGen ? "opacity-50" : "bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
-                      onClick={() => handleGenerate(entry)}
-                      disabled={isGen || !!bulkProgress}
-                      data-testid={`btn-game-gen-${entry.index}`}
-                    >
-                      {isGen ? "…" : entry.audioUrl ? "Regen" : "Generate"}
-                    </button>
-                    <button
-                      className={`px-2 py-1 rounded text-xs font-medium border ${uploading.has(entry.index) ? "opacity-50" : "bg-white text-violet-600 border-violet-200 hover:bg-violet-50"}`}
-                      onClick={() => triggerUpload(entry.index)}
-                      disabled={uploading.has(entry.index) || !!bulkProgress}
-                      data-testid={`btn-game-upload-${entry.index}`}
-                      title="Upload your own MP3 file"
-                    >
-                      {uploading.has(entry.index) ? "…" : "↑ MP3"}
-                    </button>
-                    {entry.audioUrl && (
-                      <button
-                        className="px-2 py-1 rounded text-xs font-medium border bg-white text-blue-500 border-blue-200 hover:bg-blue-50"
-                        onClick={() => handlePushToVps(entry)}
-                        disabled={pushing.has(entry.index)}
-                        data-testid={`btn-game-push-${entry.index}`}
-                        title="Push to VPS"
-                      >
-                        {pushing.has(entry.index) ? "…" : "↑ VPS"}
-                      </button>
-                    )}
-                    {entry.audioUrl && (
-                      <button
-                        className="px-2 py-1 rounded text-xs font-medium border bg-white text-red-500 border-red-200 hover:bg-red-50"
-                        onClick={() => handleDelete(entry)}
-                        data-testid={`btn-game-delete-${entry.index}`}
-                      >
-                        ✕
-                      </button>
-                    )}
+                    <div className="text-xs text-gray-400 font-mono mt-0.5">{entry.filename}</div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                {/* Action buttons */}
+                <div className="flex gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                  {entry.audioUrl && (
+                    <button
+                      className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${isPlaying ? "bg-indigo-100 text-indigo-700 border-indigo-300" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
+                      onClick={() => handlePlay(entry)}
+                      data-testid={`btn-game-play-${entry.index}`}
+                      title={isPlaying ? "Stop" : "Play"}
+                    >
+                      {isPlaying ? "■ Stop" : "▶ Play"}
+                    </button>
+                  )}
+                  <button
+                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${isGen ? "opacity-50 cursor-not-allowed" : "bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50"}`}
+                    onClick={() => handleGenerate(entry)}
+                    disabled={isGen || !!bulkProgress}
+                    data-testid={`btn-game-gen-${entry.index}`}
+                  >
+                    {isGen ? <span className="flex items-center gap-1"><Loader2 size={10} className="animate-spin" /> Generating…</span> : entry.audioUrl ? "Regenerate" : "Generate"}
+                  </button>
+                  <button
+                    className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${uploading.has(entry.index) ? "opacity-50 cursor-not-allowed" : "bg-white text-violet-600 border-violet-200 hover:bg-violet-50"}`}
+                    onClick={() => triggerUpload(entry.index)}
+                    disabled={uploading.has(entry.index) || !!bulkProgress}
+                    data-testid={`btn-game-upload-${entry.index}`}
+                    title="Upload your own MP3"
+                  >
+                    {uploading.has(entry.index) ? "Uploading…" : "↑ Upload MP3"}
+                  </button>
+                  {entry.audioUrl && (
+                    <button
+                      className="px-2.5 py-1 rounded text-xs font-medium border bg-white text-blue-500 border-blue-200 hover:bg-blue-50 transition-colors"
+                      onClick={() => handlePushToVps(entry)}
+                      disabled={pushing.has(entry.index)}
+                      data-testid={`btn-game-push-${entry.index}`}
+                      title="Push to VPS"
+                    >
+                      {pushing.has(entry.index) ? "Pushing…" : "↑ Push to VPS"}
+                    </button>
+                  )}
+                  {entry.audioUrl && (
+                    <button
+                      className="px-2.5 py-1 rounded text-xs font-medium border bg-white text-red-500 border-red-200 hover:bg-red-50 transition-colors"
+                      onClick={() => handleDelete(entry)}
+                      data-testid={`btn-game-delete-${entry.index}`}
+                      title="Delete audio file"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
 
-        <div className="mt-4 pt-3 border-t border-indigo-100">
-          <div className="text-xs text-indigo-600 space-y-1">
-            <div><span className="font-semibold">How it works:</span> When Roger activates the Busted game, one of these 6 greetings is randomly selected and injected at a random position (2–7 profiles ahead) in the caller's browse queue.</div>
-            <div><span className="font-semibold">Voice:</span> Controlled by <code className="bg-indigo-100 px-1 rounded">ELEVENLABS_VOICE_ID_GAME</code> env var. All greetings use this voice. Entry #6 (Gary) is the seeded game greeting — generated with eleven_v3 emotion tags for best delivery.</div>
-          </div>
-        </div>
-      </div>
+              {/* Script sections */}
+              <div className="space-y-2">
+                <div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Plain Script</div>
+                  <div className="text-sm text-gray-700 leading-relaxed bg-gray-50 border border-gray-100 rounded p-2.5">
+                    {entry.plain}
+                  </div>
+                </div>
+                {entry.v3 && entry.v3 !== entry.plain && (
+                  <div>
+                    <div className="text-xs font-semibold text-indigo-500 uppercase tracking-wider mb-1">ElevenLabs v3 (emotion tags)</div>
+                    <div className="text-xs text-indigo-700 leading-relaxed bg-indigo-50 border border-indigo-100 rounded p-2.5 font-mono whitespace-pre-wrap">
+                      {entry.v3}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }
