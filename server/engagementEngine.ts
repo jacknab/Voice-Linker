@@ -35,7 +35,7 @@
 export const BUST_GAME_AI_USER_ID = "BUST_GAME_AI";
 
 /** Number of AI greeting files available (game_greeting_1.mp3 … game_greeting_N.mp3). */
-export const GAME_AI_GREETING_COUNT = 5;
+export const GAME_AI_GREETING_COUNT = 6;
 
 /** Plain-text + v3 emotion-tagged scripts for each AI greeting file. */
 export const GAME_AI_GREETING_SCRIPTS: { plain: string; v3: string }[] = [
@@ -58,6 +58,10 @@ export const GAME_AI_GREETING_SCRIPTS: { plain: string; v3: string }[] = [
   {
     plain: "What's good. Tony, forty years old. I know what I want and I'm not gonna waste your time. Looking for something genuine, not just to kill time. Leave a message if you're serious.",
     v3: "[quietly] What's good. Tony, forty years old. I know what I want and I'm not gonna waste your time. Looking for something genuine, not just to kill time. Leave a message if you're serious.",
+  },
+  {
+    plain: "well hello there, i would like to show you my pancake com-bob-you-lator. yes! I knew that would raise your eyebrow",
+    v3: "well hello there, i would like to show you my pancake com-bob-you-lator. [excited] yes! I knew that would raise your eyebrow",
   },
 ];
 

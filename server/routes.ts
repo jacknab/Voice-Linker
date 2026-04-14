@@ -1396,6 +1396,13 @@ export async function registerRoutes(
     res.json({ voiceId: id, masked });
   });
 
+  // Return the Busted Game voice ID (ELEVENLABS_VOICE_ID_GAME) masked for display.
+  app.get("/api/admin/game/voice", (_req, res) => {
+    const id = getVoiceIdForGame();
+    const masked = id.length > 8 ? `${id.slice(0, 4)}${"•".repeat(id.length - 8)}${id.slice(-4)}` : id;
+    res.json({ voiceId: id, masked });
+  });
+
   // ─── Admin: Busted Game — AI Caller Greeting Files ────────────────────────
 
   // Returns the status of all GAME_AI_GREETING_COUNT greeting files.

@@ -1614,6 +1614,10 @@ function BustedGameSubTab() {
     queryKey: ["/api/admin/game-greetings"],
   });
 
+  const { data: gameVoice } = useQuery<{ voiceId: string; masked: string }>({
+    queryKey: ["/api/admin/game/voice"],
+  });
+
   async function handleGenerate(entry: GameGreetingEntry) {
     setGenerating(entry.index);
     try {
@@ -1715,7 +1719,7 @@ function BustedGameSubTab() {
   }
 
   const missingCount = entries.filter(e => !e.audioUrl).length;
-  const NAMES = ["Derek", "Marcus", "Jason", "Chris", "Tony"];
+  const NAMES = ["Derek", "Marcus", "Jason", "Chris", "Tony", "Gary"];
 
   return (
     <div className="space-y-4">
@@ -1726,8 +1730,14 @@ function BustedGameSubTab() {
               Busted Game — AI Caller Greetings
             </div>
             <div className="text-xs text-indigo-600 mt-0.5">
-              5 pre-written AI caller greetings used as the Busted game imposter. Generated using eleven_v3.
+              6 pre-written AI caller greetings used as the Busted game imposter. Generated using eleven_v3.
               {missingCount > 0 && <span className="ml-2 font-semibold text-amber-700">{missingCount} missing</span>}
+            </div>
+            <div className="text-xs text-indigo-500 mt-1">
+              Voice: <span className="font-mono bg-indigo-100 px-1 rounded" data-testid="text-game-voice-id">
+                {gameVoice ? gameVoice.masked : "Not configured"}
+              </span>
+              <span className="ml-1 text-indigo-400">(ELEVENLABS_VOICE_ID_GAME)</span>
             </div>
           </div>
           <div className="flex gap-2">
@@ -1830,8 +1840,8 @@ function BustedGameSubTab() {
 
         <div className="mt-4 pt-3 border-t border-indigo-100">
           <div className="text-xs text-indigo-600 space-y-1">
-            <div><span className="font-semibold">How it works:</span> When Roger activates the Busted game, one of these 5 greetings is randomly selected and injected at a random position (2–7 profiles ahead) in the caller's browse queue.</div>
-            <div><span className="font-semibold">Voice:</span> Controlled by <code className="bg-indigo-100 px-1 rounded">ELEVENLABS_VOICE_ID_GAME</code> env var. Set a realistic male voice distinct from Roger for best results.</div>
+            <div><span className="font-semibold">How it works:</span> When Roger activates the Busted game, one of these 6 greetings is randomly selected and injected at a random position (2–7 profiles ahead) in the caller's browse queue.</div>
+            <div><span className="font-semibold">Voice:</span> Controlled by <code className="bg-indigo-100 px-1 rounded">ELEVENLABS_VOICE_ID_GAME</code> env var. All greetings use this voice. Entry #6 (Gary) is the seeded game greeting — generated with eleven_v3 emotion tags for best delivery.</div>
           </div>
         </div>
       </div>
