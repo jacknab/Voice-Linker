@@ -12,7 +12,7 @@ import fs from "fs";
 import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
-import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger, getVoiceIdForGame } from "./elevenlabs";
+import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger, getVoiceIdForGame, getElevenLabsApiKey } from "./elevenlabs";
 import { triggerLocationAudio } from "./audioAutogen";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
@@ -1153,7 +1153,7 @@ export async function registerRoutes(
       const { text, folder } = req.body as { text?: string; folder?: string };
       if (!text?.trim()) return res.status(400).json({ message: "text is required" });
 
-      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const apiKey = getElevenLabsApiKey();
       const validFolders = ["mm", "mw", "mw_m"];
       const resolvedFolder = folder && validFolders.includes(folder.toLowerCase()) ? folder.toLowerCase() : null;
       const voiceId = getVoiceIdForFolder(resolvedFolder);
@@ -1265,7 +1265,7 @@ export async function registerRoutes(
     const folders: ("shared" | "mm" | "mw" | "mw_m")[] = ["shared", "mm", "mw", "mw_m"];
     const uploadFolders = folders.map(checkUploadFolder);
     const fileCounts = Object.fromEntries(folders.map(folder => [folder, countMp3Files(folder)]));
-    const apiKey = process.env.ELEVENLABS_API_KEY;
+      const apiKey = getElevenLabsApiKey();
     let connectionOk: boolean | null = null;
     let connectionMessage = apiKey ? "Not checked" : "ELEVENLABS_API_KEY is not configured";
 
@@ -1275,9 +1275,22 @@ export async function registerRoutes(
           headers: { "xi-api-key": apiKey },
         });
         connectionOk = response.ok;
-        connectionMessage = response.ok
-          ? "ElevenLabs API key is valid"
-          : `ElevenLabs API returned ${response.status}`;
+          if (response.ok) {
+            connectionMessage = "ElevenLabs API key is valid";
+          } else {
+            let upstreamMessage = "";
+            try {
+              const payload = await response.json() as { detail?: unknown };
+              if (typeof payload.detail === "string") {
+                upstreamMessage = payload.detail;
+              } else if (payload.detail && typeof payload.detail === "object" && "message" in payload.detail) {
+                upstreamMessage = String((payload.detail as { message?: unknown }).message ?? "");
+              }
+            } catch {}
+            connectionMessage = upstreamMessage
+              ? `ElevenLabs API returned ${response.status}: ${upstreamMessage}`
+              : `ElevenLabs API returned ${response.status}`;
+          }
       } catch (e: any) {
         connectionOk = false;
         connectionMessage = e?.message ?? "Could not reach ElevenLabs";

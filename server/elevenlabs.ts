@@ -3,6 +3,11 @@ import path from "path";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
+export function getElevenLabsApiKey(): string | null {
+  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+  return apiKey || null;
+}
+
 // Returns the correct ElevenLabs voice ID for a given folder (mm/mw/mw_m) or falls back to the legacy var.
 export function getVoiceIdForFolder(folder?: string | null): string {
   if (folder === "mm") {
@@ -40,7 +45,7 @@ export async function generateTTS(
   voiceIdOverride?: string,
   modelId?: string
 ): Promise<string> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = getElevenLabsApiKey();
   const voiceId = voiceIdOverride ?? getVoiceIdForFolder(subfolder ?? null);
   const model = modelId ?? "eleven_turbo_v2";
 
@@ -110,7 +115,7 @@ export async function generateTTS(
 }
 
 export async function listVoices(): Promise<{ voice_id: string; name: string }[]> {
-  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const apiKey = getElevenLabsApiKey();
   if (!apiKey) throw new Error("ELEVENLABS_API_KEY is not configured");
 
   const response = await fetch("https://api.elevenlabs.io/v1/voices", {
