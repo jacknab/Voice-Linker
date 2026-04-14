@@ -43,8 +43,10 @@ async function buildAll() {
   await viteBuild();
 
   console.log("building admin...");
+  const adminRoot = path.resolve(__dirname, "../malebox-admin");
   await viteBuild({
-    configFile: path.resolve(__dirname, "../malebox-admin/vite.config.ts"),
+    configFile: path.resolve(adminRoot, "vite.config.ts"),
+    root: adminRoot,
   });
 
   console.log("building server...");
