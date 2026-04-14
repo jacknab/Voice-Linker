@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { queryClient, apiRequest, getAdminKey, setAdminKey, clearAdminKey } from "@/lib/queryClient";
+import { queryClient, apiRequest, getAdminKey, setAdminKey, clearAdminKey, getVpsUrl, setVpsUrl, pushAudioToVps } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import {
@@ -1152,6 +1152,8 @@ function RogerSubTab() {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [rogerModel, setRogerModel] = useState<RogerModelId>("eleven_turbo_v2");
+  const [pushing, setPushing] = useState<Set<string>>(new Set());
+  const [pushingAll, setPushingAll] = useState(false);
 
   const { data: prompts = [], isLoading, refetch } = useQuery<RogerPromptEntry[]>({
     queryKey: ["/api/admin/roger/prompts"],
@@ -1239,6 +1241,33 @@ function RogerSubTab() {
     bulkAbortRef.current = false;
     queryClient.invalidateQueries({ queryKey: ["/api/admin/roger/prompts"] });
     if (!cancelled) toast({ title: "Bulk generation complete", description: `${done} files generated.` });
+  }
+
+  async function handlePushToVps(entry: RogerPromptEntry) {
+    if (!entry.audioUrl || !entry.audioFilename) return;
+    if (!getVpsUrl()) { toast({ title: "VPS URL not set", description: "Enter your VPS URL in the config bar above.", variant: "destructive" }); return; }
+    setPushing(prev => new Set(prev).add(entry.id));
+    try {
+      await pushAudioToVps(entry.audioUrl, entry.audioFilename);
+      toast({ title: `Pushed: ${entry.id}`, description: "Audio sent to VPS." });
+    } catch (e: any) {
+      toast({ title: "Push failed", description: e.message, variant: "destructive" });
+    } finally {
+      setPushing(prev => { const s = new Set(prev); s.delete(entry.id); return s; });
+    }
+  }
+
+  async function handlePushAllToVps() {
+    if (!getVpsUrl()) { toast({ title: "VPS URL not set", description: "Enter your VPS URL in the config bar above.", variant: "destructive" }); return; }
+    const withAudio = prompts.filter(p => p.audioUrl && p.audioFilename);
+    if (withAudio.length === 0) { toast({ title: "No generated audio to push" }); return; }
+    setPushingAll(true);
+    let ok = 0;
+    for (const p of withAudio) {
+      try { await pushAudioToVps(p.audioUrl!, p.audioFilename!); ok++; } catch {}
+    }
+    setPushingAll(false);
+    toast({ title: `Pushed ${ok}/${withAudio.length} Roger files to VPS` });
   }
 
   const moodFilteredPrompts = prompts.filter(p => {
@@ -1353,6 +1382,16 @@ function RogerSubTab() {
             ) : (
               <><Wand2 size={11} /> Generate Missing ({prompts.length - generated})</>
             )}
+          </button>
+          <button
+            data-testid="btn-roger-push-all"
+            onClick={handlePushAllToVps}
+            disabled={pushingAll || generated === 0}
+            className={C.btnGhost + " text-xs"}
+            title="Push all generated Roger audio to VPS"
+          >
+            {pushingAll ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+            Push All to VPS
           </button>
           <button
             data-testid="btn-roger-refresh"
@@ -1489,6 +1528,15 @@ function RogerSubTab() {
                               {isPlaying ? <Pause size={10} /> : <Play size={10} />}
                             </button>
                             <button
+                              data-testid={`btn-roger-push-${entry.id}`}
+                              onClick={() => handlePushToVps(entry)}
+                              disabled={pushing.has(entry.id)}
+                              title="Push audio to VPS"
+                              className={C.btnGhost + " text-[10px]"}
+                            >
+                              {pushing.has(entry.id) ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                            </button>
+                            <button
                               data-testid={`btn-roger-delete-${entry.id}`}
                               onClick={() => entry.audioFilename && deleteMutation.mutate(entry.audioFilename)}
                               title="Delete audio file"
@@ -1534,6 +1582,8 @@ function BustedGameSubTab() {
   const bulkAbortRef = useRef(false);
   const [playingIdx, setPlayingIdx] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [pushing, setPushing] = useState<Set<number>>(new Set());
+  const [pushingAll, setPushingAll] = useState(false);
 
   const { data: entries = [], isLoading, refetch } = useQuery<GameGreetingEntry[]>({
     queryKey: ["/api/admin/game-greetings"],
@@ -1612,6 +1662,33 @@ function BustedGameSubTab() {
     setPlayingIdx(entry.index);
   }
 
+  async function handlePushToVps(entry: GameGreetingEntry) {
+    if (!entry.audioUrl) return;
+    if (!getVpsUrl()) { toast({ title: "VPS URL not set", description: "Enter your VPS URL in the config bar above.", variant: "destructive" }); return; }
+    setPushing(prev => new Set(prev).add(entry.index));
+    try {
+      await pushAudioToVps(entry.audioUrl, entry.filename);
+      toast({ title: `Pushed: ${entry.filename}`, description: "Audio sent to VPS." });
+    } catch (e: any) {
+      toast({ title: "Push failed", description: e.message, variant: "destructive" });
+    } finally {
+      setPushing(prev => { const s = new Set(prev); s.delete(entry.index); return s; });
+    }
+  }
+
+  async function handlePushAllToVps() {
+    if (!getVpsUrl()) { toast({ title: "VPS URL not set", description: "Enter your VPS URL in the config bar above.", variant: "destructive" }); return; }
+    const withAudio = entries.filter(e => e.audioUrl);
+    if (withAudio.length === 0) { toast({ title: "No generated audio to push" }); return; }
+    setPushingAll(true);
+    let ok = 0;
+    for (const e of withAudio) {
+      try { await pushAudioToVps(e.audioUrl!, e.filename); ok++; } catch {}
+    }
+    setPushingAll(false);
+    toast({ title: `Pushed ${ok}/${withAudio.length} game greeting files to VPS` });
+  }
+
   const missingCount = entries.filter(e => !e.audioUrl).length;
   const NAMES = ["Derek", "Marcus", "Jason", "Chris", "Tony"];
 
@@ -1635,14 +1712,26 @@ function BustedGameSubTab() {
                 <button className={`${C.btnAmber} text-xs`} onClick={() => { bulkAbortRef.current = true; }} data-testid="btn-game-cancel-bulk">Cancel</button>
               </>
             ) : (
-              <button
-                className={`${C.btnAmber} text-xs`}
-                onClick={handleGenerateAll}
-                disabled={missingCount === 0}
-                data-testid="btn-game-generate-all"
-              >
-                Generate Missing
-              </button>
+              <>
+                <button
+                  className={`${C.btnAmber} text-xs`}
+                  onClick={handleGenerateAll}
+                  disabled={missingCount === 0}
+                  data-testid="btn-game-generate-all"
+                >
+                  Generate Missing
+                </button>
+                <button
+                  className={`${C.btnGhost} text-xs`}
+                  onClick={handlePushAllToVps}
+                  disabled={pushingAll}
+                  data-testid="btn-game-push-all"
+                  title="Push all generated game greetings to VPS"
+                >
+                  {pushingAll ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                  Push All to VPS
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -1687,6 +1776,17 @@ function BustedGameSubTab() {
                     >
                       {isGen ? "…" : entry.audioUrl ? "Regen" : "Generate"}
                     </button>
+                    {entry.audioUrl && (
+                      <button
+                        className="px-2 py-1 rounded text-xs font-medium border bg-white text-blue-500 border-blue-200 hover:bg-blue-50"
+                        onClick={() => handlePushToVps(entry)}
+                        disabled={pushing.has(entry.index)}
+                        data-testid={`btn-game-push-${entry.index}`}
+                        title="Push to VPS"
+                      >
+                        {pushing.has(entry.index) ? "…" : "↑ VPS"}
+                      </button>
+                    )}
                     {entry.audioUrl && (
                       <button
                         className="px-2 py-1 rounded text-xs font-medium border bg-white text-red-500 border-red-200 hover:bg-red-50"
@@ -1747,6 +1847,9 @@ function TTSTab() {
   const generateAllAbortRef = useRef(false);
   const [playingPromptKey, setPlayingPromptKey] = useState<string | null>(null);
   const promptAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [pushingPrompt, setPushingPrompt] = useState<Set<string>>(new Set());
+  const [pushingAllPrompts, setPushingAllPrompts] = useState(false);
+  const [vpsUrlInput, setVpsUrlInput] = useState<string>(() => getVpsUrl() || "");
 
   // Load saved prompt texts from server on mount
   const { data: savedPromptTexts } = useQuery<Record<string, string>>({
@@ -2080,28 +2183,74 @@ function TTSTab() {
   const generatedCount = activePrompts.filter(p => promptExists(p.filename)).length;
   const missingCount = activePrompts.length - generatedCount;
 
+  async function handlePushPromptToVps(filename: string, folder: string) {
+    const url = `/uploads/${folder}/${filename}`;
+    const key = `${folder}:${filename}`;
+    if (!getVpsUrl()) { toast({ title: "VPS URL not set", description: "Enter your VPS URL in the config bar above.", variant: "destructive" }); return; }
+    setPushingPrompt(prev => new Set(prev).add(key));
+    try {
+      await pushAudioToVps(url, filename, folder);
+      toast({ title: `Pushed: ${filename}`, description: "Audio sent to VPS." });
+    } catch (e: any) {
+      toast({ title: "Push failed", description: e.message, variant: "destructive" });
+    } finally {
+      setPushingPrompt(prev => { const s = new Set(prev); s.delete(key); return s; });
+    }
+  }
+
+  async function handlePushAllPromptsToVps() {
+    if (!getVpsUrl()) { toast({ title: "VPS URL not set", description: "Enter your VPS URL in the config bar above.", variant: "destructive" }); return; }
+    const withAudio = activePrompts.filter(p => promptExists(p.filename));
+    if (withAudio.length === 0) { toast({ title: "No generated audio to push" }); return; }
+    setPushingAllPrompts(true);
+    let ok = 0;
+    for (const p of withAudio) {
+      try { await pushAudioToVps(`/uploads/${categoryFolder}/${p.filename}`, p.filename, categoryFolder); ok++; } catch {}
+    }
+    setPushingAllPrompts(false);
+    toast({ title: `Pushed ${ok}/${withAudio.length} ${categoryFolder.toUpperCase()} prompts to VPS` });
+  }
+
   const subTabBar = (
-    <div className="flex border-b border-gray-200 gap-1 mb-6">
-      {([
-        { id: "mm",    label: "MM Prompts" },
-        { id: "mw",    label: "MW Female Voice" },
-        { id: "mw_m",  label: "MW Male Voice" },
-        { id: "roger", label: "Roger" },
-        { id: "game",  label: "Busted Game" },
-      ] as const).map(tab => (
-        <button
-          key={tab.id}
-          data-testid={`btn-audio-gen-tab-${tab.id}`}
-          onClick={() => setAudioGenTab(tab.id)}
-          className={`px-4 py-2 text-sm font-mono font-semibold border-b-2 -mb-px transition-colors ${
-            audioGenTab === tab.id
-              ? "border-[#f5a623] text-[#f5a623]"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          {tab.label}
-        </button>
-      ))}
+    <div className="space-y-0">
+      <div className="flex border-b border-gray-200 gap-1">
+        {([
+          { id: "mm",    label: "MM Prompts" },
+          { id: "mw",    label: "MW Female Voice" },
+          { id: "mw_m",  label: "MW Male Voice" },
+          { id: "roger", label: "Roger" },
+          { id: "game",  label: "Busted Game" },
+        ] as const).map(tab => (
+          <button
+            key={tab.id}
+            data-testid={`btn-audio-gen-tab-${tab.id}`}
+            onClick={() => setAudioGenTab(tab.id)}
+            className={`px-4 py-2 text-sm font-mono font-semibold border-b-2 -mb-px transition-colors ${
+              audioGenTab === tab.id
+                ? "border-[#f5a623] text-[#f5a623]"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-t-0 border-blue-200 rounded-b text-xs mb-6">
+        <Globe size={12} className="text-blue-400 shrink-0" />
+        <span className="text-blue-700 font-mono font-semibold shrink-0">VPS URL:</span>
+        <input
+          data-testid="input-vps-url"
+          type="text"
+          value={vpsUrlInput}
+          onChange={e => setVpsUrlInput(e.target.value)}
+          onBlur={() => { const v = vpsUrlInput.trim(); if (v) setVpsUrl(v); }}
+          placeholder="https://your-vps.com  (required for Push to VPS)"
+          className="flex-1 bg-white border border-blue-200 rounded px-2 py-0.5 font-mono text-xs outline-none focus:border-blue-400"
+        />
+        {vpsUrlInput.trim() && (
+          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-bold shrink-0">READY</span>
+        )}
+      </div>
     </div>
   );
 
@@ -2466,6 +2615,16 @@ function TTSTab() {
             >
               <Wand2 size={11} /> Regen All
             </button>
+            <button
+              data-testid="btn-push-all-prompts"
+              onClick={handlePushAllPromptsToVps}
+              disabled={pushingAllPrompts}
+              className={C.btnGhost + " text-xs"}
+              title="Push all generated prompts to VPS"
+            >
+              {pushingAllPrompts ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+              Push All to VPS
+            </button>
           </div>
         </div>
 
@@ -2582,6 +2741,17 @@ function TTSTab() {
                             className={C.btnGhost + " text-[10px]"}
                           >
                             {isPlaying ? <Pause size={10} /> : <Play size={10} />}
+                          </button>
+                        )}
+                        {exists && (
+                          <button
+                            data-testid={`btn-push-prompt-${prompt.filename}`}
+                            onClick={() => handlePushPromptToVps(prompt.filename, categoryFolder)}
+                            disabled={pushingPrompt.has(`${categoryFolder}:${prompt.filename}`)}
+                            title="Push audio to VPS"
+                            className={C.btnGhost + " text-[10px]"}
+                          >
+                            {pushingPrompt.has(`${categoryFolder}:${prompt.filename}`) ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
                           </button>
                         )}
                         {exists && (

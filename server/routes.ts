@@ -455,6 +455,29 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Receive audio file pushed from local admin to VPS ---
+  app.post("/api/admin/receive-audio", upload.single("audio"), async (req, res) => {
+    try {
+      const subfolder = (req.body?.subfolder as string)?.trim() || "";
+      const filename = (req.body?.filename as string)?.trim();
+      if (!filename) return res.status(400).json({ message: "filename is required" });
+      if (!req.file) return res.status(400).json({ message: "No audio file uploaded" });
+
+      const destDir = subfolder ? path.join(UPLOADS_DIR, subfolder) : UPLOADS_DIR;
+      if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+
+      const destPath = path.join(destDir, filename);
+      fs.renameSync(req.file.path, destPath);
+
+      const url = subfolder ? `/uploads/${subfolder}/${filename}` : `/uploads/${filename}`;
+      console.log(`[admin] receive-audio: saved ${filename}${subfolder ? " in " + subfolder : ""}`);
+      res.json({ success: true, url });
+    } catch (e: any) {
+      console.error("[admin] receive-audio error:", e);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   // --- Admin: Upload MP3 to create/replace a caller's profile greeting ---
   app.post("/api/admin/profiles/upload", upload.single("audio"), async (req, res) => {
     try {
