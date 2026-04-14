@@ -1,14 +1,43 @@
 import { type Express } from "express";
-import { createServer as createViteServer, createLogger } from "vite";
+import { createServer as createViteServer, createLogger, build as viteBuild } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
-import fs from "fs";
 import path from "path";
+import fs from "fs";
+import express from "express";
 import { nanoid } from "nanoid";
 
 const viteLogger = createLogger();
 
 export async function setupVite(server: Server, app: Express) {
+  // ── Build admin app (once on startup, served statically) ─────────────────
+  const adminDistPath = path.resolve(import.meta.dirname, "..", "dist", "admin");
+  const adminConfigPath = path.resolve(
+    import.meta.dirname,
+    "..",
+    "malebox-admin",
+    "vite.config.ts",
+  );
+
+  if (!fs.existsSync(adminDistPath)) {
+    console.log("[admin] Building admin app for dev server…");
+    try {
+      const adminRoot = path.resolve(import.meta.dirname, "..", "malebox-admin");
+      await viteBuild({ configFile: adminConfigPath, root: adminRoot, logLevel: "warn" });
+      console.log("[admin] Admin app built successfully.");
+    } catch (e) {
+      console.error("[admin] Admin build failed:", e);
+    }
+  }
+
+  if (fs.existsSync(adminDistPath)) {
+    app.use("/backstage", express.static(adminDistPath));
+    app.use(/^\/backstage(\/.*)?$/, (_req, res) => {
+      res.sendFile(path.resolve(adminDistPath, "index.html"));
+    });
+  }
+
+  // ── Main client Vite instance ──────────────────────────────────────────────
   const serverOptions = {
     middlewareMode: true,
     hmr: { server, path: "/vite-hmr" },
@@ -42,7 +71,6 @@ export async function setupVite(server: Server, app: Express) {
         "index.html",
       );
 
-      // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { getConfig, resolveUrl } from "../config";
+import { resolveUrl } from "../config";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -2708,13 +2708,13 @@ function MembershipsTab() {
               data-testid="text-stripe-webhook-url"
               className="flex-1 font-mono text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-gray-700 break-all select-all"
             >
-              {getConfig()?.serverUrl ?? "https://your-server.com"}/api/stripe/webhook
+              {window.location.origin}/api/stripe/webhook
             </code>
             <button
               type="button"
               data-testid="btn-copy-stripe-webhook"
               onClick={() => {
-                const url = `${getConfig()?.serverUrl ?? ""}/api/stripe/webhook`;
+                const url = `${window.location.origin}/api/stripe/webhook`;
                 navigator.clipboard.writeText(url);
                 toast({ title: "Webhook URL copied to clipboard" });
               }}

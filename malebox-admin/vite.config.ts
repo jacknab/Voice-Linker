@@ -4,12 +4,14 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  base: "/backstage/",
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  server: {
-    open: true,
+  build: {
+    outDir: "../dist/admin",
+    emptyOutDir: true,
   },
 });

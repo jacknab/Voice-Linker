@@ -1976,6 +1976,11 @@ export async function registerRoutes(
     }
   });
 
+  // ── Admin logout (clears any server-side session state) ─────────────────────
+  app.post("/api/admin/logout", (_req, res) => {
+    res.json({ ok: true });
+  });
+
   // ─── PayPal Standard IPN ────────────────────────────────────────────────────
   // In-memory set to prevent double-crediting from duplicate IPN deliveries
   const processedIpnTxns = new Set<string>();

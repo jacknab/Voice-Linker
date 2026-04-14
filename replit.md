@@ -6,7 +6,7 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 
 ## Architecture
 
-- **Frontend**: React + Vite + TailwindCSS + shadcn/ui (admin dashboard, public membership page, web auth)
+- **Frontend**: React + Vite + TailwindCSS + shadcn/ui (admin dashboard at `/backstage`, public membership page, web auth)
 - **Backend**: Express (TypeScript) + Drizzle ORM + PostgreSQL
 - **Voice**: Twilio TwiML IVR system
 - **Payments**: Stripe (web checkout + IVR card entry) + PayPal Standard (web checkout via IPN)
@@ -14,9 +14,10 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 ## Replit Runtime
 
 - Development workflow: `npm run dev`, serving the Express/Vite app on port 5000.
-- Build command: `npm run build`.
+- Build command: `npm run build` — builds both the main client app AND the admin app (`malebox-admin/` → `dist/admin`).
 - Production run command: `node ./dist/index.cjs`.
 - Database schema is managed with Drizzle using `drizzle.config.ts`; sync with `npm run db:push`.
+- Admin console: `/backstage` — pre-built into `dist/admin` on first dev startup. To force-rebuild after admin code changes, delete `dist/admin/` and restart the dev server.
 
 ## Roger Mood + Attention Drain Engine
 
@@ -67,7 +68,7 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - `scripts/seed-membership.ts` — Seeds Bronze/Silver/Gold products in Stripe
 - `client/src/pages/Landing.tsx` — Public-facing customer marketing page (`/` route)
 - `client/src/pages/Home.tsx` — System status & Twilio setup page (`/setup` route)
-- `client/src/pages/Admin.tsx` — Full admin dashboard (`/admin` route)
+- `malebox-admin/` — Standalone admin console app, served at `/backstage` (built into `dist/admin` on startup; key-only login via `ADMIN_SECRET_KEY`)
 - `client/src/pages/Membership.tsx` — Public web membership purchase page (`/membership` route)
 - `client/src/pages/MembershipSuccess.tsx` — Post-purchase confirmation page (`/membership/success` route)
 - `client/src/pages/Dashboard.tsx` — Logged-in web user dashboard (link phone, view plan)

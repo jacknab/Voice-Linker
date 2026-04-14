@@ -1,6 +1,10 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -37,6 +41,11 @@ async function buildAll() {
 
   console.log("building client...");
   await viteBuild();
+
+  console.log("building admin...");
+  await viteBuild({
+    configFile: path.resolve(__dirname, "../malebox-admin/vite.config.ts"),
+  });
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));

@@ -10,6 +10,16 @@ export function serveStatic(app: Express) {
     );
   }
 
+  // ── Admin app at /backstage ────────────────────────────────────────────────
+  const adminDistPath = path.resolve(__dirname, "admin");
+  if (fs.existsSync(adminDistPath)) {
+    app.use("/backstage", express.static(adminDistPath));
+    app.use(/^\/backstage(\/.*)?$/, (_req, res) => {
+      res.sendFile(path.resolve(adminDistPath, "index.html"));
+    });
+  }
+
+  // ── Main client app ────────────────────────────────────────────────────────
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist

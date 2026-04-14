@@ -4,26 +4,14 @@ import "./index.css";
 import App from "./App";
 import { getConfig } from "./config";
 
-// ── Patch global fetch to inject server URL prefix + admin secret key ────────
-// This means Admin.tsx needs zero changes — all its fetch('/api/...') calls
-// automatically hit the configured production server with the right auth header.
+// ── Patch global fetch to inject admin secret key header ─────────────────────
+// Admin is now served from the same origin as the backend, so relative paths
+// work as-is. We only need to inject the X-Admin-Key header on every request.
 const _originalFetch = window.fetch.bind(window);
 
 window.fetch = function (input, init) {
   const config = getConfig();
   if (!config) return _originalFetch(input, init);
-
-  let url =
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : (input as Request).url;
-
-  // Prefix relative API paths with the configured server URL
-  if (url.startsWith("/")) {
-    url = config.serverUrl + url;
-  }
 
   // Inject the admin secret key header on every request
   const headers = new Headers(
@@ -37,9 +25,9 @@ window.fetch = function (input, init) {
   const newInit: RequestInit = { ...init, headers };
 
   if (typeof input === "string" || input instanceof URL) {
-    return _originalFetch(url, newInit);
+    return _originalFetch(input, newInit);
   } else {
-    return _originalFetch(new Request(url, input), newInit);
+    return _originalFetch(new Request((input as Request).url, input), newInit);
   }
 };
 
