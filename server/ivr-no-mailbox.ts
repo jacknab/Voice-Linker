@@ -875,7 +875,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       timeout: 10,
     });
     playPrompt(gather, req, "gender_select.mp3",
-      "Guys, press one to talk to women. Women, press two to talk to guys.");
+      "Guys, press one to talk to women. Women, press three to talk to guys.");
     // No input / timeout → loop back and ask again
     twiml.redirect("/voice/gender-select");
     res.type("text/xml");
@@ -894,7 +894,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.error("[voice] gender-select: failed to set gender=male", err)
       );
       twiml.redirect("/voice/membership-entry");
-    } else if (digit === "2") {
+    } else if (digit === "3") {
       // Female caller — always free on MW systems, go straight to the male box
       console.log(`[voice] gender-select: female caller callSid=${callSid} — bypassing membership`);
       femaleCallers.add(callSid);

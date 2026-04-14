@@ -39,7 +39,7 @@ const MAX_REDIRECTS = 15;
 const PROMPT_TEXTS: Record<string, string> = {
   "system_greeting.mp3":          "Welcome to the Male Box. This service assumes no responsibility for personal meetings.",
   "disclaimer.mp3":               "(disclaimer — content policy audio)",
-  "gender_select.mp3":            "Guys, press one to talk to women. Women, press two to talk to guys.",
+  "gender_select.mp3":            "Guys, press one to talk to women. Women, press three to talk to guys.",
   "free_mode_announcement.mp3":   "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now.",
   "membership_entry_prompt.mp3":  "If you have a membership card, enter your card number now. Otherwise press the pound key.",
   "main_menu.mp3":                "Main menu. To enter the male box press star. For mailboxes and personal ads press 1. To add time or purchase a membership press 2. For information on membership prices press 3. To manage your membership press 4. For customer service press 0. To repeat these choices press 9.",

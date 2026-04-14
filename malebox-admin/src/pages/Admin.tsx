@@ -1024,7 +1024,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
 // Derived from SYSTEM_PROMPTS with gender-appropriate text overrides and MW-exclusive prompts.
 const MW_SYSTEM_PROMPTS: typeof SYSTEM_PROMPTS = [
   // MW-exclusive: gender gate heard at the very start of every call
-  { group: "entry", filename: "gender_select.mp3", label: "Gender Selection (MW Exclusive)", text: "Guys, press one to talk to women. Women, press two to talk to guys." },
+  { group: "entry", filename: "gender_select.mp3", label: "Gender Selection (MW Exclusive)", text: "Guys, press one to talk to women. Women, press three to talk to guys." },
 
   // All MM prompts in order, with MW-specific text overrides applied
   ...SYSTEM_PROMPTS.flatMap(p => {
