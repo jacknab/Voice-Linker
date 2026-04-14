@@ -133,83 +133,33 @@ export function SiteNav({ siteName, onMenuToggle, mobileOpen }: {
   );
 }
 
-export function SiteFooter({ siteName, footerBlurb, csPhone, csEmail }: {
+export function SiteFooter({ siteName, csPhone, csEmail }: {
   siteName: string;
-  footerBlurb: string;
+  footerBlurb?: string;
   csPhone: string | null;
   csEmail: string | null;
 }) {
-  const cols: { heading: string; links: FooterLink[] }[] = [
-    {
-      heading: "Account",
-      links: [
-        { label: "Buy Time", href: "/membership" },
-        { label: "Free Trial", href: "/membership" },
-        { label: "Memberships", href: "/membership" },
-      ],
-    },
-    {
-      heading: "Help",
-      links: [
-        { label: "Customer Support", href: "/support" },
-        { label: "FAQ", href: "/faq" },
-        { label: "Keypad Tips", href: "/keypad-tips" },
-        { label: "Cities Coverage", href: "/cities" },
-        { label: "Safety Tips", href: "/safety-tips" },
-        ...(csPhone ? [{ label: `Call: ${formatPhone(csPhone)}`, href: `tel:${csPhone.replace(/\D/g, "")}` }] : []),
-        ...(csEmail ? [{ label: `Email: ${csEmail}`, href: `mailto:${csEmail}` }] : []),
-      ],
-    },
-    {
-      heading: "Company",
-      links: [
-        { label: "About Us", href: "/about" },
-        { label: "Privacy Policy", href: "/privacy-policy" },
-        { label: "Terms of Use", href: "/terms" },
-      ],
-    },
+  const footerLinks: FooterLink[] = [
+    { label: "Home", href: "/" },
+    { label: "Privacy Policy", href: "/privacy-policy" },
+    { label: "Terms of Service", href: "/terms" },
+    ...(csPhone ? [{ label: `Call: ${formatPhone(csPhone)}`, href: `tel:${csPhone.replace(/\D/g, "")}` }] : []),
+    ...(csEmail ? [{ label: `Email: ${csEmail}`, href: `mailto:${csEmail}` }] : []),
   ];
 
   return (
-    <footer style={{ background: "#080808", borderTop: "1px solid #1a1a1a", padding: "3rem 1.5rem 2rem" }}>
-      <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "2rem", marginBottom: "2.5rem" }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-              <MaleBoxLogo size={30} />
-              <span style={{ fontSize: "1rem" }}><MaleBoxWordmark /></span>
-            </div>
-            <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.3)", lineHeight: 1.65 }}>{footerBlurb}</p>
-          </div>
-          {cols.map(col => (
-            <div key={col.heading}>
-              <h4 style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", marginBottom: "0.75rem" }}>
-                {col.heading}
-              </h4>
-              <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.45rem" }}>
-                {col.links.map(link => (
-                  <li key={link.label}>
-                    <a href={link.href}
-                      style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.45)", textDecoration: "none", transition: "color 0.15s" }}
-                      onMouseEnter={e => (e.currentTarget.style.color = "#fff")}
-                      onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.45)")}>
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-        <div style={{ borderTop: "1px solid #1a1a1a", paddingTop: "1.5rem", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-          <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.2)" }}>
-            © {new Date().getFullYear()} {siteName}. All Rights Reserved.
-          </p>
-          <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.2)" }}>
-            All callers must be 18 years or older.
-          </p>
-        </div>
-      </div>
+    <footer style={{ textAlign: "center", padding: "24px", fontSize: "0.78rem", color: "rgba(255,255,255,0.16)", borderTop: "1px solid rgba(255,255,255,0.05)", background: "#080808" }}>
+      <p>© {new Date().getFullYear()} {siteName}</p>
+      <nav aria-label="Footer links" style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "18px", marginTop: "8px" }}>
+        {footerLinks.map(link => (
+          <a key={link.label} href={link.href}
+            style={{ color: "rgba(255,255,255,0.26)", textDecoration: "none", transition: "color 0.15s" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.5)")}
+            onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.26)")}>
+            {link.label}
+          </a>
+        ))}
+      </nav>
     </footer>
   );
 }
