@@ -954,13 +954,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       numDigits: 5,
       finishOnKey: "#",
       action: "/voice/handle-membership-entry",
-      timeout: 20,
-      actionOnEmptyResult: true,
+      timeout: 60,
     });
     playPrompt(gather, req, "membership_entry_prompt.mp3",
       "If you have a membership card, enter your card number now. Otherwise press the pound key.");
-    // No input / timeout → skip membership and continue
-    twiml.redirect("/voice/entry-check");
+    playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
+    twiml.hangup();
     res.type("text/xml");
     res.send(twiml.toString());
   });
