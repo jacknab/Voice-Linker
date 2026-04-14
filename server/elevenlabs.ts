@@ -4,7 +4,14 @@ import path from "path";
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
 export function getElevenLabsApiKey(): string | null {
-  const apiKey = process.env.ELEVENLABS_API_KEY?.trim();
+  let apiKey = process.env.ELEVENLABS_API_KEY?.trim().replace(/[\u200B-\u200D\uFEFF]/g, "");
+  if (
+    apiKey &&
+    ((apiKey.startsWith('"') && apiKey.endsWith('"')) ||
+      (apiKey.startsWith("'") && apiKey.endsWith("'")))
+  ) {
+    apiKey = apiKey.slice(1, -1).trim();
+  }
   return apiKey || null;
 }
 

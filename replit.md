@@ -18,6 +18,7 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - Production run command: `node ./dist/index.cjs`.
 - Database schema is managed with Drizzle using `drizzle.config.ts`; sync with `npm run db:push`.
 - Admin console: `/backstage` — pre-built into `dist/admin` on first dev startup. To force-rebuild after admin code changes, delete `dist/admin/` and restart the dev server.
+- ElevenLabs keys are normalized server-side before API calls; the VPS PM2 config also strips surrounding quotes/hidden characters from `.env` values to avoid false 401 invalid-key responses.
 
 ## Roger Mood + Attention Drain Engine
 

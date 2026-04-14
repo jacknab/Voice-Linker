@@ -11,7 +11,14 @@ function parseEnvFile(filePath) {
       if (trimmed && !trimmed.startsWith('#')) {
         const [key, ...valueParts] = trimmed.split('=');
         if (key && valueParts.length > 0) {
-          env[key.trim()] = valueParts.join('=').trim();
+          let value = valueParts.join('=').trim();
+          if (
+            (value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith("'") && value.endsWith("'"))
+          ) {
+            value = value.slice(1, -1);
+          }
+          env[key.trim()] = value.trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
         }
       }
     });
@@ -41,7 +48,9 @@ module.exports = {
         ELEVENLABS_API_KEY: envVars.ELEVENLABS_API_KEY || '',
         ELEVENLABS_VOICE_ID_ROGER: envVars.ELEVENLABS_VOICE_ID_ROGER || '',
         ELEVENLABS_VOICE_ID_MW: envVars.ELEVENLABS_VOICE_ID_MW || '',
-        ELEVENLABS_VOICE_ID_MM: envVars.ELEVENLABS_VOICE_ID_MM || ''
+        ELEVENLABS_VOICE_ID_MM: envVars.ELEVENLABS_VOICE_ID_MM || '',
+        ELEVENLABS_VOICE_ID_MW_M: envVars.ELEVENLABS_VOICE_ID_MW_M || '',
+        ELEVENLABS_VOICE_ID_GAME: envVars.ELEVENLABS_VOICE_ID_GAME || ''
       },
       error_file: '/apps/chatline/logs/pm2-error.log',
       out_file: '/apps/chatline/logs/pm2-out.log',
