@@ -1883,19 +1883,17 @@ function TTSTab() {
 
   useEffect(() => {
     if (savedPromptTexts && !initialized) {
-      // Migrate old bare-filename keys (e.g. "main_menu.mp3") to compound keys
-      // (e.g. "mm:main_menu.mp3") so each folder has its own independent text.
-      // Keys that already contain ":" are already in the new format and pass through as-is.
       const migrated: Record<string, string> = {};
       for (const [k, v] of Object.entries(savedPromptTexts)) {
         if (k.includes(":")) {
           migrated[k] = v;
-        } else {
-          // Copy old shared value into all three folder variants so existing saved
-          // overrides are not silently lost after the migration.
-          migrated[`mm:${k}`]    = v;
-          migrated[`mw:${k}`]    = v;
-          migrated[`mw_m:${k}`]  = v;
+        }
+      }
+      for (const [k, v] of Object.entries(savedPromptTexts)) {
+        if (!k.includes(":")) {
+          if (migrated[`mm:${k}`] === undefined) migrated[`mm:${k}`] = v;
+          if (migrated[`mw:${k}`] === undefined) migrated[`mw:${k}`] = v;
+          if (migrated[`mw_m:${k}`] === undefined) migrated[`mw_m:${k}`] = v;
         }
       }
       setEditingText(migrated);
@@ -2072,7 +2070,7 @@ function TTSTab() {
     let failure: { label: string; message: string } | null = null;
     for (const prompt of prompts) {
       if (generateAllAbortRef.current) break;
-      const text = editingText[`${categoryFolder}:${prompt.filename}`] ?? editingText[prompt.filename] ?? prompt.text;
+      const text = editingText[`${categoryFolder}:${prompt.filename}`] ?? prompt.text;
       const key = `${categoryFolder}:${prompt.filename}`;
       setGenerating(key);
       setGenerateAllProgress({ done: successCount, total: prompts.length, currentLabel: prompt.label });
@@ -2146,7 +2144,7 @@ function TTSTab() {
     let failure: { label: string; message: string } | null = null;
     for (const prompt of missing) {
       if (generateAllAbortRef.current) break;
-      const text = editingText[`${categoryFolder}:${prompt.filename}`] ?? editingText[prompt.filename] ?? prompt.text;
+      const text = editingText[`${categoryFolder}:${prompt.filename}`] ?? prompt.text;
       if (!text.trim()) { skippedCount++; continue; }
       const key = `${categoryFolder}:${prompt.filename}`;
       setGenerating(key);
@@ -2831,7 +2829,7 @@ function TTSTab() {
                 const isGen = generating === `${categoryFolder}:${prompt.filename}`;
                 const existingFile = getFileIn(categoryFolder, prompt.filename) ?? getFileIn("shared", prompt.filename);
                 const promptKey = `${categoryFolder}:${prompt.filename}`;
-                const currentText = editingText[promptKey] ?? editingText[prompt.filename] ?? prompt.text;
+                const currentText = editingText[promptKey] ?? prompt.text;
                 const isDirty = dirtyKeys.has(promptKey);
                 const isPlaying = playingPromptKey === prompt.filename;
                 return (

@@ -404,6 +404,14 @@ The Audio Gen tab includes a health-check card backed by `GET /api/admin/tts/hea
 
 Use this panel on the VPS-hosted admin page to confirm audio generation is ready before running bulk generation.
 
+### Per-Folder Prompt Text Overrides
+System prompt text edits are stored per audio folder using compound keys:
+- `mm:<filename>.mp3`
+- `mw:<filename>.mp3`
+- `mw_m:<filename>.mp3`
+
+This prevents editing a prompt in the MM tab from changing the text shown/generated in MW Female Voice or MW Male Voice. Older bare filename overrides are migrated into folder-specific keys only when a folder-specific value does not already exist.
+
 ### Custom Audio File
 Manually generate a single named file outside the system prompts list. Enter a filename (`.mp3` is appended automatically) and the text to speak, then click **Generate**. Files are saved to the selected category folder.
 
