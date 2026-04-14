@@ -1279,17 +1279,52 @@ export async function registerRoutes(
             connectionMessage = "ElevenLabs API key is valid";
           } else {
             let upstreamMessage = "";
+          let upstreamStatus = "";
             try {
-              const payload = await response.json() as { detail?: unknown };
+            const payload = await response.json() as { detail?: unknown };
               if (typeof payload.detail === "string") {
                 upstreamMessage = payload.detail;
-              } else if (payload.detail && typeof payload.detail === "object" && "message" in payload.detail) {
-                upstreamMessage = String((payload.detail as { message?: unknown }).message ?? "");
+            } else if (payload.detail && typeof payload.detail === "object") {
+              upstreamMessage = "message" in payload.detail ? String((payload.detail as { message?: unknown }).message ?? "") : "";
+              upstreamStatus = "status" in payload.detail ? String((payload.detail as { status?: unknown }).status ?? "") : "";
               }
             } catch {}
+          if (response.status === 401 && upstreamStatus === "missing_permissions" && upstreamMessage.includes("user_read")) {
+            const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${getVoiceIdForFolder("mm")}`, {
+              method: "POST",
+              headers: {
+                "xi-api-key": apiKey,
+                "Content-Type": "application/json",
+                Accept: "audio/mpeg",
+              },
+              body: JSON.stringify({
+                text: "test",
+                model_id: "eleven_turbo_v2",
+                voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+              }),
+            });
+            connectionOk = ttsResponse.ok;
+            if (ttsResponse.ok) {
+              connectionMessage = "ElevenLabs API key can generate audio. Account read permission is not enabled, so subscription details are skipped.";
+            } else {
+              let ttsMessage = "";
+              try {
+                const payload = await ttsResponse.json() as { detail?: unknown };
+                if (typeof payload.detail === "string") {
+                  ttsMessage = payload.detail;
+                } else if (payload.detail && typeof payload.detail === "object" && "message" in payload.detail) {
+                  ttsMessage = String((payload.detail as { message?: unknown }).message ?? "");
+                }
+              } catch {}
+              connectionMessage = ttsMessage
+                ? `ElevenLabs TTS returned ${ttsResponse.status}: ${ttsMessage}`
+                : `ElevenLabs TTS returned ${ttsResponse.status}`;
+            }
+          } else {
             connectionMessage = upstreamMessage
               ? `ElevenLabs API returned ${response.status}: ${upstreamMessage}`
               : `ElevenLabs API returned ${response.status}`;
+          }
           }
       } catch (e: any) {
         connectionOk = false;
