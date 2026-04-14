@@ -93,6 +93,7 @@ export const activeCalls = pgTable("active_calls", {
   userId: uuid("user_id").notNull(),
   regionId: uuid("region_id"),
   gender: text("gender"),  // 'male' | 'female' — set during MW gender-select; null for MM systems
+  seeking: text("seeking"), // 'msm' | null — set when a male MW caller enters the Men Seeking Men section
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 

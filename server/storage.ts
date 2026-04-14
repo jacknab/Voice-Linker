@@ -94,13 +94,14 @@ export interface IStorage {
   // Active call tracking (real-time party line)
   registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void>;
   updateActiveCallGender(callSid: string, gender: string): Promise<void>;
+  updateActiveCallSeeking(callSid: string, seeking: string): Promise<void>;
   removeActiveCall(callSid: string): Promise<void>;
   removeActiveCallsByUser(userId: string): Promise<void>;
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
   finalizeOrphanedCallLogs(olderThanMinutes: number): Promise<void>;
-  getActiveCallerCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number>;
-  getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<number>;
-  getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<Profile[]>;
+  getActiveCallerCount(excludeUserId: string, regionId?: string, callerGender?: string | null, seeking?: string | null): Promise<number>;
+  getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null, seeking?: string | null): Promise<number>;
+  getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null, seeking?: string | null): Promise<Profile[]>;
   getNearbyProfileUserIds(excludeUserId: string, regionId: string | undefined, callerLat: number, callerLon: number, thresholdKm: number): Promise<string[]>;
   getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined>;
   getZipEntryById(id: string): Promise<ZipCode | undefined>;
@@ -579,6 +580,12 @@ export class DatabaseStorage implements IStorage {
   async updateActiveCallGender(callSid: string, gender: string): Promise<void> {
     await db.update(activeCalls)
       .set({ gender })
+      .where(eq(activeCalls.callSid, callSid));
+  }
+
+  async updateActiveCallSeeking(callSid: string, seeking: string): Promise<void> {
+    await db.update(activeCalls)
+      .set({ seeking })
       .where(eq(activeCalls.callSid, callSid));
   }
 
