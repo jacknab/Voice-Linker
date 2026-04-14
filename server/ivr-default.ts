@@ -958,8 +958,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     });
     playPrompt(gather, req, "membership_entry_prompt.mp3",
       "If you have a membership card, enter your card number now. Otherwise press the pound key.");
-    playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
-    twiml.hangup();
+    twiml.redirect("/voice/entry-check");
     res.type("text/xml");
     res.send(twiml.toString());
   });
