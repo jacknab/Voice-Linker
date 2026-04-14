@@ -331,7 +331,7 @@ const pendingPinAuth = new Map<string, string>(); // callSid → membership hold
 const pendingCardFirstUse = new Map<string, string>(); // callSid → card number
 
 // Calling card override: tracks which card a caller is using for the duration of the call.
-// Billing deducts directly from the card's value_seconds; no phone linkage occurs.
+// Billing deducts directly from the card's value_seconds.
 const callCardOverride = new Map<string, string>(); // callSid → cardId
 
 // Pending new PIN setup: the caller is confirming a newly entered PIN
@@ -954,7 +954,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       numDigits: 5,
       finishOnKey: "#",
       action: "/voice/handle-membership-entry",
-      timeout: 10,
+      timeout: 20,
+      actionOnEmptyResult: true,
     });
     playPrompt(gather, req, "membership_entry_prompt.mp3",
       "If you have a membership card, enter your card number now. Otherwise press the pound key.");
@@ -1020,13 +1021,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
       twiml.redirect("/voice/entry-check");
     } else if (digits.length === 5) {
-      // 5-digit calling card number — always require PIN, never link to caller's phone
+      // 5-digit calling card number
       try {
         const card = await storage.getMembershipCardByNumber(digits);
         if (!card) {
           console.log(`[voice] Card not found: ${digits}`);
           playPrompt(twiml, req, "membership_invalid.mp3",
             "We could not find a card with that number. Please check your card and try again.");
+          twiml.redirect("/voice/entry-check");
+        } else if (card.phoneNumber && card.phoneNumber !== fromNumber) {
+          console.log(`[voice] Card ${digits} already linked to ${card.phoneNumber}; rejected for ${fromNumber}`);
+          playPrompt(twiml, req, "membership_invalid.mp3",
+            "That membership card has already been activated on a different phone number.");
           twiml.redirect("/voice/entry-check");
         } else if (card.valueSeconds <= 0) {
           console.log(`[voice] Card ${digits} has no remaining time`);
@@ -1039,7 +1045,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           pendingCardFirstUse.set(callSid, card.cardNumber);
           twiml.redirect("/voice/membership-card-pin-entry");
         } else {
-          // No PIN set on card — grant access directly (announce time, no phone link)
+          if (!card.phoneNumber) {
+            await storage.linkCardToPhone(card.id, fromNumber);
+          }
           console.log(`[voice] Card ${digits} — no PIN, granting access directly`);
           callCardOverride.set(callSid, card.id);
           const minutes = Math.floor(card.valueSeconds / 60);
@@ -1207,7 +1215,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       numDigits: 4,
       finishOnKey: "",
       action: "/voice/handle-membership-card-pin-entry",
-      timeout: 10,
+      timeout: 20,
+      actionOnEmptyResult: true,
     });
     gather.say("Please enter your 4-digit PIN.");
     // No input / timeout → skip membership and continue
@@ -1220,6 +1229,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digits = (req.body?.Digits as string) ?? "";
     const callSid = req.body?.CallSid as string;
+    const fromNumber = req.body?.From as string;
 
     const cardNumber = pendingCardFirstUse.get(callSid);
     if (!cardNumber) {
@@ -1230,13 +1240,21 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       const card = await storage.getMembershipCardByNumber(cardNumber);
-      if (card && card.pin && card.pin === digits) {
+      if (card && card.phoneNumber && card.phoneNumber !== fromNumber) {
         pendingCardFirstUse.delete(callSid);
-        // PIN correct — grant calling card access without linking to caller's phone
+        console.log(`[voice] Card ${cardNumber} already linked to ${card.phoneNumber}; rejected for ${fromNumber}`);
+        playPrompt(twiml, req, "membership_invalid.mp3",
+          "That membership card has already been activated on a different phone number.");
+        twiml.redirect("/voice/entry-check");
+      } else if (card && card.pin && card.pin === digits) {
+        pendingCardFirstUse.delete(callSid);
+        if (!card.phoneNumber) {
+          await storage.linkCardToPhone(card.id, fromNumber);
+        }
         callCardOverride.set(callSid, card.id);
         const minutes = Math.floor(card.valueSeconds / 60);
-        console.log(`[voice] Card ${cardNumber} PIN accepted for callSid=${callSid} — ${minutes} min remaining, no phone link`);
-        playPrompt(twiml, req, "membership_linked.mp3", "Card accepted.");
+        console.log(`[voice] Card ${cardNumber} PIN accepted for callSid=${callSid} phone=${fromNumber} — ${minutes} min remaining`);
+        playPrompt(twiml, req, "membership_linked.mp3", "Membership card activated.");
         playTimeRemaining(twiml, req, minutes);
         callTimeAnnounced.add(callSid);
         twiml.redirect("/voice/entry-check-card");
@@ -1325,26 +1343,36 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (isFreeModeActive(freeModeSettings)) {
         // Still route through Roger so callers get a personalized greeting
         twiml.redirect("/voice/roger-greeting");
-      } else if (!user.membershipTier) {
+      } else {
+        const linkedCard = await storage.getMembershipCardByPhone(fromNumber);
+        if (linkedCard && linkedCard.valueSeconds > 0) {
+          callCardOverride.set(callSid, linkedCard.id);
+          if (!callTimeAnnounced.has(callSid)) {
+            playTimeRemaining(twiml, req, Math.floor(linkedCard.valueSeconds / 60));
+            callTimeAnnounced.add(callSid);
+          }
+          twiml.redirect("/voice/entry-check-card");
+        } else if (!user.membershipTier) {
         // Brand new — Roger will auto-activate the free trial and welcome them
-        twiml.redirect("/voice/roger-greeting");
-      } else if (freeModeSettings.billingMode === "per_24h" && user.membershipTier !== "free_trial") {
+          twiml.redirect("/voice/roger-greeting");
+        } else if (freeModeSettings.billingMode === "per_24h" && user.membershipTier !== "free_trial") {
         // 24-hour pass: check wall-clock expiry from purchase timestamp
-        const purchasedAt = user.membershipPurchasedAt;
-        const hoursElapsed = purchasedAt ? (Date.now() - purchasedAt.getTime()) / 3_600_000 : 24;
-        if (hoursElapsed >= 24) {
-          playPrompt(twiml, req, "access_expired.mp3", "Your backdoor access pass has expired.");
+          const purchasedAt = user.membershipPurchasedAt;
+          const hoursElapsed = purchasedAt ? (Date.now() - purchasedAt.getTime()) / 3_600_000 : 24;
+          if (hoursElapsed >= 24) {
+            playPrompt(twiml, req, "access_expired.mp3", "Your backdoor access pass has expired.");
+            twiml.redirect("/voice/membership-purchase");
+          } else {
+            twiml.redirect("/voice/roger-greeting");
+          }
+        } else if (remainingSeconds <= 0) {
+          // Access fully expired (per_minute / per_day / free_trial with no time)
+          playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
           twiml.redirect("/voice/membership-purchase");
         } else {
+          // Returning caller with time — Roger greets them, then time is announced
           twiml.redirect("/voice/roger-greeting");
         }
-      } else if (remainingSeconds <= 0) {
-        // Access fully expired (per_minute / per_day / free_trial with no time)
-        playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
-        twiml.redirect("/voice/membership-purchase");
-      } else {
-        // Returning caller with time — Roger greets them, then time is announced
-        twiml.redirect("/voice/roger-greeting");
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check error:", error);

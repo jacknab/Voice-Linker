@@ -252,6 +252,13 @@ Members can set a 4-digit PIN that allows them to call in from **any phone** by 
 
 **IVR routes:** `/voice/membership-pin-entry`, `/voice/handle-membership-pin-entry`, `/voice/set-pin`, `/voice/handle-set-pin`, `/voice/handle-confirm-pin`
 
+## Membership Cards (IVR)
+
+- 5-digit membership cards are entered at `/voice/membership-entry` in per-minute billing mode.
+- The DTMF gather now waits 20 seconds and posts empty results to the handler, preventing callers from being advanced immediately after the prompt if they wait until playback finishes.
+- Successful card PIN verification links the card to the caller's phone number via `membership_cards.phone_number` / `first_used_at`, rejects use from a different phone after activation, and automatically reuses the linked card on later calls from that phone.
+- Card balances are deducted directly from `membership_cards.value_seconds` during per-minute billing through `callCardOverride`.
+
 ## Auto-Moderation System
 
 **Service:** `server/autoModeration.ts` — runs asynchronously after every flag, block, and recording transcription event.
