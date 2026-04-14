@@ -3911,5 +3911,20 @@ END OF KNOWLEDGE BASE
     res.type("text/plain").send(doc);
   });
 
+  // ─── Clean URLs for region SEO pages ──────────────────────────────────────
+  // Serves /denver instead of /regions/denver.html
+  // Matches any single-segment slug that hasn't been handled by a prior route.
+  const REGIONS_DIR = path.join(process.cwd(), "client", "public", "regions");
+  app.get(/^\/([a-z0-9][a-z0-9-]*)$/, (req, res, next) => {
+    const slug = (req.params as unknown as string[])[0];
+    if (!slug) return next();
+    const filePath = path.join(REGIONS_DIR, `${slug}.html`);
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      next();
+    }
+  });
+
   return httpServer;
 }
