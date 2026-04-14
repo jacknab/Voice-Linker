@@ -1628,6 +1628,17 @@ function TTSTab() {
     return existingMap.get(`${folder}:${filename}`);
   }
 
+  function addGeneratedFileToCache(file: { filename: string; url: string; folder: string }) {
+    queryClient.setQueryData<{ filename: string; url: string; size: number; folder: string }[]>(
+      ["/api/admin/tts/prompts"],
+      (current = []) => {
+        const nextFile = { ...file, size: 0 };
+        const withoutDuplicate = current.filter(f => !(f.folder === file.folder && f.filename === file.filename));
+        return [...withoutDuplicate, nextFile];
+      }
+    );
+  }
+
   const generateMutation = useMutation({
     mutationFn: async ({ text, filename, folder }: { text: string; filename: string; folder?: string }) => {
       const res = await fetch("/api/admin/tts/generate", {
@@ -1639,6 +1650,7 @@ function TTSTab() {
       return res.json() as Promise<{ filename: string; url: string; folder: string }>;
     },
     onSuccess: (data) => {
+      addGeneratedFileToCache(data);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
       toast({ title: "Audio generated", description: data.filename });
       setGenerating(null);
@@ -1710,13 +1722,14 @@ function TTSTab() {
     generateAllAbortRef.current = false;
     const prompts = activePrompts;
     setGenerateAllProgress({ done: 0, total: prompts.length, currentLabel: prompts[0]?.label ?? "" });
-    let done = 0;
+    let successCount = 0;
+    let failure: { label: string; message: string } | null = null;
     for (const prompt of prompts) {
       if (generateAllAbortRef.current) break;
       const text = editingText[prompt.filename] ?? prompt.text;
       const key = `${categoryFolder}:${prompt.filename}`;
       setGenerating(key);
-      setGenerateAllProgress({ done, total: prompts.length, currentLabel: prompt.label });
+      setGenerateAllProgress({ done: successCount, total: prompts.length, currentLabel: prompt.label });
       try {
         const res = await fetch("/api/admin/tts/generate", {
           method: "POST",
@@ -1725,12 +1738,16 @@ function TTSTab() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ message: "Failed" }));
-          toast({ title: `Failed: ${prompt.label}`, description: err.message, variant: "destructive" });
+          failure = { label: prompt.label, message: err.message };
+          break;
         }
+        const generatedFile = await res.json() as { filename: string; url: string; folder: string };
+        addGeneratedFileToCache(generatedFile);
+        successCount++;
       } catch {
-        toast({ title: `Error: ${prompt.label}`, description: "Network error", variant: "destructive" });
+        failure = { label: prompt.label, message: "Network error" };
+        break;
       }
-      done++;
       // 30-second gap between requests to stay well within ElevenLabs rate limits
       if (!generateAllAbortRef.current) await new Promise(r => setTimeout(r, 30000));
     }
@@ -1739,8 +1756,10 @@ function TTSTab() {
     setGenerateAllProgress(null);
     generateAllAbortRef.current = false;
     queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
-    if (!wasCancelled) {
-      toast({ title: "Generate All complete", description: `${done} of ${prompts.length} prompts generated into ${categoryFolder.toUpperCase()} folder.` });
+    if (failure) {
+      toast({ title: `Stopped: ${failure.label}`, description: failure.message, variant: "destructive" });
+    } else if (!wasCancelled) {
+      toast({ title: "Generate All complete", description: `${successCount} of ${prompts.length} prompts generated into ${categoryFolder.toUpperCase()} folder.` });
     }
   }
 
@@ -1776,14 +1795,16 @@ function TTSTab() {
       return;
     }
     setGenerateAllProgress({ done: 0, total: missing.length, currentLabel: missing[0]?.label ?? "" });
-    let done = 0;
+    let successCount = 0;
+    let skippedCount = 0;
+    let failure: { label: string; message: string } | null = null;
     for (const prompt of missing) {
       if (generateAllAbortRef.current) break;
       const text = editingText[prompt.filename] ?? prompt.text;
-      if (!text.trim()) { done++; continue; }
+      if (!text.trim()) { skippedCount++; continue; }
       const key = `${categoryFolder}:${prompt.filename}`;
       setGenerating(key);
-      setGenerateAllProgress({ done, total: missing.length, currentLabel: prompt.label });
+      setGenerateAllProgress({ done: successCount + skippedCount, total: missing.length, currentLabel: prompt.label });
       try {
         const res = await fetch("/api/admin/tts/generate", {
           method: "POST",
@@ -1792,12 +1813,16 @@ function TTSTab() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({ message: "Failed" }));
-          toast({ title: `Failed: ${prompt.label}`, description: err.message, variant: "destructive" });
+          failure = { label: prompt.label, message: err.message };
+          break;
         }
+        const generatedFile = await res.json() as { filename: string; url: string; folder: string };
+        addGeneratedFileToCache(generatedFile);
+        successCount++;
       } catch {
-        toast({ title: `Error: ${prompt.label}`, description: "Network error", variant: "destructive" });
+        failure = { label: prompt.label, message: "Network error" };
+        break;
       }
-      done++;
       // 30-second gap between requests to stay well within ElevenLabs rate limits
       if (!generateAllAbortRef.current) await new Promise(r => setTimeout(r, 30000));
     }
@@ -1806,8 +1831,10 @@ function TTSTab() {
     setGenerateAllProgress(null);
     generateAllAbortRef.current = false;
     queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
-    if (!wasCancelled) {
-      toast({ title: "Generate Missing complete", description: `${done} of ${missing.length} missing prompts generated.` });
+    if (failure) {
+      toast({ title: `Stopped: ${failure.label}`, description: failure.message, variant: "destructive" });
+    } else if (!wasCancelled) {
+      toast({ title: "Generate Missing complete", description: `${successCount} of ${missing.length} missing prompts generated.` });
     }
   }
 
