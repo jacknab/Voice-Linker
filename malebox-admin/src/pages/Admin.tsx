@@ -1804,7 +1804,7 @@ function TTSTab() {
   }
 
   function promptExists(filename: string): boolean {
-    return fileExistsIn(categoryFolder, filename) || fileExistsIn("shared", filename);
+    return fileExistsIn(categoryFolder, filename);
   }
 
   function handlePlayPrompt(key: string, url: string) {
@@ -2384,7 +2384,7 @@ function TTSTab() {
               {filtered.map(prompt => {
                 const exists = promptExists(prompt.filename);
                 const isGen = generating === `${categoryFolder}:${prompt.filename}`;
-                const existingFile = getFileIn(categoryFolder, prompt.filename) ?? getFileIn("shared", prompt.filename);
+                const existingFile = getFileIn(categoryFolder, prompt.filename);
                 const promptKey = `${categoryFolder}:${prompt.filename}`;
                 const currentText = editingText[promptKey] ?? prompt.text;
                 const isDirty = dirtyKeys.has(promptKey);
