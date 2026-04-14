@@ -7,3 +7,6 @@ vite.config.ts.*
 .env
 .env.local
 .env.*.local
+
+# Generated/uploaded audio files — managed per-server, not in git
+uploads/
