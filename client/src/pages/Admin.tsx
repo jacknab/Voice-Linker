@@ -4404,30 +4404,43 @@ function IVRTesterTab() {
 
         {/* Keypad */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "0.5rem" }}>
-          {keys.map(k => (
-            <button
-              key={k}
-              data-testid={`btn-ivr-key-${k}`}
-              onClick={() => sendDigits(k)}
-              disabled={!canType}
-              style={{
-                background: canType ? PT.keyBg : "#111826",
-                border: `1px solid ${canType ? PT.keyBorder : "#151e2d"}`,
-                borderRadius: 10, padding: "0.8rem 0.25rem",
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                cursor: canType ? "pointer" : "not-allowed",
-                transition: "background 0.12s, border-color 0.12s, transform 0.08s",
-                userSelect: "none",
-              }}
-              onMouseEnter={e => { if (canType) { e.currentTarget.style.background = PT.keyHover; e.currentTarget.style.borderColor = "#3a5a8a"; } }}
-              onMouseLeave={e => { e.currentTarget.style.background = canType ? PT.keyBg : "#111826"; e.currentTarget.style.borderColor = canType ? PT.keyBorder : "#151e2d"; }}
-              onMouseDown={e => { if (canType) e.currentTarget.style.transform = "scale(0.93)"; }}
-              onMouseUp={e => { e.currentTarget.style.transform = "scale(1)"; }}
-            >
-              <span style={{ fontFamily: "monospace", fontSize: "1.4rem", fontWeight: 400, color: canType ? "#c5d9f0" : PT.dimText, lineHeight: 1 }}>{k}</span>
-              {keySub[k] && <span style={{ fontSize: "0.55rem", color: PT.dimText, marginTop: 2, letterSpacing: "0.12em" }}>{keySub[k]}</span>}
-            </button>
-          ))}
+          {keys.map(k => {
+            const isSend = canType && finishOnKey === k;
+            const bg      = !canType ? "#111826" : isSend ? "#1f1200" : PT.keyBg;
+            const border  = !canType ? "#151e2d" : isSend ? "#c07000" : PT.keyBorder;
+            const shadow  = !canType ? "none"    : isSend ? "0 0 10px rgba(245,158,11,0.45), inset 0 0 8px rgba(245,158,11,0.08)" : "0 0 6px rgba(42,100,180,0.25)";
+            const textClr = !canType ? PT.dimText : isSend ? "#f59e0b" : "#c5d9f0";
+            const hoverBg     = isSend ? "#2a1800" : PT.keyHover;
+            const hoverBorder = isSend ? "#e08800" : "#3a5a8a";
+            return (
+              <button
+                key={k}
+                data-testid={`btn-ivr-key-${k}`}
+                onClick={() => sendDigits(k)}
+                disabled={!canType}
+                style={{
+                  background: bg,
+                  border: `1px solid ${border}`,
+                  boxShadow: shadow,
+                  borderRadius: 10, padding: "0.8rem 0.25rem",
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  cursor: canType ? "pointer" : "not-allowed",
+                  transition: "background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.08s",
+                  userSelect: "none",
+                }}
+                onMouseEnter={e => { if (canType) { e.currentTarget.style.background = hoverBg; e.currentTarget.style.borderColor = hoverBorder; } }}
+                onMouseLeave={e => { e.currentTarget.style.background = bg; e.currentTarget.style.borderColor = border; }}
+                onMouseDown={e => { if (canType) e.currentTarget.style.transform = "scale(0.93)"; }}
+                onMouseUp={e => { e.currentTarget.style.transform = "scale(1)"; }}
+              >
+                <span style={{ fontFamily: "monospace", fontSize: "1.4rem", fontWeight: 400, color: textClr, lineHeight: 1 }}>{k}</span>
+                {isSend
+                  ? <span style={{ fontSize: "0.52rem", color: "#f59e0b", marginTop: 2, letterSpacing: "0.14em", fontFamily: "monospace", fontWeight: 700 }}>SEND</span>
+                  : keySub[k] && <span style={{ fontSize: "0.55rem", color: PT.dimText, marginTop: 2, letterSpacing: "0.12em" }}>{keySub[k]}</span>
+                }
+              </button>
+            );
+          })}
         </div>
 
         {/* Play Greeting / Bypass button */}
