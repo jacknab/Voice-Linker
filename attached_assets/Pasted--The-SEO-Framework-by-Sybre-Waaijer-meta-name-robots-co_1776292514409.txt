@@ -1,0 +1,17 @@
+<!-- The SEO Framework by Sybre Waaijer -->
+<meta name="robots" content="max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+<link rel="canonical" href="https://hardlinechat.com/" />
+<meta name="description" content="Try it FREE! Keep the conversation going… Get the app Hardline has many member benefits… Buy time on Hardline…" />
+<meta property="og:type" content="website" />
+<meta property="og:locale" content="en_US" />
+<meta property="og:site_name" content="Best Gay Free Trial Phone Chat Line Numbers for Chat" />
+<meta property="og:title" content="Best Gay Free Trial Phone Chat Line Numbers for Chat" />
+<meta property="og:description" content="Try it FREE! Keep the conversation going… Get the app Hardline has many member benefits… Buy time on Hardline…" />
+<meta property="og:url" content="https://hardlinechat.com/" />
+<meta property="og:image" content="https://hardlinechat.com/wp-content/uploads/2025/06/hl_homepage_card11.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Best Gay Free Trial Phone Chat Line Numbers for Chat" />
+<meta name="twitter:description" content="Try it FREE! Keep the conversation going… Get the app Hardline has many member benefits… Buy time on Hardline…" />
+<meta name="twitter:image" content="https://hardlinechat.com/wp-content/uploads/2025/06/hl_homepage_card11.jpg" />
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://hardlinechat.com/#/schema/WebSite","url":"https://hardlinechat.com/","name":"Best Gay Free Trial Phone Chat Line Numbers for Chat","description":"Hardline Chat","inLanguage":"en-US","potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://hardlinechat.com/search/{search_term_string}/"},"query-input":"required name=search_term_string"},"publisher":{"@id":"https://hardlinechat.com/#/schema/Organization"}},{"@type":"WebPage","@id":"https://hardlinechat.com/","url":"https://hardlinechat.com/","name":"Best Gay Free Trial Phone Chat Line Numbers for Chat - Hardline Chat","description":"Try it FREE! Keep the conversation going… Get the app Hardline has many member benefits… Buy time on Hardline…","inLanguage":"en-US","isPartOf":{"@id":"https://hardlinechat.com/#/schema/WebSite"},"breadcrumb":{"@type":"BreadcrumbList","@id":"https://hardlinechat.com/#/schema/BreadcrumbList","itemListElement":{"@type":"ListItem","position":1,"name":"Best Gay Free Trial Phone Chat Line Numbers for Chat"}},"potentialAction":{"@type":"ReadAction","target":"https://hardlinechat.com/"},"about":{"@id":"https://hardlinechat.com/#/schema/Organization"}},{"@type":"Organization","@id":"https://hardlinechat.com/#/schema/Organization","name":"Best Gay Free Trial Phone Chat Line Numbers for Chat","url":"https://hardlinechat.com/","logo":{"@type":"ImageObject","url":"https://hardlinechat.com/wp-content/uploads/2025/06/hlLogo.png","contentUrl":"https://hardlinechat.com/wp-content/uploads/2025/06/hlLogo.png","width":300,"height":60,"contentSize":"3469"}}]}</script>
+<!-- / The SEO Framework by Sybre Waaijer | 19.81ms meta | 5.20ms boot -->
