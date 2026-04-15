@@ -265,6 +265,19 @@ const FOLDERS: { folder: string; prompts: Prompt[] }[] = [
   { folder: "mw_m", prompts: MW_M_PROMPTS },
 ];
 
+// ── Roger greeting variants (uploads/ root, Roger voice, eleven_v3) ────────
+// Pre-generated so callers never hear a silent pause after the disclaimer.
+// Mapped by call history: new caller, same-day return, 1–3 days, 4–14 days,
+// 15–30 days, and 30+ days since last call.
+export const ROGER_PROMPTS: Prompt[] = [
+  { filename: "roger_welcome_new.mp3",      text: "[warmly] Hi, this is the Male Box. My name is Roger — your cruise director. [chuckles] Oh, look at you... a first time caller. I see. [warmly] Well in that case — let me set you up with some free time so you can check out what we have going on in here. [cheerfully] Welcome to the party, honey." },
+  { filename: "roger_welcome_sameday.mp3",  text: "[warmly] Welcome back! Back again the same day? [playfully] I love the commitment. The boys are still here — let us get you in." },
+  { filename: "roger_welcome_recent.mp3",   text: "[warmly] Hey, welcome back. [playfully] The boys have been asking about you. Well... one of them might have been. Good to see you again." },
+  { filename: "roger_welcome_fewdays.mp3",  text: "[warmly] Welcome back! It has been a few days. [mischievously] We were starting to wonder if you found someone. Either way — glad you are back. Let us see what is going on tonight." },
+  { filename: "roger_welcome_weeks.mp3",    text: "[chuckles] Well, well, well. Look who remembered we exist. [warmly] I am kidding, relax. Welcome back. It has been a couple of weeks — let us see what is happening tonight." },
+  { filename: "roger_welcome_longtime.mp3", text: "[gasps] Oh my God. It has been a while, honey. [playfully] I was starting to think you found love on another chat line. [warmly] No hard feelings. Welcome back — we missed you." },
+];
+
 const DELAY_MS = 2000;
 
 function sleep(ms: number) {
@@ -300,6 +313,23 @@ async function runAudioAutogen(): Promise<void> {
         failed++;
         await sleep(DELAY_MS);
       }
+    }
+  }
+
+  // ── Roger greeting variants (root uploads/ dir, Roger voice, eleven_v3) ──
+  const rogerVoiceId = getVoiceIdForRoger();
+  for (const prompt of ROGER_PROMPTS) {
+    const filePath = path.join(UPLOADS_DIR, prompt.filename);
+    if (fs.existsSync(filePath)) { skipped++; continue; }
+    try {
+      await generateTTS(prompt.text.trim(), prompt.filename, undefined, rogerVoiceId, "eleven_v3");
+      console.log(`[audio-autogen] generated roger/${prompt.filename}`);
+      generated++;
+      await sleep(DELAY_MS);
+    } catch (err: any) {
+      console.error(`[audio-autogen] failed roger/${prompt.filename}: ${err?.message ?? err}`);
+      failed++;
+      await sleep(DELAY_MS);
     }
   }
 

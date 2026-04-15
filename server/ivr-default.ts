@@ -3,7 +3,7 @@ import { storage } from "./storage";
 import twilio from "twilio";
 import path from "path";
 import fs from "fs";
-import { generateTTS, getVoiceIdForFolder, getVoiceIdForRoger } from "./elevenlabs";
+import { getVoiceIdForFolder } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, scheduleAutoModCheck } from "./autoModeration";
@@ -12,7 +12,7 @@ import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
-import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText } from "./audioAutogen";
+import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText, ROGER_PROMPTS } from "./audioAutogen";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -1515,30 +1515,27 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // New callers: auto-activates their free trial, Roger explains the system.
   // Returning callers: Roger greets them based on how long since their last call.
 
-  /** Build Roger's welcome script based on whether it's a new or returning caller. */
-  function rogerWelcomeText(isNewCaller: boolean, lastCallDate: Date | null): string {
-    if (isNewCaller || !lastCallDate) {
-      return `[warmly] Hi, this is the Male Box. My name is Roger — your cruise director. [chuckles] Oh, look at you... a first time caller. I see. [warmly] Well in that case — let me set you up with some free time so you can check out what we have going on in here. [cheerfully] Welcome to the party, honey.`;
-    }
-    const daysSince = Math.floor((Date.now() - lastCallDate.getTime()) / 86_400_000);
-    if (daysSince < 1) {
-      return `[warmly] Welcome back! Back again the same day? [playfully] I love the commitment. The boys are still here — let us get you in.`;
-    }
-    if (daysSince <= 3) {
-      return `[warmly] Hey, welcome back. [playfully] The boys have been asking about you. Well... one of them might have been. Good to see you again.`;
-    }
-    if (daysSince <= 14) {
-      return `[warmly] Welcome back! It has been a few days. [mischievously] We were starting to wonder if you found someone. Either way — glad you are back. Let us see what is going on tonight.`;
-    }
-    if (daysSince <= 30) {
-      return `[chuckles] Well, well, well. Look who remembered we exist. [warmly] I am kidding, relax. Welcome back. It has been a couple of weeks — let us see what is happening tonight.`;
-    }
-    return `[gasps] Oh my God. It has been a while, honey. [playfully] I was starting to think you found love on another chat line. [warmly] No hard feelings. Welcome back — we missed you.`;
-  }
-
   /** Strip ElevenLabs emotion tags for plain-text Twilio fallback. */
   function stripEmotionTags(text: string): string {
     return text.replace(/\[[\w\s]+\]/g, " ").replace(/\s{2,}/g, " ").trim();
+  }
+
+  /**
+   * Pick the pre-generated Roger greeting variant for this caller.
+   * Returns the filename (in uploads/ root) and a plain-text fallback.
+   */
+  function rogerGreetingVariant(isNewCaller: boolean, lastCallDate: Date | null): { filename: string; fallback: string } {
+    const find = (name: string) => {
+      const p = ROGER_PROMPTS.find(r => r.filename === name);
+      return { filename: name, fallback: p ? stripEmotionTags(p.text) : "" };
+    };
+    if (isNewCaller || !lastCallDate) return find("roger_welcome_new.mp3");
+    const daysSince = Math.floor((Date.now() - lastCallDate.getTime()) / 86_400_000);
+    if (daysSince < 1)   return find("roger_welcome_sameday.mp3");
+    if (daysSince <= 3)  return find("roger_welcome_recent.mp3");
+    if (daysSince <= 14) return find("roger_welcome_fewdays.mp3");
+    if (daysSince <= 30) return find("roger_welcome_weeks.mp3");
+    return find("roger_welcome_longtime.mp3");
   }
 
   app.post("/voice/roger-greeting", async (req, res) => {
@@ -1550,33 +1547,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const user = await getOrCreateUser(fromNumber);
       const isNewCaller = !user.membershipTier;
       const lastCallDate = await storage.getLastCallTimestamp(fromNumber, callSid);
-      const script = rogerWelcomeText(isNewCaller, lastCallDate);
-      const filename = `roger_welcome_${callSid}.mp3`;
-      const filepath = path.join(UPLOADS_DIR, filename);
+      const { filename: rogerFile, fallback: rogerFallback } = rogerGreetingVariant(isNewCaller, lastCallDate);
+      const filepath = path.join(UPLOADS_DIR, rogerFile);
 
-      // Generate Roger's welcome using ElevenLabs v3 (emotion tags enabled).
-      // Race against a 4-second timeout so callers never hear a long silent pause
-      // after the disclaimer if ElevenLabs is slow — fall back to Twilio TTS instead.
-      let audioReady = false;
-      try {
-        const ttsTimeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("TTS generation timeout")), 4000)
-        );
-        await Promise.race([
-          generateTTS(script, filename, undefined, getVoiceIdForRoger(), "eleven_v3"),
-          ttsTimeout,
-        ]);
-        audioReady = fs.existsSync(filepath);
-      } catch (ttsErr) {
-        console.warn(`[roger-greeting] ElevenLabs v3 failed or timed out, falling back to twiml.say — ${ttsErr}`);
-      }
-
-      if (audioReady) {
-        twiml.play(`${baseUrl(req)}/uploads/${filename}`);
-        // Clean up the temp file after 3 minutes (well past Twilio's fetch window)
-        setTimeout(() => { try { if (fs.existsSync(filepath)) fs.unlinkSync(filepath); } catch {} }, 3 * 60 * 1000);
+      // Play pre-generated Roger greeting; fall back to Twilio TTS if file is missing.
+      if (fs.existsSync(filepath)) {
+        twiml.play(`${baseUrl(req)}/uploads/${rogerFile}`);
       } else {
-        twiml.say({ voice: "alice" }, stripEmotionTags(script));
+        console.warn(`[roger-greeting] Pre-generated file missing: ${rogerFile} — using TTS fallback`);
+        twiml.say({ voice: "alice" }, rogerFallback);
       }
 
       const membershipConf = await getMembershipSettingsCached();
