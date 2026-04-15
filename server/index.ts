@@ -8,6 +8,7 @@ import { serveStatic } from "./static";
 import { startSimulator } from "./simulator";
 import { startAudioAutogen } from "./audioAutogen";
 import { runStartupMigrations } from "./migrations";
+import { importSeedFolder } from "./seedImport";
 import { createServer } from "http";
 
 const app = express();
@@ -155,7 +156,12 @@ app.use((req, res, next) => {
   }, 5000);
 
   // Start the virtual caller simulator after a short delay to let the DB settle
-  setTimeout(() => startSimulator().catch(err => console.error("[simulator] startup error:", err)), 3000);
+  // Then run the seed folder importer (needs the simulator running first so
+  // addVirtualCaller can register loops for any newly-imported profiles).
+  setTimeout(async () => {
+    await startSimulator().catch(err => console.error("[simulator] startup error:", err));
+    importSeedFolder().catch(err => console.error("[seeds] startup import error:", err));
+  }, 3000);
 
   // Start the hourly audio auto-generation cron (generates any missing prompt MP3s via ElevenLabs)
   startAudioAutogen();
