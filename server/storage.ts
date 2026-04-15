@@ -112,6 +112,7 @@ export interface IStorage {
   blockUser(blockerId: string, blockedUserId: string): Promise<void>;
   unblockUser(blockerId: string, blockedUserId: string): Promise<void>;
   unblockAllByUser(userId: string): Promise<number>;
+  getLastSentMessageToUser(fromUserId: string, toUserId: string): Promise<Message | undefined>;
 
   // Admin blocked list
   getAdminBlockedList(): Promise<{
@@ -890,6 +891,15 @@ export class DatabaseStorage implements IStorage {
   async unblockAllByUser(userId: string): Promise<number> {
     const result = await db.delete(blockedUsers).where(eq(blockedUsers.blockerId, userId));
     return (result as any).rowCount ?? 0;
+  }
+
+  async getLastSentMessageToUser(fromUserId: string, toUserId: string): Promise<Message | undefined> {
+    const [msg] = await db.select()
+      .from(messages)
+      .where(and(eq(messages.fromUserId, fromUserId), eq(messages.toUserId, toUserId)))
+      .orderBy(desc(messages.createdAt))
+      .limit(1);
+    return msg;
   }
 
   async getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }> {

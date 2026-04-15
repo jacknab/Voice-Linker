@@ -70,7 +70,7 @@ const PROMPT_TEXTS: Record<string, string> = {
   "no_profiles.mp3":              "There are no profiles available right now. Please call back later.",
   "profile_saved.mp3":            "Your greeting has been saved.",
   "live_invite_options.mp3":      "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4.",
-  "message_options.mp3":          "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 4 to block this caller. Press 7 to flag this message for review. Press 9 to return to the main menu.",
+  "message_options.mp3":          "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound.",
   "new_caller_closest_to_you.mp3":"New caller closest to you.",
   "profile_options.mp3":          "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.",
   "nearby_callers_offer.mp3":     "You have heard all the callers close to you.",

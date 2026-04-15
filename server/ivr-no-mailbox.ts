@@ -4155,7 +4155,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           msgGather.say("You have a new message.");
         }
         safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available for playback.");
-        playPrompt(msgGather, req, "message_options.mp3", "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to connect live with this caller. Press 4 to continue browsing profiles. Press 5 to block this caller. Press 7 to flag this message for review. Press 9 to return to the main menu.");
+        playPrompt(msgGather, req, "message_options.mp3", "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound.");
         twiml.redirect("/voice/main-menu");
       } else {
         // Build the queue once per caller, then advance position on each visit
@@ -4456,6 +4456,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   });
 
   // ─── 6. Handle Message Menu ───────────────────────────────────────────────
+  const MSG_MENU_PROMPT = "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound.";
+
   app.post("/voice/handle-message-menu", async (req, res) => {
     const twiml = new VoiceResponse();
 
@@ -4463,33 +4465,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const digit = req.body?.Digits;
       const msgId = req.query.msgId as string;
       const senderId = req.query.senderId as string;
+      const fromNumber = req.body?.From as string;
+      const callSid = req.body?.CallSid as string;
 
       if (digit === "1") {
-        await storage.markMessageRead(msgId);
-        playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone. Press any key when done.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}` });
-      } else if (digit === "2") {
-        const senderProfile = await storage.getProfile(senderId);
-        const senderGather = twiml.gather({
-          numDigits: 1,
-          action: `/voice/handle-sender-profile-menu?senderId=${senderId}&msgId=${msgId}`,
-          timeout: 10,
-        });
-        if (senderProfile) {
-          // Nested inside gather so pressing 2 during playback skips immediately
-          if (senderProfile.nameRecordingUrl) {
-            safePlayRecording(senderGather, senderProfile.nameRecordingUrl, req, "");
-          }
-          safePlayRecording(senderGather, senderProfile.recordingUrl, req, "This profile's greeting is not available.");
-        } else {
-          senderGather.say("This caller no longer has a profile.");
-        }
-        senderGather.say("Press 1 to send a message. Press 2 to continue browsing. Press 9 for main menu.");
-        twiml.redirect("/voice/main-menu");
-      } else if (digit === "3") {
         // ── Connect live with the message sender ─────────────────────────────
-        const fromNumber = req.body?.From as string;
-        const callSid = req.body?.CallSid as string;
         if (!fromNumber || !senderId || !callSid) {
           playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to profiles.");
           twiml.redirect("/voice/browse-profiles");
@@ -4545,13 +4525,43 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             }
           }
         }
-      } else if (digit === "4") {
+      } else if (digit === "2") {
+        // ── Reply with a message ──────────────────────────────────────────────
+        await storage.markMessageRead(msgId);
+        playPrompt(twiml, req, "record_reply.mp3", "Record your reply after the tone. Press any key when done.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}` });
+      } else if (digit === "3") {
+        // ── Skip this message ─────────────────────────────────────────────────
         await storage.markMessageRead(msgId);
         twiml.redirect("/voice/browse-profiles");
+      } else if (digit === "4") {
+        // ── Hear the last message you sent them ───────────────────────────────
+        if (fromNumber && senderId) {
+          const user = await getOrCreateUser(fromNumber);
+          const lastSent = await storage.getLastSentMessageToUser(user.id, senderId);
+          const replayGather = twiml.gather({
+            numDigits: 1,
+            action: `/voice/handle-message-menu?msgId=${msgId}&senderId=${senderId}`,
+            timeout: 10,
+          });
+          if (lastSent?.recordingUrl) {
+            replayGather.say("Here is the last message you sent this caller.");
+            safePlayRecording(replayGather, lastSent.recordingUrl, req, "");
+          } else {
+            replayGather.say("You have not sent this caller a message yet.");
+          }
+          playPrompt(replayGather, req, "message_options.mp3", MSG_MENU_PROMPT);
+          twiml.redirect("/voice/browse-profiles");
+        } else {
+          twiml.redirect("/voice/browse-profiles");
+        }
       } else if (digit === "5") {
-        // ── Block the message sender ─────────────────────────────────────────
-        const fromNumber = req.body?.From as string;
-        const callSid = req.body?.CallSid as string;
+        // ── Save this message (mark read, stays in mailbox) ───────────────────
+        await storage.markMessageRead(msgId);
+        twiml.say("Message saved.");
+        twiml.redirect("/voice/browse-profiles");
+      } else if (digit === "7") {
+        // ── Block the message sender ──────────────────────────────────────────
         if (fromNumber && senderId) {
           const user = await getOrCreateUser(fromNumber);
           await storage.markMessageRead(msgId);
@@ -4562,25 +4572,36 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
         twiml.redirect("/voice/browse-profiles");
-      } else if (digit === "7") {
-        // ── Flag this message for review ─────────────────────────────────────
-        const fromNumber = req.body?.From as string;
-        if (fromNumber && msgId) {
-          const user = await getOrCreateUser(fromNumber);
-          await storage.markMessageRead(msgId);
-          await storage.createFlaggedItem({
-            contentType: "message",
-            contentId: msgId,
-            reason: "Reported by caller via IVR",
-            status: "pending",
-            reportedByUserId: user.id,
-          });
-          console.log(`[voice] handle-message-menu: userId=${user.id} flagged msgId=${msgId}`);
-          runFlagAutoChecks("message", msgId, senderId).catch(console.error);
+      } else if (digit === "8") {
+        // ── Hear this caller's greeting and location ──────────────────────────
+        const senderProfile = await storage.getProfile(senderId);
+        const senderActiveCall = await storage.getActiveCallByUserId(senderId);
+        const greetingGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-message-menu?msgId=${msgId}&senderId=${senderId}`,
+          timeout: 10,
+        });
+        if (senderProfile?.recordingUrl) {
+          if (senderProfile.nameRecordingUrl) {
+            safePlayRecording(greetingGather, senderProfile.nameRecordingUrl, req, "");
+          }
+          safePlayRecording(greetingGather, senderProfile.recordingUrl, req, "This caller's greeting is not available.");
+        } else {
+          greetingGather.say("This caller's greeting is not available.");
         }
-        playPrompt(twiml, req, "message_flagged.mp3", "This message has been flagged for review. Thank you.");
+        if (senderActiveCall?.regionId) {
+          const region = await storage.getRegionById(senderActiveCall.regionId);
+          greetingGather.say(region ? `This caller is from ${region.name}.` : "This caller's location is not available.");
+        } else {
+          greetingGather.say("This caller's location is not available.");
+        }
+        playPrompt(greetingGather, req, "message_options.mp3", MSG_MENU_PROMPT);
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "9") {
+        // ── Repeat — leave message unread, return to browse (will re-present) ─
+        twiml.redirect("/voice/browse-profiles");
+      } else if (digit === "#") {
+        // ── Exit / change greeting ────────────────────────────────────────────
         await storage.markMessageRead(msgId);
         twiml.redirect("/voice/main-menu");
       } else {

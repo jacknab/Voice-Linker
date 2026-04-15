@@ -901,7 +901,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "browsing", filename: "profile_flagged.mp3",           label: "Profile Flagged for Review",                text: "This profile has been flagged for review. Thank you." },
 
   // ── 7. MESSAGING — private voice messages ─────────────────────────────────
-  { group: "messaging", filename: "message_options.mp3",    label: "Message Options — After Hearing a Message", text: "Press 1 to reply to this message. Press 2 to hear the sender's profile. Press 3 to continue browsing profiles. Press 4 to block this caller. Press 7 to flag this message for review. Press 9 to return to the main menu." },
+  { group: "messaging", filename: "message_options.mp3",    label: "Message Options — After Hearing a Message", text: "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound." },
   { group: "messaging", filename: "record_message.mp3",     label: "Record Message — Prompt",                   text: "Record your message after the tone. Press any key when done." },
   { group: "messaging", filename: "record_reply.mp3",       label: "Record Reply — Prompt",                     text: "Record your reply after the tone. Press any key when done." },
   { group: "messaging", filename: "review_your_message.mp3",label: "Review Recorded Message",                   text: "Here is your recorded message." },
