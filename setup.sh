@@ -8,9 +8,9 @@
 #    bash malebox_setup.sh mydomain.com --yes  # fully unattended, run all steps
 #
 #  Requirements:
-#    - Ubuntu 22.04.5 LTS (Jammy Jellyfish)
-#    - Node.js v22.12.0
-#    - PostgreSQL 15.15
+#    - Ubuntu 22.04 LTS (Jammy Jellyfish)
+#    - Node.js v22.x LTS
+#    - PostgreSQL 15+
 # =============================================================================
 
 set -euo pipefail
@@ -97,9 +97,9 @@ show_disclaimer() {
         --backtitle "$BACKTITLE" \
         --msgbox "\
 Auto application setup process provided by TJ BENJAMIN Services.
-This setup tool is developed for Ubuntu 22.04.5 LTS Linux based systems.
+This setup tool is developed for Ubuntu 22.04 LTS Linux based systems.
 
-Requirements: Node.js v22.12.0 and PostgreSQL 15.15
+Requirements: Node.js v22.x LTS and PostgreSQL 15+
 
 This tool will:
   - Install system dependencies and packages
@@ -210,7 +210,7 @@ prompt_domain() {
     DOMAIN="${DOMAIN%/}"
 
     [[ -z "$DOMAIN" ]] && error "Domain name cannot be empty."
-    
+
     clear
     echo "Domain set to: $DOMAIN"
     sleep 1
@@ -467,19 +467,28 @@ do_step_2() {
     sudo apt-get update -qq
     sudo apt-get install -y -qq \
         curl wget git openssl ca-certificates gnupg lsb-release \
-        build-essential python3 \
+        build-essential python3 zip unzip \
         ufw fail2ban \
         unattended-upgrades apt-listchanges
 
-    # Node.js 20.x LTS
+    # Node.js 22.x LTS
     NODE_VER=$(node --version 2>/dev/null | grep -oP '(?<=v)\d+' || echo "0")
-    if (( NODE_VER < 20 )); then
-        info "Node.js ${NODE_VER} found — installing 20.x LTS..."
-        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - -q
+    if (( NODE_VER < 22 )); then
+        info "Node.js v${NODE_VER} found — installing 22.x LTS..."
+        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - -q
         sudo apt-get install -y nodejs -qq
         success "Node.js $(node --version) installed."
     else
         info "Node.js $(node --version) already present — skipping."
+    fi
+
+    # PM2 global install
+    if ! command -v pm2 &>/dev/null; then
+        info "Installing PM2 globally..."
+        sudo npm install -g pm2 --silent
+        success "PM2 $(pm2 --version) installed."
+    else
+        info "PM2 $(pm2 --version) already present — skipping."
     fi
 
     # PostgreSQL
@@ -608,7 +617,7 @@ do_step_4() {
     npm install --silent
     success "npm install complete."
 
-    # Rename .env.example to .env if .env does not already exist
+    # Copy .env.example to .env if .env does not already exist
     if [ ! -f "${APP_DIR}/.env" ]; then
         if [ -f "${APP_DIR}/.env.example" ]; then
             cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"
@@ -712,16 +721,8 @@ do_step_5() {
         info "Created .env with DATABASE_URL."
     fi
 
-    # Initialize schema
-    info "Initializing database schema..."
-    cd "${APP_DIR}"
-    if [ -f "package.json" ] && npm run db:push >/dev/null 2>&1; then
-        success "Database schema initialized."
-    else
-        warn "Schema init failed — you may need to run 'npm run db:push' manually."
-    fi
-
     success "DATABASE_URL written: ${NEW_DB_URL}"
+    info "Note: Run Step 8 (Drizzle push) to initialize the database schema."
 }
 
 # ── Step 6 – .env file ────────────────────────────────────────────────────────
@@ -831,7 +832,9 @@ do_step_7() {
     for DIR in \
         "${APP_DIR}/uploads" \
         "${APP_DIR}/uploads/mm" \
-        "${APP_DIR}/uploads/mw"; do
+        "${APP_DIR}/uploads/mw" \
+        "${APP_DIR}/uploads/mw_m" \
+        "${APP_DIR}/logs"; do
         [ -d "$DIR" ] || mkdir -p "$DIR"
         info "Verified: $DIR"
     done
@@ -869,12 +872,23 @@ do_step_9() {
     hdr "Step 9/10  Production build"
     cd "${APP_DIR}"
     npm run build
-    success "Build complete → ${APP_DIR}/dist/"
+    # Confirm the built entry-point exists before PM2 tries to use it
+    if [ ! -f "${APP_DIR}/dist/index.cjs" ]; then
+        error "Build succeeded but dist/index.cjs not found. Check the build output above."
+    fi
+    success "Build complete → ${APP_DIR}/dist/index.cjs"
 }
 
 # ── Step 10 – PM2 + Nginx + SSL ───────────────────────────────────────────────
 do_step_10() {
     hdr "Step 10a/10  PM2 process management (${SERVICE_NAME})"
+
+    # Verify PM2 is installed
+    if ! command -v pm2 &>/dev/null; then
+        info "PM2 not found — installing now..."
+        sudo npm install -g pm2 --silent
+        success "PM2 $(pm2 --version) installed."
+    fi
 
     # Ensure DB_PASSWORD is available
     DB_PASSWORD=""
@@ -916,23 +930,42 @@ module.exports = {
 };
 ECOEOF
 
+    # Stop and delete any existing PM2 process before starting fresh
+    if pm2 list 2>/dev/null | grep -q "${SERVICE_NAME}"; then
+        info "Existing PM2 process '${SERVICE_NAME}' found — stopping and deleting..."
+        pm2 delete "${SERVICE_NAME}" 2>/dev/null || true
+        sleep 1
+    fi
+
     info "Starting application with PM2..."
     pm2 start "${APP_DIR}/ecosystem.config.cjs"
 
     info "Waiting for application to start..."
-    for i in $(seq 1 15); do
+    for i in $(seq 1 20); do
         sleep 1
         if pm2 list | grep -q "${SERVICE_NAME}.*online"; then
             success "Application '${SERVICE_NAME}' is running."
             break
         fi
-        if [ "$i" -eq 15 ]; then
-            warn "Application did not come up within 15 seconds. Last log lines:"
-            pm2 logs "${SERVICE_NAME}" --lines 20 2>/dev/null || true
+        if [ "$i" -eq 20 ]; then
+            warn "Application did not come up within 20 seconds. Last log lines:"
+            pm2 logs "${SERVICE_NAME}" --lines 30 --nostream 2>/dev/null || true
             error "Application '${SERVICE_NAME}' failed to start — see logs above."
         fi
     done
     pm2 save
+
+    # Configure PM2 to start on system boot
+    info "Configuring PM2 to start on system reboot..."
+    PM2_STARTUP=$(pm2 startup systemd -u root --hp /root 2>/dev/null | grep "sudo env" || true)
+    if [ -n "$PM2_STARTUP" ]; then
+        eval "$PM2_STARTUP" 2>/dev/null || true
+    else
+        # Fallback: run the startup command directly
+        pm2 startup systemd -u root --hp /root 2>/dev/null || true
+    fi
+    pm2 save
+    success "PM2 will restart '${SERVICE_NAME}' automatically on reboot."
 
     # ── Nginx + SSL ──────────────────────────────────────────────────────────
     hdr "Step 10b/10  Nginx + SSL"
@@ -1064,6 +1097,8 @@ server {
     ssl_session_tickets off;
     ssl_stapling on;
     ssl_stapling_verify on;
+    resolver 8.8.8.8 8.8.4.4 valid=300s;
+    resolver_timeout 5s;
 
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
     add_header X-Frame-Options SAMEORIGIN always;
@@ -1100,7 +1135,6 @@ server {
         proxy_set_header Host              \$host;
         proxy_set_header X-Real-IP         \$remote_addr;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_valid 200 7d;
         add_header Cache-Control "public, max-age=604800, immutable";
     }
 
@@ -1132,8 +1166,22 @@ NGINXEOF
         sudo systemctl start nginx
     fi
     sudo systemctl reload nginx
-    sudo systemctl enable certbot.timer 2>/dev/null || true
-    success "Nginx configured and reloaded."
+
+    # Certificate auto-renewal (timer preferred, cron fallback)
+    if sudo systemctl list-timers certbot.timer --all 2>/dev/null | grep -q certbot; then
+        sudo systemctl enable certbot.timer 2>/dev/null || true
+        info "Certbot timer enabled for automatic renewal."
+    else
+        CRON_ENTRY="0 3 * * * certbot renew --quiet --deploy-hook 'systemctl reload nginx'"
+        if ! sudo crontab -l 2>/dev/null | grep -q "certbot renew"; then
+            (sudo crontab -l 2>/dev/null; echo "$CRON_ENTRY") | sudo crontab -
+            info "Certbot renewal cron job added (daily at 3 AM)."
+        else
+            info "Certbot renewal cron already configured."
+        fi
+    fi
+
+    success "Nginx configured, SSL active, auto-renewal scheduled."
 }
 
 # ─── RUN FROM A GIVEN STEP ────────────────────────────────────────────────────
@@ -1157,7 +1205,7 @@ run_from() {
     echo -e "  ${BOLD}Site      :${RESET} ${CYAN}https://${DOMAIN}${RESET}"
     echo -e "  ${BOLD}Admin     :${RESET} https://${DOMAIN}/admin/login"
     echo -e "  ${BOLD}Database  :${RESET} ${DB_NAME}  (user: ${DB_USER})"
-    echo -e "  ${BOLD}Service   :${RESET} ${SERVICE_NAME}  (PM2)"
+    echo -e "  ${BOLD}Service   :${RESET} ${SERVICE_NAME}  (PM2 — auto-starts on reboot)"
     echo ""
     echo -e "  ${BOLD}Useful commands:${RESET}"
     echo -e "    App logs  : pm2 logs ${SERVICE_NAME} -f"
@@ -1193,6 +1241,7 @@ prompt_port
 if [ "$AUTO_YES" = true ]; then
     info "Running all steps unattended (--yes flag set)."
     run_from 1
+    exit 0
 fi
 
 # Interactive whiptail menu loop
