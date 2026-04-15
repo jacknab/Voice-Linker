@@ -404,11 +404,13 @@ function getRecordingSid(url: string): string | null {
 // Play a pre-recorded prompt from uploads/ if the file exists, otherwise fall back to TTS.
 //
 // Audio path lookup order:
-//   MM systems: uploads/mm/<file>  →  uploads/<file>  →  TTS (male voice, Twilio default)
-//   MW systems: uploads/mw/<file>  →  TTS (female voice, Polly.Joanna)
+//   MM systems:             uploads/mm/<file>    →  uploads/<file>  →  TTS (male voice, Twilio default)
+//   MW systems (male):      uploads/mw/<file>    →  TTS (female voice, Polly.Joanna)
+//   MW systems (female):    uploads/mw_m/<file>  →  uploads/mw/<file>  →  TTS (male voice, Polly.Matthew)
 //              ↳ MW intentionally skips the shared uploads/ root so MM audio never bleeds in.
+//              ↳ Female callers on MW use uploads/mw_m/ (male-voiced prompts), with uploads/mw/ as fallback.
 //
-// The admin Audio Manager exposes separate Shared / MM / MW folders to match this logic.
+// The admin Audio Manager exposes separate Shared / MM / MW / MW_M folders to match this logic.
 function playPrompt(
   node: { say: (...args: any[]) => any; play: (url: string) => void },
   req: Request,
@@ -416,13 +418,32 @@ function playPrompt(
   fallbackText: string
 ): void {
   const category = getRawSiteSettingsCache()?.siteCategory?.toLowerCase();
+  const callSid = (req.body?.CallSid ?? req.query?.CallSid ?? "") as string;
 
-  // Check the category-specific subfolder first (uploads/mm/ or uploads/mw/)
+  // For MW systems, female callers use the mw_m (male-voiced) folder.
+  const isMWFemale = category === "mw" && femaleCallers.has(callSid);
+
   if (category) {
-    const catPath = path.join(UPLOADS_DIR, category, filename);
-    if (fs.existsSync(catPath)) {
-      node.play(`${baseUrl(req)}/uploads/${category}/${filename}`);
-      return;
+    // MW female → try mw_m first, then mw as fallback
+    if (isMWFemale) {
+      const mwmPath = path.join(UPLOADS_DIR, "mw_m", filename);
+      if (fs.existsSync(mwmPath)) {
+        node.play(`${baseUrl(req)}/uploads/mw_m/${filename}`);
+        return;
+      }
+      // Fallback to mw/ folder (covers files not yet generated in mw_m)
+      const mwPath = path.join(UPLOADS_DIR, "mw", filename);
+      if (fs.existsSync(mwPath)) {
+        node.play(`${baseUrl(req)}/uploads/mw/${filename}`);
+        return;
+      }
+    } else {
+      // MM or MW male → use the category folder directly
+      const catPath = path.join(UPLOADS_DIR, category, filename);
+      if (fs.existsSync(catPath)) {
+        node.play(`${baseUrl(req)}/uploads/${category}/${filename}`);
+        return;
+      }
     }
   } else {
     // Cache not yet populated — scan all known category folders so audio files
@@ -437,9 +458,15 @@ function playPrompt(
   }
 
   // MW systems use a separate audio path — do not fall back to the shared uploads/ root.
-  // If no MW-specific file was found above, fall back to TTS with a female voice.
+  // Female callers fall back to Polly.Matthew (male voice); male callers to Polly.Joanna (female voice).
   if (category === "mw") {
-    if (fallbackText) node.say({ voice: "Polly.Joanna" }, fallbackText);
+    if (fallbackText) {
+      if (isMWFemale) {
+        node.say({ voice: "Polly.Matthew" }, fallbackText);
+      } else {
+        node.say({ voice: "Polly.Joanna" }, fallbackText);
+      }
+    }
     return;
   }
 
@@ -4215,6 +4242,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     else if (digit === "2") twiml.redirect("/voice/purchase-pre-menu");
     else if (digit === "3") twiml.redirect("/voice/cs-billing-info");
     else if (digit === "4") twiml.redirect("/voice/cs-leave-message");
+    else if (digit === "#") twiml.redirect("/voice/main-menu");
     else                    twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -4270,6 +4298,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digit  = req.body?.Digits as string;
     if      (digit === "2") twiml.redirect("/voice/purchase-pre-menu");
+    else if (digit === "#") twiml.redirect("/voice/main-menu");
     else                    twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -4310,6 +4339,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const digit  = req.body?.Digits as string;
     if      (digit === "2") twiml.redirect("/voice/purchase-pre-menu");
     else if (digit === "4") twiml.redirect("/voice/cs-leave-message");
+    else if (digit === "#") twiml.redirect("/voice/main-menu");
     else                    twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());

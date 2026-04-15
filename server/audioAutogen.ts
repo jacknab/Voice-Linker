@@ -45,7 +45,7 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "name_saved_record_greeting.mp3",  text: "Great. Now record your greeting for other callers. After the tone, press any key when done." },
   { filename: "greeting_error.mp3",              text: "That greeting was too short. Please try again after the tone. Press any key when done." },
   { filename: "greeting_setup.mp3",              text: "Your last greeting you recorded is still available. To use it again, press 1. To record a new greeting, press 2. To hear your greeting, press 3. To repeat these choices, press 9. To continue, press pound." },
-  { filename: "review_greeting.mp3",             text: "To hear your greeting, press 1. To re-record, press 2. To accept and continue, press 3. To repeat these choices, press 9." },
+  { filename: "review_greeting.mp3",             text: "If you're happy with the way your greeting sounds, press 1. To re-record, press 2. To hear how your greeting sounds, press 3. To repeat these choices, press 9." },
   { filename: "no_greeting_found.mp3",           text: "No greeting found." },
   { filename: "profile_saved.mp3",               text: "Your greeting has been saved." },
   { filename: "profile_save_error.mp3",          text: "We could not save your profile. Please try again." },
