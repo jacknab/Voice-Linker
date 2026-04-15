@@ -3969,6 +3969,169 @@ function formatElapsed(cs: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}.${cents.toString().padStart(2, "0")}`;
 }
 
+// ── Prompt Library ────────────────────────────────────────────────────────────
+// Shows all known IVR audio prompts with their expected text, lets admins edit
+// the script text for each file and flag issues — all without running a call.
+const GROUP_LABELS: Record<string, string> = {
+  entry: "Call Entry",
+  membership: "Membership Gateway",
+  onboarding: "New Caller Onboarding",
+  menu: "Main Menu",
+  customer_service: "Customer Service",
+  billing: "Billing & Pricing",
+  live: "Live Connector",
+  mailbox: "Mailboxes",
+  time: "Time Announcements",
+  roger: "Roger / AI Greeter",
+  misc: "Miscellaneous",
+};
+
+function PromptLibrary({
+  overrides,
+  onEdit,
+  onReport,
+  onOverridesChange,
+}: {
+  overrides: Record<string, string>;
+  onEdit: (filename: string, text: string) => void;
+  onReport: (filename: string, text: string) => void;
+  onOverridesChange: (o: Record<string, string>) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [activeGroup, setActiveGroup] = useState<string>("all");
+  const [collapsed, setCollapsed] = useState(false);
+
+  const groups = ["all", ...Array.from(new Set(SYSTEM_PROMPTS.map(p => p.group)))];
+
+  const filtered = SYSTEM_PROMPTS.filter(p => {
+    const matchGroup = activeGroup === "all" || p.group === activeGroup;
+    const q = search.toLowerCase();
+    const matchSearch = !q || p.filename.toLowerCase().includes(q) || p.label.toLowerCase().includes(q) || p.text.toLowerCase().includes(q);
+    return matchGroup && matchSearch;
+  });
+
+  return (
+    <div style={{ background: PT.card, border: `1px solid ${PT.cardBorder}`, borderRadius: 16, overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ padding: "0.85rem 1.1rem", borderBottom: `1px solid ${PT.logBorder}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <Pencil size={14} style={{ color: "#a78bfa" }} />
+          <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.8rem", color: "#8fa3c8", letterSpacing: "0.08em" }}>
+            PROMPT LIBRARY
+          </span>
+          <span style={{ fontFamily: "monospace", fontSize: "0.65rem", background: "#1e2d47", border: "1px solid #2a3a5a", borderRadius: 4, padding: "0 5px", color: "#6b84a8" }}>
+            {SYSTEM_PROMPTS.length} prompts
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flex: 1, justifyContent: "flex-end" }}>
+          <input
+            data-testid="input-prompt-search"
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search filename, label, or text…"
+            style={{ background: PT.logBg, border: `1px solid ${PT.keyBorder}`, borderRadius: 6, padding: "0.3rem 0.6rem", fontFamily: "monospace", fontSize: "0.72rem", color: "#aabbd4", outline: "none", width: 240 }}
+          />
+          <button
+            onClick={() => setCollapsed(c => !c)}
+            style={{ background: "none", border: "1px solid #3a4a6a", borderRadius: 6, cursor: "pointer", fontFamily: "monospace", fontSize: "0.68rem", color: "#6b84a8", padding: "0.2rem 0.5rem" }}
+          >
+            {collapsed ? "▼ Show" : "▲ Hide"}
+          </button>
+        </div>
+      </div>
+
+      {!collapsed && (
+        <>
+          {/* Group filter chips */}
+          <div style={{ padding: "0.6rem 1.1rem", borderBottom: `1px solid ${PT.logBorder}`, display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+            {groups.map(g => (
+              <button
+                key={g}
+                onClick={() => setActiveGroup(g)}
+                style={{
+                  background: activeGroup === g ? "#3b2f7a" : PT.logBg,
+                  border: `1px solid ${activeGroup === g ? "#7c5fa8" : "#2a3a5a"}`,
+                  borderRadius: 5, padding: "0.2rem 0.55rem",
+                  fontFamily: "monospace", fontSize: "0.65rem",
+                  color: activeGroup === g ? "#c4b5fd" : "#6b84a8",
+                  cursor: "pointer", transition: "all 0.12s",
+                }}
+              >
+                {g === "all" ? "All" : (GROUP_LABELS[g] ?? g)}
+              </button>
+            ))}
+          </div>
+
+          {/* Prompt rows */}
+          <div style={{ maxHeight: 420, overflowY: "auto" }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: "2rem", textAlign: "center", fontFamily: "monospace", fontSize: "0.75rem", color: PT.dimText }}>No prompts match your search.</div>
+            ) : filtered.map(p => {
+              const currentText = overrides[p.filename] ?? p.text;
+              const hasOverride = !!overrides[p.filename];
+              return (
+                <div
+                  key={p.filename}
+                  data-testid={`prompt-row-${p.filename}`}
+                  style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", padding: "0.55rem 1.1rem", borderBottom: `1px solid ${PT.logBorder}` }}
+                >
+                  {/* Filename + label */}
+                  <div style={{ width: 220, flexShrink: 0 }}>
+                    <div style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#c4b5fd", wordBreak: "break-all" }}>{p.filename}</div>
+                    <div style={{ fontFamily: "monospace", fontSize: "0.62rem", color: "#6b84a8", marginTop: 1 }}>{p.label}</div>
+                  </div>
+
+                  {/* Text preview */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {currentText ? (
+                      <span style={{ fontFamily: "monospace", fontSize: "0.7rem", color: hasOverride ? "#22c55e" : "#8fa3c8", fontStyle: "italic" }}>
+                        {hasOverride && <span style={{ fontSize: "0.6rem", fontWeight: 700, marginRight: "0.3rem", color: "#22c55e" }}>OVERRIDE:</span>}
+                        {currentText.length > 120 ? currentText.slice(0, 120) + "…" : currentText}
+                      </span>
+                    ) : (
+                      <span style={{ fontFamily: "monospace", fontSize: "0.65rem", color: PT.dimText, fontStyle: "italic" }}>no text — click ✏ to add</span>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", flexShrink: 0 }}>
+                    <button
+                      data-testid={`btn-lib-edit-${p.filename}`}
+                      title="Edit prompt script text"
+                      onClick={() => onEdit(p.filename, currentText)}
+                      style={{ background: "none", border: "1px solid #3a4a6a", borderRadius: 5, cursor: "pointer", padding: "0.25rem 0.5rem", display: "flex", alignItems: "center", gap: "0.25rem" }}
+                    >
+                      <Pencil size={10} style={{ color: "#a78bfa" }} />
+                      <span style={{ fontFamily: "monospace", fontSize: "0.6rem", color: "#a78bfa" }}>Edit</span>
+                    </button>
+                    <button
+                      data-testid={`btn-lib-report-${p.filename}`}
+                      title="Flag an issue with this prompt"
+                      onClick={() => onReport(p.filename, currentText)}
+                      style={{ background: "none", border: "1px solid #3a4a6a", borderRadius: 5, cursor: "pointer", padding: "0.25rem 0.5rem", display: "flex", alignItems: "center", gap: "0.25rem" }}
+                    >
+                      <Flag size={10} style={{ color: "#f59e0b" }} />
+                      <span style={{ fontFamily: "monospace", fontSize: "0.6rem", color: "#f59e0b" }}>Flag</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footer hint */}
+          <div style={{ padding: "0.5rem 1.1rem", borderTop: `1px solid ${PT.logBorder}`, background: PT.logBg }}>
+            <span style={{ fontFamily: "monospace", fontSize: "0.62rem", color: PT.dimText }}>
+              Click <strong style={{ color: "#a78bfa" }}>Edit</strong> to update the script text for an audio file · Click <strong style={{ color: "#f59e0b" }}>Flag</strong> to log an issue for that prompt · Changes saved here persist across sessions.
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function IVRTesterTab() {
   const { toast } = useToast();
   const logEndRef   = useRef<HTMLDivElement>(null);
@@ -4367,7 +4530,10 @@ function IVRTesterTab() {
   };
 
   return (
-    <div style={{ background: PT.bg, minHeight: "100%", padding: "1.5rem", display: "flex", gap: "1.25rem", alignItems: "flex-start" }}>
+    <div style={{ background: PT.bg, minHeight: "100%", padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+
+      {/* ── Top row: Dialer + Activity Log ────────────────────────────────── */}
+      <div style={{ display: "flex", gap: "1.25rem", alignItems: "flex-start" }}>
 
       {/* ── Left: Dialer ─────────────────────────────────────────────────── */}
       <div style={{ width: 310, flexShrink: 0, ...dialerCardStyle }}>
@@ -4727,6 +4893,15 @@ function IVRTesterTab() {
           ))}
         </div>
       </div>
+      </div>{/* end top-row flex */}
+
+      {/* ── Prompt Library ───────────────────────────────────────────────── */}
+      <PromptLibrary
+        overrides={promptOverrides}
+        onEdit={(filename, text) => { setEditPrompt({ filename, text }); setEditText(text); }}
+        onReport={(filename, text) => { setReportEntry({ filename, text }); setReportNotes(""); }}
+        onOverridesChange={setPromptOverrides}
+      />
 
       {/* ── Edit Prompt Text Modal ────────────────────────────────────────── */}
       {editPrompt && (

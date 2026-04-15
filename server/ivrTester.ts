@@ -329,7 +329,7 @@ export async function sendIVRInput(
     await executeIVRStep(session, action, {
       Digits: digits,
       RecordingUrl: "",
-      RecordingDuration: "0",
+      RecordingDuration: "5",
       RecordingSid: `TEST-REC-${Date.now()}`,
     });
     return;

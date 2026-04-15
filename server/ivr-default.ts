@@ -1716,15 +1716,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const nameRecordingUrl = req.body?.RecordingUrl as string;
     const nameDuration = parseInt(req.body?.RecordingDuration) || 0;
 
-    if (!nameRecordingUrl || nameDuration < 1) {
+    // Test sessions (from the admin phone tester) have no real recording — bypass validation
+    const isTestSession = callSid?.startsWith("TEST-");
+
+    if (!isTestSession && (!nameRecordingUrl || nameDuration < 1)) {
       playPrompt(twiml, req, "name_retry.mp3", "We didn't catch your name. Please try again.");
       twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       res.type("text/xml");
       return res.send(twiml.toString());
     }
 
-    // Download from Twilio to local server, then hold until the greeting is saved
-    pendingNameRecordings.set(callSid, await downloadRecording(nameRecordingUrl));
+    // Download from Twilio to local server, then hold until the greeting is saved.
+    // Test sessions use a placeholder path since there's no actual recording.
+    const resolvedNameUrl = isTestSession && !nameRecordingUrl
+      ? "/uploads/test-sim-name.mp3"
+      : await downloadRecording(nameRecordingUrl);
+    pendingNameRecordings.set(callSid, resolvedNameUrl);
 
     playPrompt(twiml, req, "name_saved_record_greeting.mp3", "Great. Now record your greeting for other callers. After the tone, press any key when done.");
     twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" } as any);
@@ -1744,20 +1751,26 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const rawRecordingUrl = req.body?.RecordingUrl;
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
 
-      if (!fromNumber || !rawRecordingUrl) {
+      // Test sessions (from the admin phone tester) have no real recording — bypass validation
+      const isTestSession = callSid?.startsWith("TEST-");
+
+      if (!fromNumber || (!isTestSession && !rawRecordingUrl)) {
         throw new Error(`Missing fields: From=${fromNumber}, RecordingUrl=${rawRecordingUrl}`);
       }
 
-      // Reject greetings shorter than 3 seconds — play error audio and re-prompt
-      if (recordingDuration < 3) {
+      // Reject greetings shorter than 3 seconds — play error audio and re-prompt (not for test sessions)
+      if (!isTestSession && recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That greeting was too short. Please try again after the tone. Press any key when done.");
         twiml.record({ maxLength: 60, playBeep: true, action: "/voice/save-profile" } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
-      // Download greeting recording from Twilio to local server
-      const recordingUrl = await downloadRecording(rawRecordingUrl);
+      // Download greeting recording from Twilio to local server.
+      // Test sessions use a placeholder path since there's no actual recording.
+      const recordingUrl = isTestSession && !rawRecordingUrl
+        ? "/uploads/test-sim-greeting.mp3"
+        : await downloadRecording(rawRecordingUrl);
 
       // Consume any pending name recording from the prior step
       const nameRecordingUrl = pendingNameRecordings.get(callSid) ?? undefined;
@@ -1797,9 +1810,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       scheduleAutoModCheck(recordingUrl, user.id, "greeting");
 
       // Automatically play back the greeting so the caller can hear it before the review menu.
-      // This also gives the transcription callback time to come back before they press 3 to accept.
-      twiml.say("Here is what your greeting sounds like.");
-      safePlayRecording(twiml, recordingUrl, req, "");
+      // Test sessions skip playback (no real audio file) and go straight to the review menu.
+      if (!isTestSession) {
+        twiml.say("Here is what your greeting sounds like.");
+        safePlayRecording(twiml, recordingUrl, req, "");
+      }
       twiml.redirect("/voice/review-greeting");
     } catch (error) {
       console.error("[voice] /voice/save-profile error:", error);
