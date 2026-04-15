@@ -7,6 +7,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { startSimulator } from "./simulator";
 import { startAudioAutogen } from "./audioAutogen";
+import { runStartupMigrations } from "./migrations";
 import { createServer } from "http";
 
 const app = express();
@@ -124,6 +125,11 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Run idempotent schema migrations before anything else touches the DB.
+  // This catches any columns that were added to the schema after the initial
+  // drizzle-kit push ran on the production server.
+  await runStartupMigrations();
+
   await registerRoutes(httpServer, app);
 
   // Start the virtual caller simulator after a short delay to let the DB settle
