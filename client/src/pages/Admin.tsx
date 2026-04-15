@@ -926,8 +926,17 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
 
   // ── 9. NUMBERS & PHRASES — chained-audio building blocks ────────────────
   { group: "phrases", filename: "phrase_you_have.mp3", label: "Phrase — «You have»", text: "You have" },
+  { group: "phrases", filename: "phrase_and.mp3", label: "Phrase — «and»", text: "and" },
   { group: "phrases", filename: "phrase_minutes_of_pbtr.mp3", label: "Phrase — «minutes remaining»", text: "minutes remaining." },
   { group: "phrases", filename: "phrase_minute_of_pbtr.mp3", label: "Phrase — «minute remaining»", text: "minute remaining." },
+  { group: "phrases", filename: "phrase_hours_of_pbtr.mp3", label: "Phrase — «hours remaining»", text: "hours remaining." },
+  { group: "phrases", filename: "phrase_hour_of_pbtr.mp3", label: "Phrase — «hour remaining»", text: "hour remaining." },
+  { group: "phrases", filename: "phrase_hours.mp3", label: "Phrase — «hours»", text: "hours" },
+  { group: "phrases", filename: "phrase_hour.mp3", label: "Phrase — «hour»", text: "hour" },
+  { group: "phrases", filename: "phrase_days_of_pbtr.mp3", label: "Phrase — «days remaining»", text: "days remaining." },
+  { group: "phrases", filename: "phrase_day_of_pbtr.mp3", label: "Phrase — «day remaining»", text: "day remaining." },
+  { group: "phrases", filename: "phrase_days.mp3", label: "Phrase — «days»", text: "days" },
+  { group: "phrases", filename: "phrase_day.mp3", label: "Phrase — «day»", text: "day" },
   { group: "phrases", filename: "phrase_there_are.mp3", label: "Phrase — «There are»", text: "There are" },
   { group: "phrases", filename: "phrase_there_is.mp3", label: "Phrase — «There is»", text: "There is" },
   { group: "phrases", filename: "phrase_callers_on_the_line.mp3", label: "Phrase — «guys on the line»", text: "guys on the line." },
