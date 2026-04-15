@@ -1874,6 +1874,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       let hasMembership: boolean;
       let remainingSeconds: number;
 
+      let userTier: string | null = null;
       if (cardId) {
         const card = await storage.getMembershipCardById(cardId);
         hasMembership = true;
@@ -1882,15 +1883,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const user = await getOrCreateUser(fromNumber);
         hasMembership = !!user.membershipTier;
         remainingSeconds = user.remainingSeconds ?? 0;
+        userTier = user.membershipTier ?? null;
       }
 
       // ── Access expired ──────────────────────────────────────────────────
       if (hasMembership && remainingSeconds <= 0) {
-        playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         if (cardId) {
+          playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
           twiml.say("Please use a different calling card.");
           twiml.hangup();
+        } else if (userTier === "free_trial") {
+          playPrompt(twiml, req, "free_trial_expired.mp3",
+            "Your free trial has ended. We hope you enjoyed your time on the system. " +
+            "To keep your access and join the community as a full member, press 1 when you hear the menu.");
+          twiml.redirect("/voice/membership-purchase");
         } else {
+          playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
           twiml.redirect("/voice/membership-purchase");
         }
         res.type("text/xml");
@@ -2321,6 +2329,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       let hasMembership: boolean;
       let remainingSeconds: number;
 
+      let userTier: string | null = null;
       if (cardId) {
         const card = await storage.getMembershipCardById(cardId);
         hasMembership = true;
@@ -2329,15 +2338,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const user = await getOrCreateUser(fromNumber);
         hasMembership = !!user.membershipTier;
         remainingSeconds = user.remainingSeconds ?? 0;
+        userTier = user.membershipTier ?? null;
       }
 
       // Access expired
       if (hasMembership && remainingSeconds <= 0 && !femaleCallers.has(callSid)) {
-        playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         if (cardId) {
+          playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
           twiml.say("Please use a different calling card.");
           twiml.hangup();
+        } else if (userTier === "free_trial") {
+          playPrompt(twiml, req, "free_trial_expired.mp3",
+            "Your free trial has ended. We hope you enjoyed your time on the system. " +
+            "To keep your access and join the community as a full member, press 1 when you hear the menu.");
+          twiml.redirect("/voice/membership-purchase");
         } else {
+          playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
           twiml.redirect("/voice/membership-purchase");
         }
         res.type("text/xml");

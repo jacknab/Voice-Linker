@@ -34,6 +34,7 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "membership_invalid.mp3",      text: "We could not find a card with that number. Please check your card and try again." },
   { filename: "membership_linked.mp3",       text: "Card accepted." },
   { filename: "access_expired.mp3",          text: "Your access has expired." },
+  { filename: "free_trial_expired.mp3",      text: "Your free trial has ended. We hope you enjoyed your time on the system. To keep your access and join the community as a full member, press 1 when you hear the menu." },
   { filename: "free_mode_announcement.mp3",  text: "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now." },
   { filename: "free_trial_offer.mp3",        text: "We would like to offer you a free trial. To get your free trial now press 1. To get your free trial later press the pound key." },
   { filename: "free_trial_terms.mp3",        text: "Your free trial will expire in seven days and it must be used from this phone number." },
