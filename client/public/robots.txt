@@ -1,9 +1,9 @@
 User-agent: *
 Allow: /
 Disallow: /api/
-Disallow: /admin
+Disallow: /backstage
 
 # Crawl-delay for well-behaved bots
 Crawl-delay: 1
 
-Sitemap: https://ec21bbd2-8c65-407c-a3ec-731e3b5b43a9-00-20rrdffu6l9hy.janeway.replit.dev/sitemap.xml
+Sitemap: https://c1d5d8d8-fa0b-4334-9be5-4597c3dbc8b3-00-cqh8ef7j7m38.janeway.replit.dev/sitemap.xml

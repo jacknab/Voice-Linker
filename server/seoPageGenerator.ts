@@ -63,92 +63,92 @@ function getContentConfig(siteCategory: string): ContentConfig {
 
   if (isMM) {
     return {
-      pronoun: "guys",
-      audienceDesc: "men seeking men",
+      pronoun: "gay men",
+      audienceDesc: "gay and bisexual men",
       metaDesc: (city, state, phone, siteName) =>
-        `${siteName} is the free phone chat line for men in ${city}, ${state}. Connect with real local guys right now — no app, no credit card, no hassle. ${phone ? `Call your local number: ${phone}. ` : ""}New callers get free trial minutes to get started.`,
+        `${siteName} is the free gay chat line for men in ${city}, ${state}. Talk to real local gay men right now — no app, no credit card required. ${phone ? `Local number: ${phone}. ` : ""}Free trial minutes for every new caller. Call and connect instantly.`,
       h1: (city, stateCode, siteName) =>
-        `${siteName} in ${city}, ${stateCode} — Talk to Real Local Guys`,
+        `${city}, ${stateCode} Gay Chat Line — Talk to Gay Men Now | ${siteName}`,
       tagline: (city, state, siteName) =>
-        `The free phone chat line for men in ${city}, ${state}. Real guys, live conversation, 24 hours a day.`,
+        `The free gay chat line and gay party line for men in ${city}, ${state}. Real gay men, live voice conversations, 24 hours a day.`,
       features: [
-        `Free trial minutes for all new ${isMM ? "callers" : "callers"} — no credit card required`,
-        "Real local callers on the line right now, 24/7",
-        "Private and anonymous — your phone number is never shared",
-        "Record a personal greeting to introduce yourself to the community",
-        "Browse greetings from guys in your area before connecting",
-        "Leave and receive voice messages anytime, day or night",
+        "Free trial minutes for all new callers — no credit card required",
+        "Talk to real gay men in your area right now, 24/7",
+        "100% private and anonymous — your number is never shared",
+        "Record a personal greeting to introduce yourself to local gay men",
+        "Browse greetings from gay men near you before connecting",
+        "Leave and receive private voice messages at any time",
         "Go live with someone instantly when you both want to connect",
         "Simple, affordable membership plans with no hidden fees",
-        "Block any caller instantly with a single keystroke",
-        "Available from any phone — smartphone, cell, or landline",
+        "Block any caller instantly — full control over your experience",
+        "Works on any phone — smartphone, basic cell, or landline",
       ],
       h2s: [
         {
-          heading: (city, state, siteName) => `${siteName}: The ${city}, ${state} Chat Line for Men`,
+          heading: (city, state, siteName) => `${siteName}: The Free Gay Chat Line in ${city}, ${state}`,
           body: (city, state, siteName) =>
-            `${siteName} is the premier free phone chat line for men seeking men in ${city}, ${state}. Whether you're looking for casual conversation, friendship, or a meaningful connection, real guys in your area are on the line right now — waiting to hear from you. Unlike dating apps that bury you under endless profiles and algorithm filters, ${siteName} puts you in direct, real-time voice contact with men in the ${city} community. No swiping, no messaging back and forth for days — just pick up the phone and start talking. Thousands of men across ${state} use ${siteName} every day to meet people they never would have found otherwise. Your next great conversation is just one phone call away.`,
+            `${siteName} is the premier free gay chat line for men in ${city}, ${state}. Whether you're looking to talk to gay men casually, find friendship, or make a real connection, the ${city} gay chat line is live right now — real guys in your area are on the line waiting to hear from you. Unlike gay dating apps that rely on photos and algorithms, ${siteName} is voice-first. You hear a real man's voice from the very first second, which means you know immediately if there's genuine chemistry. No swiping, no text chains that go nowhere, no fake profiles — just pick up your phone, call the ${city} gay chat line number, and start talking. Gay men across ${state} use ${siteName} every day to connect with people they never would have found on an app.`,
         },
         {
-          heading: (_c, _s, _n) => "How the Chat Line Works — Step by Step",
+          heading: (_c, _s, _n) => "How the Gay Chat Line Works — Step by Step",
           body: (city, _state, siteName) =>
-            `Getting started on ${siteName} couldn't be simpler. First, call your local ${city} access number — you'll be greeted with a welcome message and guided through the process automatically. Next, record a short personal greeting: say your name, a little about yourself, and what you're looking for. Your greeting is how other guys get to know you before deciding to connect, so make it genuine and interesting. After recording, you'll be dropped directly into the ${city} community where you can browse greetings from other local guys, leave voice messages for anyone who catches your attention, or request a live connection. When both callers agree to go live, you're connected instantly and privately. The entire process — from calling to connecting — takes less than five minutes. There's no profile to fill out, no photos required, and no app to download. Your phone is your only tool.`,
+            `Getting started on ${siteName}'s gay chat line couldn't be simpler. Call your local ${city} gay chat line access number and you'll be guided through the process automatically. First, record a short personal greeting — say your name, a little about yourself, and what you're looking for. Your greeting is how other gay men get to know you before deciding to connect, so keep it genuine. After recording, you're dropped into the live ${city} gay chat line community where you can browse greetings from local gay men, leave private voice messages for anyone who interests you, or request a live two-way connection. When both callers agree to go live, ${siteName} connects you instantly and privately. The entire process — from first call to first real conversation — takes under five minutes. No profile, no photos, no app required.`,
         },
         {
-          heading: (city, state, siteName) => `Why ${city} Men Choose ${siteName}`,
+          heading: (city, state, siteName) => `Why Gay Men in ${city} Choose ${siteName}`,
           body: (city, state, siteName) =>
-            `Men in ${city}, ${state} choose ${siteName} for three simple reasons: it's fast, it's private, and it's real. Unlike social apps where you never know who's on the other side of a screen, ${siteName} is voice-first — you hear a real person from the very first second. There's no catfishing, no fake profiles, and no ghosting after hours of text conversation. ${siteName} also offers unmatched privacy. Your phone number is never displayed to other callers, and you're known only by the screen name you choose when you call. You control who you talk to, for how long, and you can block anyone instantly. For men in ${city} who value discretion — whether they're out and proud or simply private — ${siteName} provides a safe, anonymous space to connect authentically. Add in the free trial minutes for new callers and there's genuinely nothing to lose by calling.`,
+            `Gay men in ${city}, ${state} choose ${siteName} because it delivers something dating apps can't: immediate, authentic voice connection. When you call the ${city} gay chat line, you hear a real man's voice — his personality, energy, and sense of humor — right away. There's no catfishing, no carefully filtered photos, and no text conversations that go nowhere. ${siteName} also offers complete privacy that's especially important for gay men who value discretion. Your personal phone number is never revealed, you're known only by your chosen screen name, and you can block anyone with a single keypress. Whether you're out and proud, privately exploring, or anywhere in between, ${siteName} is a safe, anonymous space to connect with gay men in ${city} on your own terms. The free trial means there's nothing to lose by calling.`,
         },
         {
-          heading: (city, state, siteName) => `${city}, ${state} Is on the Line Right Now`,
+          heading: (city, state, siteName) => `Gay Men in ${city}, ${state} Are on the Line Right Now`,
           body: (city, state, siteName) =>
-            `The ${siteName} community in ${city} and across ${state} is active around the clock. In the morning before work, late at night, on weekends — there are always real guys on the line. The beauty of a phone chat line is that there's no barrier: no downloading an app, no waiting for matches, no filling out a lengthy profile. When you call your ${city} local number, you're immediately part of an active community of men in your area who are all there for the same reason you are: real connection. The community skews toward authenticity because voice is harder to fake than a carefully curated photo. What you hear is what you get — and that honesty makes for much better, much more meaningful conversations. Join the ${city} community on ${siteName} today and see who's waiting to meet you.`,
+            `The ${siteName} gay chat line community in ${city} is active around the clock — morning, night, weekends, weekdays. There are always real gay men on the line, no matter when you call. Unlike gay dating apps that go quiet or show you the same profiles for days, the ${city} gay chat line brings fresh voices and new guys every time you call. The phone-based format means there's no barrier to entry: call your ${city} gay chat line number, and you're immediately connected to a live community of gay men in your area. Voice is harder to fake than a photo, which means the gay men you meet on ${siteName} are more authentic and the conversations are more real. Join the ${city} gay chat line community on ${siteName} today.`,
         },
         {
-          heading: (_c, _s, siteName) => `Privacy and Safety on ${siteName}`,
+          heading: (_c, _s, siteName) => `Gay Chat Line Privacy — Your Safety Is Guaranteed`,
           body: (_city, _state, siteName) =>
-            `Privacy is built into every part of how ${siteName} works. Your personal phone number is never revealed to other callers — ever. You're identified only by the screen name you choose when you set up your profile, which you can change at any time. All calls are routed through ${siteName}'s private network, so neither party ever sees the other's real number. Beyond anonymity, ${siteName} gives you full control over your experience. You can block any caller permanently with a single keypress, and that caller will never be able to reach you again. The greetings and messages you send are stored securely and are only accessible to you and the people you've chosen to share them with. ${siteName} is committed to creating a space where men can connect openly without worrying about their privacy being compromised.`,
+            `Privacy is one of the most important features of the ${siteName} gay chat line — and it's built in at every level. Your personal phone number is never revealed to other callers under any circumstances. All calls are routed through ${siteName}'s private network, so neither party ever sees the other's real number. You're identified only by the screen name you record in your greeting, which you can change at any time. You have complete control over every interaction on the gay chat line: choose who you respond to, how long you talk, and block anyone permanently with a single keypress. That block is immediate and final — the blocked caller can never reach you again. ${siteName} is designed to give gay and bisexual men a safe, private, anonymous space to connect openly and authentically.`,
         },
       ],
       howToSteps: [
-        { name: "Call your local access number", text: (city, siteName) => `Dial the ${city} local access number for ${siteName}. New callers are guided through the setup process automatically — no prior experience needed.` },
-        { name: "Record your greeting", text: (_city, siteName) => `Record a short personal greeting introducing yourself. Tell other ${siteName} members a little about who you are and what you're looking for. Keep it natural and genuine — authentic greetings get the most responses.` },
-        { name: "Browse local greetings", text: (city, siteName) => `Listen to greetings from real guys in and around ${city}. Take your time — there's no pressure. When you hear someone who interests you, move on to the next step.` },
-        { name: "Send a message or go live", text: (_city, siteName) => `Leave a private voice message for anyone who catches your attention, or request a live connection. When both callers agree to connect, ${siteName} bridges you together instantly and privately.` },
+        { name: "Call your local gay chat line number", text: (city, siteName) => `Dial the ${city} gay chat line access number for ${siteName}. New callers are guided through setup automatically — no experience needed. You'll be talking to gay men in your area in minutes.` },
+        { name: "Record your greeting", text: (_city, siteName) => `Record a short personal greeting introducing yourself to the gay chat line community. Tell other men a little about who you are and what you're looking for. Genuine, specific greetings get the best responses.` },
+        { name: "Browse local gay men's greetings", text: (city, siteName) => `Listen to greetings from real gay men in and around ${city}. Take your time — there's no pressure. When you hear someone who interests you, you're ready for the next step.` },
+        { name: "Send a message or connect live", text: (_city, siteName) => `Leave a private voice message for any guy who caught your attention, or request a live two-way connection. When both callers agree, ${siteName} bridges you together instantly and privately.` },
       ],
       faqs: [
         {
-          q: (city, state, siteName) => `Is the ${siteName} chat line really free in ${city}, ${state}?`,
+          q: (city, state, siteName) => `Is there a free gay chat line in ${city}, ${state}?`,
           a: (city, state, siteName) =>
-            `Yes — ${siteName} gives all new callers free trial minutes to get started, and no credit card is required to claim them. During your free trial, you can record your greeting, browse greetings from guys in the ${city} area, send voice messages, and even connect live with someone. The free minutes give you a genuine taste of the ${siteName} experience before you decide whether a paid membership is right for you. After your trial minutes are used, affordable membership plans are available at multiple price points — there are no contracts, no hidden fees, and you can cancel anytime.`,
+            `Yes — ${siteName} is a free gay chat line with local access numbers in ${city} and across ${state}. Every new caller gets free trial minutes with no credit card required. During your trial you can record your greeting, browse greetings from gay men in the ${city} area, send voice messages, and connect live with someone. After your trial, affordable month-to-month plans are available with no contracts and no hidden fees.`,
         },
         {
-          q: (_c, _s, _n) => `Do I need to download an app to use the chat line?`,
+          q: (city, _s, _n) => `How do I talk to gay men in ${city} right now?`,
+          a: (city, state, siteName) =>
+            `The fastest way to talk to gay men in ${city} right now is to call the ${siteName} gay chat line. Dial your local ${city} access number, record a quick greeting, and you're immediately placed into the live ${city} gay chat line community. Real gay men in your area are on the line right now — no app, no profile, no waiting for a match. Just pick up any phone and call.`,
+        },
+        {
+          q: (_c, _s, _n) => `Do I need an app to use the gay chat line?`,
           a: (city, _state, siteName) =>
-            `No app is required. ${siteName} is a phone-based chat line, which means all you need is any phone — smartphone, basic cell phone, or even a landline. Just dial the ${city} local access number and you're immediately connected to the ${siteName} community. There's no account to create online, no profile photo to upload, and no software to install. This makes ${siteName} one of the most accessible ways to meet local guys because you don't need to be tech-savvy or have the latest smartphone. If you can make a phone call, you can use ${siteName}.`,
+            `No app is needed. ${siteName} is an entirely phone-based gay chat line — all you need is any phone (smartphone, basic cell, or landline) to call your local ${city} gay chat line number. There's no account to create, no photos to upload, and no software to install. If you can make a phone call, you can talk to gay men on ${siteName} right now.`,
         },
         {
-          q: (city) => `Will other callers see my personal phone number when I call?`,
+          q: (_c, _s, _n) => `Will other gay men on the chat line see my real phone number?`,
           a: (_city, _state, siteName) =>
-            `Never. ${siteName} routes all calls through its private network, which means your personal phone number is completely hidden from every other caller on the system. Other members only know you by the screen name you record in your greeting — your real identity and contact information remain entirely private. This anonymity is a core feature of ${siteName}, not an afterthought, and it's one of the main reasons men trust the platform for discreet connections. You are in complete control of your privacy at every step.`,
+            `Never. ${siteName} routes all gay chat line calls through a private network that completely hides your personal phone number from every other caller. Other men only know you by the screen name in your greeting. Your real identity and contact information stay entirely private — this is one of the core reasons gay men trust ${siteName} as a safe, discreet way to connect.`,
         },
         {
-          q: (_c, _s, _n) => `What happens after my free trial minutes are used up?`,
-          a: (_city, _state, siteName) =>
-            `Once your free trial minutes run out, you can choose from several affordable membership plans to keep connecting. Plans vary by the number of minutes included, so you can pick whatever fits your usage and budget. All plans are month-to-month with no long-term contracts, and you can cancel at any time without penalty. There are no hidden fees or surprise charges — the price you see is the price you pay. Visit the ${siteName} website for current pricing details and to find the plan that works best for you.`,
-        },
-        {
-          q: (city, state, siteName) => `How does ${siteName} connect me with guys specifically in the ${city}, ${state} area?`,
+          q: (city, state, siteName) => `How does the ${city} gay chat line connect me with local men?`,
           a: (city, state, siteName) =>
-            `${siteName} uses local access numbers to create geographically focused communities. When you dial the ${city} local access number, you're automatically placed into the ${city} and ${state} community. The greetings you hear first, the messages you receive, and the live connections you make are all prioritized from guys in and around the ${city} area. This local-first approach is what makes ${siteName} feel genuinely like a community rather than a national dating platform. You're talking to people who share your city, your neighborhood, your daily life — and that local connection makes conversations feel more real and more relevant.`,
+            `${siteName} uses local access numbers to create geographically focused gay chat line communities. When you call the ${city} gay chat line number, you're placed directly into the ${city} and ${state} community. The greetings you hear, the messages you receive, and the live connections you make are all prioritized from gay men in and around ${city}. This local-first approach makes ${siteName} feel like a real ${city} community — not a national app where your area is a filter setting.`,
         },
         {
-          q: (_c, _s, _n) => `Is the chat line available 24 hours a day?`,
+          q: (_c, _s, _n) => `Is the gay chat line available 24 hours a day?`,
           a: (_city, _state, siteName) =>
-            `Yes — ${siteName} is available 24 hours a day, 7 days a week, 365 days a year. There is always someone on the line, no matter what time you call. The community is most active in the evenings and on weekends, but even at 3 AM on a Tuesday, you'll find guys browsing greetings and leaving messages. Your greeting stays active in the system even when you're not on the call, so other members can leave you voice messages any time — and you can reply whenever it's convenient for you.`,
+            `Yes — ${siteName}'s gay chat line is available 24 hours a day, 7 days a week, 365 days a year. There are always real gay men on the line no matter when you call. The community is most active evenings and weekends, but even late-night calls find active members. Your greeting stays live in the system when you're not on the call, so gay men can leave you messages anytime and you can reply at your convenience.`,
         },
       ],
-      ctaText: "Call Free Now",
+      ctaText: "Talk to Gay Men Free",
     };
   } else {
     return {
@@ -265,17 +265,35 @@ export function generateRegionPage(
   const today = new Date().toISOString().split("T")[0];
 
   const pageUrl = `${siteUrl}/regions/${region.slug}.html`;
-  const metaTitle = `${city}, ${stateCode} Chat Line — ${siteName} | Free Trial | Local ${cfg.pronoun === "guys" ? "Gay" : ""} Phone Chat`;
+  const isMM = siteSettings.siteCategory !== "MW";
+  const metaTitle = isMM
+    ? `${city}, ${stateCode} Gay Chat Line — Talk to Gay Men Now | ${siteName} | Free Trial`
+    : `${city}, ${stateCode} Chat Line — ${siteName} | Free Trial | Local Phone Chat for Singles`;
   const metaDesc = cfg.metaDesc(city, stateDisplay, phone, siteName);
   const h1Text = cfg.h1(city, stateCode, siteName);
 
-  const keywords = [
+  const keywords = isMM ? [
+    `gay chat line ${city.toLowerCase()}`,
+    `gay chat line ${city.toLowerCase()} ${stateCode.toLowerCase()}`,
+    `gay party line ${city.toLowerCase()}`,
+    `free gay chat line ${city.toLowerCase()}`,
+    `talk to gay men ${city.toLowerCase()}`,
+    `gay men ${city.toLowerCase()} ${stateCode.toLowerCase()}`,
+    `gay phone chat ${city.toLowerCase()}`,
+    `${city.toLowerCase()} gay chat line`,
+    `${city.toLowerCase()} ${stateCode.toLowerCase()} gay chat`,
+    `gay chat line ${stateCode.toLowerCase()}`,
+    `free gay phone chat ${city.toLowerCase()}`,
+    `gay chat line free trial ${city.toLowerCase()}`,
+    `${siteName.toLowerCase()} ${city.toLowerCase()}`,
+    `m4m chat line ${city.toLowerCase()}`,
+  ].join(", ") : [
     `${siteName.toLowerCase()} ${city.toLowerCase()}`,
     `chat line ${city.toLowerCase()} ${stateCode.toLowerCase()}`,
     `free phone chat ${city.toLowerCase()}`,
     `local chat line ${city.toLowerCase()} ${stateCode.toLowerCase()}`,
     `free trial chat line ${city.toLowerCase()}`,
-    `meet ${cfg.pronoun} ${city.toLowerCase()} ${stateCode.toLowerCase()}`,
+    `singles chat line ${city.toLowerCase()}`,
     `${city.toLowerCase()} ${stateCode.toLowerCase()} phone chat`,
     `${city.toLowerCase()} ${stateCode.toLowerCase()} chat line free`,
     `phone dating ${city.toLowerCase()}`,
@@ -287,7 +305,7 @@ export function generateRegionPage(
     "@context": "https://schema.org",
     "@type": "LocalBusiness",
     "@id": pageUrl,
-    "name": `${siteName} — ${city}, ${stateCode}`,
+    "name": isMM ? `${siteName} — ${city}, ${stateCode} Gay Chat Line` : `${siteName} — ${city}, ${stateCode}`,
     "description": metaDesc,
     "url": siteUrl,
     "telephone": phoneE164 || undefined,
@@ -1559,10 +1577,14 @@ export function writeRobotsTxt(siteUrl: string): void {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function getSiteUrl(): string {
+export function getSiteUrlExported(): string {
   if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/$/, "");
   if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`;
   return "https://example.com";
+}
+
+function getSiteUrl(): string {
+  return getSiteUrlExported();
 }
 
 function escHtml(str: string): string {

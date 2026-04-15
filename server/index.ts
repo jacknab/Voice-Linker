@@ -132,6 +132,28 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
 
+  // Regenerate all active region SEO pages in the background so content/keyword
+  // changes in the generator are picked up without needing manual admin re-saves.
+  setTimeout(async () => {
+    try {
+      const { storage: s } = await import("./storage");
+      const { writeRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage, getSiteUrlExported } = await import("./seoPageGenerator");
+      const [regions, settings] = await Promise.all([s.getAllRegions(), s.getSiteSettings()]);
+      const siteUrl = getSiteUrlExported();
+      const active = regions.filter((r: any) => r.isActive);
+      for (const region of active) {
+        const linked = active.filter((r: any) => r.id !== region.id && r.stateAbbreviation === region.stateAbbreviation);
+        writeRegionPage(region, settings, linked, siteUrl, regions);
+      }
+      writeRegionsIndexPage(regions, settings.siteName, siteUrl);
+      writeSitemap(regions, siteUrl);
+      writeRobotsTxt(siteUrl);
+      log(`[seo] Regenerated ${active.length} region page(s)`, "seo");
+    } catch (err: any) {
+      console.error("[seo] Startup page regeneration error:", err.message);
+    }
+  }, 5000);
+
   // Start the virtual caller simulator after a short delay to let the DB settle
   setTimeout(() => startSimulator().catch(err => console.error("[simulator] startup error:", err)), 3000);
 
