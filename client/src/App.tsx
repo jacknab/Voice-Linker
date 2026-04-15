@@ -45,8 +45,8 @@ function Router() {
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms" component={Terms} />
       <Route path="/setup" component={Home} />
-      <Route path="/admin/login" component={AdminLogin} />
-      <Route path="/admin" component={SecureAdminGuard} />
+      <Route path="/backstage/login" component={AdminLogin} />
+      <Route path="/backstage" component={SecureAdminGuard} />
 
       <Route component={NotFound} />
     </Switch>

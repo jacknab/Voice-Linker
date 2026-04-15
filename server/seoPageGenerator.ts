@@ -1018,7 +1018,7 @@ export function writeRobotsTxt(siteUrl: string): void {
     "User-agent: *",
     "Allow: /",
     "Disallow: /api/",
-    "Disallow: /admin",
+    "Disallow: /backstage",
     "",
     "# Crawl-delay for well-behaved bots",
     "Crawl-delay: 1",

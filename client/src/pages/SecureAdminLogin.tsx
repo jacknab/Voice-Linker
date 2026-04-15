@@ -22,7 +22,7 @@ export default function SecureAdminLogin() {
       if (JSON.stringify(newSequence) === JSON.stringify(CORRECT_SEQUENCE)) {
         // Set a simple session flag
         sessionStorage.setItem('adminAuthenticated', 'true');
-        setLocation("/admin");
+        setLocation("/backstage");
       } else {
         // Wrong sequence - shake and reset
         setIsShaking(true);

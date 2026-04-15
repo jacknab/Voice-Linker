@@ -16,7 +16,7 @@ export default function SecureAdminGuard() {
   const handleLogout = () => {
     sessionStorage.removeItem('adminAuthenticated');
     setIsAuthenticated(false);
-    setLocation("/admin/login");
+    setLocation("/backstage/login");
   };
 
   if (isAuthenticated === null) {

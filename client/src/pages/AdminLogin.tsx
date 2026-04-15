@@ -19,7 +19,7 @@ export default function AdminLogin() {
       apiRequest("POST", "/api/admin/login", data),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["/api/admin/me"] });
-      setLocation("/admin");
+      setLocation("/backstage");
     },
     onError: async (err: any) => {
       let message = "Login failed. Please check your credentials.";

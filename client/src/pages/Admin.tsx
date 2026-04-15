@@ -8717,7 +8717,7 @@ export default function Admin({ onLogout }: AdminProps) {
       if (onLogout) {
         onLogout();
       } else {
-        setLocation("/admin/login");
+        setLocation("/backstage/login");
       }
     },
   });
