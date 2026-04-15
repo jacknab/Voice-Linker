@@ -485,7 +485,7 @@ do_step_2() {
     # PM2 global install
     if ! command -v pm2 &>/dev/null; then
         info "Installing PM2 globally..."
-        sudo npm install -g pm2 --silent
+        sudo npm install -g pm2 --loglevel=error
         success "PM2 $(pm2 --version) installed."
     else
         info "PM2 $(pm2 --version) already present — skipping."
@@ -613,8 +613,11 @@ do_step_4() {
     hdr "Step 4/10  Node.js dependencies + .env setup"
     cd "${APP_DIR}"
     info "Installing npm packages (this may take a minute)..."
-    rm -rf node_modules
-    npm install --silent
+    if [ -f "${APP_DIR}/package-lock.json" ]; then
+        npm ci --loglevel=error
+    else
+        npm install --loglevel=error
+    fi
     success "npm install complete."
 
     # Copy .env.example to .env if .env does not already exist
@@ -886,7 +889,7 @@ do_step_10() {
     # Verify PM2 is installed
     if ! command -v pm2 &>/dev/null; then
         info "PM2 not found — installing now..."
-        sudo npm install -g pm2 --silent
+        sudo npm install -g pm2 --loglevel=error
         success "PM2 $(pm2 --version) installed."
     fi
 
@@ -955,14 +958,22 @@ ECOEOF
     done
     pm2 save
 
-    # Configure PM2 to start on system boot
+    # Configure PM2 to start on system boot.
+    # pm2 startup prints a "sudo env PATH=..." command that must be eval'd to actually
+    # install the systemd unit. If the grep for that line fails (e.g. systemd hook is
+    # already installed and pm2 prints a different message), we try every line of the
+    # output as a fallback, then fall back to a direct systemd enable.
     info "Configuring PM2 to start on system reboot..."
-    PM2_STARTUP=$(pm2 startup systemd -u root --hp /root 2>/dev/null | grep "sudo env" || true)
+    PM2_STARTUP_OUTPUT=$(pm2 startup systemd -u root --hp /root 2>&1 || true)
+    PM2_STARTUP=$(echo "$PM2_STARTUP_OUTPUT" | grep "sudo env" || true)
     if [ -n "$PM2_STARTUP" ]; then
         eval "$PM2_STARTUP" 2>/dev/null || true
+        success "PM2 systemd startup hook installed."
     else
-        # Fallback: run the startup command directly
-        pm2 startup systemd -u root --hp /root 2>/dev/null || true
+        # Hook may already be installed — try enabling the unit directly
+        sudo systemctl enable pm2-root 2>/dev/null \
+            || sudo systemctl enable "pm2-$(whoami)" 2>/dev/null \
+            || warn "Could not auto-enable PM2 on boot. Run 'pm2 startup' manually if needed."
     fi
     pm2 save
     success "PM2 will restart '${SERVICE_NAME}' automatically on reboot."
@@ -970,39 +981,45 @@ ECOEOF
     # ── Nginx + SSL ──────────────────────────────────────────────────────────
     hdr "Step 10b/10  Nginx + SSL"
 
-    info "Checking for existing certificates for '${DOMAIN}'..."
-    EXISTING_CERTS=()
-    for CANDIDATE in \
-        "/etc/letsencrypt/live/${DOMAIN}" \
-        "/etc/letsencrypt/live/${DOMAIN}-0001" \
-        "/etc/letsencrypt/live/${DOMAIN}-0002" \
-        "/etc/letsencrypt/live/${DOMAIN}-0003"; do
-        [ -d "${CANDIDATE}" ] && EXISTING_CERTS+=("$(basename "${CANDIDATE}")")
-    done
-
-    if [ ${#EXISTING_CERTS[@]} -gt 0 ]; then
-        warn "Found ${#EXISTING_CERTS[@]} existing certificate(s) — removing for clean re-issue."
-        for CERT_NAME in "${EXISTING_CERTS[@]}"; do
-            info "Deleting certificate: ${CERT_NAME}"
-            sudo certbot delete --cert-name "${CERT_NAME}" --non-interactive 2>/dev/null \
-                || sudo rm -rf \
-                    "/etc/letsencrypt/live/${CERT_NAME}" \
-                    "/etc/letsencrypt/archive/${CERT_NAME}" \
-                    "/etc/letsencrypt/renewal/${CERT_NAME}.conf"
-        done
-        success "Old certificate(s) removed."
-    fi
-
+    # ── Certificate check — reuse valid certs, only re-issue when needed ─────────
+    # Let's Encrypt enforces a rate limit of 5 duplicate certificates per domain
+    # per 7 days. Always deleting and re-issuing on every Step 10 run would burn
+    # through that allowance quickly. Instead we check whether an existing cert is
+    # still valid (using openssl checkend — valid for > 24 hours) and reuse it if
+    # so. Only expired or missing certs trigger a new issuance.
+    info "Checking for existing valid certificate for '${DOMAIN}'..."
     local CERT_BASE=""
     for CANDIDATE in \
         "/etc/letsencrypt/live/${DOMAIN}" \
         "/etc/letsencrypt/live/${DOMAIN}-0001" \
         "/etc/letsencrypt/live/${DOMAIN}-0002" \
         "/etc/letsencrypt/live/${DOMAIN}-0003"; do
-        if [ -f "${CANDIDATE}/fullchain.pem" ] && [ -f "${CANDIDATE}/privkey.pem" ]; then
-            CERT_BASE="$CANDIDATE"; break
+        if [ -f "${CANDIDATE}/fullchain.pem" ] \
+            && openssl x509 -in "${CANDIDATE}/fullchain.pem" -checkend 86400 -noout 2>/dev/null; then
+            CERT_BASE="$CANDIDATE"
+            success "Found valid existing certificate at ${CERT_BASE}/ — skipping re-issue."
+            break
         fi
     done
+
+    # Remove stale / expired cert dirs only when no valid cert was found
+    if [ -z "$CERT_BASE" ]; then
+        for CANDIDATE in \
+            "/etc/letsencrypt/live/${DOMAIN}" \
+            "/etc/letsencrypt/live/${DOMAIN}-0001" \
+            "/etc/letsencrypt/live/${DOMAIN}-0002" \
+            "/etc/letsencrypt/live/${DOMAIN}-0003"; do
+            if [ -d "${CANDIDATE}" ]; then
+                CERT_NAME="$(basename "${CANDIDATE}")"
+                info "Removing stale/expired certificate: ${CERT_NAME}"
+                sudo certbot delete --cert-name "${CERT_NAME}" --non-interactive 2>/dev/null \
+                    || sudo rm -rf \
+                        "/etc/letsencrypt/live/${CERT_NAME}" \
+                        "/etc/letsencrypt/archive/${CERT_NAME}" \
+                        "/etc/letsencrypt/renewal/${CERT_NAME}.conf"
+            fi
+        done
+    fi
 
     # Clean up default site and broken symlinks
     [ -L /etc/nginx/sites-enabled/default ] \
