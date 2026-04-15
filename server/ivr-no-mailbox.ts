@@ -4109,7 +4109,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           browseCallerGender = null;
           browseSiteCategory = "MM";
         }
-      } catch { /* non-fatal — fall through with defaults */ }
+      } catch (_e) { /* non-fatal — fall through with defaults */ }
 
       // Count available profiles: active callers + admin-uploaded greetings (region-scoped)
       // On MW systems, only count opposite-gender profiles scoped to the MW siteCategory.

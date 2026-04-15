@@ -4296,7 +4296,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           browseCallerGender = null;
           browseSiteCategory = "MM";
         }
-      } catch { /* non-fatal — fall through with defaults */ }
+      } catch (_e) { /* non-fatal — fall through with defaults */ }
       const hasActiveBrowseSession = callerBrowseState.has(callSid) &&
         (callerBrowseState.get(callSid)!.queue.length > 0);
       const availableCount = hasActiveBrowseSession
