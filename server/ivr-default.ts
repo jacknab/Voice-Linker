@@ -12,7 +12,7 @@ import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
-import { locationToFilename, triggerLocationAudio } from "./audioAutogen";
+import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText } from "./audioAutogen";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -92,56 +92,20 @@ function playNumber(
   }
 }
 
-// Play the time-remaining announcement by chaining phrase + number audio files.
-// Threshold logic:
-//   < 60 min  → "You have [N] minute(s) remaining."
-//   60–1439   → "You have [H] hour(s) [and [M] minute(s)] remaining."
-//   ≥ 1440    → "You have [D] day(s) [and [H] hour(s)] remaining."
+// Play the time-remaining announcement.
+// Uses a single composite audio file (time_remaining_N.mp3) for natural, seamless playback.
+// Falls back to TTS of the full sentence when the file hasn't been generated yet.
+// Stitched phrase-file fallback is kept below for reference but is no longer the primary path.
 function playTimeRemaining(
   twiml: { say: (text: string) => void; play: (url: string) => void },
   req: Request,
   totalMinutes: number
 ): void {
-  playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
-
-  if (totalMinutes >= 1440) {
-    // 24+ hours → announce in days and hours
-    const days = Math.floor(totalMinutes / 1440);
-    const hours = Math.floor((totalMinutes % 1440) / 60);
-    playNumber(twiml, req, days);
-    if (hours > 0) {
-      playPrompt(twiml, req, days === 1 ? "phrase_day.mp3" : "phrase_days.mp3",
-        days === 1 ? "day" : "days");
-      playPrompt(twiml, req, "phrase_and.mp3", "and");
-      playNumber(twiml, req, hours);
-      playPrompt(twiml, req, hours === 1 ? "phrase_hour_of_pbtr.mp3" : "phrase_hours_of_pbtr.mp3",
-        hours === 1 ? "hour remaining." : "hours remaining.");
-    } else {
-      playPrompt(twiml, req, days === 1 ? "phrase_day_of_pbtr.mp3" : "phrase_days_of_pbtr.mp3",
-        days === 1 ? "day remaining." : "days remaining.");
-    }
-  } else if (totalMinutes >= 60) {
-    // 1–23 hours → announce in hours and optional minutes
-    const hours = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
-    playNumber(twiml, req, hours);
-    if (mins > 0) {
-      playPrompt(twiml, req, hours === 1 ? "phrase_hour.mp3" : "phrase_hours.mp3",
-        hours === 1 ? "hour" : "hours");
-      playPrompt(twiml, req, "phrase_and.mp3", "and");
-      playNumber(twiml, req, mins);
-      playPrompt(twiml, req, mins === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
-        mins === 1 ? "minute remaining." : "minutes remaining.");
-    } else {
-      playPrompt(twiml, req, hours === 1 ? "phrase_hour_of_pbtr.mp3" : "phrase_hours_of_pbtr.mp3",
-        hours === 1 ? "hour remaining." : "hours remaining.");
-    }
-  } else {
-    // Under 60 minutes → announce in minutes
-    playNumber(twiml, req, totalMinutes);
-    playPrompt(twiml, req, totalMinutes === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
-      totalMinutes === 1 ? "minute remaining." : "minutes remaining.");
-  }
+  const compositeFilename = `time_remaining_${totalMinutes}.mp3`;
+  const fullSentence = minutesToAnnouncementText(totalMinutes);
+  // playPrompt checks the category folder (mm/mw/mw_m) for the composite file.
+  // If not found yet, the TTS fallback speaks the full sentence in one natural utterance.
+  playPrompt(twiml, req, compositeFilename, fullSentence);
 }
 
 // Play the 24-hour pass expiry announcement using pre-recorded hourly audio files.

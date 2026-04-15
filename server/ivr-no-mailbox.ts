@@ -11,7 +11,7 @@ import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsC
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
-import { locationToFilename, triggerLocationAudio } from "./audioAutogen";
+import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText } from "./audioAutogen";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -91,17 +91,17 @@ function playNumber(
   }
 }
 
-// Play the time-remaining announcement by chaining phrase + number audio files.
+// Play the time-remaining announcement.
+// Uses a single composite audio file (time_remaining_N.mp3) for natural, seamless playback.
+// Falls back to TTS of the full sentence when the file hasn't been generated yet.
 function playTimeRemaining(
   twiml: { say: (text: string) => void; play: (url: string) => void },
   req: Request,
   totalMinutes: number
 ): void {
-  // Always announce in minutes — the system is per-minute based.
-  playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
-  playNumber(twiml, req, totalMinutes);
-  playPrompt(twiml, req, totalMinutes === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
-    totalMinutes === 1 ? "minute remaining." : "minutes remaining.");
+  const compositeFilename = `time_remaining_${totalMinutes}.mp3`;
+  const fullSentence = minutesToAnnouncementText(totalMinutes);
+  playPrompt(twiml, req, compositeFilename, fullSentence);
 }
 
 // Play the 24-hour pass expiry announcement using pre-recorded hourly audio files.

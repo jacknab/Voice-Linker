@@ -150,6 +150,12 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "num_700.mp3", text: "seven hundred" },
   { filename: "num_800.mp3", text: "eight hundred" },
   { filename: "num_900.mp3", text: "nine hundred" },
+  // Composite time-remaining announcements — single-file replacements for stitched playback.
+  // Covers every minute value callers can encounter (1–1440 min, i.e. up to 24 hours).
+  ...Array.from({ length: 1440 }, (_, i) => {
+    const n = i + 1;
+    return { filename: `time_remaining_${n}.mp3`, text: minutesToAnnouncementText(n) };
+  }),
 ];
 
 // ── MW prompts (uploads/mw/) — female voice for male callers ──────────────
@@ -198,6 +204,33 @@ const MW_M_PROMPTS: Prompt[] = [
     return p;
   }),
 ];
+
+/**
+ * Generate the full spoken text for a time-remaining announcement.
+ * e.g. 90  → "You have 1 hour and 30 minutes remaining."
+ *      45  → "You have 45 minutes remaining."
+ *      60  → "You have 1 hour remaining."
+ *      1440 → "You have 1 day remaining."
+ */
+export function minutesToAnnouncementText(totalMinutes: number): string {
+  if (totalMinutes >= 1440) {
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    if (hours === 0) {
+      return `You have ${days} ${days === 1 ? "day" : "days"} remaining.`;
+    }
+    return `You have ${days} ${days === 1 ? "day" : "days"} and ${hours} ${hours === 1 ? "hour" : "hours"} remaining.`;
+  }
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    if (mins === 0) {
+      return `You have ${hours} ${hours === 1 ? "hour" : "hours"} remaining.`;
+    }
+    return `You have ${hours} ${hours === 1 ? "hour" : "hours"} and ${mins} ${mins === 1 ? "minute" : "minutes"} remaining.`;
+  }
+  return `You have ${totalMinutes} ${totalMinutes === 1 ? "minute" : "minutes"} remaining.`;
+}
 
 // Simple number-to-words for 0–99 (used to build the num_N.mp3 list)
 function numberToWords(n: number): string {
