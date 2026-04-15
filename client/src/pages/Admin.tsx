@@ -4071,6 +4071,54 @@ function IVRTesterTab() {
     }
   }
 
+  function exportReportsTxt() {
+    if (reports.length === 0) return;
+    const sep = "=".repeat(72);
+    const div = "-".repeat(72);
+    const lines: string[] = [
+      "IVR ISSUE REPORTS",
+      `Generated: ${new Date().toLocaleString()}`,
+      `Total: ${reports.length} report${reports.length !== 1 ? "s" : ""}`,
+      sep,
+    ];
+    reports.forEach((r, idx) => {
+      lines.push("");
+      lines.push(`#${idx + 1} — ${new Date(r.createdAt).toLocaleString()}`);
+      if (r.promptFilename) lines.push(`Prompt File: ${r.promptFilename}`);
+      if (r.promptText)    lines.push(`Script Text: ${r.promptText}`);
+      lines.push(`Notes: ${r.notes}`);
+      lines.push(div);
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ivr-issue-reports-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportReportsCsv() {
+    if (reports.length === 0) return;
+    const escape = (v: string | null | undefined) => `"${(v ?? "").replace(/"/g, '""')}"`;
+    const headers = ["ID", "Date", "Prompt File", "Script Text", "Notes"];
+    const rows = reports.map(r => [
+      String(r.id),
+      new Date(r.createdAt).toLocaleString(),
+      r.promptFilename ?? "",
+      r.promptText ?? "",
+      r.notes,
+    ].map(escape).join(","));
+    const csv = [headers.map(escape).join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ivr-issue-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function saveEditPrompt() {
     if (!editPrompt || editSaving) return;
     setEditSaving(true);
@@ -4750,6 +4798,24 @@ function IVRTesterTab() {
                 <Flag size={14} /> IVR Issue Reports ({reports.length})
               </div>
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <button
+                  data-testid="btn-export-reports-txt"
+                  onClick={exportReportsTxt}
+                  disabled={reports.length === 0}
+                  title="Download as plain text"
+                  style={{ background: "none", border: "1px solid #2a3a5a", borderRadius: 6, padding: "0.2rem 0.5rem", fontFamily: "monospace", fontSize: "0.68rem", color: reports.length === 0 ? "#374151" : "#60a5fa", cursor: reports.length === 0 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "0.3rem" }}
+                >
+                  <Save size={10} /> TXT
+                </button>
+                <button
+                  data-testid="btn-export-reports-csv"
+                  onClick={exportReportsCsv}
+                  disabled={reports.length === 0}
+                  title="Download as CSV spreadsheet"
+                  style={{ background: "none", border: "1px solid #2a3a5a", borderRadius: 6, padding: "0.2rem 0.5rem", fontFamily: "monospace", fontSize: "0.68rem", color: reports.length === 0 ? "#374151" : "#34d399", cursor: reports.length === 0 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "0.3rem" }}
+                >
+                  <Save size={10} /> CSV
+                </button>
                 <button onClick={fetchReports} style={{ background: "none", border: "1px solid #2a3a5a", borderRadius: 6, padding: "0.2rem 0.5rem", fontFamily: "monospace", fontSize: "0.68rem", color: "#8fa3c8", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem" }}>
                   <RefreshCw size={10} /> Refresh
                 </button>
