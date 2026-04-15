@@ -475,7 +475,7 @@ do_step_2() {
     NODE_VER=$(node --version 2>/dev/null | grep -oP '(?<=v)\d+' || echo "0")
     if (( NODE_VER < 22 )); then
         info "Node.js v${NODE_VER} found — installing 22.x LTS..."
-        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - -q
+        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
         sudo apt-get install -y nodejs -qq
         success "Node.js $(node --version) installed."
     else
