@@ -4164,32 +4164,48 @@ function IVRTesterTab() {
     const entry = audioQueue.current.shift()!;
     audioPlaying.current = true;
 
-    // Reveal this entry in the log exactly when it starts playing
-    setLog(prev => [...prev, entry]);
-    scrollToBottom();
+    const advance = () => {
+      audioPlaying.current = false;
+      currentAudio.current = null;
+      processAudioQueue();
+    };
 
     if (entry.type === "play" && entry.content.startsWith("/")) {
+      // Reveal play entries in the log when they start playing
+      setLog(prev => [...prev, entry]);
+      scrollToBottom();
       const audio = new Audio(entry.content);
       currentAudio.current = audio;
-      audio.onended = () => { audioPlaying.current = false; currentAudio.current = null; processAudioQueue(); };
-      audio.onerror = () => { audioPlaying.current = false; currentAudio.current = null; processAudioQueue(); };
-      audio.play().catch(() => { audioPlaying.current = false; processAudioQueue(); });
+      audio.onended = advance;
+      audio.onerror = advance;
+      audio.play().catch(advance);
     } else if (entry.type === "say" && entry.content && window.speechSynthesis) {
+      // say entries are already in the log (added immediately by applyResult/enqueueAudio)
+      // Just attempt to speak them with a timeout safeguard so the queue never gets stuck
       const utt = new SpeechSynthesisUtterance(entry.content);
       utt.rate = 0.92;
-      utt.onend  = () => { audioPlaying.current = false; processAudioQueue(); };
-      utt.onerror = () => { audioPlaying.current = false; processAudioQueue(); };
+      // Timeout: ~100ms per char, min 3s, max 20s — prevents stuck queue on failed TTS
+      const timeoutMs = Math.min(20000, Math.max(3000, entry.content.length * 100));
+      const tId = setTimeout(() => { window.speechSynthesis?.cancel(); advance(); }, timeoutMs);
+      utt.onend  = () => { clearTimeout(tId); advance(); };
+      utt.onerror = () => { clearTimeout(tId); advance(); };
       window.speechSynthesis.speak(utt);
     } else {
-      audioPlaying.current = false;
-      processAudioQueue();
+      advance();
     }
   }
 
   function enqueueAudio(entries: IVRLogEntry[]) {
-    // Only queue audio entries — they reveal themselves one-by-one as each plays
     for (const e of entries) {
-      if (e.type === "say" || e.type === "play") audioQueue.current.push(e);
+      if (e.type === "say") {
+        // say entries: show in log immediately and queue for audio playback
+        setLog(prev => [...prev, e]);
+        scrollToBottom();
+        audioQueue.current.push(e);
+      } else if (e.type === "play") {
+        // play entries: deferred — shown in log when they start playing (filename reveal UX)
+        audioQueue.current.push(e);
+      }
     }
     processAudioQueue();
   }
