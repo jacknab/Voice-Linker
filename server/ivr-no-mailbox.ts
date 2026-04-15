@@ -515,6 +515,42 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     next();
   });
 
+  // ─── Global key interceptor ────────────────────────────────────────────────
+  // * → Membership Center  (from any single-digit menu)
+  // # → Main Menu          (from any single-digit menu)
+  const GLOBAL_KEY_SKIP_ROUTES = new Set([
+    "/handle-membership-entry",
+    "/handle-membership-pin-entry",
+    "/handle-membership-card-pin-entry",
+    "/handle-set-pin",
+    "/handle-confirm-pin",
+    "/handle-promo-code",
+    "/handle-zip-code",
+    "/handle-setup-mailbox-dob",
+    "/handle-setup-mailbox-create-passcode",
+    "/handle-setup-mailbox-confirm-passcode",
+    "/handle-mailbox-lookup",
+    "/handle-membership-center",
+  ]);
+  app.use("/voice", (req: Request, res: Response, next: NextFunction) => {
+    if (req.method === "POST" && req.path.startsWith("/handle-") && !GLOBAL_KEY_SKIP_ROUTES.has(req.path)) {
+      const digit = req.body?.Digits as string;
+      if (digit === "*") {
+        const twiml = new VoiceResponse();
+        twiml.redirect("/voice/membership-center");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+      if (digit === "#") {
+        const twiml = new VoiceResponse();
+        twiml.redirect("/voice/main-menu");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+    }
+    next();
+  });
+
   // --- Twilio Voice Webhooks ---
 
   async function getOrCreateUser(phoneNumber: string) {
@@ -951,15 +987,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       console.error("[voice] membership-entry billing mode check error:", err);
     }
 
-    const gather = twiml.gather({
-      numDigits: 5,
-      finishOnKey: "#",
-      action: "/voice/handle-membership-entry",
-      timeout: 10,
-    });
-    playPrompt(gather, req, "membership_entry_prompt.mp3",
-      "If you have a membership card, enter your card number now. Otherwise press the pound key.");
-    // No input / timeout → skip membership and continue
     twiml.redirect("/voice/entry-check");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -977,6 +1004,46 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/membership-number-entry", async (req, res) => {
     const twiml = new VoiceResponse();
     twiml.redirect("/voice/membership-entry");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Membership Center (global * shortcut) ────────────────────────────────
+  app.post("/voice/membership-center", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-membership-center", timeout: 10 });
+    playPrompt(gather, req, "membership_center.mp3",
+      "Membership center. To sign in to your membership press 1. To return to the main menu press pound.");
+    twiml.redirect("/voice/membership-center");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-membership-center", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    if (digit === "1") {
+      twiml.redirect("/voice/membership-sign-in");
+    } else if (digit === "#") {
+      twiml.redirect("/voice/main-menu");
+    } else {
+      twiml.redirect("/voice/membership-center");
+    }
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/membership-sign-in", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 5,
+      finishOnKey: "#",
+      action: "/voice/handle-membership-entry",
+      timeout: 15,
+    });
+    playPrompt(gather, req, "membership_entry_prompt.mp3",
+      "Enter your membership card number now, or press pound to skip.");
+    twiml.redirect("/voice/entry-check");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -1696,8 +1763,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-main-menu" });
     playPrompt(gather, req, "main_menu.mp3",
       "Main menu. " +
-      "To enter the male box press star. " +
-      (MAILBOX_ENABLED ? "For mailboxes and personal ads press 1. " : "") +
+      "To enter the male box press 1. " +
+      (MAILBOX_ENABLED ? "For mailboxes and personal ads press 3. " : "") +
       "To add time or purchase a membership press 2. " +
       "For information on membership prices press 4. " +
       "To manage your membership press 8. " +
@@ -1714,10 +1781,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits;
 
-    if (digit === "*") {
+    if (digit === "1") {
       // Enter the male box (live connector)
       twiml.redirect("/voice/phone-booth");
-    } else if (digit === "1" && MAILBOX_ENABLED) {
+    } else if (digit === "3" && MAILBOX_ENABLED) {
       // Mailboxes and personal ads
       twiml.redirect("/voice/mailbox-menu");
     } else if (digit === "2") {
@@ -2460,8 +2527,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "Your mailbox is now set up. " +
       "To begin recording a new ad press one. " +
       "To listen to ads from other guys press two. " +
-      "To enter the male box press star. " +
-      "To cancel creating your mailbox press pound."
+      "To enter the male box press 1 from the main menu. " +
+      "To return to the main menu press pound."
     );
     twiml.redirect("/voice/mailbox-menu");
     res.type("text/xml");
@@ -2477,10 +2544,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       twiml.redirect("/voice/ad-category-menu?mode=record");
     } else if (digit === "2") {
       twiml.redirect("/voice/ad-category-menu?mode=listen");
-    } else if (digit === "*") {
-      twiml.redirect("/voice/phone-booth");
-    } else if (digit === "#") {
-      twiml.redirect("/voice/mailbox-menu");
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
       twiml.redirect("/voice/setup-mailbox-complete");
@@ -3609,7 +3672,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-customer-service", timeout: 10 });
     playPrompt(gather, req, "cs_menu_intro.mp3", "Customer service.");
     if (snapshot) dSay(gather, snapshot);
-    playPrompt(gather, req, "cs_menu_options.mp3", "Press 1 for your full account details. Press 2 to add time to your account. Press 3 for billing information. Press 4 to leave a message for our billing team. Press star to return to the main menu.");
+    playPrompt(gather, req, "cs_menu_options.mp3", "Press 1 for your full account details. Press 2 to add time to your account. Press 3 for billing information. Press 4 to leave a message for our billing team. Press pound to return to the main menu.");
     twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -3622,7 +3685,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     else if (digit === "2") twiml.redirect("/voice/purchase-pre-menu");
     else if (digit === "3") twiml.redirect("/voice/cs-billing-info");
     else if (digit === "4") twiml.redirect("/voice/cs-leave-message");
-    else if (digit === "*") twiml.redirect("/voice/main-menu");
     else                    twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -3658,10 +3720,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(gather, req, "cs_account_greeting_no.mp3", "You do not have a greeting recorded yet. You must record a greeting before other callers can hear you.");
       }
       if (cardLine) dSay(gather, cardLine);
-      playPrompt(gather, req, "cs_account_options.mp3", "Press 2 to add more time. Press 9 to return to customer service. Press star for the main menu.");
+      playPrompt(gather, req, "cs_account_options.mp3", "Press 2 to add more time. Press 9 to return to customer service. Press pound for the main menu.");
     } catch {
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-cs-account-status", timeout: 10 });
-      playPrompt(gather, req, "cs_account_error.mp3", "We were unable to retrieve your account information at this time. Press 9 to return to customer service. Press star for the main menu.");
+      playPrompt(gather, req, "cs_account_error.mp3", "We were unable to retrieve your account information at this time. Press 9 to return to customer service. Press pound for the main menu.");
     }
     twiml.redirect("/voice/customer-service");
     res.type("text/xml");
@@ -3672,7 +3734,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digit  = req.body?.Digits as string;
     if      (digit === "2") twiml.redirect("/voice/purchase-pre-menu");
-    else if (digit === "*") twiml.redirect("/voice/main-menu");
     else                    twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -3696,7 +3757,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     playPrompt(gather, req, "cs_billing_title.mp3", "Billing information.");
     if (planContext) dSay(gather, planContext);
     playPrompt(gather, req, "cs_billing_static.mp3", "Time is deducted from your membership while you are connected to the system. You can add more time at any time by pressing 2 from the main menu. If you were recently charged and your time has not been applied, please leave a message for our billing team and we will investigate promptly.");
-    playPrompt(gather, req, "cs_billing_options.mp3", "Press 2 to add time now. Press 4 to leave a message for the billing team. Press 9 to return to customer service. Press star for the main menu.");
+    playPrompt(gather, req, "cs_billing_options.mp3", "Press 2 to add time now. Press 4 to leave a message for the billing team. Press 9 to return to customer service. Press pound for the main menu.");
     twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -3707,7 +3768,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const digit  = req.body?.Digits as string;
     if      (digit === "2") twiml.redirect("/voice/purchase-pre-menu");
     else if (digit === "4") twiml.redirect("/voice/cs-leave-message");
-    else if (digit === "*") twiml.redirect("/voice/main-menu");
     else                    twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
