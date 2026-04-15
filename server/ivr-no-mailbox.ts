@@ -1796,6 +1796,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     playPrompt(gather, req, "mw_main_menu.mp3",
       "Main menu. " +
       "If you're ready to join the action press 1. " +
+      "For the men seeking men line press 5. " +
       "To buy membership time press 2. " +
       "To manage your membership press 8. " +
       "For customer service press 0. " +
@@ -1810,10 +1811,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/handle-mw-main-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits;
+    const callSid = req.body?.CallSid as string;
 
     if (digit === "1") {
-      // Join the action — enter the male box
+      // Join the action — enter the male/female box (straight line)
+      if (callSid) await storage.updateActiveCallSeeking(callSid, "").catch(() => {});
       twiml.redirect("/voice/phone-booth");
+    } else if (digit === "5") {
+      // Men Seeking Men section — set seeking flag and browse male profiles
+      if (callSid) await storage.updateActiveCallSeeking(callSid, "msm").catch(() => {});
+      twiml.redirect("/voice/browse-profiles");
     } else if (digit === "2") {
       // Buy membership time
       twiml.redirect("/voice/purchase-pre-menu");
@@ -1824,7 +1831,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Customer service
       twiml.redirect("/voice/customer-service");
     } else if (digit === "9") {
-      // Repeat
+      // Repeat — also clear MSM flag so repeating the menu resets state
+      if (callSid) await storage.updateActiveCallSeeking(callSid, "").catch(() => {});
       twiml.redirect("/voice/mw-main-menu");
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
@@ -4088,15 +4096,25 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       // Determine caller gender for MW gender-filtering (null = MM, no filter)
       const browseSiteConf = await getSiteSettingsCached();
-      const browseCallerGender = browseSiteConf.siteCategory === "MW"
+      let browseCallerGender: string | null = browseSiteConf.siteCategory === "MW"
         ? (femaleCallers.has(callSid) ? "female" : "male")
         : null;
+
+      // MSM override — male MW caller pressed 5 to enter Men Seeking Men section.
+      // Treat them identically to an MM caller: no gender filter, MM profile pool.
+      let browseSiteCategory = browseSiteConf.siteCategory ?? "MM";
+      try {
+        const activeCall = await storage.getActiveCallByUserId(user.id);
+        if (activeCall?.seeking === "msm") {
+          browseCallerGender = null;
+          browseSiteCategory = "MM";
+        }
+      } catch { /* non-fatal — fall through with defaults */ }
 
       // Count available profiles: active callers + admin-uploaded greetings (region-scoped)
       // On MW systems, only count opposite-gender profiles scoped to the MW siteCategory.
       // If the caller already has an active browse session (queue cached), skip the count
       // check — seeds may cycle off briefly but the queue should keep playing.
-      const browseSiteCategory = browseSiteConf.siteCategory ?? "MM";
       const hasActiveBrowseSession = callerBrowseState.has(callSid) &&
         (callerBrowseState.get(callSid)!.queue.length > 0);
       const availableCount = hasActiveBrowseSession
