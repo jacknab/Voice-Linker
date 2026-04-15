@@ -54,8 +54,8 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "zip_code_saved.mp3",              text: "Got it. We'll use your zip code to show you nearby callers." },
 
   { filename: "main_menu.mp3",      text: "Main menu. To enter the male box press 1. For mailboxes and personal ads press 3. To add time or purchase a membership press 2. For your voicemail press 6. For information on membership prices press 4. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
-  { filename: "trial_warning.mp3",  text: "You have less than 15 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
-  { filename: "member_warning.mp3", text: "You have less than 15 minutes remaining in your membership. To renew now press 1. To continue press pound." },
+  { filename: "trial_warning.mp3",  text: "You have less than 5 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
+  { filename: "member_warning.mp3", text: "You have less than 5 minutes remaining in your membership. To renew now press 1. To continue press pound." },
   { filename: "no_profiles.mp3",    text: "There are no profiles available right now. Please call back later." },
 
   { filename: "info_menu.mp3",                   text: "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu." },

@@ -4331,7 +4331,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   });
 
   // ─── 4b. Time Warning ─────────────────────────────────────────────────────
-  // Played once per call when the caller has < 15 minutes of access remaining.
+  // Played once per call when the caller has < 5 minutes of access remaining.
   app.post("/voice/time-warning", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
@@ -4347,7 +4347,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-time-warning", finishOnKey: "#" });
     if (isFreeTrialCaller) {
       playPrompt(gather, req, "trial_warning.mp3",
-        "You have less than 15 minutes remaining in your free trial. " +
+        "You have less than 5 minutes remaining in your free trial. " +
         "Stay connected by joining now. " +
         "You won't be interrupted by ads. " +
         "Access member only features like off-line messaging, connect live for one on one chat. " +
@@ -4356,7 +4356,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       );
     } else {
       playPrompt(gather, req, "member_warning.mp3",
-        "You have less than 15 minutes remaining in your membership. " +
+        "You have less than 5 minutes remaining in your membership. " +
         "To renew now press 1. " +
         "To continue press pound."
       );
