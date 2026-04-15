@@ -101,7 +101,8 @@ const MM_PROMPTS: Prompt[] = [
 
   { filename: "live_connect_disclaimer.mp3",  text: "Please be respectful and kind. You are about to request a live one on one connection." },
   { filename: "live_connect_connecting.mp3",  text: "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!" },
-  { filename: "live_invite_options.mp3",      text: "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4." },
+  { filename: "live_invite_wants_to_connect.mp3", text: "wants to connect with you." },
+  { filename: "live_invite_options.mp3",          text: "To connect live with this caller press 1. To reply with a message press 2. To skip press 3. To hear the last message you sent them press 4. To block this caller press 7. To hear this caller's location press 8. To repeat these choices press 9." },
   { filename: "live_connect_ended.mp3",       text: "Your live connection has ended. Returning you to the male box." },
   { filename: "live_connect_failed.mp3",      text: "We were unable to connect your call. Returning you to the male box." },
   { filename: "live_connect_busy.mp3",        text: "That caller is already connected with someone else. Please try again later." },

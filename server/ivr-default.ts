@@ -4765,15 +4765,28 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const inviteGather = twiml.gather({
           numDigits: 1,
           action: `/voice/handle-live-invite?initiatorUserId=${pendingInvite.initiatorUserId}&room=${encodeURIComponent(pendingInvite.conferenceRoom)}`,
-          timeout: 15,
+          timeout: 20,
         });
+        // 1. Chime
         playPrompt(inviteGather, req, "live_connect_chime.mp3", "");
-        inviteGather.say("This caller");
+        // 2. Caller's name recording
         if (pendingInvite.initiatorNameRecordingUrl) {
           safePlayRecording(inviteGather, pendingInvite.initiatorNameRecordingUrl, req, "");
         }
-        inviteGather.say("would like to connect live with you.");
-        playPrompt(inviteGather, req, "live_invite_options.mp3", "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4.");
+        // 3. "wants to connect with you."
+        playPrompt(inviteGather, req, "live_invite_wants_to_connect.mp3", "wants to connect with you.");
+        // 4. 1-second pause
+        inviteGather.pause({ length: 1 });
+        // 5. Caller's greeting / connection request recording
+        if (pendingInvite.initiatorGreetingUrl) {
+          safePlayRecording(inviteGather, pendingInvite.initiatorGreetingUrl, req, "");
+        }
+        // 6. Menu
+        playPrompt(inviteGather, req, "live_invite_options.mp3",
+          "To connect live with this caller press 1. To reply with a message press 2. " +
+          "To skip press 3. To hear the last message you sent them press 4. " +
+          "To block this caller press 7. To hear this caller's location press 8. " +
+          "To repeat these choices press 9.");
         twiml.redirect("/voice/browse-profiles");
         res.type("text/xml");
         return res.send(twiml.toString());
@@ -5865,9 +5878,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 8b. Live Connect: Invitee Response ───────────────────────────────────
   // Caller B sees the invite and responds here.
-  // digit 1 → accept (REST API redirects A to conference, B joins conference)
-  // digit 2 → decline → return to browse-profiles
-  // digit 3 → hear initiator's greeting, then re-show invite menu
+  // digit 1 → connect live (accept)
+  // digit 2 → reply with a message (decline + record)
+  // digit 3 → skip (decline, return to browse)
+  // digit 4 → hear last message you sent them, then re-show invite
+  // digit 7 → block the initiator
+  // digit 8 → hear initiator's location, then re-show invite
+  // digit 9 → repeat (re-show the full invite sequence)
   app.post("/voice/handle-live-invite", async (req, res) => {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits;
@@ -5891,14 +5908,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       if (digit === "1") {
-        // ── Accept ──────────────────────────────────────────────────────────
+        // ── Accept / Connect live ────────────────────────────────────────────
         invite.status = "accepted";
         liveConnectionUserIds.add(user.id);
         liveConnectionUserIds.add(invite.initiatorUserId);
         liveConnectionCallSidMap.set(callSid, user.id);
         liveConnectionCallSidMap.set(invite.initiatorCallSid, invite.initiatorUserId);
 
-        // Redirect initiator's live call to join the conference room
         const accountSid = process.env.TWILIO_ACCOUNT_SID;
         const authToken = process.env.TWILIO_AUTH_TOKEN;
         if (accountSid && authToken) {
@@ -5907,8 +5923,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             const joinUrl = `${baseUrl(req)}/voice/live-connect-join?room=${encodeURIComponent(room)}&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}`;
             await client.calls(invite.initiatorCallSid).update({ url: joinUrl, method: "POST" });
             console.log(`[live-connect] Redirected initiator ${invite.initiatorCallSid} to conference ${room}`);
-
-            // Start real-time billing interval now that both legs are headed to the conference
             startLiveBilling(
               room,
               invite.initiatorCallSid, callSid,
@@ -5917,7 +5931,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             );
           } catch (err) {
             console.error("[live-connect] Failed to redirect initiator via REST API:", err);
-            // Undo tracking on failure
             invite.status = "declined";
             liveConnectionUserIds.delete(user.id);
             liveConnectionUserIds.delete(invite.initiatorUserId);
@@ -5932,7 +5945,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
         }
 
-        // B joins the conference (waits briefly for A to arrive)
         playPrompt(twiml, req, "live_connect_connecting.mp3",
           "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
         const dial = twiml.dial({ action: `/voice/live-connect-complete?role=invitee&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}&room=${encodeURIComponent(room)}` });
@@ -5945,33 +5957,43 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         });
 
       } else if (digit === "2") {
-        // ── Decline ─────────────────────────────────────────────────────────
+        // ── Reply with a message ─────────────────────────────────────────────
         invite.status = "declined";
         pendingLiveInvites.delete(user.id);
-        console.log(`[live-connect] Invite declined by userId=${user.id}`);
-        twiml.redirect("/voice/browse-profiles");
+        console.log(`[live-connect] Invite declined (reply chosen) by userId=${user.id}`);
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${encodeURIComponent(initiatorUserId)}&returnTo=browse-profiles` });
 
       } else if (digit === "3") {
-        // ── Hear initiator's greeting ────────────────────────────────────────
-        const initiatorProfile = await storage.getProfile(initiatorUserId);
-        const greetingGather = twiml.gather({
-          numDigits: 1,
-          action: `/voice/handle-live-invite?initiatorUserId=${encodeURIComponent(initiatorUserId)}&room=${encodeURIComponent(room)}`,
-          timeout: 15,
-        });
-        if (initiatorProfile?.nameRecordingUrl) {
-          safePlayRecording(greetingGather, initiatorProfile.nameRecordingUrl, req, "");
-        }
-        if (initiatorProfile?.recordingUrl) {
-          safePlayRecording(greetingGather, initiatorProfile.recordingUrl, req, "This caller's greeting is not available.");
-        } else {
-          greetingGather.say("This caller's greeting is not available.");
-        }
-        playPrompt(greetingGather, req, "live_invite_options.mp3",
-          "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting again, press 3. To block this caller, press 4.");
+        // ── Skip (decline) ───────────────────────────────────────────────────
+        invite.status = "declined";
+        pendingLiveInvites.delete(user.id);
+        console.log(`[live-connect] Invite skipped by userId=${user.id}`);
         twiml.redirect("/voice/browse-profiles");
 
       } else if (digit === "4") {
+        // ── Hear last message you sent them ──────────────────────────────────
+        const lastMsg = await storage.getLastSentMessageToUser(user.id, initiatorUserId);
+        const replayGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-live-invite?initiatorUserId=${encodeURIComponent(initiatorUserId)}&room=${encodeURIComponent(room)}`,
+          timeout: 20,
+        });
+        if (lastMsg?.recordingUrl) {
+          replayGather.say("Last message you sent this caller.");
+          replayGather.pause({ length: 1 });
+          safePlayRecording(replayGather, lastMsg.recordingUrl, req, "");
+        } else {
+          replayGather.say("You have not sent this caller any messages.");
+        }
+        playPrompt(replayGather, req, "live_invite_options.mp3",
+          "To connect live with this caller press 1. To reply with a message press 2. " +
+          "To skip press 3. To hear the last message you sent them press 4. " +
+          "To block this caller press 7. To hear this caller's location press 8. " +
+          "To repeat these choices press 9.");
+        twiml.redirect("/voice/browse-profiles");
+
+      } else if (digit === "7") {
         // ── Block the invite initiator ───────────────────────────────────────
         invite.status = "declined";
         pendingLiveInvites.delete(user.id);
@@ -5980,6 +6002,39 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.log(`[live-connect] handle-live-invite: userId=${user.id} blocked initiatorUserId=${initiatorUserId}`);
         runBlockAutoChecks(initiatorUserId).catch(console.error);
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
+        twiml.redirect("/voice/browse-profiles");
+
+      } else if (digit === "8") {
+        // ── Hear this caller's location ──────────────────────────────────────
+        const initiatorUser = await storage.getUserById(initiatorUserId);
+        let location: string | null = null;
+        if (initiatorUser?.zipCodeId) {
+          const zipEntry = await storage.getZipEntryById(initiatorUser.zipCodeId);
+          if (zipEntry?.latitude != null && zipEntry?.longitude != null) {
+            location = await reverseGeocodeNeighborhood(zipEntry.latitude, zipEntry.longitude);
+          }
+          if (!location) location = zipEntry?.neighborhood || zipEntry?.city || null;
+        }
+        const locationGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-live-invite?initiatorUserId=${encodeURIComponent(initiatorUserId)}&room=${encodeURIComponent(room)}`,
+          timeout: 20,
+        });
+        if (location) {
+          playPrompt(locationGather, req, locationToFilename(location),
+            `This caller is located in ${location}.`);
+        } else {
+          locationGather.say("This caller's location is not available.");
+        }
+        playPrompt(locationGather, req, "live_invite_options.mp3",
+          "To connect live with this caller press 1. To reply with a message press 2. " +
+          "To skip press 3. To hear the last message you sent them press 4. " +
+          "To block this caller press 7. To hear this caller's location press 8. " +
+          "To repeat these choices press 9.");
+        twiml.redirect("/voice/browse-profiles");
+
+      } else if (digit === "9") {
+        // ── Repeat — send back to browse-profiles which re-shows the invite ──
         twiml.redirect("/voice/browse-profiles");
 
       } else {
