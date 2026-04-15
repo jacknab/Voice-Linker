@@ -84,6 +84,7 @@ export const messages = pgTable("messages", {
   toUserId: uuid("to_user_id").notNull(),
   recordingUrl: text("recording_url").notNull(),
   isRead: boolean("is_read").default(false),
+  isSaved: boolean("is_saved").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -1868,8 +1868,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "To enter the male box press star. " +
       (MAILBOX_ENABLED ? "For mailboxes and personal ads press 1. " : "") +
       "To add time or purchase a membership press 2. " +
-      "For information on membership prices press 3. " +
-      "To manage your membership press 4. " +
+      "For your voicemail press 6. " +
+      "For information on membership prices press 4. " +
+      "To manage your membership press 8. " +
       "For customer service press 0. " +
       "To repeat these choices press 9."
     );
@@ -1892,6 +1893,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else if (digit === "2") {
       // Add time / purchase membership — show promo-code option first
       twiml.redirect("/voice/purchase-pre-menu");
+    } else if (digit === "6") {
+      // Voicemail
+      twiml.redirect("/voice/voicemail");
     } else if (digit === "4") {
       // Information on membership prices
       twiml.redirect("/voice/info-menu");
@@ -1907,6 +1911,337 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
       twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Voicemail System ────────────────────────────────────────────────────────
+  // Accessible from main menu (press 6). Functions like a cell-phone voicemail:
+  // announces new + saved counts, lets caller listen, save, delete, or reply.
+
+  app.post("/voice/voicemail", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+      const newCount  = await storage.getUnreadMessageCount(user.id);
+      const savedCount = await storage.getSavedMessageCount(user.id);
+
+      const vmSettings = await getMembershipSettingsCached();
+      if (vmSettings.billingMode !== "per_day" && vmSettings.billingMode !== "per_24h" && !vmSettings.freeMode) {
+        startBilling(callSid, fromNumber);
+      }
+
+      const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-voicemail", timeout: 10 });
+
+      if (newCount === 0 && savedCount === 0) {
+        playPrompt(gather, req, "vm_no_new.mp3", "You have no new messages.");
+      } else {
+        if (newCount > 0) {
+          gather.say(`You have ${newCount} new ${newCount === 1 ? "message" : "messages"}.`);
+        } else {
+          playPrompt(gather, req, "vm_no_new.mp3", "You have no new messages.");
+        }
+        if (savedCount > 0) {
+          gather.say(`And ${savedCount} saved ${savedCount === 1 ? "message" : "messages"}.`);
+        }
+      }
+      playPrompt(gather, req, "vm_options.mp3",
+        "To listen to your messages press 1. To listen to saved messages press 2. To repeat this menu press 9. To return to the main menu press star.");
+
+      twiml.redirect("/voice/voicemail");
+    } catch (err) {
+      console.error("[voice] /voice/voicemail error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred.");
+      twiml.redirect("/voice/main-menu");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-voicemail", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+
+    if (digit === "1") {
+      twiml.redirect("/voice/voicemail-inbox");
+    } else if (digit === "2") {
+      twiml.redirect("/voice/voicemail-saved");
+    } else if (digit === "9") {
+      twiml.redirect("/voice/voicemail");
+    } else if (digit === "*") {
+      twiml.redirect("/voice/main-menu");
+    } else {
+      playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+      twiml.redirect("/voice/voicemail");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Voicemail Inbox (new messages) ──────────────────────────────────────
+
+  app.post("/voice/voicemail-inbox", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+
+      const vmSettings = await getMembershipSettingsCached();
+      if (vmSettings.billingMode !== "per_day" && vmSettings.billingMode !== "per_24h" && !vmSettings.freeMode) {
+        startBilling(callSid, fromNumber);
+      }
+
+      const message = await storage.getUnreadMessage(user.id);
+
+      if (!message) {
+        playPrompt(twiml, req, "vm_end_of_new.mp3", "End of new messages.");
+        twiml.redirect("/voice/voicemail");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const senderProfile = await storage.getProfile(message.fromUserId);
+      const gather = twiml.gather({
+        numDigits: 1,
+        action: `/voice/handle-voicemail-inbox?msgId=${message.id}&senderId=${message.fromUserId}`,
+        timeout: 10,
+      });
+
+      playPrompt(gather, req, "vm_new_message.mp3", "New message.");
+      if (senderProfile?.nameRecordingUrl) {
+        playPrompt(gather, req, "vm_message_from.mp3", "Message from");
+        safePlayRecording(gather, senderProfile.nameRecordingUrl, req, "");
+      }
+      safePlayRecording(gather, message.recordingUrl, req, "Message audio is not available.");
+      playPrompt(gather, req, "vm_new_options.mp3",
+        "To replay this message press 1. To save this message press 2. To delete this message press 3. To reply press 4. To hear this caller's profile press 5. For the next message press 9. To return to the voicemail menu press star.");
+
+      twiml.redirect("/voice/voicemail");
+    } catch (err) {
+      console.error("[voice] /voice/voicemail-inbox error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred.");
+      twiml.redirect("/voice/voicemail");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-voicemail-inbox", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const callSid = req.body?.CallSid as string;
+    const msgId   = req.query.msgId as string;
+    const senderId = req.query.senderId as string;
+
+    try {
+      await syncBilling(callSid);
+
+      if (digit === "1") {
+        // Replay — message is still unread so next /voicemail-inbox call plays it again
+        twiml.redirect("/voice/voicemail-inbox");
+      } else if (digit === "2") {
+        await storage.saveMessage(msgId);
+        playPrompt(twiml, req, "vm_message_saved.mp3", "Message saved.");
+        twiml.redirect("/voice/voicemail-inbox");
+      } else if (digit === "3") {
+        await storage.deleteMessage(msgId);
+        playPrompt(twiml, req, "vm_message_deleted.mp3", "Message deleted.");
+        twiml.redirect("/voice/voicemail-inbox");
+      } else if (digit === "4") {
+        await storage.markMessageRead(msgId);
+        playPrompt(twiml, req, "vm_reply_prompt.mp3", "Record your reply after the tone. Press any key when done.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}&returnTo=voicemail-inbox` });
+      } else if (digit === "5") {
+        await storage.markMessageRead(msgId);
+        const senderProfile = await storage.getProfile(senderId);
+        const profileGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-voicemail-inbox-profile?senderId=${senderId}`,
+          timeout: 10,
+        });
+        if (senderProfile) {
+          if (senderProfile.nameRecordingUrl) safePlayRecording(profileGather, senderProfile.nameRecordingUrl, req, "");
+          safePlayRecording(profileGather, senderProfile.recordingUrl, req, "This caller's profile is not available.");
+        } else {
+          profileGather.say("This caller no longer has a profile.");
+        }
+        profileGather.say("To send a message press 1. To return to your voicemail press 9.");
+        twiml.redirect("/voice/voicemail-inbox");
+      } else if (digit === "9") {
+        await storage.markMessageRead(msgId);
+        twiml.redirect("/voice/voicemail-inbox");
+      } else if (digit === "*") {
+        twiml.redirect("/voice/voicemail");
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect("/voice/voicemail-inbox");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-voicemail-inbox error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred.");
+      twiml.redirect("/voice/voicemail");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-voicemail-inbox-profile", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const senderId = req.query.senderId as string;
+
+    try {
+      if (digit === "1") {
+        playPrompt(twiml, req, "vm_reply_prompt.mp3", "Record your message after the tone. Press any key when done.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}&returnTo=voicemail-inbox` });
+      } else {
+        twiml.redirect("/voice/voicemail-inbox");
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-voicemail-inbox-profile error:", err);
+      twiml.redirect("/voice/voicemail");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Voicemail Saved Messages ─────────────────────────────────────────────
+
+  app.post("/voice/voicemail-saved", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+    const afterId = req.query.afterId as string | undefined;
+
+    try {
+      const user = await getOrCreateUser(fromNumber);
+
+      const vmSettings = await getMembershipSettingsCached();
+      if (vmSettings.billingMode !== "per_day" && vmSettings.billingMode !== "per_24h" && !vmSettings.freeMode) {
+        startBilling(callSid, fromNumber);
+      }
+
+      const savedMessages = await storage.getSavedMessages(user.id, afterId || undefined);
+      const message = savedMessages[0];
+
+      if (!message) {
+        playPrompt(twiml, req, "vm_end_of_saved.mp3", "End of saved messages.");
+        twiml.redirect("/voice/voicemail");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const senderProfile = await storage.getProfile(message.fromUserId);
+      const gather = twiml.gather({
+        numDigits: 1,
+        action: `/voice/handle-voicemail-saved?msgId=${message.id}&senderId=${message.fromUserId}${afterId ? `&afterId=${afterId}` : ""}`,
+        timeout: 10,
+      });
+
+      playPrompt(gather, req, "vm_saved_message.mp3", "Saved message.");
+      if (senderProfile?.nameRecordingUrl) {
+        playPrompt(gather, req, "vm_message_from.mp3", "Message from");
+        safePlayRecording(gather, senderProfile.nameRecordingUrl, req, "");
+      }
+      safePlayRecording(gather, message.recordingUrl, req, "Message audio is not available.");
+      playPrompt(gather, req, "vm_saved_options.mp3",
+        "To replay this message press 1. To delete this message press 3. To reply press 4. To hear this caller's profile press 5. For the next message press 9. To return to the voicemail menu press star.");
+
+      twiml.redirect("/voice/voicemail");
+    } catch (err) {
+      console.error("[voice] /voice/voicemail-saved error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred.");
+      twiml.redirect("/voice/voicemail");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-voicemail-saved", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const callSid = req.body?.CallSid as string;
+    const msgId   = req.query.msgId as string;
+    const senderId = req.query.senderId as string;
+    const afterId  = req.query.afterId as string | undefined;
+
+    try {
+      await syncBilling(callSid);
+
+      if (digit === "1") {
+        // Replay — go back to same position (same afterId cursor)
+        twiml.redirect(`/voice/voicemail-saved${afterId ? `?afterId=${afterId}` : ""}`);
+      } else if (digit === "3") {
+        await storage.deleteMessage(msgId);
+        playPrompt(twiml, req, "vm_message_deleted.mp3", "Message deleted.");
+        // After delete, advance to the next message from the same position
+        twiml.redirect(`/voice/voicemail-saved${afterId ? `?afterId=${afterId}` : ""}`);
+      } else if (digit === "4") {
+        playPrompt(twiml, req, "vm_reply_prompt.mp3", "Record your reply after the tone. Press any key when done.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}&returnTo=voicemail-saved` });
+      } else if (digit === "5") {
+        const senderProfile = await storage.getProfile(senderId);
+        const profileGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-voicemail-saved-profile?senderId=${senderId}${afterId ? `&afterId=${afterId}` : ""}`,
+          timeout: 10,
+        });
+        if (senderProfile) {
+          if (senderProfile.nameRecordingUrl) safePlayRecording(profileGather, senderProfile.nameRecordingUrl, req, "");
+          safePlayRecording(profileGather, senderProfile.recordingUrl, req, "This caller's profile is not available.");
+        } else {
+          profileGather.say("This caller no longer has a profile.");
+        }
+        profileGather.say("To send a message press 1. To return to your voicemail press 9.");
+        twiml.redirect(`/voice/voicemail-saved${afterId ? `?afterId=${afterId}` : ""}`);
+      } else if (digit === "9") {
+        // Advance past the current message
+        twiml.redirect(`/voice/voicemail-saved?afterId=${msgId}`);
+      } else if (digit === "*") {
+        twiml.redirect("/voice/voicemail");
+      } else {
+        playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
+        twiml.redirect(`/voice/voicemail-saved${afterId ? `?afterId=${afterId}` : ""}`);
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-voicemail-saved error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred.");
+      twiml.redirect("/voice/voicemail");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-voicemail-saved-profile", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+    const senderId = req.query.senderId as string;
+    const afterId  = req.query.afterId as string | undefined;
+
+    try {
+      if (digit === "1") {
+        playPrompt(twiml, req, "vm_reply_prompt.mp3", "Record your message after the tone. Press any key when done.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${senderId}&returnTo=voicemail-saved` });
+      } else {
+        twiml.redirect(`/voice/voicemail-saved${afterId ? `?afterId=${afterId}` : ""}`);
+      }
+    } catch (err) {
+      console.error("[voice] /voice/handle-voicemail-saved-profile error:", err);
+      twiml.redirect("/voice/voicemail");
     }
 
     res.type("text/xml");
@@ -5669,6 +6004,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   function cancelReturnPath(returnTo: string, category: string): string {
     if (returnTo === "mailbox") return "/voice/my-mailbox";
+    if (returnTo === "voicemail-inbox") return "/voice/voicemail-inbox";
+    if (returnTo === "voicemail-saved") return "/voice/voicemail-saved";
     if (returnTo === "category" && category) return `/voice/browse-category-ads?category=${category}`;
     return "/voice/browse-profiles";
   }
@@ -5734,7 +6071,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // Send the message
         pendingMessages.delete(callSid);
         const user = await getOrCreateUser(fromNumber);
-        if (returnTo === "mailbox" || returnTo === "category") {
+        if (returnTo === "mailbox" || returnTo === "category" || returnTo === "voicemail-inbox" || returnTo === "voicemail-saved") {
           await syncBilling(callSid);
         }
         const sentMessage = await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
@@ -5749,6 +6086,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (returnTo === "mailbox") {
           playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
           twiml.redirect("/voice/my-mailbox");
+        } else if (returnTo === "voicemail-inbox") {
+          playPrompt(twiml, req, "message_sent.mp3", "Your reply has been sent.");
+          twiml.redirect("/voice/voicemail-inbox");
+        } else if (returnTo === "voicemail-saved") {
+          playPrompt(twiml, req, "message_sent.mp3", "Your reply has been sent.");
+          twiml.redirect("/voice/voicemail-saved");
         } else if (returnTo === "category" && category) {
           playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to ads.");
           twiml.redirect(`/voice/browse-category-ads?category=${category}`);

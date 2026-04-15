@@ -52,7 +52,7 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "zip_code_prompt.mp3",             text: "Optional: enter your 5-digit zip code and we'll play callers closest to you first. Press pound to skip." },
   { filename: "zip_code_saved.mp3",              text: "Got it. We'll use your zip code to show you nearby callers." },
 
-  { filename: "main_menu.mp3",      text: "Main menu. To enter the male box press star. To add time or purchase a membership press 2. For information on membership prices press 4. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+  { filename: "main_menu.mp3",      text: "Main menu. To enter the male box press star. For mailboxes and personal ads press 1. To add time or purchase a membership press 2. For your voicemail press 6. For information on membership prices press 4. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
   { filename: "trial_warning.mp3",  text: "You have less than 15 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
   { filename: "member_warning.mp3", text: "You have less than 15 minutes remaining in your membership. To renew now press 1. To continue press pound." },
   { filename: "no_profiles.mp3",    text: "There are no profiles available right now. Please call back later." },
@@ -123,6 +123,21 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "cs_billing_options.mp3",     text: "Press 2 to add time now. Press 4 to leave a message for the billing team. Press 9 to return to customer service. Press star for the main menu." },
   { filename: "cs_leave_message_prompt.mp3",text: "Please describe your billing question or issue after the tone. Press any key when you are done." },
   { filename: "cs_message_received.mp3",    text: "Your message has been received. Our billing team will review it and follow up with you as soon as possible. Thank you for calling." },
+
+  // ── Voicemail prompts ──────────────────────────────────────────────────────
+  { filename: "vm_no_new.mp3",         text: "You have no new messages." },
+  { filename: "vm_no_saved.mp3",       text: "You have no saved messages." },
+  { filename: "vm_new_message.mp3",    text: "New message." },
+  { filename: "vm_saved_message.mp3",  text: "Saved message." },
+  { filename: "vm_message_from.mp3",   text: "Message from" },
+  { filename: "vm_options.mp3",        text: "To listen to your messages press 1. To listen to saved messages press 2. To repeat this menu press 9. To return to the main menu press star." },
+  { filename: "vm_new_options.mp3",    text: "To replay this message press 1. To save this message press 2. To delete this message press 3. To reply press 4. To hear this caller's profile press 5. For the next message press 9. To return to the voicemail menu press star." },
+  { filename: "vm_saved_options.mp3",  text: "To replay this message press 1. To delete this message press 3. To reply press 4. To hear this caller's profile press 5. For the next message press 9. To return to the voicemail menu press star." },
+  { filename: "vm_message_saved.mp3",  text: "Message saved." },
+  { filename: "vm_message_deleted.mp3",text: "Message deleted." },
+  { filename: "vm_end_of_new.mp3",     text: "End of new messages." },
+  { filename: "vm_end_of_saved.mp3",   text: "End of saved messages." },
+  { filename: "vm_reply_prompt.mp3",   text: "Record your reply after the tone. Press any key when done." },
 
   { filename: "phrase_you_have.mp3",             text: "You have" },
   { filename: "phrase_and.mp3",                  text: "and" },

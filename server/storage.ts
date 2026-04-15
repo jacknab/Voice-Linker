@@ -80,8 +80,13 @@ export interface IStorage {
   deleteProfile(id: string): Promise<void>;
 
   getUnreadMessage(userId: string): Promise<Message | undefined>;
+  getUnreadMessageCount(userId: string): Promise<number>;
+  getSavedMessages(userId: string, afterId?: string): Promise<Message[]>;
+  getSavedMessageCount(userId: string): Promise<number>;
   createMessage(message: InsertMessage): Promise<Message>;
   markMessageRead(messageId: string): Promise<void>;
+  saveMessage(messageId: string): Promise<void>;
+  deleteMessage(messageId: string): Promise<void>;
   getAllMessagesAdmin(): Promise<{
     id: string;
     fromPhone: string;
@@ -578,6 +583,56 @@ export class DatabaseStorage implements IStorage {
     await db.update(messages)
       .set({ isRead: true })
       .where(eq(messages.id, messageId));
+  }
+
+  async getUnreadMessageCount(userId: string): Promise<number> {
+    const [result] = await db.select({ count: count() })
+      .from(messages)
+      .where(and(
+        eq(messages.toUserId, userId),
+        eq(messages.isRead, false)
+      ));
+    return result?.count ?? 0;
+  }
+
+  async getSavedMessages(userId: string, afterId?: string): Promise<Message[]> {
+    const conditions = [
+      eq(messages.toUserId, userId),
+      eq(messages.isSaved, true),
+    ];
+    if (afterId) {
+      // Fetch the createdAt of the afterId message to paginate by time
+      const [ref] = await db.select({ createdAt: messages.createdAt })
+        .from(messages)
+        .where(eq(messages.id, afterId));
+      if (ref?.createdAt) {
+        conditions.push(sql`${messages.createdAt} > ${ref.createdAt}`);
+      }
+    }
+    return db.select()
+      .from(messages)
+      .where(and(...conditions))
+      .orderBy(messages.createdAt);
+  }
+
+  async getSavedMessageCount(userId: string): Promise<number> {
+    const [result] = await db.select({ count: count() })
+      .from(messages)
+      .where(and(
+        eq(messages.toUserId, userId),
+        eq(messages.isSaved, true)
+      ));
+    return result?.count ?? 0;
+  }
+
+  async saveMessage(messageId: string): Promise<void> {
+    await db.update(messages)
+      .set({ isRead: true, isSaved: true })
+      .where(eq(messages.id, messageId));
+  }
+
+  async deleteMessage(messageId: string): Promise<void> {
+    await db.delete(messages).where(eq(messages.id, messageId));
   }
 
   // --- Active Call Tracking ---
