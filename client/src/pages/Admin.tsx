@@ -4004,6 +4004,7 @@ function IVRTesterTab() {
   const [showReports,        setShowReports]        = useState(false);
   const [reports,            setReports]            = useState<{ id: number; promptFilename: string | null; promptText: string | null; notes: string; createdAt: string }[]>([]);
   const [reportsLoading,     setReportsLoading]     = useState(false);
+  const [reportSearch,       setReportSearch]       = useState("");
 
   // Audio queue
   const audioQueue   = useRef<IVRLogEntry[]>([]);
@@ -4795,7 +4796,7 @@ function IVRTesterTab() {
           <div style={{ background: "#1a2540", border: "1px solid #4a3020", borderRadius: 14, padding: "1.5rem", width: 680, maxWidth: "95vw", maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexShrink: 0 }}>
               <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.9rem", color: "#f59e0b", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <Flag size={14} /> IVR Issue Reports ({reports.length})
+                <Flag size={14} /> IVR Issue Reports ({reportSearch.trim() ? `${reports.filter(r => {const q = reportSearch.toLowerCase(); return (r.promptFilename ?? "").toLowerCase().includes(q) || (r.promptText ?? "").toLowerCase().includes(q) || r.notes.toLowerCase().includes(q);}).length} of ${reports.length}` : reports.length})
               </div>
               <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                 <button
@@ -4824,6 +4825,26 @@ function IVRTesterTab() {
                 </button>
               </div>
             </div>
+            {/* Search bar */}
+            {reports.length > 0 && (
+              <div style={{ position: "relative", marginBottom: "0.75rem", flexShrink: 0 }}>
+                <Search size={12} style={{ position: "absolute", left: "0.6rem", top: "50%", transform: "translateY(-50%)", color: "#6b84a8", pointerEvents: "none" }} />
+                <input
+                  data-testid="input-report-search"
+                  type="text"
+                  value={reportSearch}
+                  onChange={e => setReportSearch(e.target.value)}
+                  placeholder="Search by filename, prompt text, or notes…"
+                  style={{ width: "100%", boxSizing: "border-box", background: "#101828", border: "1px solid #2a3a5a", borderRadius: 8, padding: "0.4rem 0.75rem 0.4rem 1.8rem", fontFamily: "monospace", fontSize: "0.78rem", color: "#cbd5e1", outline: "none" }}
+                />
+                {reportSearch && (
+                  <button onClick={() => setReportSearch("")} style={{ position: "absolute", right: "0.5rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1 }}>
+                    <X size={12} style={{ color: "#6b84a8" }} />
+                  </button>
+                )}
+              </div>
+            )}
+
             <div style={{ overflowY: "auto", flex: 1 }}>
               {reportsLoading ? (
                 <div style={{ textAlign: "center", padding: "2rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#6b84a8" }}>
@@ -4832,8 +4853,21 @@ function IVRTesterTab() {
                 </div>
               ) : reports.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "2rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#6b84a8" }}>No reports yet. Flag issues using the 🏴 icon while testing.</div>
-              ) : (
-                reports.map(r => (
+              ) : (() => {
+                const q = reportSearch.trim().toLowerCase();
+                const filtered = q
+                  ? reports.filter(r =>
+                      (r.promptFilename ?? "").toLowerCase().includes(q) ||
+                      (r.promptText ?? "").toLowerCase().includes(q) ||
+                      r.notes.toLowerCase().includes(q)
+                    )
+                  : reports;
+                if (filtered.length === 0) return (
+                  <div style={{ textAlign: "center", padding: "2rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#6b84a8" }}>
+                    No reports match <span style={{ color: "#f59e0b" }}>"{reportSearch}"</span>
+                  </div>
+                );
+                return filtered.map(r => (
                   <div key={r.id} data-testid={`report-card-${r.id}`} style={{ background: "#101828", border: "1px solid #2a3a5a", borderRadius: 10, padding: "0.9rem", marginBottom: "0.6rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.4rem" }}>
                       <div>
@@ -4858,7 +4892,7 @@ function IVRTesterTab() {
                     </div>
                   </div>
                 ))
-              )}
+              })()}
             </div>
           </div>
         </div>
