@@ -4327,7 +4327,7 @@ function IVRTesterTab() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canType, sessionId, connected, ended, loading, numDigits, digitBuffer]);
+  }, [canType, sessionId, connected, ended, loading, numDigits, digitBuffer, finishOnKey]);
 
   // ── Keys layout ──────────────────────────────────────────────────────────
   const keys = ["1","2","3","4","5","6","7","8","9","*","0","#"];
