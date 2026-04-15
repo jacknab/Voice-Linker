@@ -177,6 +177,79 @@ const MM_PROMPTS: Prompt[] = [
     const n = i + 1;
     return { filename: `time_remaining_${n}.mp3`, text: minutesToAnnouncementText(n) };
   }),
+
+  // ── Moderation / account status ────────────────────────────────────────────
+  { filename: "caller_banned.mp3",          text: "We're sorry, your access to this service has been suspended. If you believe this is an error, please contact customer support. Goodbye." },
+  { filename: "account_restricted_live.mp3",text: "We're sorry, your account has been restricted and you are not able to go live at this time. You may still listen to profiles and use other features. Please contact customer support if you have questions." },
+
+  // ── Web-link flow ──────────────────────────────────────────────────────────
+  { filename: "link_phone_prefix.mp3",  text: "Your phone number has been linked to your web account. Your membership number is:" },
+  { filename: "link_phone_portal.mp3",  text: "You can now sign in to the web portal to manage your account." },
+  { filename: "link_phone_success.mp3", text: "Your phone number has been linked to your web account. You can now sign in to the web portal." },
+
+  // ── PIN management ─────────────────────────────────────────────────────────
+  { filename: "pin_accepted.mp3",    text: "PIN accepted. Welcome." },
+  { filename: "pin_incorrect.mp3",   text: "Incorrect PIN. Please try again by calling from your registered phone number or entering your membership number again." },
+  { filename: "pin_enter_new.mp3",   text: "Please enter your new 4-digit PIN." },
+  { filename: "pin_invalid.mp3",     text: "Invalid PIN. Please enter exactly 4 digits." },
+  { filename: "pin_confirm.mp3",     text: "Please enter your PIN again to confirm." },
+  { filename: "pin_mismatch.mp3",    text: "The PINs did not match. Please try again." },
+  { filename: "pin_set_success.mp3", text: "Your PIN has been set successfully. You can now use your membership number and PIN to call in from any phone." },
+  { filename: "pin_save_error.mp3",  text: "An error occurred saving your PIN. Please try again." },
+
+  // ── Calling card ───────────────────────────────────────────────────────────
+  { filename: "card_no_time.mp3", text: "Please use a different calling card." },
+
+  // ── Greeting playback ──────────────────────────────────────────────────────
+  { filename: "here_is_your_greeting.mp3",   text: "Here is what your greeting sounds like." },
+  { filename: "greeting_not_available.mp3",  text: "This caller's greeting is not available." },
+
+  // ── Profile / browse ───────────────────────────────────────────────────────
+  { filename: "caller_no_profile.mp3",          text: "This caller no longer has a profile." },
+  { filename: "replay_last_message.mp3",         text: "Here is the last message you sent this caller." },
+  { filename: "no_message_sent.mp3",             text: "You have not sent this caller a message yet." },
+  { filename: "message_saved.mp3",               text: "Message saved." },
+  { filename: "location_not_available.mp3",      text: "This caller's location is not available." },
+  { filename: "location_not_available_send.mp3", text: "This caller's location is not available. To send them a message, press 1." },
+  { filename: "ai_caller_message_blocked.mp3",   text: "You can't message an AI caller. Back to browsing." },
+
+  // ── Voicemail / messaging ──────────────────────────────────────────────────
+  { filename: "vm_send_or_return.mp3",       text: "To send a message press 1. To return to your voicemail press 9." },
+  { filename: "has_sent_you_a_message.mp3",  text: "has sent you a message." },
+  { filename: "you_have_new_message.mp3",    text: "You have a new message." },
+
+  // ── Mailbox ────────────────────────────────────────────────────────────────
+  { filename: "mailbox_no_greeting.mp3",      text: "You have not recorded a mailbox greeting yet." },
+  { filename: "mailbox_record_greeting.mp3",  text: "Record your mailbox greeting after the tone. Press any key when done." },
+  { filename: "mailbox_greeting_saved.mp3",   text: "Your mailbox greeting has been saved. Callers who enter your mailbox number will now hear this greeting." },
+  { filename: "mailbox_send_or_return.mp3",   text: "Press 1 to send a message. Press 9 to return to your mailbox." },
+  { filename: "mailbox_message_options.mp3",  text: "Press 1 to reply. Press 2 to hear the sender's ad. Press 3 to skip this message. Press 9 to return to the mailbox menu." },
+
+  // ── Purchase / package ─────────────────────────────────────────────────────
+  { filename: "package_load_error.mp3",  text: "We're having trouble loading package information. To return to the main menu press 9. To cancel press pound." },
+  { filename: "promo_code_prompt.mp3",   text: "Enter your promotional code followed by the pound key. Press star to cancel." },
+
+  // ── Membership management ──────────────────────────────────────────────────
+  { filename: "unblock_confirm.mp3",     text: "To confirm you want to unblock all callers, press 1. Press any other key to cancel and return to the previous menu." },
+  { filename: "unblock_done.mp3",        text: "All callers are unblocked." },
+  { filename: "cancelled_returning.mp3", text: "Cancelled. Returning to the previous menu." },
+  { filename: "cancelled.mp3",           text: "Cancelled." },
+  { filename: "account_not_found.mp3",   text: "Could not find your account. Please try again." },
+
+  // ── Message review ─────────────────────────────────────────────────────────
+  { filename: "send_or_cancel.mp3", text: "Press 1 to send. Press 2 to cancel." },
+
+  // ── Live connect ───────────────────────────────────────────────────────────
+  { filename: "calling.mp3",          text: "Calling" },
+  { filename: "now.mp3",              text: "now." },
+  { filename: "live_time_warning.mp3",text: "Warning: you have less than 5 minutes remaining. Please note your live connection will end when your time expires." },
+
+  // ── Mailbox ────────────────────────────────────────────────────────────────
+  { filename: "mailbox_has_greeting.mp3",   text: "You already have a mailbox greeting recorded. Press 1 to record a new greeting. Press 2 to hear your current greeting. Press 9 to return to your mailbox." },
+  { filename: "caller_no_mailbox_ad.mp3",   text: "This caller no longer has a mailbox ad." },
+
+  // ── Engagement / game ──────────────────────────────────────────────────────
+  { filename: "cant_message_ai.mp3", text: "You can't message an AI. Nice try though. Back to browsing." },
 ];
 
 // ── MW prompts (uploads/mw/) — female voice for male callers ──────────────
