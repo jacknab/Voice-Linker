@@ -907,20 +907,44 @@ export function generateHomePage(
   const activeRegions = allRegions.filter(r => r.isActive).sort((a, b) => a.name.localeCompare(b.name));
 
   const metaTitle = isMM
-    ? `${siteName} — Free Gay Phone Chat Line | Free Trial | Talk to Local Men`
+    ? `Gay Chat Line & Gay Party Line | ${siteName} | Free Trial — Talk to Men Now`
     : `${siteName} — Free Phone Chat Line for Singles | Free Trial | Talk to Real People`;
 
   const metaDesc = isMM
-    ? `${siteName} is the free gay phone chat line connecting men across the US. Call any local access number, record your greeting, and talk to real local guys — no app, no credit card needed. Free trial minutes for all new callers.`
+    ? `${siteName} is the #1 free gay chat line and gay party line for men in the US. Talk live to real local guys 24/7 — no app, no credit card, no hassle. Free trial minutes for every new caller. Pick up any phone and call now.`
     : `${siteName} is the free phone chat line connecting singles across the US. Call your local number, record your greeting, and talk to real local men and women — no app, no credit card needed. Free trial for new callers.`;
 
-  const keywords = [
+  const keywords = isMM ? [
+    "gay chat line",
+    "gay party line",
+    "free gay chat line",
+    "gay phone chat",
+    "gay chatline",
+    "free gay party line",
+    "men to men chat line",
+    "gay male chat line",
+    "gay chat line free trial",
+    "gay phone dating",
+    "gay men chat line",
+    "m4m chat line",
+    "gay voice chat",
+    "gay phone line",
+    "men seeking men chat line",
+    "adult gay chat line",
+    "local gay chat line",
+    "gay phone personals",
+    "gay chat line number",
+    "free gay men chat",
+    "gay chat line 24 hours",
+    "gay chat line no credit card",
     siteName.toLowerCase(),
-    isMM ? "gay phone chat line" : "phone chat line for singles",
-    isMM ? "free gay chat line" : "free singles chat line",
+  ].join(", ") : [
+    siteName.toLowerCase(),
+    "phone chat line for singles",
+    "free singles chat line",
     "free trial phone chat",
     "local phone chat",
-    isMM ? "men seeking men chat line" : "men and women chat line",
+    "men and women chat line",
     "adult phone chat free",
     "local chat line numbers",
     "phone dating service",
@@ -928,11 +952,11 @@ export function generateHomePage(
   ].join(", ");
 
   const h1 = isMM
-    ? `${siteName} — Talk to Real Local Men. Free Trial. No App.`
+    ? `${siteName} — Gay Chat Line & Gay Party Line. Free Trial. Real Men. 24/7.`
     : `${siteName} — Talk to Real Local Singles. Free Trial. No App.`;
 
   const tagline = isMM
-    ? `The free gay phone chat line for men across the US. Real guys, live conversation, 24 hours a day — just pick up your phone and call.`
+    ? `The free gay chat line and gay party line for men across the US. Real guys, live conversation, no apps — just pick up any phone and call.`
     : `The free phone chat line for singles across the US. Real people, live conversation, 24 hours a day — just pick up your phone and call.`;
 
   // Structured data
@@ -956,6 +980,9 @@ export function generateHomePage(
     "@type": "Organization",
     "@id": `${siteUrl}/#organization`,
     "name": siteName,
+    "alternateName": isMM
+      ? [`${siteName} Gay Chat Line`, `${siteName} Gay Party Line`, "Free Gay Chat Line", "Gay Phone Chat Line"]
+      : [`${siteName} Singles Chat Line`, "Free Phone Chat Line", "Singles Party Line"],
     "url": siteUrl,
     "description": metaDesc,
     "contactPoint": phoneRaw ? [{
@@ -970,18 +997,30 @@ export function generateHomePage(
   const serviceJsonLd = {
     "@context": "https://schema.org",
     "@type": "Service",
-    "name": `${siteName} Phone Chat Line`,
+    "name": isMM ? `${siteName} — Free Gay Chat Line & Gay Party Line` : `${siteName} Phone Chat Line`,
+    "alternateName": isMM
+      ? ["Gay Chat Line", "Gay Party Line", "Free Gay Phone Chat", "Gay Men Chat Line", "M4M Chat Line"]
+      : ["Singles Chat Line", "Free Phone Chat Line"],
     "url": siteUrl,
     "description": metaDesc,
     "provider": { "@type": "Organization", "name": siteName, "url": siteUrl },
     "serviceType": isMM ? "Gay Phone Chat Line" : "Singles Phone Chat Line",
+    "category": isMM ? "Gay Chat Line" : "Singles Chat Line",
     "areaServed": { "@type": "Country", "name": "United States" },
+    "audience": {
+      "@type": "Audience",
+      "audienceType": isMM ? "Gay and Bisexual Men" : "Singles",
+    },
     "offers": {
       "@type": "Offer",
+      "name": "Free Trial",
       "price": "0",
       "priceCurrency": "USD",
-      "description": "Free trial minutes for all new callers",
+      "description": isMM
+        ? "Free trial minutes for all new gay chat line callers — no credit card required"
+        : "Free trial minutes for all new callers — no credit card required",
       "availability": "https://schema.org/InStock",
+      "eligibleRegion": { "@type": "Country", "name": "United States" },
     },
     "hasOfferCatalog": {
       "@type": "OfferCatalog",
@@ -1266,11 +1305,32 @@ export function generateHomePage(
 
   <!-- Content H2 blocks -->
   <div class="content-blocks">
-    ${cfg.h2s.map(block => `
+    ${!isMM ? cfg.h2s.map(block => `
     <article class="content-block">
-      <h2>${escHtml(block.heading(siteName, "the US", siteName))}</h2>
-      <p>${escHtml(block.body(siteName, "the US", siteName))}</p>
-    </article>`).join("")}
+      <h2>${escHtml(block.heading("singles across", "the US", siteName))}</h2>
+      <p>${escHtml(block.body("singles across", "the US", siteName))}</p>
+    </article>`).join("") : ""}
+    ${isMM ? `
+    <article class="content-block">
+      <h2>What Is a Gay Chat Line? How It Works in 2025</h2>
+      <p>A gay chat line is a phone-based service where gay and bisexual men can connect with each other through live voice calls, recorded greetings, and private voice messages — all without using an app or creating an online profile. You simply dial a local access number, record a short greeting introducing yourself, and you're immediately placed into a live community of real men in your area. You can browse other guys' greetings, leave private voice messages for anyone who interests you, or request a live two-way connection. When both callers agree, ${escHtml(siteName)} bridges you together instantly and privately. The entire experience runs through your phone — any phone — and your personal number is never revealed to other callers. Gay chat lines have been connecting men for decades, and ${escHtml(siteName)} is the modern evolution of that tradition: faster, safer, and available 24 hours a day.</p>
+    </article>
+    <article class="content-block">
+      <h2>Gay Party Line vs. Gay Chat Line — What's the Difference?</h2>
+      <p>The terms "gay party line" and "gay chat line" are often used interchangeably, but there is a subtle difference worth knowing. A gay party line traditionally refers to a multi-caller phone line where several men can join the same "room" and talk together simultaneously — like a group phone call. A gay chat line, by contrast, is typically a one-on-one connection service where you browse greetings privately and connect individually with men who interest you. ${escHtml(siteName)} operates as a gay chat line: your conversations are always private and one-on-one, which means you get real, focused conversation with one real man at a time — not a noisy group call where it's hard to connect meaningfully. Most men who search for a "gay party line" are actually looking for exactly what ${escHtml(siteName)} offers: a live, voice-based service for meeting other gay men by phone. Whatever you call it, ${escHtml(siteName)} is the answer.</p>
+    </article>
+    <article class="content-block">
+      <h2>Free Gay Chat Line — What the Free Trial Actually Includes</h2>
+      <p>Every new caller on ${escHtml(siteName)} receives a block of free trial minutes the moment they first call in — no credit card required, no sign-up form, nothing to download. During your free trial you get full access to everything the service offers: recording your personal greeting, browsing the greetings of other gay men in your area, sending private voice messages to anyone who catches your attention, and going live with someone for a real two-way conversation. The free trial is a genuine, no-strings introduction to the ${escHtml(siteName)} community. It's not a teaser that cuts off after 30 seconds — you get real time to explore and connect. After your free trial minutes are used, you can choose from affordable monthly membership plans to keep chatting. There are no hidden fees, no auto-renewals without your knowledge, and no contracts. If you've been searching for a free gay chat line, this is the one that actually delivers.</p>
+    </article>
+    <article class="content-block">
+      <h2>Why Gay Men Choose ${escHtml(siteName)} Over Dating Apps</h2>
+      <p>Dating apps for gay men have become overcrowded, superficial, and exhausting. Hours spent crafting the perfect profile, waiting for matches, exchanging text messages for days before finding out there's no chemistry — it's a process that strips the joy out of meeting someone new. ${escHtml(siteName)} works the opposite way. You hear a man's actual voice within seconds of calling. His personality, his energy, his sense of humor — all of it is right there in his greeting, immediate and impossible to fake. There are no photos to obsess over, no filters to swipe through, and no algorithm deciding who you get to see. You're in direct control of who you listen to, who you message, and who you connect with live. For gay men who value real conversation over curated profiles — or who simply want to meet someone without the performance anxiety of an app — ${escHtml(siteName)} is a completely different experience. Private, fast, and refreshingly human.</p>
+    </article>
+    <article class="content-block">
+      <h2>Gay Chat Line Safety: Your Privacy Is Fully Protected</h2>
+      <p>Privacy is one of the most important concerns for gay men using any chat or dating service, and ${escHtml(siteName)} takes it seriously at every level. Your personal phone number is never displayed to other callers under any circumstances — all calls are routed through ${escHtml(siteName)}'s private network. Other members only know you by the screen name you record in your greeting, which you can change at any time. You're never required to share any personal information — no email address, no real name, no location beyond the general area you call from. You have complete control over every interaction: you choose who you reply to, how long you talk, and you can block any caller permanently with a single keypress. That block is immediate and permanent — the blocked caller can never reach you again. Whether you're out and proud, privately exploring, or anywhere in between, ${escHtml(siteName)} gives you a safe, anonymous space to connect with other gay men on your own terms.</p>
+    </article>` : ""}
   </div>
 
   <!-- Local numbers -->
@@ -1278,8 +1338,8 @@ export function generateHomePage(
   <section class="local-numbers" aria-labelledby="local-numbers-h2">
     <div class="local-numbers-inner">
       <p class="section-label">Local Access Numbers</p>
-      <h2 id="local-numbers-h2">Find your local ${escHtml(siteName)} number</h2>
-      <p style="color:rgba(255,255,255,0.4);font-size:0.95rem;margin-bottom:0;">${siteName} has local access numbers across the US. Pick the city nearest you and call free today.</p>
+      <h2 id="local-numbers-h2">Find your local ${isMM ? "gay chat line" : escHtml(siteName)} number</h2>
+      <p style="color:rgba(255,255,255,0.4);font-size:0.95rem;margin-bottom:0;">${escHtml(siteName)} has local${isMM ? " gay chat line" : ""} access numbers across the US. Pick the city nearest you and call free today.</p>
       <ul class="regions-grid">${regionLinks}</ul>
       <a href="/regions/" class="view-all-link">View all local numbers →</a>
     </div>
@@ -1288,9 +1348,38 @@ export function generateHomePage(
   <!-- FAQ -->
   <section class="faq-section" aria-labelledby="faq-h2">
     <div class="faq-inner">
-      <h2 id="faq-h2">Frequently Asked Questions</h2>
-      <p class="faq-sub">Common questions about ${escHtml(siteName)}</p>
-      ${cfg.faqs.map(faq => `
+      <h2 id="faq-h2">Frequently Asked Questions${isMM ? " — Gay Chat Line & Gay Party Line" : ""}</h2>
+      <p class="faq-sub">Common questions about ${escHtml(siteName)}${isMM ? " — the free gay chat line" : ""}</p>
+      ${isMM ? `
+      <article class="faq-item">
+        <h3 class="faq-q">What is a gay chat line?</h3>
+        <p class="faq-a">A gay chat line is a phone-based service where gay and bisexual men connect with each other through live voice calls and private voice messages — no app or internet required. You dial a local access number, record a short personal greeting, and are placed into a live community of real men in your area. You can browse greetings, leave messages, or connect live with any guy who interests you. ${escHtml(siteName)} is one of the best free gay chat lines available, with local numbers across the US and free trial minutes for every new caller.</p>
+      </article>
+      <article class="faq-item">
+        <h3 class="faq-q">What is a gay party line and how is it different from a gay chat line?</h3>
+        <p class="faq-a">A gay party line typically refers to a multi-caller group phone line where several men talk together simultaneously. A gay chat line like ${escHtml(siteName)} connects men one-on-one for private conversations. Most men searching for a "gay party line" are looking for a live voice service to meet other gay men by phone — which is exactly what ${escHtml(siteName)} provides, with the added benefit of genuine private, one-on-one conversations rather than a noisy group call.</p>
+      </article>
+      <article class="faq-item">
+        <h3 class="faq-q">Is ${escHtml(siteName)} really a free gay chat line?</h3>
+        <p class="faq-a">Yes — ${escHtml(siteName)} gives every new caller free trial minutes with zero credit card required. During your free trial you get complete access: record your greeting, browse other guys' greetings, send voice messages, and even connect live. After the trial, affordable month-to-month plans are available. No contracts, no hidden fees, no surprises.</p>
+      </article>
+      <article class="faq-item">
+        <h3 class="faq-q">What is the best gay chat line available right now?</h3>
+        <p class="faq-a">${escHtml(siteName)} is designed to be the best free gay chat line in the US — offering local access numbers in cities across the country, free trial minutes for new callers, 24/7 availability, and complete privacy protection. Unlike older gay party lines, ${escHtml(siteName)} uses modern private-network routing so your phone number is never exposed. The community is active around the clock, which means there are always real men on the line no matter when you call.</p>
+      </article>
+      <article class="faq-item">
+        <h3 class="faq-q">Do I need to use an app or the internet to use the gay chat line?</h3>
+        <p class="faq-a">No app or internet connection is required. ${escHtml(siteName)} is entirely phone-based — all you need is any phone (smartphone, basic cell phone, or landline) to call your local gay chat line access number. There's no profile to create, no photos to upload, and no software to install. If you can make a phone call, you can use ${escHtml(siteName)}.</p>
+      </article>
+      <article class="faq-item">
+        <h3 class="faq-q">Is the gay chat line available 24 hours a day?</h3>
+        <p class="faq-a">Yes — ${escHtml(siteName)} is available 24 hours a day, 7 days a week, 365 days a year. The community is most active in the evenings and on weekends, but there are always real men on the line regardless of when you call. Your personal greeting stays active in the system even when you're not on the call, so other guys can leave you messages at any time and you can reply whenever it's convenient.</p>
+      </article>
+      <article class="faq-item">
+        <h3 class="faq-q">Will other callers know my real phone number?</h3>
+        <p class="faq-a">Never. ${escHtml(siteName)} routes all calls through a private network that completely hides your personal phone number from every other caller. You're known only by the screen name you record in your greeting. Your real identity and contact information remain entirely private throughout every interaction — this is one of the core reasons gay men trust ${escHtml(siteName)} as a safe and discreet way to connect.</p>
+      </article>
+      ` : cfg.faqs.map(faq => `
       <article class="faq-item">
         <h3 class="faq-q">${escHtml(faq.q("your area", "your state", siteName))}</h3>
         <p class="faq-a">${escHtml(faq.a("your area", "your state", siteName))}</p>
@@ -1300,7 +1389,7 @@ export function generateHomePage(
 
   <!-- CTA banner -->
   <section class="cta-banner" aria-label="Call to action">
-    <h2>Ready to connect? Your first call is free.</h2>
+    <h2>${isMM ? `Join the Free Gay Chat Line — Real Men, Real Conversations` : `Ready to connect? Your first call is free.`}</h2>
     <p>Real local ${escHtml(cfg.pronoun)} are on the line right now. No credit card, no commitment — just pick up the phone.</p>
     ${phone ? `<p class="cta-phone">📞 <a href="tel:+1${phoneRaw}">${escHtml(phone)}</a></p>` : ""}
     <a href="${phoneRaw ? `tel:+1${phoneRaw}` : "/regions/"}" class="btn-primary" style="font-size:1.05rem;padding:16px 40px;">
