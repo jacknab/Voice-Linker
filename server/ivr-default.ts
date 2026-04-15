@@ -1554,13 +1554,21 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const filename = `roger_welcome_${callSid}.mp3`;
       const filepath = path.join(UPLOADS_DIR, filename);
 
-      // Generate Roger's welcome using ElevenLabs v3 (emotion tags enabled)
+      // Generate Roger's welcome using ElevenLabs v3 (emotion tags enabled).
+      // Race against a 4-second timeout so callers never hear a long silent pause
+      // after the disclaimer if ElevenLabs is slow — fall back to Twilio TTS instead.
       let audioReady = false;
       try {
-        await generateTTS(script, filename, undefined, getVoiceIdForRoger(), "eleven_v3");
+        const ttsTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("TTS generation timeout")), 4000)
+        );
+        await Promise.race([
+          generateTTS(script, filename, undefined, getVoiceIdForRoger(), "eleven_v3"),
+          ttsTimeout,
+        ]);
         audioReady = fs.existsSync(filepath);
       } catch (ttsErr) {
-        console.warn(`[roger-greeting] ElevenLabs v3 failed, falling back to twiml.say — ${ttsErr}`);
+        console.warn(`[roger-greeting] ElevenLabs v3 failed or timed out, falling back to twiml.say — ${ttsErr}`);
       }
 
       if (audioReady) {

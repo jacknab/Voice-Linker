@@ -177,7 +177,7 @@ const MM_PROMPTS: Prompt[] = [
 // ── MW prompts (uploads/mw/) — female voice for male callers ──────────────
 const MW_PROMPTS: Prompt[] = [
   { filename: "gender_select.mp3",  text: "Guys, press one to talk to women. Women, press three to talk to guys." },
-  { filename: "mw_main_menu.mp3",   text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+  { filename: "mw_main_menu.mp3",   text: "Main menu. If you're ready to join the action press 1. For the men seeking men line press 5. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
   ...MM_PROMPTS.filter(p =>
     p.filename !== "main_menu.mp3" &&
     p.filename !== "mw_main_menu.mp3"
@@ -200,7 +200,7 @@ const MW_PROMPTS: Prompt[] = [
 
 // ── MW_M prompts (uploads/mw_m/) — male voice for female callers ──────────
 const MW_M_PROMPTS: Prompt[] = [
-  { filename: "mw_main_menu.mp3",  text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+  { filename: "mw_main_menu.mp3",  text: "Main menu. If you're ready to join the action press 1. For the men seeking men line press 5. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
   ...MM_PROMPTS.filter(p =>
     p.filename !== "main_menu.mp3" &&
     p.filename !== "mw_main_menu.mp3"
