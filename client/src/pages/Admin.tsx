@@ -3730,18 +3730,29 @@ interface MessageEntry {
   createdAt: string | null;
 }
 
+type MessageFilter = "all" | "unread" | "saved";
+
 function MessagesTab() {
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<MessageFilter>("all");
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const { data: msgs = [], isLoading } = useQuery<MessageEntry[]>({
     queryKey: ["/api/admin/messages"],
+    refetchInterval: 15000,
   });
 
-  const filtered = msgs.filter(m =>
-    m.fromPhone.includes(search) || m.toPhone.includes(search)
-  );
+  const unreadCount = msgs.filter(m => !m.isRead).length;
+  const savedCount = msgs.filter(m => m.isSaved).length;
+
+  const filtered = msgs.filter(m => {
+    const matchesSearch = m.fromPhone.includes(search) || m.toPhone.includes(search);
+    if (!matchesSearch) return false;
+    if (statusFilter === "unread") return !m.isRead;
+    if (statusFilter === "saved") return !!m.isSaved;
+    return true;
+  });
 
   function fmtDate(d: string | null) {
     if (!d) return "—";
@@ -3767,9 +3778,15 @@ function MessagesTab() {
     setPlayingId(msg.id);
   }
 
+  const filterOptions: { id: MessageFilter; label: string; count?: number }[] = [
+    { id: "all", label: "All", count: msgs.length },
+    { id: "unread", label: "Unread", count: unreadCount },
+    { id: "saved", label: "Saved", count: savedCount },
+  ];
+
   return (
     <div>
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex flex-wrap items-center gap-3 mb-5">
         <input
           data-testid="input-messages-search"
           type="text"
@@ -3778,6 +3795,39 @@ function MessagesTab() {
           onChange={e => setSearch(e.target.value)}
           className="border border-gray-200 rounded px-3 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none w-64"
         />
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          {filterOptions.map(opt => (
+            <button
+              key={opt.id}
+              data-testid={`btn-filter-${opt.id}`}
+              onClick={() => setStatusFilter(opt.id)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-mono text-xs transition-colors ${
+                statusFilter === opt.id
+                  ? opt.id === "unread"
+                    ? "bg-white text-rose-600 shadow-sm font-semibold"
+                    : opt.id === "saved"
+                    ? "bg-white text-blue-600 shadow-sm font-semibold"
+                    : "bg-white text-gray-800 shadow-sm font-semibold"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {opt.label}
+              {opt.count !== undefined && opt.count > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                  statusFilter === opt.id
+                    ? opt.id === "unread"
+                      ? "bg-rose-100 text-rose-600"
+                      : opt.id === "saved"
+                      ? "bg-blue-100 text-blue-600"
+                      : "bg-gray-100 text-gray-600"
+                    : "bg-gray-200 text-gray-500"
+                }`}>
+                  {opt.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
         <span className="text-gray-400 font-mono text-xs">
           {filtered.length} message{filtered.length !== 1 ? "s" : ""}
         </span>
