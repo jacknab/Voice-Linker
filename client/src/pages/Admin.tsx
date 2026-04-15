@@ -11,6 +11,7 @@ import {
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
   BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send, Headphones,
+  Voicemail, MailOpen, Bookmark,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import {
@@ -3546,7 +3547,12 @@ interface MailboxStats {
   byCategory: { category: string | null; count: number }[];
 }
 
-function DashboardTab() {
+interface VoicemailSummary {
+  totalUnread: number;
+  callers: { phoneNumber: string; unreadCount: number; latestAt: string | null }[];
+}
+
+function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
     refetchInterval: 5000,
@@ -3565,11 +3571,16 @@ function DashboardTab() {
     refetchInterval: 30000,
   });
 
+  const { data: vmSummary } = useQuery<VoicemailSummary>({
+    queryKey: ["/api/admin/voicemail-summary"],
+    refetchInterval: 15000,
+  });
+
   const items = [
     { label: "Live on the Line", value: stats?.activeCalls ?? 0, icon: <PhoneCall size={18} className="text-emerald-500" /> },
     { label: "Registered Users", value: stats?.users ?? 0, icon: <Phone size={18} className="text-[#f5a623]" /> },
     { label: "Voice Profiles", value: stats?.profiles ?? 0, icon: <Volume2 size={18} className="text-[#f5a623]" /> },
-    { label: "Messages Relayed", value: stats?.messages ?? 0, icon: <MessageSquare size={18} className="text-emerald-500" /> },
+    { label: "Unread Voicemails", value: vmSummary?.totalUnread ?? 0, icon: <Voicemail size={18} className={vmSummary && vmSummary.totalUnread > 0 ? "text-rose-500" : "text-gray-400"} /> },
   ];
 
   return (
@@ -3584,6 +3595,71 @@ function DashboardTab() {
             <div className={C.statLabel}>{item.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* Voicemail Inbox Panel */}
+      <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Voicemail size={15} className={vmSummary && vmSummary.totalUnread > 0 ? "text-rose-500" : "text-gray-400"} />
+            <span className="font-mono font-bold text-sm tracking-widest uppercase text-gray-800">Voicemail Inbox</span>
+            {vmSummary && vmSummary.totalUnread > 0 && (
+              <span className="ml-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-mono font-bold uppercase tracking-wider">
+                {vmSummary.totalUnread} unread
+              </span>
+            )}
+          </div>
+          <button
+            data-testid="btn-view-all-messages"
+            onClick={() => onNavigate?.("messages")}
+            className="font-mono text-xs text-[#f5a623] hover:text-amber-700 transition-colors"
+          >
+            View All →
+          </button>
+        </div>
+        <div className="p-5">
+          {!vmSummary ? (
+            <div className="flex items-center gap-2 text-gray-400 font-mono text-xs py-4 justify-center">
+              <Loader2 size={13} className="animate-spin" /> Loading…
+            </div>
+          ) : vmSummary.callers.length === 0 ? (
+            <div className="text-gray-400 font-mono text-xs text-center py-4">No unread voicemails.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs font-mono">
+                <thead>
+                  <tr className="text-gray-400 uppercase tracking-widest border-b border-gray-100">
+                    <th className="text-left pb-2">Recipient</th>
+                    <th className="text-center pb-2">Unread</th>
+                    <th className="text-right pb-2">Latest</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vmSummary.callers.map((c, i) => (
+                    <tr
+                      key={c.phoneNumber}
+                      data-testid={`row-vm-caller-${i}`}
+                      className="border-b border-gray-50 last:border-0 hover:bg-rose-50 transition-colors cursor-pointer"
+                      onClick={() => onNavigate?.("messages")}
+                    >
+                      <td className="py-2 pr-4 text-gray-700 font-semibold">{c.phoneNumber}</td>
+                      <td className="py-2 text-center">
+                        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-[10px] font-bold">
+                          {c.unreadCount}
+                        </span>
+                      </td>
+                      <td className="py-2 text-right text-gray-400">
+                        {c.latestAt
+                          ? new Date(c.latestAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                          : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
       {isMM && (
@@ -3650,6 +3726,7 @@ interface MessageEntry {
   toPhone: string;
   recordingUrl: string;
   isRead: boolean | null;
+  isSaved: boolean | null;
   createdAt: string | null;
 }
 
@@ -3737,16 +3814,26 @@ function MessagesTab() {
                   <td className="px-4 py-3 text-gray-800 font-semibold" data-testid={`text-msg-to-${i}`}>{msg.toPhone}</td>
                   <td className="px-4 py-3 text-gray-400">{fmtDate(msg.createdAt)}</td>
                   <td className="px-4 py-3">
-                    <span
-                      data-testid={`status-msg-read-${i}`}
-                      className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold ${
-                        msg.isRead
-                          ? "bg-green-50 text-green-600"
-                          : "bg-amber-50 text-amber-600"
-                      }`}
-                    >
-                      {msg.isRead ? "Read" : "Unread"}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        data-testid={`status-msg-read-${i}`}
+                        className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold ${
+                          msg.isRead
+                            ? "bg-green-50 text-green-600"
+                            : "bg-rose-50 text-rose-600"
+                        }`}
+                      >
+                        {msg.isRead ? "Read" : "Unread"}
+                      </span>
+                      {msg.isSaved && (
+                        <span
+                          data-testid={`status-msg-saved-${i}`}
+                          className="px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider font-semibold bg-blue-50 text-blue-600"
+                        >
+                          Saved
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -8716,7 +8803,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {showUpload && <UploadDialog onClose={() => setShowUpload(false)} />}
           {showAddRegion && <RegionDialog onClose={() => setShowAddRegion(false)} />}
 
-          {activeTab === "dashboard"      && <DashboardTab />}
+          {activeTab === "dashboard"      && <DashboardTab onNavigate={setActiveTab} />}
           {activeTab === "callers"        && <CallersTab />}
           {activeTab === "flagged"        && <FlaggedContentTab />}
           {activeTab === "voice-profiles"  && <VoiceProfilesTab key={String(showUpload)} />}

@@ -93,8 +93,10 @@ export interface IStorage {
     toPhone: string;
     recordingUrl: string;
     isRead: boolean | null;
+    isSaved: boolean | null;
     createdAt: Date | null;
   }[]>;
+  getVoicemailSummary(): Promise<{ totalUnread: number; callers: { phoneNumber: string; unreadCount: number; latestAt: Date | null }[] }>;
 
   // Active call tracking (real-time party line)
   registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void>;
@@ -570,13 +572,38 @@ export class DatabaseStorage implements IStorage {
         toPhone: recipient.phoneNumber,
         recordingUrl: messages.recordingUrl,
         isRead: messages.isRead,
+        isSaved: messages.isSaved,
         createdAt: messages.createdAt,
       })
       .from(messages)
       .innerJoin(sender, eq(messages.fromUserId, sender.id))
       .innerJoin(recipient, eq(messages.toUserId, recipient.id))
-      .orderBy(messages.createdAt);
+      .orderBy(desc(messages.createdAt));
     return rows;
+  }
+
+  async getVoicemailSummary(): Promise<{ totalUnread: number; callers: { phoneNumber: string; unreadCount: number; latestAt: Date | null }[] }> {
+    const [totalRow] = await db
+      .select({ count: count() })
+      .from(messages)
+      .where(eq(messages.isRead, false));
+
+    const callerRows = await db
+      .select({
+        phoneNumber: users.phoneNumber,
+        unreadCount: count(messages.id),
+        latestAt: sql<Date | null>`MAX(${messages.createdAt})`,
+      })
+      .from(messages)
+      .innerJoin(users, eq(messages.toUserId, users.id))
+      .where(eq(messages.isRead, false))
+      .groupBy(users.phoneNumber)
+      .orderBy(desc(sql`COUNT(${messages.id})`));
+
+    return {
+      totalUnread: totalRow?.count ?? 0,
+      callers: callerRows,
+    };
   }
 
   async markMessageRead(messageId: string): Promise<void> {

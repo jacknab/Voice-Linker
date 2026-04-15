@@ -632,6 +632,17 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Voicemail summary (unread message counts per caller) ---
+  app.get("/api/admin/voicemail-summary", async (_req, res) => {
+    try {
+      const summary = await storage.getVoicemailSummary();
+      res.json(summary);
+    } catch (e) {
+      console.error("[admin] /api/admin/voicemail-summary GET error:", e);
+      res.status(500).json({ message: "Failed to fetch voicemail summary" });
+    }
+  });
+
   // --- Admin: Blocked numbers list ---
   app.get("/api/admin/blocked", async (_req, res) => {
     try {
