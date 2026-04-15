@@ -22,7 +22,7 @@ import { db } from "./db";
 import { profiles } from "@shared/schema";
 import { eq, isNull, or } from "drizzle-orm";
 import { PROMPT_LIBRARY, ROGER_V3_TEXTS, GAME_AI_GREETING_SCRIPTS, GAME_AI_GREETING_COUNT } from "./engagementEngine";
-import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage } from "./seoPageGenerator";
+import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage, generateHomePage } from "./seoPageGenerator";
 
 // ─── City Audio Helper ────────────────────────────────────────────────────────
 // Generates a shared ElevenLabs audio file for a region's city name so the
@@ -154,6 +154,26 @@ export async function registerRoutes(
 
   // Prime the site settings cache so playPrompt can use category-specific audio on first call
   getSiteSettingsCached().catch(() => {});
+
+  // ── SSR Landing Page (GET /) ───────────────────────────────────────────────
+  // Serves fully server-rendered HTML so search engines can crawl and index it.
+  // Registered before all other routes so it takes priority over the SPA catch-all.
+  app.get("/", async (_req: Request, res: Response) => {
+    try {
+      const [siteSettings, allRegions] = await Promise.all([
+        storage.getSiteSettings(),
+        storage.getAllRegions(),
+      ]);
+      const siteUrl = (process.env.SITE_URL ?? (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "")).replace(/\/$/, "");
+      const html = generateHomePage(siteSettings, allRegions, siteUrl || "https://example.com");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+      res.status(200).send(html);
+    } catch (err: any) {
+      console.error("[ssr] Home page generation error:", err.message);
+      res.status(500).send("Service temporarily unavailable");
+    }
+  });
 
   // ── Auth routes ───────────────────────────────────────────────────────────
   app.use(authRouter);

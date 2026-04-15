@@ -885,6 +885,445 @@ export function generateRegionPage(
 </html>`;
 }
 
+// ── Home page generator ────────────────────────────────────────────────────
+
+export function generateHomePage(
+  siteSettings: SiteSettings,
+  allRegions: Region[],
+  siteUrl = "https://example.com",
+): string {
+  const cfg = getContentConfig(siteSettings.siteCategory);
+  const siteName = siteSettings.siteName;
+  const isMM = siteSettings.siteCategory !== "MW";
+  const color = "#2563EB";
+  const colorLight = "#3B82F6";
+  const today = new Date().toISOString().split("T")[0];
+  const year = new Date().getFullYear();
+
+  const fallbackPhone = siteSettings.fallbackPhoneNumber ?? "";
+  const phone = formatPhone(fallbackPhone);
+  const phoneRaw = fallbackPhone.replace(/\D/g, "");
+
+  const activeRegions = allRegions.filter(r => r.isActive).sort((a, b) => a.name.localeCompare(b.name));
+
+  const metaTitle = isMM
+    ? `${siteName} — Free Gay Phone Chat Line | Free Trial | Talk to Local Men`
+    : `${siteName} — Free Phone Chat Line for Singles | Free Trial | Talk to Real People`;
+
+  const metaDesc = isMM
+    ? `${siteName} is the free gay phone chat line connecting men across the US. Call any local access number, record your greeting, and talk to real local guys — no app, no credit card needed. Free trial minutes for all new callers.`
+    : `${siteName} is the free phone chat line connecting singles across the US. Call your local number, record your greeting, and talk to real local men and women — no app, no credit card needed. Free trial for new callers.`;
+
+  const keywords = [
+    siteName.toLowerCase(),
+    isMM ? "gay phone chat line" : "phone chat line for singles",
+    isMM ? "free gay chat line" : "free singles chat line",
+    "free trial phone chat",
+    "local phone chat",
+    isMM ? "men seeking men chat line" : "men and women chat line",
+    "adult phone chat free",
+    "local chat line numbers",
+    "phone dating service",
+    "voice chat line",
+  ].join(", ");
+
+  const h1 = isMM
+    ? `${siteName} — Talk to Real Local Men. Free Trial. No App.`
+    : `${siteName} — Talk to Real Local Singles. Free Trial. No App.`;
+
+  const tagline = isMM
+    ? `The free gay phone chat line for men across the US. Real guys, live conversation, 24 hours a day — just pick up your phone and call.`
+    : `The free phone chat line for singles across the US. Real people, live conversation, 24 hours a day — just pick up your phone and call.`;
+
+  // Structured data
+  const websiteJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": `${siteUrl}/#website`,
+    "url": siteUrl,
+    "name": siteName,
+    "description": metaDesc,
+    "inLanguage": "en-US",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": { "@type": "EntryPoint", "urlTemplate": `${siteUrl}/regions/` },
+      "query-input": "required name=search_term_string",
+    },
+  };
+
+  const orgJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${siteUrl}/#organization`,
+    "name": siteName,
+    "url": siteUrl,
+    "description": metaDesc,
+    "contactPoint": phoneRaw ? [{
+      "@type": "ContactPoint",
+      "telephone": `+1${phoneRaw}`,
+      "contactType": "customer service",
+      "availableLanguage": "English",
+      "hoursAvailable": { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"], "opens": "00:00", "closes": "23:59" },
+    }] : undefined,
+  };
+
+  const serviceJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Service",
+    "name": `${siteName} Phone Chat Line`,
+    "url": siteUrl,
+    "description": metaDesc,
+    "provider": { "@type": "Organization", "name": siteName, "url": siteUrl },
+    "serviceType": isMM ? "Gay Phone Chat Line" : "Singles Phone Chat Line",
+    "areaServed": { "@type": "Country", "name": "United States" },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "description": "Free trial minutes for all new callers",
+      "availability": "https://schema.org/InStock",
+    },
+    "hasOfferCatalog": {
+      "@type": "OfferCatalog",
+      "name": `${siteName} Features`,
+      "itemListElement": cfg.features.map((f, i) => ({
+        "@type": "Offer",
+        "position": i + 1,
+        "name": f,
+        "price": "0",
+        "priceCurrency": "USD",
+      })),
+    },
+  };
+
+  const howToJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": `How to Use ${siteName}`,
+    "description": `Step-by-step guide to connecting with local ${cfg.pronoun} on ${siteName}.`,
+    "totalTime": "PT5M",
+    "supply": [{ "@type": "HowToSupply", "name": "Any telephone — smartphone, cell phone, or landline" }],
+    "step": cfg.howToSteps.map((s, i) => ({
+      "@type": "HowToStep",
+      "position": i + 1,
+      "name": s.name,
+      "text": s.text("your city", siteName),
+    })),
+  };
+
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": cfg.faqs.map(faq => ({
+      "@type": "Question",
+      "name": faq.q("your city", "your state", siteName),
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": faq.a("your city", "your state", siteName),
+      },
+    })),
+  };
+
+  const regionLinks = activeRegions.map(r => {
+    const sc = r.stateAbbreviation ?? "";
+    const ph = formatPhone(r.phoneNumber);
+    return `
+      <li>
+        <a href="/regions/${encodeURIComponent(r.slug)}.html" class="region-card">
+          <span class="region-name">${escHtml(r.name)}${sc ? `, ${escHtml(sc)}` : ""}</span>
+          ${ph ? `<span class="region-phone">${escHtml(ph)}</span>` : ""}
+          <span class="region-arrow">→</span>
+        </a>
+      </li>`;
+  }).join("");
+
+  return `<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+  <!-- Primary SEO -->
+  <title>${escHtml(metaTitle)}</title>
+  <meta name="description" content="${escAttr(metaDesc)}" />
+  <meta name="keywords" content="${escAttr(keywords)}" />
+  <link rel="canonical" href="${escAttr(siteUrl)}/" />
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+  <meta name="author" content="${escAttr(siteName)}" />
+  <meta name="revisit-after" content="7 days" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="${escAttr(siteUrl)}/" />
+  <meta property="og:title" content="${escAttr(metaTitle)}" />
+  <meta property="og:description" content="${escAttr(metaDesc)}" />
+  <meta property="og:site_name" content="${escAttr(siteName)}" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escAttr(metaTitle)}" />
+  <meta name="twitter:description" content="${escAttr(metaDesc)}" />
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">${JSON.stringify(websiteJsonLd)}</script>
+  <script type="application/ld+json">${JSON.stringify(orgJsonLd)}</script>
+  <script type="application/ld+json">${JSON.stringify(serviceJsonLd)}</script>
+  <script type="application/ld+json">${JSON.stringify(howToJsonLd)}</script>
+  <script type="application/ld+json">${JSON.stringify(faqJsonLd)}</script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; font-size: 16px; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #f0f0f0; line-height: 1.6; }
+    a { color: inherit; text-decoration: none; }
+
+    /* Nav */
+    .nav { position: sticky; top: 0; z-index: 100; background: rgba(10,10,10,0.96); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 0 24px; height: 60px; display: flex; align-items: center; }
+    .nav-inner { max-width: 1100px; width: 100%; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { font-size: 1.15rem; font-weight: 900; letter-spacing: -0.02em; color: #fff; }
+    .nav-logo span { color: ${colorLight}; }
+    .nav-right { display: flex; align-items: center; gap: 20px; }
+    .nav-link { font-size: 0.875rem; color: rgba(255,255,255,0.5); font-weight: 500; }
+    .nav-link:hover { color: #fff; }
+    .nav-cta { background: ${color}; color: #fff; font-size: 0.875rem; font-weight: 700; padding: 8px 20px; border-radius: 8px; transition: background 0.2s; }
+    .nav-cta:hover { background: ${colorLight}; }
+
+    /* Hero */
+    .hero { background: linear-gradient(160deg, #0f0f1a 0%, #0a0a0a 60%); border-bottom: 1px solid rgba(255,255,255,0.06); padding: 80px 24px 72px; text-align: center; }
+    .hero-eyebrow { display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: ${colorLight}; background: ${color}18; border: 1px solid ${color}30; padding: 5px 14px; border-radius: 50px; margin-bottom: 22px; }
+    .hero h1 { font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 900; line-height: 1.08; letter-spacing: -0.025em; max-width: 860px; margin: 0 auto 20px; color: #fff; }
+    .hero h1 .accent { color: ${colorLight}; }
+    .hero-sub { font-size: 1.1rem; color: rgba(255,255,255,0.5); max-width: 640px; margin: 0 auto 36px; line-height: 1.75; }
+    .hero-phone-box { display: inline-flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 14px 28px; border-radius: 12px; font-size: 1.3rem; font-weight: 800; margin-bottom: 28px; letter-spacing: 0.02em; }
+    .hero-phone-box a { color: ${colorLight}; }
+    .hero-phone-box a:hover { text-decoration: underline; }
+    .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary { display: inline-flex; align-items: center; gap: 8px; background: ${color}; color: #fff; font-weight: 700; font-size: 1rem; padding: 14px 32px; border-radius: 10px; transition: background 0.2s, transform 0.15s; }
+    .btn-primary:hover { background: ${colorLight}; transform: translateY(-1px); }
+    .btn-secondary { display: inline-flex; align-items: center; background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.8); font-weight: 600; font-size: 1rem; padding: 14px 32px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); transition: background 0.2s; }
+    .btn-secondary:hover { background: rgba(255,255,255,0.12); }
+
+    /* Stats */
+    .stats-bar { display: flex; justify-content: center; flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); }
+    .stat-item { padding: 20px 32px; text-align: center; border-right: 1px solid rgba(255,255,255,0.05); }
+    .stat-item:last-child { border-right: none; }
+    .stat-value { font-size: 1.4rem; font-weight: 900; color: ${colorLight}; display: block; }
+    .stat-label { font-size: 0.76rem; color: rgba(255,255,255,0.3); font-weight: 500; margin-top: 3px; }
+
+    /* Sections */
+    .section { max-width: 1100px; margin: 0 auto; padding: 72px 24px; }
+    .section-label { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: ${colorLight}; margin-bottom: 10px; }
+    .section > h2 { font-size: clamp(1.5rem, 3.5vw, 2.1rem); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 14px; color: #fff; }
+    .section > p { color: rgba(255,255,255,0.5); font-size: 1.02rem; max-width: 640px; line-height: 1.8; margin-bottom: 40px; }
+
+    /* Features */
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .feature-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 18px 20px; display: flex; align-items: flex-start; gap: 12px; }
+    .feature-check { width: 22px; height: 22px; flex-shrink: 0; background: ${color}22; color: ${colorLight}; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 900; margin-top: 1px; }
+    .feature-card p { font-size: 0.92rem; color: rgba(255,255,255,0.62); margin: 0; }
+
+    /* How-to */
+    .howto-steps { margin-top: 40px; display: flex; flex-direction: column; gap: 0; }
+    .howto-step { display: flex; align-items: flex-start; gap: 20px; padding: 24px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .howto-step:first-child { padding-top: 0; }
+    .howto-step:last-child { border-bottom: none; }
+    .step-num { width: 36px; height: 36px; flex-shrink: 0; background: ${color}; color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; font-weight: 900; margin-top: 2px; }
+    .step-body h3 { font-size: 1rem; font-weight: 700; color: #fff; margin-bottom: 6px; }
+    .step-body p { font-size: 0.93rem; color: rgba(255,255,255,0.5); line-height: 1.75; margin: 0; }
+
+    /* Content blocks */
+    .content-blocks { border-top: 1px solid rgba(255,255,255,0.05); }
+    .content-block { max-width: 1100px; margin: 0 auto; padding: 64px 24px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .content-block h2 { font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 16px; color: #fff; line-height: 1.2; }
+    .content-block p { color: rgba(255,255,255,0.55); font-size: 1.01rem; line-height: 1.85; max-width: 780px; }
+
+    /* Local numbers */
+    .local-numbers { background: rgba(255,255,255,0.015); border-top: 1px solid rgba(255,255,255,0.06); padding: 72px 24px; }
+    .local-numbers-inner { max-width: 1100px; margin: 0 auto; }
+    .local-numbers h2 { font-size: clamp(1.5rem, 3.5vw, 2.1rem); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 10px; color: #fff; }
+    .local-numbers > .local-numbers-inner > p { color: rgba(255,255,255,0.4); font-size: 0.95rem; margin-bottom: 32px; }
+    .regions-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; list-style: none; padding: 0; margin-top: 28px; }
+    .region-card { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; background: rgba(255,255,255,0.03); transition: background 0.2s, border-color 0.2s; }
+    .region-card:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); }
+    .region-name { font-weight: 600; color: #fff; flex: 1; font-size: 0.92rem; }
+    .region-phone { font-size: 0.82rem; color: ${colorLight}; font-weight: 600; }
+    .region-arrow { color: rgba(255,255,255,0.2); font-size: 0.9rem; }
+    .view-all-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 24px; font-size: 0.9rem; color: ${colorLight}; font-weight: 600; }
+    .view-all-link:hover { text-decoration: underline; }
+
+    /* FAQ */
+    .faq-section { background: #080808; }
+    .faq-inner { max-width: 860px; margin: 0 auto; padding: 80px 24px; }
+    .faq-inner > h2 { font-size: clamp(1.5rem, 3.5vw, 2.1rem); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 10px; text-align: center; color: #fff; }
+    .faq-sub { text-align: center; color: rgba(255,255,255,0.35); font-size: 0.95rem; margin-bottom: 48px; }
+    .faq-item { border-top: 1px solid rgba(255,255,255,0.07); padding: 28px 0; }
+    .faq-item:last-child { border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .faq-q { font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: #fff; }
+    .faq-a { color: rgba(255,255,255,0.5); font-size: 0.95rem; line-height: 1.85; }
+
+    /* CTA */
+    .cta-banner { background: linear-gradient(135deg, ${color}22 0%, rgba(10,10,10,1) 60%); border-top: 1px solid ${color}33; text-align: center; padding: 80px 24px; }
+    .cta-banner h2 { font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 900; letter-spacing: -0.02em; margin-bottom: 14px; color: #fff; }
+    .cta-banner p { color: rgba(255,255,255,0.45); font-size: 1.05rem; max-width: 520px; margin: 0 auto 28px; line-height: 1.75; }
+    .cta-phone { font-size: 1.4rem; font-weight: 900; color: ${colorLight}; margin-bottom: 24px; display: block; }
+    .cta-phone a { color: ${colorLight}; }
+    .cta-phone a:hover { text-decoration: underline; }
+
+    /* Footer */
+    footer { text-align: center; padding: 32px 24px; font-size: 0.78rem; color: rgba(255,255,255,0.18); border-top: 1px solid rgba(255,255,255,0.05); }
+    footer a { color: rgba(255,255,255,0.28); }
+    footer a:hover { color: rgba(255,255,255,0.5); }
+    .footer-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; margin-top: 10px; }
+
+    @media (max-width: 640px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .regions-grid { grid-template-columns: 1fr; }
+      .stat-item { padding: 14px 18px; }
+      .hero { padding: 56px 20px 52px; }
+      .nav-link { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation -->
+  <header>
+    <nav class="nav" aria-label="Main navigation">
+      <div class="nav-inner">
+        <a href="/" class="nav-logo">${escHtml(siteName)}</a>
+        <div class="nav-right">
+          ${activeRegions.length > 0 ? `<a href="/regions/" class="nav-link">Local Numbers</a>` : ""}
+          <a href="${phoneRaw ? `tel:+1${phoneRaw}` : "/regions/"}" class="nav-cta">📞 ${escHtml(cfg.ctaText)}</a>
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Hero -->
+  <main>
+  <section class="hero" aria-labelledby="hero-h1">
+    <p class="hero-eyebrow">${escHtml(siteName)} · Free ${isMM ? "Gay " : ""}Phone Chat Line · Free Trial</p>
+    <h1 id="hero-h1">${escHtml(h1).replace(escHtml(siteName), `<span class="accent">${escHtml(siteName)}</span>`)}</h1>
+    <p class="hero-sub">${escHtml(tagline)}</p>
+    ${phone ? `
+    <div class="hero-phone-box">
+      <span aria-hidden="true">📞</span>
+      <span>Free call: <a href="tel:+1${phoneRaw}">${escHtml(phone)}</a></span>
+    </div>` : ""}
+    <div class="hero-ctas">
+      <a href="${phoneRaw ? `tel:+1${phoneRaw}` : "/regions/"}" class="btn-primary" aria-label="${escAttr(cfg.ctaText)} on ${escAttr(siteName)}">📞 ${escHtml(cfg.ctaText)}</a>
+      <a href="${activeRegions.length > 0 ? "/regions/" : "#how-it-works"}" class="btn-secondary">Find Local Number</a>
+    </div>
+  </section>
+
+  <!-- Stats bar -->
+  <aside class="stats-bar" aria-label="Key facts">
+    <div class="stat-item"><span class="stat-value">Free</span><span class="stat-label">Trial Minutes</span></div>
+    <div class="stat-item"><span class="stat-value">24/7</span><span class="stat-label">Always Live</span></div>
+    <div class="stat-item"><span class="stat-value">100%</span><span class="stat-label">Anonymous</span></div>
+    ${activeRegions.length > 0 ? `<div class="stat-item"><span class="stat-value">${activeRegions.length}</span><span class="stat-label">Local Numbers</span></div>` : ""}
+    <div class="stat-item"><span class="stat-value">No&nbsp;App</span><span class="stat-label">Any Phone Works</span></div>
+  </aside>
+
+  <!-- Features -->
+  <section class="section" aria-labelledby="features-h2">
+    <p class="section-label">${escHtml(siteName)} Features</p>
+    <h2 id="features-h2">Everything included — free to try</h2>
+    <p>No apps, no profiles, no swiping. Just pick up any phone, call your local access number, and start talking to real ${escHtml(cfg.pronoun)} in your area.</p>
+    <div class="features-grid" role="list">
+      ${cfg.features.map(f => `
+      <article class="feature-card" role="listitem">
+        <div class="feature-check" aria-hidden="true">✓</div>
+        <p>${escHtml(f)}</p>
+      </article>`).join("")}
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section id="how-it-works" class="section" style="padding-top:0;" aria-labelledby="howto-h2">
+    <p class="section-label">Getting Started</p>
+    <h2 id="howto-h2">How ${escHtml(siteName)} works</h2>
+    <p>You can go from first call to a real live conversation in under five minutes. Here's exactly how it works:</p>
+    <ol class="howto-steps">
+      ${cfg.howToSteps.map((s, i) => `
+      <li class="howto-step">
+        <div class="step-num" aria-hidden="true">${i + 1}</div>
+        <div class="step-body">
+          <h3>${escHtml(s.name)}</h3>
+          <p>${escHtml(s.text("your city", siteName))}</p>
+        </div>
+      </li>`).join("")}
+    </ol>
+  </section>
+
+  <!-- Content H2 blocks -->
+  <div class="content-blocks">
+    ${cfg.h2s.map(block => `
+    <article class="content-block">
+      <h2>${escHtml(block.heading(siteName, "the US", siteName))}</h2>
+      <p>${escHtml(block.body(siteName, "the US", siteName))}</p>
+    </article>`).join("")}
+  </div>
+
+  <!-- Local numbers -->
+  ${activeRegions.length > 0 ? `
+  <section class="local-numbers" aria-labelledby="local-numbers-h2">
+    <div class="local-numbers-inner">
+      <p class="section-label">Local Access Numbers</p>
+      <h2 id="local-numbers-h2">Find your local ${escHtml(siteName)} number</h2>
+      <p style="color:rgba(255,255,255,0.4);font-size:0.95rem;margin-bottom:0;">${siteName} has local access numbers across the US. Pick the city nearest you and call free today.</p>
+      <ul class="regions-grid">${regionLinks}</ul>
+      <a href="/regions/" class="view-all-link">View all local numbers →</a>
+    </div>
+  </section>` : ""}
+
+  <!-- FAQ -->
+  <section class="faq-section" aria-labelledby="faq-h2">
+    <div class="faq-inner">
+      <h2 id="faq-h2">Frequently Asked Questions</h2>
+      <p class="faq-sub">Common questions about ${escHtml(siteName)}</p>
+      ${cfg.faqs.map(faq => `
+      <article class="faq-item">
+        <h3 class="faq-q">${escHtml(faq.q("your area", "your state", siteName))}</h3>
+        <p class="faq-a">${escHtml(faq.a("your area", "your state", siteName))}</p>
+      </article>`).join("")}
+    </div>
+  </section>
+
+  <!-- CTA banner -->
+  <section class="cta-banner" aria-label="Call to action">
+    <h2>Ready to connect? Your first call is free.</h2>
+    <p>Real local ${escHtml(cfg.pronoun)} are on the line right now. No credit card, no commitment — just pick up the phone.</p>
+    ${phone ? `<p class="cta-phone">📞 <a href="tel:+1${phoneRaw}">${escHtml(phone)}</a></p>` : ""}
+    <a href="${phoneRaw ? `tel:+1${phoneRaw}` : "/regions/"}" class="btn-primary" style="font-size:1.05rem;padding:16px 40px;">
+      ${escHtml(cfg.ctaText)} →
+    </a>
+  </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p>&copy; <time datetime="${today}">${year}</time> ${escHtml(siteName)}</p>
+    <nav class="footer-links" aria-label="Footer links">
+      <a href="/">Home</a>
+      ${activeRegions.length > 0 ? `<a href="/regions/">Local Numbers</a>` : ""}
+      <a href="/privacy-policy">Privacy Policy</a>
+      <a href="/terms-of-service">Terms of Service</a>
+    </nav>
+  </footer>
+
+</body>
+</html>`;
+}
+
 // ── Write / delete helpers ─────────────────────────────────────────────────
 
 export function writeRegionPage(
