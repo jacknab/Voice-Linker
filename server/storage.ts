@@ -429,6 +429,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUser(id: string): Promise<void> {
+    // Unlink any membership cards tied to this caller's phone number so they
+    // cannot be auto-recognized on their next call.
+    const [userRow] = await db.select({ phoneNumber: users.phoneNumber }).from(users).where(eq(users.id, id));
+    if (userRow?.phoneNumber) {
+      await db.update(membershipCards)
+        .set({ phoneNumber: null })
+        .where(eq(membershipCards.phoneNumber, userRow.phoneNumber));
+    }
+
     await db.delete(activeCalls).where(eq(activeCalls.userId, id));
     await db.delete(messages).where(or(eq(messages.fromUserId, id), eq(messages.toUserId, id)));
     await db.delete(blockedUsers).where(or(eq(blockedUsers.blockerId, id), eq(blockedUsers.blockedUserId, id)));
