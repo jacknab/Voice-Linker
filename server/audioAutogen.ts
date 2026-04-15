@@ -9,7 +9,7 @@
 
 import fs from "fs";
 import path from "path";
-import { generateTTS } from "./elevenlabs";
+import { generateTTS, getVoiceIdForRoger } from "./elevenlabs";
 import { reverseGeocodeNeighborhood } from "./zipLookup";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
