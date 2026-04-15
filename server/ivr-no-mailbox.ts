@@ -3607,14 +3607,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       snapshot = "I was unable to retrieve your account at this time.";
     }
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-customer-service", timeout: 10 });
-    dSay(gather,
-      `Customer service. ${snapshot} ` +
-      `Press 1 for your full account details. ` +
-      `Press 2 to add time to your account. ` +
-      `Press 3 for billing information. ` +
-      `Press 4 to leave a message for our billing team. ` +
-      `Press star to return to the main menu.`
-    );
+    playPrompt(gather, req, "cs_menu_intro.mp3", "Customer service.");
+    if (snapshot) dSay(gather, snapshot);
+    playPrompt(gather, req, "cs_menu_options.mp3", "Press 1 for your full account details. Press 2 to add time to your account. Press 3 for billing information. Press 4 to leave a message for our billing team. Press star to return to the main menu.");
     twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -3646,22 +3641,27 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const statusLabel = user.accountStatus === "banned" ? "suspended"
         : user.accountStatus === "restricted" ? "restricted"
         : "active and in good standing";
-      const greetingLine = profile?.recordingUrl
-        ? "You have a greeting recorded."
-        : "You do not have a greeting recorded yet.";
       const cardLine = user.membershipNumber
         ? `Your membership card number is: ${user.membershipNumber.split("").join(", ")}.`
         : "";
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-cs-account-status", timeout: 10 });
-      dSay(gather,
-        `Account details. Status: ${statusLabel}. Membership: ${tier}. ` +
-        `Time remaining: ${formatTime(remaining)}. ` +
-        `${greetingLine} ${cardLine} ` +
-        `Press 2 to add more time. Press 9 to return to customer service. Press star for the main menu.`
-      );
+      playPrompt(gather, req, "cs_account_title.mp3", "Account details.");
+      playPrompt(gather, req, "cs_account_label_status.mp3", "Status:");
+      dSay(gather, `${statusLabel}.`);
+      playPrompt(gather, req, "cs_account_label_membership.mp3", "Membership type:");
+      dSay(gather, `${tier}.`);
+      playPrompt(gather, req, "cs_account_label_time.mp3", "Time remaining:");
+      dSay(gather, `${formatTime(remaining)}.`);
+      if (profile?.recordingUrl) {
+        playPrompt(gather, req, "cs_account_greeting_yes.mp3", "You have a greeting recorded.");
+      } else {
+        playPrompt(gather, req, "cs_account_greeting_no.mp3", "You do not have a greeting recorded yet. You must record a greeting before other callers can hear you.");
+      }
+      if (cardLine) dSay(gather, cardLine);
+      playPrompt(gather, req, "cs_account_options.mp3", "Press 2 to add more time. Press 9 to return to customer service. Press star for the main menu.");
     } catch {
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-cs-account-status", timeout: 10 });
-      dSay(gather, "We were unable to retrieve your account information. Press 9 to return. Press star for the main menu.");
+      playPrompt(gather, req, "cs_account_error.mp3", "We were unable to retrieve your account information at this time. Press 9 to return to customer service. Press star for the main menu.");
     }
     twiml.redirect("/voice/customer-service");
     res.type("text/xml");
@@ -3693,13 +3693,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
     } catch {}
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-cs-billing-info", timeout: 10 });
-    dSay(gather,
-      `Billing information. ${planContext}` +
-      `Time is deducted while you are connected. You can add more time by pressing 2 from the main menu. ` +
-      `If you were recently charged and your time has not been applied, please leave a message for our billing team. ` +
-      `Press 2 to add time now. Press 4 to leave a message for the billing team. ` +
-      `Press 9 to return to customer service. Press star for the main menu.`
-    );
+    playPrompt(gather, req, "cs_billing_title.mp3", "Billing information.");
+    if (planContext) dSay(gather, planContext);
+    playPrompt(gather, req, "cs_billing_static.mp3", "Time is deducted from your membership while you are connected to the system. You can add more time at any time by pressing 2 from the main menu. If you were recently charged and your time has not been applied, please leave a message for our billing team and we will investigate promptly.");
+    playPrompt(gather, req, "cs_billing_options.mp3", "Press 2 to add time now. Press 4 to leave a message for the billing team. Press 9 to return to customer service. Press star for the main menu.");
     twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -3718,7 +3715,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   app.post("/voice/cs-leave-message", async (req, res) => {
     const twiml = new VoiceResponse();
-    dSay(twiml, "Please describe your billing question or issue after the tone. Press any key when you are done.");
+    playPrompt(twiml, req, "cs_leave_message_prompt.mp3", "Please describe your billing question or issue after the tone. Press any key when you are done.");
     twiml.record({ action: "/voice/cs-save-message", finishOnKey: "any", maxLength: 180, timeout: 5 });
     twiml.redirect("/voice/customer-service");
     res.type("text/xml");
@@ -3737,7 +3734,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.error("[cs] Failed to save support ticket:", err);
       }
     }
-    dSay(twiml, "Your message has been received. Our billing team will review it and follow up as soon as possible. Thank you for calling.");
+    playPrompt(twiml, req, "cs_message_received.mp3", "Your message has been received. Our billing team will review it and follow up with you as soon as possible. Thank you for calling.");
     twiml.redirect("/voice/customer-service");
     res.type("text/xml");
     res.send(twiml.toString());

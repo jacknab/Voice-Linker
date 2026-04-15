@@ -867,6 +867,23 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "menu", filename: "member_warning.mp3", label: "Membership Time Running Low",       text: "You have less than 15 minutes remaining in your membership. To renew now press 1. To continue press pound." },
   { group: "menu", filename: "no_profiles.mp3",    label: "No Profiles Available",             text: "There are no profiles available right now. Please call back later." },
 
+  // ── 5a. CUSTOMER SERVICE MENU ──────────────────────────────────────────────
+  { group: "customer_service", filename: "cs_menu_intro.mp3",          label: "CS — Intro",                        text: "Customer service." },
+  { group: "customer_service", filename: "cs_menu_options.mp3",        label: "CS — Menu Options",                 text: "Press 1 for your full account details. Press 2 to add time to your account. Press 3 for billing information. Press 4 to leave a message for our billing team. Press star to return to the main menu." },
+  { group: "customer_service", filename: "cs_account_title.mp3",       label: "CS Account — Title",                text: "Account details." },
+  { group: "customer_service", filename: "cs_account_label_status.mp3",     label: "CS Account — Label: Status",   text: "Status:" },
+  { group: "customer_service", filename: "cs_account_label_membership.mp3", label: "CS Account — Label: Membership", text: "Membership type:" },
+  { group: "customer_service", filename: "cs_account_label_time.mp3",       label: "CS Account — Label: Time",     text: "Time remaining:" },
+  { group: "customer_service", filename: "cs_account_greeting_yes.mp3",     label: "CS Account — Has Greeting",    text: "You have a greeting recorded." },
+  { group: "customer_service", filename: "cs_account_greeting_no.mp3",      label: "CS Account — No Greeting",     text: "You do not have a greeting recorded yet. You must record a greeting before other callers can hear you." },
+  { group: "customer_service", filename: "cs_account_options.mp3",     label: "CS Account — Nav Options",          text: "Press 2 to add more time. Press 9 to return to customer service. Press star for the main menu." },
+  { group: "customer_service", filename: "cs_account_error.mp3",       label: "CS Account — Error",                text: "We were unable to retrieve your account information at this time. Press 9 to return to customer service. Press star for the main menu." },
+  { group: "customer_service", filename: "cs_billing_title.mp3",       label: "CS Billing — Title",                text: "Billing information." },
+  { group: "customer_service", filename: "cs_billing_static.mp3",      label: "CS Billing — How Billing Works",    text: "Time is deducted from your membership while you are connected to the system. You can add more time at any time by pressing 2 from the main menu. If you were recently charged and your time has not been applied, please leave a message for our billing team and we will investigate promptly." },
+  { group: "customer_service", filename: "cs_billing_options.mp3",     label: "CS Billing — Nav Options",          text: "Press 2 to add time now. Press 4 to leave a message for the billing team. Press 9 to return to customer service. Press star for the main menu." },
+  { group: "customer_service", filename: "cs_leave_message_prompt.mp3",label: "CS — Leave Message Prompt",         text: "Please describe your billing question or issue after the tone. Press any key when you are done." },
+  { group: "customer_service", filename: "cs_message_received.mp3",    label: "CS — Message Received Confirmation",text: "Your message has been received. Our billing team will review it and follow up with you as soon as possible. Thank you for calling." },
+
   // ── 5. INFO / PRICING / MEMBERSHIP PURCHASE ───────────────────────────────
   { group: "billing", filename: "info_menu.mp3",                   label: "Info & Membership Menu",          text: "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu." },
   { group: "billing", filename: "membership_questions.mp3",        label: "Membership Questions Menu",       text: "Membership questions. Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership with a credit card. Press 9 to return to the main menu." },
