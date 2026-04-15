@@ -458,6 +458,16 @@ function playPrompt(
       node.play(`${baseUrl(req)}/uploads/${category}/${filename}`);
       return;
     }
+  } else {
+    // Cache not yet populated — scan all known category folders so audio files
+    // are never silently skipped just because the cache hasn't been primed.
+    for (const cat of ["mm", "mw", "mw_m"]) {
+      const catPath = path.join(UPLOADS_DIR, cat, filename);
+      if (fs.existsSync(catPath)) {
+        node.play(`${baseUrl(req)}/uploads/${cat}/${filename}`);
+        return;
+      }
+    }
   }
 
   // MW systems use a separate audio path — do not fall back to the shared uploads/ root.
@@ -845,6 +855,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From;
     const callSid = req.body?.CallSid;
+
+    // Prime the site settings cache immediately so playPrompt can resolve the
+    // correct audio folder (uploads/mm/ vs uploads/mw/) on this and all
+    // downstream routes — even if they don't call getSiteSettingsCached() themselves.
+    await getSiteSettingsCached().catch(() => {});
 
     if (!fromNumber || !callSid) {
       playPrompt(twiml, req, "no_caller_id.mp3", "We could not identify your call. Goodbye.");
