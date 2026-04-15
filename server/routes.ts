@@ -172,6 +172,7 @@ export async function registerRoutes(
           status: session.status,
           waitingForInput: session.waitingForInput,
           numDigits: session.numDigits,
+          finishOnKey: session.finishOnKey,
           waitingForRecording: !!session.recordAction,
         });
       } catch (err: any) {
@@ -193,6 +194,7 @@ export async function registerRoutes(
           status: session.status,
           waitingForInput: session.waitingForInput,
           numDigits: session.numDigits,
+          finishOnKey: session.finishOnKey,
           waitingForRecording: !!session.recordAction,
         });
       } catch (err: any) {
@@ -1497,6 +1499,35 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[admin/prompt-texts] PUT failed:", e);
       res.status(500).json({ message: "Failed to save prompt texts" });
+    }
+  });
+
+  // ── IVR Error Reports ─────────────────────────────────────────────────────
+  app.get("/api/admin/ivr-error-reports", async (_req, res) => {
+    try {
+      res.json(await storage.getIvrErrorReports());
+    } catch (e) {
+      res.status(500).json({ message: "Failed to fetch IVR error reports" });
+    }
+  });
+
+  app.post("/api/admin/ivr-error-reports", async (req, res) => {
+    try {
+      const { promptFilename, promptText, notes } = req.body as { promptFilename?: string; promptText?: string; notes: string };
+      if (typeof notes !== "string") return res.status(400).json({ message: "notes required" });
+      const report = await storage.createIvrErrorReport({ promptFilename, promptText, notes });
+      res.json(report);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to create IVR error report" });
+    }
+  });
+
+  app.delete("/api/admin/ivr-error-reports/:id", async (req, res) => {
+    try {
+      await storage.deleteIvrErrorReport(parseInt(req.params.id, 10));
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to delete IVR error report" });
     }
   });
 

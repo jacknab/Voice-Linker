@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, personalityProfiles, rogerPromptHistory, supportTickets, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate, type PersonalityProfile, type InsertPersonalityProfile, type SupportTicket } from "@shared/schema";
+import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, personalityProfiles, rogerPromptHistory, supportTickets, ivrErrorReports, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate, type PersonalityProfile, type InsertPersonalityProfile, type SupportTicket, type IvrErrorReport } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -290,6 +290,11 @@ export interface IStorage {
   getSupportTickets(status?: string): Promise<SupportTicket[]>;
   updateSupportTicket(id: string, data: { status?: string; notes?: string }): Promise<SupportTicket>;
   deleteSupportTicket(id: string): Promise<void>;
+
+  // IVR Error Reports
+  getIvrErrorReports(): Promise<IvrErrorReport[]>;
+  createIvrErrorReport(data: { promptFilename?: string; promptText?: string; notes: string }): Promise<IvrErrorReport>;
+  deleteIvrErrorReport(id: number): Promise<void>;
 
   // Analytics
   getAnalytics(): Promise<{
@@ -2347,6 +2352,23 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSupportTicket(id: string): Promise<void> {
     await db.delete(supportTickets).where(eq(supportTickets.id, id));
+  }
+
+  async getIvrErrorReports(): Promise<IvrErrorReport[]> {
+    return db.select().from(ivrErrorReports).orderBy(desc(ivrErrorReports.createdAt));
+  }
+
+  async createIvrErrorReport(data: { promptFilename?: string; promptText?: string; notes: string }): Promise<IvrErrorReport> {
+    const [row] = await db.insert(ivrErrorReports).values({
+      promptFilename: data.promptFilename ?? null,
+      promptText: data.promptText ?? null,
+      notes: data.notes,
+    }).returning();
+    return row;
+  }
+
+  async deleteIvrErrorReport(id: number): Promise<void> {
+    await db.delete(ivrErrorReports).where(eq(ivrErrorReports.id, id));
   }
 }
 

@@ -527,3 +527,14 @@ export const supportTickets = pgTable("support_tickets", {
 export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({ id: true, createdAt: true });
 export type SupportTicket = typeof supportTickets.$inferSelect;
 export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+
+// ── IVR Error Reports ─────────────────────────────────────────────────────────
+// Admin notes about IVR issues discovered during phone testing sessions.
+export const ivrErrorReports = pgTable("ivr_error_reports", {
+  id: serial("id").primaryKey(),
+  promptFilename: text("prompt_filename"),
+  promptText: text("prompt_text"),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type IvrErrorReport = typeof ivrErrorReports.$inferSelect;

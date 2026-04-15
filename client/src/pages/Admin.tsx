@@ -3982,14 +3982,114 @@ function IVRTesterTab() {
   const [waitingForInput,    setWaitingForInput]    = useState(false);
   const [waitingForRecording,setWaitingForRecording]= useState(false);
   const [numDigits,          setNumDigits]          = useState<number | null>(null);
+  const [finishOnKey,        setFinishOnKey]        = useState<string | null>(null);
   const [digitBuffer,        setDigitBuffer]        = useState("");
   const [loading,            setLoading]            = useState(false);
   const [elapsed,            setElapsed]            = useState(0); // centiseconds
+
+  // Prompt overrides (from Audio Gen / system_prompt_overrides table)
+  const [promptOverrides,    setPromptOverrides]    = useState<Record<string, string>>({});
+
+  // Edit prompt modal
+  const [editPrompt,         setEditPrompt]         = useState<{ filename: string; text: string } | null>(null);
+  const [editText,           setEditText]           = useState("");
+  const [editSaving,         setEditSaving]         = useState(false);
+
+  // Error report modal
+  const [reportEntry,        setReportEntry]        = useState<{ filename?: string; text?: string } | null>(null);
+  const [reportNotes,        setReportNotes]        = useState("");
+  const [reportSaving,       setReportSaving]       = useState(false);
+
+  // Error reports viewer
+  const [showReports,        setShowReports]        = useState(false);
+  const [reports,            setReports]            = useState<{ id: number; promptFilename: string | null; promptText: string | null; notes: string; createdAt: string }[]>([]);
+  const [reportsLoading,     setReportsLoading]     = useState(false);
 
   // Audio queue
   const audioQueue   = useRef<IVRLogEntry[]>([]);
   const audioPlaying = useRef(false);
   const currentAudio = useRef<HTMLAudioElement | null>(null);
+
+  // ── Fetch prompt overrides on mount ──────────────────────────────────────
+  useEffect(() => {
+    fetch("/api/admin/prompt-texts")
+      .then(r => r.ok ? r.json() : {})
+      .then(data => setPromptOverrides(data))
+      .catch(() => {});
+  }, []);
+
+  // ── Prompt text resolver (overrides take priority over static PROMPT_TEXTS) ─
+  function resolvePromptText(entry: IVRLogEntry): string | undefined {
+    if (entry.type === "play") {
+      const filename = entry.content.split("/").pop() ?? entry.content;
+      return promptOverrides[filename] ?? entry.text;
+    }
+    return undefined;
+  }
+
+  // ── Error report helpers ──────────────────────────────────────────────────
+  async function fetchReports() {
+    setReportsLoading(true);
+    try {
+      const r = await fetch("/api/admin/ivr-error-reports");
+      if (r.ok) setReports(await r.json());
+    } finally {
+      setReportsLoading(false);
+    }
+  }
+
+  async function saveReport() {
+    if (!reportEntry || reportSaving) return;
+    setReportSaving(true);
+    try {
+      const r = await fetch("/api/admin/ivr-error-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          promptFilename: reportEntry.filename,
+          promptText: reportEntry.text,
+          notes: reportNotes.trim(),
+        }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      toast({ title: "Report saved", description: "IVR issue report created successfully." });
+      setReportEntry(null);
+      setReportNotes("");
+    } catch (err: any) {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    } finally {
+      setReportSaving(false);
+    }
+  }
+
+  async function deleteReport(id: number) {
+    try {
+      await fetch(`/api/admin/ivr-error-reports/${id}`, { method: "DELETE" });
+      setReports(prev => prev.filter(r => r.id !== id));
+    } catch {
+      toast({ title: "Delete failed", variant: "destructive" });
+    }
+  }
+
+  async function saveEditPrompt() {
+    if (!editPrompt || editSaving) return;
+    setEditSaving(true);
+    try {
+      const r = await fetch("/api/admin/prompt-texts", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ overrides: { [editPrompt.filename]: editText } }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      setPromptOverrides(prev => ({ ...prev, [editPrompt.filename]: editText }));
+      toast({ title: "Prompt text updated", description: `Saved override for ${editPrompt.filename}` });
+      setEditPrompt(null);
+    } catch (err: any) {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    } finally {
+      setEditSaving(false);
+    }
+  }
 
   // ── Timer ────────────────────────────────────────────────────────────────
   function startTimer() {
@@ -4056,6 +4156,7 @@ function IVRTesterTab() {
     waitingForInput: boolean;
     waitingForRecording: boolean;
     numDigits: number | null;
+    finishOnKey?: string | null;
   }) {
     // Non-audio entries (system messages, keypress, record, hangup, etc.) appear immediately.
     // Audio entries (play, say) are revealed one-at-a-time via processAudioQueue as each plays.
@@ -4064,6 +4165,7 @@ function IVRTesterTab() {
     setWaitingForInput(result.waitingForInput);
     setWaitingForRecording(result.waitingForRecording ?? false);
     setNumDigits(result.numDigits);
+    setFinishOnKey(result.finishOnKey ?? null);
     if (result.status === "ended") {
       setEnded(true);
       setConnected(false);
@@ -4085,6 +4187,7 @@ function IVRTesterTab() {
     setWaitingForInput(false);
     setWaitingForRecording(false);
     setNumDigits(null);
+    setFinishOnKey(null);
     try {
       const res = await fetch("/api/ivr-tester/connect", {
         method: "POST",
@@ -4116,6 +4219,7 @@ function IVRTesterTab() {
     setSessionId(null);
     setWaitingForInput(false);
     setWaitingForRecording(false);
+    setFinishOnKey(null);
     setDigitBuffer("");
     scrollToBottom();
   }
@@ -4129,13 +4233,21 @@ function IVRTesterTab() {
 
     let toSend = digits;
     if (numDigits && numDigits > 1) {
-      const next = digitBuffer + digits;
-      setDigitBuffer(next);
-      setLog(prev => [...prev, { type: "keypress", content: digits, ts: Date.now() }]);
-      scrollToBottom();
-      if (next.length < numDigits) return;
-      toSend = next;
-      setDigitBuffer("");
+      // If this digit is the finishOnKey, immediately send whatever is buffered
+      if (finishOnKey && digits === finishOnKey) {
+        toSend = digitBuffer; // may be empty — that's intentional (user pressed # to skip)
+        setDigitBuffer("");
+        setLog(prev => [...prev, { type: "keypress", content: digits, ts: Date.now() }]);
+        scrollToBottom();
+      } else {
+        const next = digitBuffer + digits;
+        setDigitBuffer(next);
+        setLog(prev => [...prev, { type: "keypress", content: digits, ts: Date.now() }]);
+        scrollToBottom();
+        if (next.length < numDigits) return;
+        toSend = next;
+        setDigitBuffer("");
+      }
     }
 
     setLoading(true);
@@ -4351,15 +4463,24 @@ function IVRTesterTab() {
             <Clock size={14} style={{ color: "#6b84a8" }} />
             <span style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.8rem", color: "#8fa3c8", letterSpacing: "0.08em" }}>Activity Log</span>
           </div>
-          {log.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <button
-              data-testid="btn-ivr-clear-log"
-              onClick={() => setLog([])}
-              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "monospace", fontSize: "0.68rem", color: PT.dimText, letterSpacing: "0.08em" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "#8fa3c8")}
-              onMouseLeave={e => (e.currentTarget.style.color = PT.dimText)}
-            >CLEAR</button>
-          )}
+              data-testid="btn-ivr-view-reports"
+              onClick={() => { setShowReports(true); fetchReports(); }}
+              style={{ background: "none", border: "1px solid #3a4a6a", borderRadius: 6, cursor: "pointer", fontFamily: "monospace", fontSize: "0.68rem", color: "#f59e0b", letterSpacing: "0.08em", padding: "0.2rem 0.5rem", display: "flex", alignItems: "center", gap: "0.3rem" }}
+            >
+              <Flag size={10} /> REPORTS
+            </button>
+            {log.length > 0 && (
+              <button
+                data-testid="btn-ivr-clear-log"
+                onClick={() => setLog([])}
+                style={{ background: "none", border: "none", cursor: "pointer", fontFamily: "monospace", fontSize: "0.68rem", color: PT.dimText, letterSpacing: "0.08em" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "#8fa3c8")}
+                onMouseLeave={e => (e.currentTarget.style.color = PT.dimText)}
+              >CLEAR</button>
+            )}
+          </div>
         </div>
 
         {/* Entries */}
@@ -4385,24 +4506,45 @@ function IVRTesterTab() {
                   {!isKey && (() => {
                     if (entry.type === "play") {
                       const filename = getFilename(entry.content);
+                      const resolvedText = resolvePromptText(entry);
                       return (
                         <>
                           <Play size={11} style={{ color: "#a78bfa", flexShrink: 0, marginTop: 3 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div>
-                              <span style={{ fontFamily: "monospace", fontSize: "0.65rem", color: "#6b84a8", letterSpacing: "0.06em", marginRight: "0.4rem" }}>MP3</span>
-                              <span style={{ fontFamily: "monospace", fontSize: "0.8rem", color: "#c4b5fd", fontWeight: 600, wordBreak: "break-all" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", flexWrap: "wrap" }}>
+                              <span style={{ fontFamily: "monospace", fontSize: "0.65rem", color: "#6b84a8", letterSpacing: "0.06em" }}>MP3</span>
+                              <span style={{ fontFamily: "monospace", fontSize: "0.8rem", color: "#c4b5fd", fontWeight: 600, wordBreak: "break-all", flex: 1 }}>
                                 {filename}
                               </span>
+                              {/* Edit prompt text icon */}
+                              <button
+                                data-testid={`btn-edit-prompt-${i}`}
+                                title="Edit prompt text"
+                                onClick={() => { setEditPrompt({ filename, text: resolvedText ?? "" }); setEditText(resolvedText ?? ""); }}
+                                style={{ background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}
+                              >
+                                <Pencil size={10} style={{ color: "#6b84a8" }} />
+                              </button>
+                              {/* Flag/report icon */}
+                              <button
+                                data-testid={`btn-report-prompt-${i}`}
+                                title="File an issue report for this prompt"
+                                onClick={() => { setReportEntry({ filename, text: resolvedText }); setReportNotes(""); }}
+                                style={{ background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}
+                              >
+                                <Flag size={10} style={{ color: "#f59e0b" }} />
+                              </button>
                             </div>
-                            {entry.text ? (
+                            {resolvedText ? (
                               <div style={{ marginTop: "0.2rem", borderLeft: "2px solid #3a3060", paddingLeft: "0.4rem" }}>
-                                <span style={{ fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700, color: "#7c5fa8", letterSpacing: "0.05em", marginRight: "0.3rem" }}>EXPECTED:</span>
-                                <span style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#a89ec8", fontStyle: "italic" }}>{entry.text}</span>
+                                <span style={{ fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700, color: promptOverrides[filename] ? "#22c55e" : "#7c5fa8", letterSpacing: "0.05em", marginRight: "0.3rem" }}>
+                                  {promptOverrides[filename] ? "OVERRIDE:" : "EXPECTED:"}
+                                </span>
+                                <span style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#a89ec8", fontStyle: "italic" }}>{resolvedText}</span>
                               </div>
                             ) : (
                               <div style={{ marginTop: "0.15rem", paddingLeft: "0.4rem", borderLeft: "2px solid #2a2040" }}>
-                                <span style={{ fontFamily: "monospace", fontSize: "0.6rem", color: "#4a3a60", fontStyle: "italic" }}>no expected text mapped</span>
+                                <span style={{ fontFamily: "monospace", fontSize: "0.6rem", color: "#4a3a60", fontStyle: "italic" }}>no text mapped — click ✏ to add</span>
                               </div>
                             )}
                           </div>
@@ -4413,16 +4555,26 @@ function IVRTesterTab() {
                       return (
                         <>
                           <Volume2 size={11} style={{ color: "#60a5fa", flexShrink: 0, marginTop: 3 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <span style={{
-                              fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700,
-                              background: "#7c3aed22", border: "1px solid #7c3aed55",
-                              borderRadius: 4, padding: "0 4px", color: "#a78bfa",
-                              marginRight: "0.4rem", letterSpacing: "0.06em",
-                            }}>TTS</span>
-                            <span style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "#cbd5e1" }}>
-                              {entry.content}
-                            </span>
+                          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "flex-start", gap: "0.3rem" }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{
+                                fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700,
+                                background: "#7c3aed22", border: "1px solid #7c3aed55",
+                                borderRadius: 4, padding: "0 4px", color: "#a78bfa",
+                                marginRight: "0.4rem", letterSpacing: "0.06em",
+                              }}>TTS</span>
+                              <span style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "#cbd5e1" }}>
+                                {entry.content}
+                              </span>
+                            </div>
+                            <button
+                              data-testid={`btn-report-say-${i}`}
+                              title="File an issue report for this prompt"
+                              onClick={() => { setReportEntry({ text: entry.content }); setReportNotes(""); }}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}
+                            >
+                              <Flag size={10} style={{ color: "#f59e0b" }} />
+                            </button>
                           </div>
                         </>
                       );
@@ -4497,6 +4649,154 @@ function IVRTesterTab() {
           ))}
         </div>
       </div>
+
+      {/* ── Edit Prompt Text Modal ────────────────────────────────────────── */}
+      {editPrompt && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={e => { if (e.target === e.currentTarget) setEditPrompt(null); }}>
+          <div style={{ background: "#1a2540", border: "1px solid #2a3a5a", borderRadius: 14, padding: "1.5rem", width: 520, maxWidth: "95vw", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+              <div>
+                <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.9rem", color: "#c4b5fd" }}>Edit Prompt Text</div>
+                <div style={{ fontFamily: "monospace", fontSize: "0.7rem", color: "#6b84a8", marginTop: "0.1rem" }}>{editPrompt.filename}</div>
+              </div>
+              <button onClick={() => setEditPrompt(null)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                <X size={16} style={{ color: "#6b84a8" }} />
+              </button>
+            </div>
+            <textarea
+              data-testid="textarea-edit-prompt"
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              rows={5}
+              style={{ width: "100%", boxSizing: "border-box", background: "#101828", border: "1px solid #2a3a5a", borderRadius: 8, padding: "0.6rem 0.75rem", fontFamily: "monospace", fontSize: "0.82rem", color: "#cbd5e1", resize: "vertical", outline: "none" }}
+              placeholder="Enter the script text that this audio file should speak…"
+            />
+            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", justifyContent: "flex-end" }}>
+              <button onClick={() => setEditPrompt(null)} style={{ background: "#1e2d47", border: "1px solid #2a3a5a", borderRadius: 8, padding: "0.5rem 1rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#8fa3c8", cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button
+                data-testid="btn-save-edit-prompt"
+                onClick={saveEditPrompt}
+                disabled={editSaving || !editText.trim()}
+                style={{ background: editSaving || !editText.trim() ? "#1a3020" : "#15803d", border: "none", borderRadius: 8, padding: "0.5rem 1.25rem", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: 700, color: "#fff", cursor: editSaving || !editText.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
+              >
+                {editSaving ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Save size={13} />}
+                {editSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Error Report Modal ────────────────────────────────────────────── */}
+      {reportEntry && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={e => { if (e.target === e.currentTarget) setReportEntry(null); }}>
+          <div style={{ background: "#1a2540", border: "1px solid #4a3020", borderRadius: 14, padding: "1.5rem", width: 520, maxWidth: "95vw", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+              <div>
+                <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.9rem", color: "#f59e0b", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  <Flag size={14} /> File Issue Report
+                </div>
+                {reportEntry.filename && (
+                  <div style={{ fontFamily: "monospace", fontSize: "0.7rem", color: "#6b84a8", marginTop: "0.1rem" }}>{reportEntry.filename}</div>
+                )}
+              </div>
+              <button onClick={() => setReportEntry(null)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                <X size={16} style={{ color: "#6b84a8" }} />
+              </button>
+            </div>
+            {reportEntry.text && (
+              <div style={{ background: "#101828", border: "1px solid #2a3a5a", borderRadius: 8, padding: "0.5rem 0.75rem", marginBottom: "0.75rem" }}>
+                <div style={{ fontFamily: "monospace", fontSize: "0.6rem", fontWeight: 700, color: "#7c5fa8", marginBottom: "0.2rem", letterSpacing: "0.05em" }}>CURRENT PROMPT TEXT:</div>
+                <div style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "#a89ec8", fontStyle: "italic" }}>{reportEntry.text}</div>
+              </div>
+            )}
+            <textarea
+              data-testid="textarea-report-notes"
+              value={reportNotes}
+              onChange={e => setReportNotes(e.target.value)}
+              rows={4}
+              style={{ width: "100%", boxSizing: "border-box", background: "#101828", border: "1px solid #4a3020", borderRadius: 8, padding: "0.6rem 0.75rem", fontFamily: "monospace", fontSize: "0.82rem", color: "#cbd5e1", resize: "vertical", outline: "none" }}
+              placeholder="Describe the issue: what was wrong, what should happen, what actually happened…"
+            />
+            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", justifyContent: "flex-end" }}>
+              <button onClick={() => setReportEntry(null)} style={{ background: "#1e2d47", border: "1px solid #2a3a5a", borderRadius: 8, padding: "0.5rem 1rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#8fa3c8", cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button
+                data-testid="btn-save-report"
+                onClick={saveReport}
+                disabled={reportSaving || !reportNotes.trim()}
+                style={{ background: reportSaving || !reportNotes.trim() ? "#3a2000" : "#b45309", border: "none", borderRadius: 8, padding: "0.5rem 1.25rem", fontFamily: "monospace", fontSize: "0.8rem", fontWeight: 700, color: "#fff", cursor: reportSaving || !reportNotes.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "0.4rem" }}
+              >
+                {reportSaving ? <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} /> : <Flag size={13} />}
+                {reportSaving ? "Saving…" : "Save Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Error Reports Viewer ──────────────────────────────────────────── */}
+      {showReports && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}
+          onClick={e => { if (e.target === e.currentTarget) setShowReports(false); }}>
+          <div style={{ background: "#1a2540", border: "1px solid #4a3020", borderRadius: 14, padding: "1.5rem", width: 680, maxWidth: "95vw", maxHeight: "80vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", flexShrink: 0 }}>
+              <div style={{ fontFamily: "monospace", fontWeight: 700, fontSize: "0.9rem", color: "#f59e0b", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <Flag size={14} /> IVR Issue Reports ({reports.length})
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <button onClick={fetchReports} style={{ background: "none", border: "1px solid #2a3a5a", borderRadius: 6, padding: "0.2rem 0.5rem", fontFamily: "monospace", fontSize: "0.68rem", color: "#8fa3c8", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+                  <RefreshCw size={10} /> Refresh
+                </button>
+                <button onClick={() => setShowReports(false)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                  <X size={16} style={{ color: "#6b84a8" }} />
+                </button>
+              </div>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              {reportsLoading ? (
+                <div style={{ textAlign: "center", padding: "2rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#6b84a8" }}>
+                  <Loader2 size={18} style={{ animation: "spin 1s linear infinite", marginBottom: "0.5rem" }} />
+                  <div>Loading…</div>
+                </div>
+              ) : reports.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "2rem", fontFamily: "monospace", fontSize: "0.8rem", color: "#6b84a8" }}>No reports yet. Flag issues using the 🏴 icon while testing.</div>
+              ) : (
+                reports.map(r => (
+                  <div key={r.id} data-testid={`report-card-${r.id}`} style={{ background: "#101828", border: "1px solid #2a3a5a", borderRadius: 10, padding: "0.9rem", marginBottom: "0.6rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.4rem" }}>
+                      <div>
+                        {r.promptFilename && (
+                          <div style={{ fontFamily: "monospace", fontSize: "0.7rem", color: "#c4b5fd", fontWeight: 600, marginBottom: "0.2rem" }}>{r.promptFilename}</div>
+                        )}
+                        <div style={{ fontFamily: "monospace", fontSize: "0.62rem", color: "#4a6080" }}>{new Date(r.createdAt).toLocaleString()}</div>
+                      </div>
+                      <button onClick={() => { if (confirm("Delete this report?")) deleteReport(r.id); }} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                        <Trash2 size={12} style={{ color: "#ef4444" }} />
+                      </button>
+                    </div>
+                    {r.promptText && (
+                      <div style={{ borderLeft: "2px solid #3a3060", paddingLeft: "0.5rem", marginBottom: "0.4rem" }}>
+                        <div style={{ fontFamily: "monospace", fontSize: "0.6rem", color: "#7c5fa8", fontWeight: 700, marginBottom: "0.1rem" }}>PROMPT:</div>
+                        <div style={{ fontFamily: "monospace", fontSize: "0.72rem", color: "#a89ec8", fontStyle: "italic" }}>{r.promptText}</div>
+                      </div>
+                    )}
+                    <div style={{ borderLeft: "2px solid #4a3020", paddingLeft: "0.5rem" }}>
+                      <div style={{ fontFamily: "monospace", fontSize: "0.6rem", color: "#f59e0b", fontWeight: 700, marginBottom: "0.1rem" }}>NOTES:</div>
+                      <div style={{ fontFamily: "monospace", fontSize: "0.78rem", color: "#fcd34d" }}>{r.notes}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
