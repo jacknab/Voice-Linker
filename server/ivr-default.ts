@@ -929,6 +929,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // Authentication is handled purely by caller ID to prevent account sharing.
   app.post("/voice/membership-entry", async (req, res) => {
     const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
 
     try {
       const settings = await getMembershipSettingsCached();
@@ -949,6 +950,36 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         res.type("text/xml");
         res.send(twiml.toString());
         return;
+      }
+
+      // If the caller already has active membership time on file (linked calling card,
+      // free trial with remaining minutes, or paid membership with remaining time),
+      // skip the card-entry prompt and route them straight to entry-check.
+      if (fromNumber) {
+        const [linkedCard, existingUser] = await Promise.all([
+          storage.getMembershipCardByPhone(fromNumber),
+          storage.getUserByPhone(fromNumber),
+        ]);
+
+        const hasCardTime = !!(linkedCard && linkedCard.valueSeconds > 0);
+
+        let hasUserTime = false;
+        if (existingUser?.membershipTier) {
+          if (settings.billingMode === "per_24h" && existingUser.membershipTier !== "free_trial") {
+            const purchasedAt = existingUser.membershipPurchasedAt;
+            hasUserTime = !!purchasedAt && (Date.now() - purchasedAt.getTime()) < 24 * 3_600_000;
+          } else {
+            hasUserTime = (existingUser.remainingSeconds ?? 0) > 0;
+          }
+        }
+
+        if (hasCardTime || hasUserTime) {
+          console.log(`[voice] membership-entry: ${fromNumber} has active access — skipping card prompt`);
+          twiml.redirect("/voice/entry-check");
+          res.type("text/xml");
+          res.send(twiml.toString());
+          return;
+        }
       }
     } catch (err) {
       console.error("[voice] membership-entry billing mode check error:", err);
