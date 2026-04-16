@@ -368,11 +368,29 @@ async function runAudioAutogen(): Promise<void> {
     return;
   }
 
+  // Only generate files for the folder(s) the active site category actually uses.
+  // Generating all three folders costs 3× as much in ElevenLabs credits.
+  let activeFolders = FOLDERS;
+  try {
+    const { storage } = await import("./storage");
+    const settings = await storage.getSiteSettings();
+    const cat = settings?.siteCategory ?? "MM";
+    if (cat === "MW") {
+      activeFolders = FOLDERS.filter(f => f.folder === "mw" || f.folder === "mw_m");
+      console.log("[audio-autogen] site is MW — generating mw/ and mw_m/ only.");
+    } else {
+      activeFolders = FOLDERS.filter(f => f.folder === "mm");
+      console.log("[audio-autogen] site is MM — generating mm/ only.");
+    }
+  } catch {
+    console.log("[audio-autogen] could not read site settings — generating all folders.");
+  }
+
   let generated = 0;
   let skipped = 0;
   let failed = 0;
 
-  for (const { folder, prompts } of FOLDERS) {
+  for (const { folder, prompts } of activeFolders) {
     const dir = path.join(UPLOADS_DIR, folder);
 
     for (const prompt of prompts) {
@@ -439,13 +457,20 @@ function locationText(location: string): string {
 }
 
 /**
- * Immediately generate location audio for all three voice folders.
+ * Immediately generate location audio for the active site category's folder(s).
  * Internal — always awaited sequentially.
  */
 async function generateLocationForAllFolders(location: string): Promise<void> {
   const filename = locationToFilename(location);
   const text = locationText(location);
-  for (const folder of ["mm", "mw", "mw_m"]) {
+  let folders = ["mm", "mw", "mw_m"];
+  try {
+    const { storage } = await import("./storage");
+    const settings = await storage.getSiteSettings();
+    const cat = settings?.siteCategory ?? "MM";
+    folders = cat === "MW" ? ["mw", "mw_m"] : ["mm"];
+  } catch { /* fall back to all */ }
+  for (const folder of folders) {
     const filePath = path.join(UPLOADS_DIR, folder, filename);
     if (fs.existsSync(filePath)) continue;
     try {
@@ -498,7 +523,14 @@ async function runLocationAutogen(): Promise<void> {
     if (location) uniqueLocations.add(location);
   }
 
-  const voiceFolders = ["mm", "mw", "mw_m"];
+  // Only generate for the folders the active site category uses
+  let voiceFolders = ["mm", "mw", "mw_m"];
+  try {
+    const settings = await storage.getSiteSettings();
+    const cat = settings?.siteCategory ?? "MM";
+    voiceFolders = cat === "MW" ? ["mw", "mw_m"] : ["mm"];
+  } catch { /* fall back to all three */ }
+
   let generated = 0;
   let failed = 0;
   let skipped = 0;
