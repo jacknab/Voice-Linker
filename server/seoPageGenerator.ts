@@ -996,6 +996,7 @@ export function generateHomePage(
     "name": siteName,
     "description": metaDesc,
     "inLanguage": "en-US",
+    "dateModified": today,
     "potentialAction": {
       "@type": "SearchAction",
       "target": { "@type": "EntryPoint", "urlTemplate": `${siteUrl}/regions/` },
@@ -1127,6 +1128,10 @@ export function generateHomePage(
   <meta property="og:description" content="${escAttr(metaDesc)}" />
   <meta property="og:site_name" content="${escAttr(siteName)}" />
   <meta property="og:locale" content="en_US" />
+  <meta property="og:image" content="${escAttr(siteUrl)}/${isMM ? "hero_mm.png" : "hero_mw.png"}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:image" content="${escAttr(siteUrl)}/${isMM ? "hero_mm.png" : "hero_mw.png"}" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
@@ -1139,6 +1144,9 @@ export function generateHomePage(
   <script type="application/ld+json">${JSON.stringify(serviceJsonLd)}</script>
   <script type="application/ld+json">${JSON.stringify(howToJsonLd)}</script>
   <script type="application/ld+json">${JSON.stringify(faqJsonLd)}</script>
+
+  <!-- Preload hero image for LCP performance (Core Web Vitals) -->
+  <link rel="preload" as="image" href="/${isMM ? "hero_mm.png" : "hero_mw.png"}" fetchpriority="high" />
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1317,7 +1325,7 @@ export function generateHomePage(
     <div class="hero-content">
       <div class="hero-box">
         <p class="hero-age">All users must be 18 years or older</p>
-        <h1 id="hero-h1">${isMM ? "Talk to Real Local Guys" : "Talk to Real Locals"}<br />Right Now — Try It Free Today!</h1>
+        <h1 id="hero-h1">${isMM ? "Free Gay Chat Line — Talk to Real Local Guys" : "Free Chat Line — Talk to Real Local Singles"}<br />No App. No Credit Card. Free Trial.</h1>
         <div class="hero-pill">
           <p>No credit card required · Click for details</p>
         </div>
@@ -1333,7 +1341,7 @@ export function generateHomePage(
   <!-- Intro blurb -->
   <section class="intro">
     <div class="intro-inner">
-      <h2>${isMM ? `${escHtml(siteName)} is your place to chat with local guys like you — anytime, anywhere.` : `${escHtml(siteName)} is your place to connect with local singles — men and women — anytime, anywhere.`}</h2>
+      <h2>${isMM ? `${escHtml(siteName)} — The Free Gay Chat Line &amp; Gay Party Line for Men in the US` : `${escHtml(siteName)} — The Free Phone Chat Line for Singles Across the US`}</h2>
       <p>${isMM ? `${escHtml(siteName)} is a place where you can chat with real men looking to meet men. The Connection booth is where the action is with real guys who are on the line right now. ${escHtml(siteName)} is the go-to outlet for men seeking men.` : `${escHtml(siteName)} is a place where real men and women connect over the phone. Whether you're a man looking to meet women, or a woman looking to meet men, real people are on the line right now. ${escHtml(siteName)} is your go-to live chat line for singles of all kinds.`}</p>
       ${phone ? `<a class="intro-cta" href="tel:+1${phoneRaw}">Try it FOR FREE!</a>` : ""}
     </div>
@@ -1466,8 +1474,8 @@ export function generateHomePage(
 
   <!-- CTA banner (matches Landing.tsx) -->
   <section class="cta-banner" aria-label="Call to action">
-    <h2>Ready to connect?</h2>
-    <p>Your first call is free. Just dial and step right in — no sign-up, no photos.</p>
+    <h2>${isMM ? "Start Your Free Gay Chat Line Trial Now" : "Start Your Free Chat Line Trial Now"}</h2>
+    <p>${isMM ? "Your first call is free — no credit card, no app, no sign-up. Just pick up any phone and dial your local gay chat line number." : "Your first call is free — no credit card, no app, no sign-up. Just pick up any phone and dial your local number."}</p>
     ${phone ? `<a href="tel:+1${phoneRaw}" class="btn-primary">&#128222; ${escHtml(phone)}</a>` : ""}
   </section>
   </main>
