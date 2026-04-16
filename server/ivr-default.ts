@@ -1550,12 +1550,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
    * Pick the pre-generated Roger greeting variant for this caller.
    * Returns the filename (in uploads/ root) and a plain-text fallback.
    */
-  function rogerGreetingVariant(isNewCaller: boolean, lastCallDate: Date | null): { filename: string; fallback: string } {
+  function rogerGreetingVariant(
+    isNewCaller: boolean,
+    lastCallDate: Date | null,
+    todayCallCount: number,
+  ): { filename: string; fallback: string } {
     const find = (name: string) => {
       const p = ROGER_PROMPTS.find(r => r.filename === name);
       return { filename: name, fallback: p ? stripEmotionTags(p.text) : "" };
     };
     if (isNewCaller || !lastCallDate) return find("roger_welcome_new.mp3");
+    // 3+ calls on the same calendar day (day ends at midnight server time)
+    if (todayCallCount >= 3) return find("roger_welcome_frequent.mp3");
     const daysSince = Math.floor((Date.now() - lastCallDate.getTime()) / 86_400_000);
     if (daysSince < 1)   return find("roger_welcome_sameday.mp3");
     if (daysSince <= 3)  return find("roger_welcome_recent.mp3");
@@ -1578,8 +1584,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     membershipConf: Awaited<ReturnType<typeof getMembershipSettingsCached>>,
   ): Promise<void> {
     const isNewCaller = !user.membershipTier;
-    const lastCallDate = await storage.getLastCallTimestamp(fromNumber, callSid);
-    const { filename: rogerFile, fallback: rogerFallback } = rogerGreetingVariant(isNewCaller, lastCallDate);
+    const [lastCallDate, todayCallCount] = await Promise.all([
+      storage.getLastCallTimestamp(fromNumber, callSid),
+      storage.getTodayCallCount(fromNumber, callSid),
+    ]);
+    const { filename: rogerFile, fallback: rogerFallback } = rogerGreetingVariant(isNewCaller, lastCallDate, todayCallCount);
     const filepath = path.join(UPLOADS_DIR, rogerFile);
 
     // Play pre-generated Roger greeting; fall back to Twilio TTS if file is missing.

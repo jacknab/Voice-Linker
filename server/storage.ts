@@ -72,6 +72,7 @@ export interface IStorage {
   getOrCreateUser(phoneNumber: string): Promise<User>;
   deleteUser(id: string): Promise<void>;
   getLastCallTimestamp(fromPhoneNumber: string, excludeCallSid: string): Promise<Date | null>;
+  getTodayCallCount(fromPhoneNumber: string, excludeCallSid: string): Promise<number>;
 
   getProfile(userId: string): Promise<Profile | undefined>;
   upsertProfile(profile: InsertProfile): Promise<Profile>;
@@ -469,6 +470,23 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(callLogs.startedAt))
       .limit(1);
     return log?.startedAt ?? null;
+  }
+
+  async getTodayCallCount(fromPhoneNumber: string, excludeCallSid: string): Promise<number> {
+    // Midnight of today in server local time — the "day" resets at midnight.
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const [result] = await db
+      .select({ n: count() })
+      .from(callLogs)
+      .where(
+        and(
+          eq(callLogs.fromPhoneNumber, fromPhoneNumber),
+          not(eq(callLogs.callSid, excludeCallSid)),
+          gte(callLogs.startedAt, midnight),
+        ),
+      );
+    return result?.n ?? 0;
   }
 
   async getProfile(userId: string): Promise<Profile | undefined> {
