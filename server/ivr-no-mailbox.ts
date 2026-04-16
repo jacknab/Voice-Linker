@@ -873,7 +873,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // /voice/entry runs its membership checks in parallel — eliminates the
       // silent round-trip that previously happened between /voice and /voice/entry.
       playPrompt(twiml, req, "system_greeting.mp3",
-        "Welcome to the Male Box. this service assumes no responsibility for personal meetings.");
+        "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
       playPrompt(twiml, req, "disclaimer.mp3", "");
       twiml.redirect("/voice/entry");
     } catch (error) {
@@ -6028,7 +6028,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Play greeting + disclaimer immediately so the caller hears audio while
       // /voice/entry runs its membership checks — eliminates silent round-trip.
       playPrompt(twiml, req, "system_greeting.mp3",
-        "Welcome to the Male Box. this service assumes no responsibility for personal meetings.");
+        "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
       playPrompt(twiml, req, "disclaimer.mp3", "");
       // Hand off to the shared entry flow (account state detection + Roger greeting)
       twiml.redirect("/voice/entry");

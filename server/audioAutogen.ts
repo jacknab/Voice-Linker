@@ -18,7 +18,7 @@ type Prompt = { filename: string; text: string };
 
 // ── MM prompts (uploads/mm/) ───────────────────────────────────────────────
 const MM_PROMPTS: Prompt[] = [
-  { filename: "system_greeting.mp3",    text: "Welcome to the Male Box. this service assumes no responsibility for personal meetings." },
+  { filename: "system_greeting.mp3",    text: "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect." },
   { filename: "no_caller_id.mp3",       text: "We could not identify your call. Goodbye." },
   { filename: "region_not_active.mp3",  text: "This phone number is not currently active. Please try again later." },
   { filename: "region_unavailable.mp3", text: "This market is temporarily unavailable. Please try again later." },
