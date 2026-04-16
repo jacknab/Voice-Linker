@@ -397,6 +397,35 @@ async function runAudioAutogen(): Promise<void> {
   let skipped = 0;
   let failed = 0;
 
+  /**
+   * Returns true when the audio file needs to be (re)generated.
+   * A sidecar .txt file records the exact prompt text used for the last
+   * successful generation.  If the text has changed since then, the stale
+   * audio file is deleted so it will be regenerated on this run.
+   */
+  function needsRegeneration(filePath: string, text: string): boolean {
+    if (!fs.existsSync(filePath)) return true;
+    const sidecar = filePath.replace(/\.mp3$/i, ".txt");
+    if (!fs.existsSync(sidecar)) return false; // old file, no sidecar — keep it
+    try {
+      const stored = fs.readFileSync(sidecar, "utf8").trim();
+      if (stored !== text.trim()) {
+        // Text has changed — delete stale audio so it gets regenerated.
+        fs.unlinkSync(filePath);
+        fs.unlinkSync(sidecar);
+        return true;
+      }
+    } catch { /* unreadable sidecar — leave the mp3 in place */ }
+    return false;
+  }
+
+  /** Write the sidecar text file after a successful generation. */
+  function writeSidecar(filePath: string, text: string): void {
+    try {
+      fs.writeFileSync(filePath.replace(/\.mp3$/i, ".txt"), text.trim(), "utf8");
+    } catch { /* non-fatal */ }
+  }
+
   for (const { folder, prompts } of activeFolders) {
     const dir = path.join(UPLOADS_DIR, folder);
 
@@ -404,10 +433,11 @@ async function runAudioAutogen(): Promise<void> {
       if (!prompt.text.trim()) { skipped++; continue; }
 
       const filePath = path.join(dir, prompt.filename);
-      if (fs.existsSync(filePath)) { skipped++; continue; }
+      if (!needsRegeneration(filePath, prompt.text)) { skipped++; continue; }
 
       try {
         await generateTTS(prompt.text.trim(), prompt.filename, folder);
+        writeSidecar(filePath, prompt.text);
         console.log(`[audio-autogen] generated ${folder}/${prompt.filename}`);
         generated++;
         await sleep(DELAY_MS);
@@ -423,9 +453,10 @@ async function runAudioAutogen(): Promise<void> {
   const rogerVoiceId = getVoiceIdForRoger();
   for (const prompt of ROGER_PROMPTS) {
     const filePath = path.join(UPLOADS_DIR, prompt.filename);
-    if (fs.existsSync(filePath)) { skipped++; continue; }
+    if (!needsRegeneration(filePath, prompt.text)) { skipped++; continue; }
     try {
       await generateTTS(prompt.text.trim(), prompt.filename, undefined, rogerVoiceId, "eleven_v3");
+      writeSidecar(filePath, prompt.text);
       console.log(`[audio-autogen] generated roger/${prompt.filename}`);
       generated++;
       await sleep(DELAY_MS);
