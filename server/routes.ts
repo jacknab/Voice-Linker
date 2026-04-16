@@ -155,20 +155,68 @@ export async function registerRoutes(
   // Prime the site settings cache so playPrompt can use category-specific audio on first call
   getSiteSettingsCached().catch(() => {});
 
-  // ── SSR Landing Page (/seo-preview only) ─────────────────────────────────
-  // The React app (Landing.tsx) serves at "/" in all environments so the
-  // design is consistent between development and production.
-  // The SEO-rendered version is still accessible at /seo-preview for testing.
-  const ssrHandler = async (_req: Request, res: Response) => {
+  // ── SSR Landing Page ─────────────────────────────────────────────────────
+  // Renders the home page server-side for SEO. Uses IP geolocation to inject
+  // the visitor's nearest local number. Served at "/" in production and
+  // at "/seo-preview" in all environments for testing.
+  const ssrHandler = async (req: Request, res: Response) => {
     try {
       const [siteSettings, allRegions] = await Promise.all([
         storage.getSiteSettings(),
         storage.getAllRegions(),
       ]);
       const siteUrl = (process.env.SITE_URL ?? (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "")).replace(/\/$/, "");
-      const html = generateHomePage(siteSettings, allRegions, siteUrl || "https://example.com");
+
+      // IP-based local number detection (mirrors /api/local-number logic)
+      let localData: { phoneNumber?: string | null; city?: string | null; state?: string | null; regionName?: string | null } | undefined;
+      try {
+        const forwarded = req.headers["x-forwarded-for"] as string | undefined;
+        const rawIp = forwarded?.split(",")[0]?.trim() || (req.headers["x-real-ip"] as string | undefined) || req.socket.remoteAddress || "";
+        const ip = rawIp.replace(/^::ffff:/, "");
+        const isPrivate = ip === "127.0.0.1" || ip === "::1" || ip === "" || /^10\./.test(ip) || /^172\.(1[6-9]|2\d|3[01])\./.test(ip) || /^192\.168\./.test(ip);
+
+        let geoLat: number | null = null, geoLon: number | null = null, geoCity: string | null = null, geoState: string | null = null;
+        if (!isPrivate) {
+          const geoRes = await fetch(`https://ipinfo.io/${ip}/json`);
+          if (geoRes.ok) {
+            const geo = await geoRes.json() as { city?: string; region?: string; loc?: string };
+            geoCity = geo.city || null;
+            geoState = geo.region || null;
+            if (geo.loc) {
+              const [lat, lon] = geo.loc.split(",").map(Number);
+              if (!isNaN(lat) && !isNaN(lon)) { geoLat = lat; geoLon = lon; }
+            }
+          }
+        }
+
+        const activeRegions = allRegions.filter(r => r.isActive);
+        if (activeRegions.length > 0) {
+          let matchRegion = activeRegions[0];
+          if (geoLat !== null && geoLon !== null) {
+            const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+              const R = 6371, toRad = (v: number) => v * Math.PI / 180;
+              const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+              const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+              return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            };
+            let closestDist = Infinity;
+            for (const region of activeRegions) {
+              if (!region.defaultZipCode) continue;
+              const zipEntry = await storage.getZipEntryByCode(region.defaultZipCode);
+              if (!zipEntry?.latitude || !zipEntry?.longitude) continue;
+              const dist = haversineKm(geoLat, geoLon, zipEntry.latitude, zipEntry.longitude);
+              if (dist < closestDist) { closestDist = dist; matchRegion = region; }
+            }
+          }
+          localData = { phoneNumber: matchRegion.phoneNumber, city: geoCity, state: geoState, regionName: matchRegion.name };
+        }
+      } catch (geoErr) {
+        console.warn("[ssr] IP geo lookup failed:", geoErr);
+      }
+
+      const html = generateHomePage(siteSettings, allRegions, siteUrl || "https://example.com", localData);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+      res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
       res.status(200).send(html);
     } catch (err: any) {
       console.error("[ssr] Home page generation error:", err.message);
@@ -176,6 +224,10 @@ export async function registerRoutes(
     }
   };
   app.get("/seo-preview", ssrHandler);
+  // Serve SSR home page at "/" in production for SEO (React app handles "/" in dev)
+  if (process.env.NODE_ENV === "production") {
+    app.get("/", ssrHandler);
+  }
 
   // ── Auth routes ───────────────────────────────────────────────────────────
   app.use(authRouter);

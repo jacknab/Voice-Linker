@@ -909,6 +909,12 @@ export function generateHomePage(
   siteSettings: SiteSettings,
   allRegions: Region[],
   siteUrl = "https://example.com",
+  localData?: {
+    phoneNumber?: string | null;
+    city?: string | null;
+    state?: string | null;
+    regionName?: string | null;
+  },
 ): string {
   const cfg = getContentConfig(siteSettings.siteCategory);
   const siteName = siteSettings.siteName;
@@ -919,8 +925,12 @@ export function generateHomePage(
   const year = new Date().getFullYear();
 
   const fallbackPhone = siteSettings.fallbackPhoneNumber ?? "";
-  const phone = formatPhone(fallbackPhone);
-  const phoneRaw = fallbackPhone.replace(/\D/g, "");
+  const localPhone = localData?.phoneNumber || fallbackPhone;
+  const phone = formatPhone(localPhone);
+  const phoneRaw = localPhone.replace(/\D/g, "");
+  const cityLabel = localData?.regionName || localData?.city || null;
+  const stateLabel = localData?.state || null;
+  const cityFull = cityLabel && stateLabel ? `${cityLabel}, ${stateLabel}` : cityLabel;
 
   const activeRegions = allRegions.filter(r => r.isActive).sort((a, b) => a.name.localeCompare(b.name));
 
@@ -1142,38 +1152,52 @@ export function generateHomePage(
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #f0f0f0; line-height: 1.6; }
     a { color: inherit; text-decoration: none; }
 
-    /* Nav */
-    .nav { position: sticky; top: 0; z-index: 100; background: rgba(10,10,10,0.96); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,0.07); padding: 0 24px; height: 60px; display: flex; align-items: center; }
-    .nav-inner { max-width: 1100px; width: 100%; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
-    .nav-logo { font-size: 1.15rem; font-weight: 900; letter-spacing: -0.02em; color: #fff; }
-    .nav-logo span { color: ${colorLight}; }
-    .nav-right { display: flex; align-items: center; gap: 20px; }
-    .nav-link { font-size: 0.875rem; color: rgba(255,255,255,0.5); font-weight: 500; }
+    /* ── NAV (matches Landing.tsx) ── */
+    .nav { background: #000; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #1a1a1a; }
+    .nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; min-height: 79px; }
+    .nav-brand { display: flex; align-items: center; gap: 0.625rem; text-decoration: none; }
+    .nav-wordmark { font-size: 1.15rem; font-weight: 900; letter-spacing: -0.02em; color: #fff; }
+    .nav-wordmark .box { background: linear-gradient(135deg, #3b82f6 0%, #7c3aed 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .nav-right { display: flex; align-items: center; gap: 1.5rem; font-size: 0.95rem; font-weight: 500; }
+    .nav-link { color: #ccc; text-decoration: none; }
     .nav-link:hover { color: #fff; }
-    .nav-cta { background: ${color}; color: #fff; font-size: 0.875rem; font-weight: 700; padding: 8px 20px; border-radius: 8px; transition: background 0.2s; }
-    .nav-cta:hover { background: ${colorLight}; }
+    .nav-divider { width: 1px; height: 18px; background: #222; display: inline-block; }
+    .nav-btn { background: #1d4ed8; color: #fff; text-decoration: none; font-size: 0.92rem; font-weight: 700; padding: 0.4rem 0.875rem; border-radius: 7px; }
+    .nav-btn:hover { background: #1e40af; }
 
-    /* Hero */
-    .hero { background: linear-gradient(160deg, #0f0f1a 0%, #0a0a0a 60%); border-bottom: 1px solid rgba(255,255,255,0.06); padding: 80px 24px 72px; text-align: center; }
-    .hero-eyebrow { display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: ${colorLight}; background: ${color}18; border: 1px solid ${color}30; padding: 5px 14px; border-radius: 50px; margin-bottom: 22px; }
-    .hero h1 { font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 900; line-height: 1.08; letter-spacing: -0.025em; max-width: 860px; margin: 0 auto 20px; color: #fff; }
-    .hero h1 .accent { color: ${colorLight}; }
-    .hero-sub { font-size: 1.1rem; color: rgba(255,255,255,0.5); max-width: 640px; margin: 0 auto 36px; line-height: 1.75; }
-    .hero-phone-box { display: inline-flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 14px 28px; border-radius: 12px; font-size: 1.3rem; font-weight: 800; margin-bottom: 28px; letter-spacing: 0.02em; }
-    .hero-phone-box a { color: ${colorLight}; }
-    .hero-phone-box a:hover { text-decoration: underline; }
-    .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-    .btn-primary { display: inline-flex; align-items: center; gap: 8px; background: ${color}; color: #fff; font-weight: 700; font-size: 1rem; padding: 14px 32px; border-radius: 10px; transition: background 0.2s, transform 0.15s; }
-    .btn-primary:hover { background: ${colorLight}; transform: translateY(-1px); }
-    .btn-secondary { display: inline-flex; align-items: center; background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.8); font-weight: 600; font-size: 1rem; padding: 14px 32px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); transition: background 0.2s; }
-    .btn-secondary:hover { background: rgba(255,255,255,0.12); }
+    /* ── HERO (matches Landing.tsx) ── */
+    .hero { position: relative; overflow: hidden; min-height: 260px; background-color: #0d0d0d; }
+    @media (min-width: 768px) { .hero { min-height: 480px; } }
+    .hero-bg { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: right center; filter: saturate(0.9) brightness(0.95); }
+    .hero-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+    .hero-fade { position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: linear-gradient(to top, #0d0d0d, transparent); }
+    .hero-content { position: relative; z-index: 10; width: 100%; min-height: 260px; display: flex; align-items: flex-start; padding: 2rem 1rem 2.5rem 1rem; }
+    @media (min-width: 768px) { .hero-content { min-height: 480px; padding: 3.5rem 4rem 2.5rem; } }
+    .hero-box { max-width: 560px; }
+    .hero-age { font-size: clamp(0.7rem, 2vw, 0.85rem); color: rgba(255,255,255,0.55); margin-bottom: 0.75rem; font-weight: 400; letter-spacing: 0.04em; }
+    .hero h1 { font-size: clamp(1.8rem, 5vw, 2.8rem); font-weight: 800; letter-spacing: -0.01em; line-height: 1.15; margin-bottom: 1rem; color: #fff; text-shadow: 2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,3px 3px 0 #000; }
+    .hero-pill { display: inline-block; background: rgba(255,255,255,0.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 0.35rem 0.9rem; margin-bottom: 2.5rem; }
+    .hero-pill p { font-size: 0.95rem; color: rgba(255,255,255,0.85); font-weight: 400; margin: 0; }
+    .hero-city { font-size: clamp(0.95rem, 4vw, 1.64rem); color: rgba(255,255,255,0.75); font-weight: 400; margin-bottom: 0.2rem; text-shadow: 1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000; }
+    .hero-city strong { color: #fff; font-weight: 700; }
+    .hero-phone { display: inline-block; font-size: clamp(1.75rem, 4vw, 2.7rem); color: #fff; text-decoration: none; letter-spacing: 0.01em; line-height: 1.1; text-shadow: 2px 2px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,3px 3px 0 #000; }
+    .hero-phone .light { font-weight: 400; }
+    .hero-phone .bold { font-weight: 900; }
 
-    /* Stats */
-    .stats-bar { display: flex; justify-content: center; flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02); }
-    .stat-item { padding: 20px 32px; text-align: center; border-right: 1px solid rgba(255,255,255,0.05); }
-    .stat-item:last-child { border-right: none; }
-    .stat-value { font-size: 1.4rem; font-weight: 900; color: ${colorLight}; display: block; }
-    .stat-label { font-size: 0.76rem; color: rgba(255,255,255,0.3); font-weight: 500; margin-top: 3px; }
+    /* ── INTRO ── */
+    .intro { background: #f4f4f4; padding: 3.5rem 1.5rem; text-align: center; }
+    .intro-inner { max-width: 760px; margin: 0 auto; }
+    .intro h2 { font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 800; color: #111; line-height: 1.35; margin-bottom: 1.25rem; }
+    .intro p { font-size: 1rem; color: #444; line-height: 1.75; margin-bottom: 1.5rem; }
+    .intro-cta { font-size: 1.25rem; font-weight: 800; color: #1d6fa8; text-decoration: none; }
+
+    /* ── TAGLINE BAR ── */
+    .tagline-bar { background: #1a1a1a; padding: 1.75rem 1.5rem; text-align: center; border-top: 1px solid #2a2a2a; border-bottom: 1px solid #2a2a2a; }
+    .tagline-bar h2 { font-size: clamp(1rem, 2.5vw, 1.4rem); font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #fff; margin-bottom: 0.4rem; line-height: 1.3; }
+    .tagline-bar .city-accent { color: #3b82f6; }
+    .tagline-sub { display: flex; align-items: center; justify-content: center; gap: 1.5rem; font-size: 0.9rem; color: rgba(255,255,255,0.6); margin-top: 0.5rem; flex-wrap: wrap; }
+
+    /* ── SECTIONS (SEO content) ── */
 
     /* Sections */
     .section { max-width: 1100px; margin: 0 auto; padding: 72px 24px; }
@@ -1226,69 +1250,104 @@ export function generateHomePage(
     .faq-q { font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: #fff; }
     .faq-a { color: rgba(255,255,255,0.5); font-size: 0.95rem; line-height: 1.85; }
 
-    /* CTA */
-    .cta-banner { background: linear-gradient(135deg, ${color}22 0%, rgba(10,10,10,1) 60%); border-top: 1px solid ${color}33; text-align: center; padding: 80px 24px; }
-    .cta-banner h2 { font-size: clamp(1.7rem, 4vw, 2.4rem); font-weight: 900; letter-spacing: -0.02em; margin-bottom: 14px; color: #fff; }
-    .cta-banner p { color: rgba(255,255,255,0.45); font-size: 1.05rem; max-width: 520px; margin: 0 auto 28px; line-height: 1.75; }
-    .cta-phone { font-size: 1.4rem; font-weight: 900; color: ${colorLight}; margin-bottom: 24px; display: block; }
-    .cta-phone a { color: ${colorLight}; }
-    .cta-phone a:hover { text-decoration: underline; }
+    /* ── BOTTOM CTA (matches Landing.tsx) ── */
+    .cta-banner { padding: 5rem 1.5rem; background: #111; text-align: center; border-top: 1px solid #1e1e1e; }
+    .cta-banner h2 { font-size: clamp(1.5rem, 3.5vw, 2.2rem); font-weight: 900; letter-spacing: -0.01em; margin-bottom: 0.75rem; color: #fff; text-transform: uppercase; }
+    .cta-banner p { font-size: 0.95rem; color: #fff; margin-bottom: 2rem; line-height: 1.65; }
+    .btn-primary { display: inline-flex; align-items: center; gap: 0.6rem; background: #1d4ed8; color: #fff; border-radius: 6px; padding: 0.9rem 2.5rem; font-size: 1.1rem; font-weight: 800; text-decoration: none; letter-spacing: 0.01em; }
+    .btn-primary:hover { background: #1e40af; }
 
-    /* Footer */
-    footer { text-align: center; padding: 32px 24px; font-size: 0.78rem; color: rgba(255,255,255,0.18); border-top: 1px solid rgba(255,255,255,0.05); }
-    footer a { color: rgba(255,255,255,0.28); }
-    footer a:hover { color: rgba(255,255,255,0.5); }
-    .footer-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; margin-top: 10px; }
+    /* ── FOOTER (matches Landing.tsx) ── */
+    footer { background: #080808; border-top: 1px solid #1a1a1a; padding: 3rem 1.5rem 2rem; }
+    .footer-inner { max-width: 1000px; margin: 0 auto; }
+    .footer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 2rem; margin-bottom: 2.5rem; }
+    .footer-brand { display: flex; align-items: center; gap: 0.625rem; margin-bottom: 0.75rem; }
+    .footer-blurb { font-size: 0.78rem; color: rgba(255,255,255,0.3); line-height: 1.65; }
+    .footer-col-heading { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.3); margin-bottom: 0.75rem; }
+    .footer-links-col { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+    .footer-links-col a { font-size: 0.82rem; color: rgba(255,255,255,0.45); text-decoration: none; }
+    .footer-links-col a:hover { color: #fff; }
+    .footer-bottom { border-top: 1px solid #1a1a1a; padding-top: 1.5rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
+    .footer-bottom p { font-size: 0.75rem; color: rgba(255,255,255,0.2); }
 
+    @media (max-width: 767px) { .nav-right { display: none; } }
     @media (max-width: 640px) {
       .features-grid { grid-template-columns: 1fr; }
       .regions-grid { grid-template-columns: 1fr; }
-      .stat-item { padding: 14px 18px; }
-      .hero { padding: 56px 20px 52px; }
-      .nav-link { display: none; }
+      .footer-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Navigation -->
-  <header>
-    <nav class="nav" aria-label="Main navigation">
-      <div class="nav-inner">
-        <a href="/" class="nav-logo">${escHtml(siteName)}</a>
-        <div class="nav-right">
-          ${activeRegions.length > 0 ? `<a href="/regions/" class="nav-link">Local Numbers</a>` : ""}
-          <a href="${phoneRaw ? `tel:+1${phoneRaw}` : "/regions/"}" class="nav-cta">📞 ${escHtml(cfg.ctaText)}</a>
-        </div>
+  <!-- Navigation (matches Landing.tsx) -->
+  <nav class="nav" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand">
+        <svg width="38" height="38" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0">
+          <rect width="64" height="64" rx="14" fill="#0f172a"/>
+          <rect x="6" y="6" width="52" height="52" rx="11" fill="url(#mb-grad-ssr)"/>
+          <path d="M15 46V18l11 15 6-9 6 9 11-15v28" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+          <defs>
+            <linearGradient id="mb-grad-ssr" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#1d4ed8"/>
+              <stop offset="100%" stop-color="#7c3aed"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <span class="nav-wordmark"><span style="font-weight:900;letter-spacing:-0.02em;color:#fff">Male</span><span class="box" style="font-weight:900;letter-spacing:-0.02em">Box</span></span>
+      </a>
+      <div class="nav-right">
+        <a href="/membership" class="nav-link">Buy Time</a>
+        <span class="nav-divider"></span>
+        <a href="/faq" class="nav-link">FAQ</a>
+        <span class="nav-divider"></span>
+        <a href="/login" class="nav-link">Log in</a>
+        <a href="/register" class="nav-btn">Register</a>
       </div>
-    </nav>
-  </header>
+    </div>
+  </nav>
 
-  <!-- Hero -->
+  <!-- Hero (matches Landing.tsx) -->
   <main>
   <section class="hero" aria-labelledby="hero-h1">
-    <p class="hero-eyebrow">${escHtml(siteName)} · Free ${isMM ? "Gay " : ""}Phone Chat Line · Free Trial</p>
-    <h1 id="hero-h1">${escHtml(h1).replace(escHtml(siteName), `<span class="accent">${escHtml(siteName)}</span>`)}</h1>
-    <p class="hero-sub">${escHtml(tagline)}</p>
-    ${phone ? `
-    <div class="hero-phone-box">
-      <span aria-hidden="true">📞</span>
-      <span>Free call: <a href="tel:+1${phoneRaw}">${escHtml(phone)}</a></span>
-    </div>` : ""}
-    <div class="hero-ctas">
-      <a href="${phoneRaw ? `tel:+1${phoneRaw}` : "/regions/"}" class="btn-primary" aria-label="${escAttr(cfg.ctaText)} on ${escAttr(siteName)}">📞 ${escHtml(cfg.ctaText)}</a>
-      <a href="${activeRegions.length > 0 ? "/regions/" : "#how-it-works"}" class="btn-secondary">Find Local Number</a>
+    <img class="hero-bg" src="${isMM ? "/hero_mm.png" : "/hero_mw.png"}" alt="${isMM ? "Man on the phone" : "Woman smiling on the phone"}" />
+    <div class="hero-overlay"></div>
+    <div class="hero-fade"></div>
+    <div class="hero-content">
+      <div class="hero-box">
+        <p class="hero-age">All users must be 18 years or older</p>
+        <h1 id="hero-h1">${isMM ? "Talk to Real Local Guys" : "Talk to Real Locals"}<br />Right Now — Try It Free Today!</h1>
+        <div class="hero-pill">
+          <p>No credit card required · Click for details</p>
+        </div>
+        ${phone ? `
+        <p class="hero-city">Your local <strong>${escHtml(cityFull || "area")}</strong> access number</p>
+        <a class="hero-phone" href="tel:+1${phoneRaw}">
+          <span class="light">Call </span><span class="bold">${escHtml(phone)}</span>
+        </a>` : ""}
+      </div>
     </div>
   </section>
 
-  <!-- Stats bar -->
-  <aside class="stats-bar" aria-label="Key facts">
-    <div class="stat-item"><span class="stat-value">Free</span><span class="stat-label">Trial Minutes</span></div>
-    <div class="stat-item"><span class="stat-value">24/7</span><span class="stat-label">Always Live</span></div>
-    <div class="stat-item"><span class="stat-value">100%</span><span class="stat-label">Anonymous</span></div>
-    ${activeRegions.length > 0 ? `<div class="stat-item"><span class="stat-value">${activeRegions.length}</span><span class="stat-label">Local Numbers</span></div>` : ""}
-    <div class="stat-item"><span class="stat-value">No&nbsp;App</span><span class="stat-label">Any Phone Works</span></div>
-  </aside>
+  <!-- Intro blurb -->
+  <section class="intro">
+    <div class="intro-inner">
+      <h2>${isMM ? `${escHtml(siteName)} is your place to chat with local guys like you — anytime, anywhere.` : `${escHtml(siteName)} is your place to connect with local singles — men and women — anytime, anywhere.`}</h2>
+      <p>${isMM ? `${escHtml(siteName)} is a place where you can chat with real men looking to meet men. The Connection booth is where the action is with real guys who are on the line right now. ${escHtml(siteName)} is the go-to outlet for men seeking men.` : `${escHtml(siteName)} is a place where real men and women connect over the phone. Whether you're a man looking to meet women, or a woman looking to meet men, real people are on the line right now. ${escHtml(siteName)} is your go-to live chat line for singles of all kinds.`}</p>
+      ${phone ? `<a class="intro-cta" href="tel:+1${phoneRaw}">Try it FOR FREE!</a>` : ""}
+    </div>
+  </section>
+
+  <!-- Tagline bar -->
+  <section class="tagline-bar">
+    <h2>${isMM ? "A gay, bi and curious live chat line in" : "A live chat line for men and women in"} <span class="city-accent">${escHtml(cityFull || "your area")}</span></h2>
+    <div class="tagline-sub">
+      <span>${isMM ? "Real guys just like you" : "Real men &amp; real women"}</span>
+      <svg width="22" height="22" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" rx="14" fill="#0f172a"/><rect x="6" y="6" width="52" height="52" rx="11" fill="url(#mb-tag)"/><path d="M15 46V18l11 15 6-9 6 9 11-15v28" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="mb-tag" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#7c3aed"/></linearGradient></defs></svg>
+      <span>${isMM ? "Freedom to be yourself" : "Connect with someone near you"}</span>
+    </div>
+  </section>
 
   <!-- Features -->
   <section class="section" aria-labelledby="features-h2">
@@ -1405,26 +1464,57 @@ export function generateHomePage(
     </div>
   </section>
 
-  <!-- CTA banner -->
+  <!-- CTA banner (matches Landing.tsx) -->
   <section class="cta-banner" aria-label="Call to action">
-    <h2>${isMM ? `Join the Free Gay Chat Line — Real Men, Real Conversations` : `Ready to connect? Your first call is free.`}</h2>
-    <p>Real local ${escHtml(cfg.pronoun)} are on the line right now. No credit card, no commitment — just pick up the phone.</p>
-    ${phone ? `<p class="cta-phone">📞 <a href="tel:+1${phoneRaw}">${escHtml(phone)}</a></p>` : ""}
-    <a href="${phoneRaw ? `tel:+1${phoneRaw}` : "/regions/"}" class="btn-primary" style="font-size:1.05rem;padding:16px 40px;">
-      ${escHtml(cfg.ctaText)} →
-    </a>
+    <h2>Ready to connect?</h2>
+    <p>Your first call is free. Just dial and step right in — no sign-up, no photos.</p>
+    ${phone ? `<a href="tel:+1${phoneRaw}" class="btn-primary">&#128222; ${escHtml(phone)}</a>` : ""}
   </section>
   </main>
 
-  <!-- Footer -->
+  <!-- Footer (matches Landing.tsx) -->
   <footer>
-    <p>&copy; <time datetime="${today}">${year}</time> ${escHtml(siteName)}</p>
-    <nav class="footer-links" aria-label="Footer links">
-      <a href="/">Home</a>
-      ${activeRegions.length > 0 ? `<a href="/regions/">Local Numbers</a>` : ""}
-      <a href="/privacy-policy">Privacy Policy</a>
-      <a href="/terms-of-service">Terms of Service</a>
-    </nav>
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <div>
+          <div class="footer-brand">
+            <svg width="28" height="28" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="64" height="64" rx="14" fill="#0f172a"/><rect x="6" y="6" width="52" height="52" rx="11" fill="url(#mb-ft)"/><path d="M15 46V18l11 15 6-9 6 9 11-15v28" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="mb-ft" x1="6" y1="6" x2="58" y2="58" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#1d4ed8"/><stop offset="100%" stop-color="#7c3aed"/></linearGradient></defs></svg>
+            <span style="font-size:0.95rem;font-weight:900;letter-spacing:-0.02em;color:#fff">Male<span style="background:linear-gradient(135deg,#3b82f6 0%,#7c3aed 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Box</span></span>
+          </div>
+          <p class="footer-blurb">${isMM ? "A gay, bi &amp; curious live chat line. Real guys, real voices." : "A live chat line for men and women. Real voices, real conversations."}</p>
+        </div>
+        <div>
+          <p class="footer-col-heading">Account</p>
+          <ul class="footer-links-col">
+            <li><a href="/membership">Buy Time</a></li>
+            <li><a href="/membership">Free Trial</a></li>
+            <li><a href="/membership">Memberships</a></li>
+          </ul>
+        </div>
+        <div>
+          <p class="footer-col-heading">Help</p>
+          <ul class="footer-links-col">
+            <li><a href="/support">Customer Support</a></li>
+            <li><a href="/faq">FAQ</a></li>
+            <li><a href="/keypad-tips">Keypad Tips</a></li>
+            <li><a href="/cities">Cities Coverage</a></li>
+            <li><a href="/safety-tips">Safety Tips</a></li>
+          </ul>
+        </div>
+        <div>
+          <p class="footer-col-heading">Company</p>
+          <ul class="footer-links-col">
+            <li><a href="/about">About Us</a></li>
+            <li><a href="/privacy-policy">Privacy Policy</a></li>
+            <li><a href="/terms">Terms of Use</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; <time datetime="${today}">${year}</time> ${escHtml(siteName)}. All Rights Reserved.</p>
+        <p>All callers must be 18 years or older.</p>
+      </div>
+    </div>
   </footer>
 
 </body>
