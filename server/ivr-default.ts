@@ -943,8 +943,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       // MW systems prompt for gender before membership — women are always free.
-      // MM systems: skip the membership-entry pass-through and go straight to
-      // entry-check (which now also inlines the Roger greeting).
+      // MM systems: inline the full entry-check gates + Roger greeting here so
+      // Roger plays in the same TwiML response as the disclaimer — zero wait.
       // Exception: free mode skips all gates and goes directly to phone-booth.
       if (entrySiteConf.siteCategory === "MW") {
         twiml.redirect("/voice/gender-select");
@@ -953,7 +953,53 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now.");
         twiml.redirect("/voice/phone-booth");
       } else {
-        twiml.redirect("/voice/entry-check");
+        // ── Inline entry-check (eliminates one Twilio round-trip) ───────────
+        const entryFrom = req.body?.From as string;
+        const entrySid  = req.body?.CallSid as string;
+        if (!entryFrom || !entrySid) {
+          // Fallback: let entry-check handle the edge case
+          twiml.redirect("/voice/entry-check");
+        } else {
+          const entryUser = await getOrCreateUser(entryFrom);
+
+          if (entryUser.accountStatus === "banned") {
+            playPrompt(twiml, req, "caller_banned.mp3",
+              "We're sorry, your access to this service has been suspended. If you believe this is an error, please contact customer support. Goodbye.");
+            twiml.hangup();
+          } else if (entryUser.recordingRejectionReason && entryUser.recordingRejectionType === "greeting") {
+            twiml.redirect(entryUser.recordingRejectionReason === "phone_number"
+              ? "/voice/recording-rejected-phone-number"
+              : "/voice/recording-rejected-unclear");
+          } else {
+            const linkedCard = await storage.getMembershipCardByPhone(entryFrom);
+            if (linkedCard && linkedCard.valueSeconds > 0) {
+              callCardOverride.set(entrySid, linkedCard.id);
+              if (!callTimeAnnounced.has(entrySid)) {
+                playTimeRemaining(twiml, req, Math.floor(linkedCard.valueSeconds / 60));
+                callTimeAnnounced.add(entrySid);
+              }
+              twiml.redirect("/voice/entry-check-card");
+            } else if (!entryUser.membershipTier) {
+              // Brand new — inline Roger activates free trial
+              await applyRogerGreetingInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
+            } else if (motdCfg.billingMode === "per_24h" && entryUser.membershipTier !== "free_trial") {
+              const purchasedAt = entryUser.membershipPurchasedAt;
+              const hoursElapsed = purchasedAt ? (Date.now() - purchasedAt.getTime()) / 3_600_000 : 24;
+              if (hoursElapsed >= 24) {
+                playPrompt(twiml, req, "access_expired.mp3", "Your backdoor access pass has expired.");
+                twiml.redirect("/voice/membership-purchase");
+              } else {
+                await applyRogerGreetingInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
+              }
+            } else if ((entryUser.remainingSeconds ?? 0) <= 0) {
+              playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
+              twiml.redirect("/voice/membership-purchase");
+            } else {
+              // Returning caller with time — Roger plays inline
+              await applyRogerGreetingInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("[voice] /voice/entry error:", error);

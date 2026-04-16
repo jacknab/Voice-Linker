@@ -902,11 +902,71 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       // MW systems prompt for gender before membership — women are always free.
-      // MM systems go straight to optional membership number entry.
+      // MM systems: inline membership-entry + entry-check to eliminate two
+      // Twilio round-trips so callers reach the main menu right after the disclaimer.
       if (entrySiteConf.siteCategory === "MW") {
         twiml.redirect("/voice/gender-select");
       } else {
-        twiml.redirect("/voice/membership-entry");
+        // ── Inline membership-entry + entry-check (eliminates two round-trips) ─
+        const entryFrom = req.body?.From as string;
+        const entrySid  = req.body?.CallSid as string;
+        if (!entryFrom || !entrySid) {
+          // Fallback: use the original hop chain
+          twiml.redirect("/voice/entry-check");
+        } else {
+          const entryUser = await getOrCreateUser(entryFrom);
+
+          if (entryUser.accountStatus === "banned") {
+            playPrompt(twiml, req, "caller_banned.mp3",
+              "We're sorry, your access to this service has been suspended. If you believe this is an error, please contact customer support. Goodbye.");
+            twiml.hangup();
+          } else {
+            const { billingMode } = motdCfg;
+            const siteConf = entrySiteConf;
+            const mainMenu = siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu";
+
+            if (!entryUser.membershipTier) {
+              // Brand new — activate free trial and announce time
+              await storage.updateUserMembership(entryUser.id, {
+                membershipTier: "free_trial",
+                remainingSeconds: motdCfg.freeTrialMinutes * 60,
+              });
+              await storage.getOrCreateMailbox(entryUser.id);
+              playTimeRemaining(twiml, req, motdCfg.freeTrialMinutes);
+              playPrompt(twiml, req, "free_trial_terms.mp3",
+                "Your free trial will expire in seven days and it must be used from this phone number.");
+              callTimeAnnounced.add(entrySid);
+              twiml.redirect(mainMenu);
+            } else if (billingMode === "per_24h" && entryUser.membershipTier !== "free_trial") {
+              const purchasedAt = entryUser.membershipPurchasedAt;
+              const hoursElapsed = purchasedAt ? (Date.now() - purchasedAt.getTime()) / 3_600_000 : 24;
+              if (hoursElapsed >= 24) {
+                playPrompt(twiml, req, "access_expired.mp3", "Your backdoor access pass has expired.");
+                twiml.redirect("/voice/membership-purchase");
+              } else {
+                playBackdoorHoursRemaining(twiml, req, 24 - hoursElapsed);
+                callTimeAnnounced.add(entrySid);
+                twiml.redirect(mainMenu);
+              }
+            } else if ((entryUser.remainingSeconds ?? 0) <= 0) {
+              playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
+              twiml.redirect("/voice/membership-purchase");
+            } else {
+              // Returning caller with time
+              if (entryUser.recordingRejectionReason && entryUser.recordingRejectionType === "greeting") {
+                twiml.redirect(entryUser.recordingRejectionReason === "phone_number"
+                  ? "/voice/recording-rejected-phone-number"
+                  : "/voice/recording-rejected-unclear");
+              } else {
+                if (billingMode !== "per_day" && billingMode !== "per_24h") {
+                  playTimeRemaining(twiml, req, Math.floor((entryUser.remainingSeconds ?? 0) / 60));
+                  callTimeAnnounced.add(entrySid);
+                }
+                twiml.redirect(mainMenu);
+              }
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("[voice] /voice/entry error:", error);
