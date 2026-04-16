@@ -55,7 +55,7 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "zip_code_prompt.mp3",             text: "Optional: enter your 5-digit zip code and we'll play callers closest to you first. Press pound to skip." },
   { filename: "zip_code_saved.mp3",              text: "Got it. We'll use your zip code to show you nearby callers." },
 
-  { filename: "main_menu.mp3",      text: "Main menu. To enter the male box press 1. For mailboxes and personal ads press 3. To add time or purchase a membership press 2. For your voicemail press 6. For information on membership prices press 4. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+  { filename: "main_menu.mp3",      text: "Main menu. To enter the male box press 1. To add time or purchase a membership press 2. For mailboxes and personal ads press 3. For information on membership prices press 4. For your voicemail press 6. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
   { filename: "trial_warning.mp3",  text: "You have less than 5 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
   { filename: "member_warning.mp3", text: "You have less than 5 minutes remaining in your membership. To renew now press 1. To continue press pound." },
   { filename: "no_profiles.mp3",    text: "There are no profiles available right now. Please call back later." },
@@ -263,7 +263,7 @@ const MM_PROMPTS: Prompt[] = [
 // ── MW prompts (uploads/mw/) — female voice for male callers ──────────────
 const MW_PROMPTS: Prompt[] = [
   { filename: "gender_select.mp3",  text: "Guys, press one to talk to women. Women, press three to talk to guys." },
-  { filename: "mw_main_menu.mp3",   text: "Main menu. If you're ready to join the action press 1. For the men seeking men line press 5. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+  { filename: "mw_main_menu.mp3",   text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. For the men seeking men line press 5. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
   ...MM_PROMPTS.filter(p =>
     p.filename !== "main_menu.mp3" &&
     p.filename !== "mw_main_menu.mp3"
@@ -286,7 +286,7 @@ const MW_PROMPTS: Prompt[] = [
 
 // ── MW_M prompts (uploads/mw_m/) — male voice for female callers ──────────
 const MW_M_PROMPTS: Prompt[] = [
-  { filename: "mw_main_menu.mp3",  text: "Main menu. If you're ready to join the action press 1. For the men seeking men line press 5. To buy membership time press 2. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+  { filename: "mw_main_menu.mp3",  text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. For the men seeking men line press 5. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
   ...MM_PROMPTS.filter(p =>
     p.filename !== "main_menu.mp3" &&
     p.filename !== "mw_main_menu.mp3"

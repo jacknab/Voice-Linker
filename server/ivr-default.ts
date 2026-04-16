@@ -2076,10 +2076,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     playPrompt(gather, req, "main_menu.mp3",
       "Main menu. " +
       "To enter the male box press 1. " +
-      (MAILBOX_ENABLED ? "For mailboxes and personal ads press 3. " : "") +
       "To add time or purchase a membership press 2. " +
-      "For your voicemail press 6. " +
+      (MAILBOX_ENABLED ? "For mailboxes and personal ads press 3. " : "") +
       "For information on membership prices press 4. " +
+      "For your voicemail press 6. " +
       "To manage your membership press 8. " +
       "For customer service press 0. " +
       "To repeat these choices press 9."
@@ -2531,8 +2531,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     playPrompt(gather, req, "mw_main_menu.mp3",
       "Main menu. " +
       "If you're ready to join the action press 1. " +
-      "For the men seeking men line press 5. " +
       "To buy membership time press 2. " +
+      "For the men seeking men line press 5. " +
       "To manage your membership press 8. " +
       "For customer service press 0. " +
       "To repeat these choices press 9."
