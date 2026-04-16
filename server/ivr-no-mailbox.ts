@@ -4046,14 +4046,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 5b. Review Greeting ──────────────────────────────────────────────────
   // Presented after recording a new greeting (first-time or re-record).
-  // The draft is held in pendingGreetingDrafts until the caller presses 3 to accept.
+  // Press 1 = accept/keep, press 2 = re-record, press 3 = hear it back.
   app.post("/voice/review-greeting", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-review-greeting" });
     playPrompt(gather, req, "review_greeting.mp3",
-      "To hear your greeting, press 1. " +
+      "If you're happy with the way your greeting sounds, press 1. " +
       "To re-record, press 2. " +
-      "To accept and continue, press 3. " +
+      "To hear how your greeting sounds, press 3. " +
       "To repeat these choices, press 9."
     );
     twiml.redirect("/voice/review-greeting");
@@ -4068,7 +4068,27 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       if (digit === "1") {
-        // Play back the saved profile (already written to DB in save-profile)
+        // Accept — check if auto-moderation has already rejected this recording
+        // (the transcription callback may have fired while the caller was reviewing)
+        const acceptUser = await getOrCreateUser(fromNumber);
+        if (acceptUser.recordingRejectionReason && acceptUser.recordingRejectionType === "greeting") {
+          const rejectionRoute = acceptUser.recordingRejectionReason === "phone_number"
+            ? "/voice/recording-rejected-phone-number"
+            : "/voice/recording-rejected-unclear";
+          twiml.redirect(rejectionRoute);
+        } else {
+          // Profile is already saved; confirm and continue
+          playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
+          twiml.redirect("/voice/zip-code-prompt");
+        }
+      } else if (digit === "2") {
+        // Re-record from scratch — restart name step
+        playPrompt(twiml, req, "welcome_record_name.mp3",
+          "Say your first name only after the tone. You have 5 seconds."
+        );
+        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
+      } else if (digit === "3") {
+        // Play back the saved greeting so the caller can hear it again
         const user = await getOrCreateUser(fromNumber);
         const profile = await storage.getProfile(user.id);
         if (profile?.recordingUrl) {
@@ -4081,16 +4101,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           playPrompt(twiml, req, "no_greeting_found.mp3", "No recording found.");
         }
         twiml.redirect("/voice/review-greeting");
-      } else if (digit === "2") {
-        // Re-record from scratch — restart name step
-        playPrompt(twiml, req, "welcome_record_name.mp3",
-          "Say your first name only after the tone. You have 5 seconds."
-        );
-        twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
-      } else if (digit === "3") {
-        // Accept — profile is already saved; confirm and continue
-        playPrompt(twiml, req, "profile_saved.mp3", "Your greeting has been saved.");
-        twiml.redirect("/voice/zip-code-prompt");
       } else {
         // 9 or anything else → repeat review menu
         twiml.redirect("/voice/review-greeting");

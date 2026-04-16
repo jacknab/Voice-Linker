@@ -4627,7 +4627,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 5b. Review Greeting ──────────────────────────────────────────────────
   // Presented after recording a new greeting (first-time or re-record).
-  // The draft is held in pendingGreetingDrafts until the caller presses 3 to accept.
+  // Press 1 = accept/keep, press 2 = re-record, press 3 = hear it back.
   app.post("/voice/review-greeting", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-review-greeting" });
