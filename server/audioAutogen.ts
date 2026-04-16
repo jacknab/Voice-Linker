@@ -408,7 +408,13 @@ async function runAudioAutogen(): Promise<void> {
   function needsRegeneration(filePath: string, text: string): boolean {
     if (!fs.existsSync(filePath)) return true;
     const sidecar = filePath.replace(/\.mp3$/i, ".txt");
-    if (!fs.existsSync(sidecar)) return false; // old file, no sidecar — keep it
+    if (!fs.existsSync(sidecar)) {
+      // No sidecar means the file predates the sidecar system — text may have
+      // changed since it was generated.  Delete it so it gets regenerated with
+      // the current text (and a fresh sidecar written afterward).
+      fs.unlinkSync(filePath);
+      return true;
+    }
     try {
       const stored = fs.readFileSync(sidecar, "utf8").trim();
       if (stored !== text.trim()) {

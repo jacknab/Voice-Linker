@@ -883,15 +883,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   });
 
   // ─── 1. Initial Webhook: POST /voice ──────────────────────────────────────
-  app.post("/voice", async (req, res) => {
+  app.post("/voice", (req, res) => {
     const twiml = new VoiceResponse();
-    const fromNumber = req.body?.From;
-    const callSid = req.body?.CallSid;
-
-    // Prime the site settings cache immediately so playPrompt can resolve the
-    // correct audio folder (uploads/mm/ vs uploads/mw/) on this and all
-    // downstream routes — even if they don't call getSiteSettingsCached() themselves.
-    await getSiteSettingsCached().catch(() => {});
+    const fromNumber = req.body?.From as string | undefined;
+    const callSid    = req.body?.CallSid as string | undefined;
+    const calledTo   = req.body?.To as string | null ?? null;
 
     if (!fromNumber || !callSid) {
       playPrompt(twiml, req, "no_caller_id.mp3", "We could not identify your call. Goodbye.");
@@ -900,30 +896,31 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       return res.send(twiml.toString());
     }
 
-    try {
-      // Fire-and-forget cleanup — doesn't affect response content.
-      storage.removeStaleActiveCalls(20).catch(() => {});
-      const user = await getOrCreateUser(fromNumber);
-      // Fire-and-forget — removes lingering rows from a previous missed status callback.
-      storage.removeActiveCallsByUser(user.id).catch(() => {});
-      await storage.registerActiveCall(callSid, user.id);
-      storage.logCall(callSid, fromNumber, req.body?.To || null, null).catch(() => {});
-      console.log(`[voice] Registered active call ${callSid} for userId=${user.id}`);
-      registerStatusCallback(callSid, req).catch(() => {});
+    // ── All DB work is fire-and-forget — nothing blocks the TwiML response. ──
+    // The greeting + disclaimer take ~8-10 s for Twilio to play, giving every
+    // async operation below far more than enough time to complete before
+    // /voice/entry is hit.
+    getSiteSettingsCached().catch(() => {});            // warms playPrompt cache for downstream routes
+    storage.removeStaleActiveCalls(20).catch(() => {}); // housekeeping
+    storage.logCall(callSid, fromNumber, calledTo, null).catch(() => {});
+    registerStatusCallback(callSid, req).catch(() => {});
 
-      // Play greeting + disclaimer immediately so the caller hears audio while
-      // /voice/entry runs its membership checks in parallel — eliminates the
-      // silent round-trip that previously happened between /voice and /voice/entry.
-      playPrompt(twiml, req, "system_greeting.mp3",
-        "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
-      playPrompt(twiml, req, "disclaimer.mp3",
-        "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
-      twiml.redirect("/voice/entry");
-    } catch (error) {
-      console.error("[voice] /voice error:", error);
-      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
-      twiml.hangup();
-    }
+    // Register the active call in the background — /voice/entry is reached
+    // only after ~8-10 s of audio, so this always completes in time.
+    getOrCreateUser(fromNumber)
+      .then(user => {
+        storage.removeActiveCallsByUser(user.id).catch(() => {});
+        return storage.registerActiveCall(callSid, user.id);
+      })
+      .then(() => console.log(`[voice] registered active call ${callSid} from ${fromNumber}`))
+      .catch(err  => console.error(`[voice] active-call registration failed ${callSid}:`, err));
+
+    // Respond immediately — caller hears audio with zero DB-wait silence.
+    playPrompt(twiml, req, "system_greeting.mp3",
+      "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
+    playPrompt(twiml, req, "disclaimer.mp3",
+      "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
+    twiml.redirect("/voice/entry");
 
     res.type("text/xml");
     res.send(twiml.toString());
@@ -7125,23 +7122,23 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Tag this call with its region for the duration of the session
       callRegion.set(callSid, region.id);
 
-      // Fire-and-forget cleanup — doesn't affect response content.
+      // ── All user/call DB work is fire-and-forget — nothing blocks the response. ──
+      // Greeting + disclaimer take ~8-10 s to play, giving all async ops time to
+      // complete before /voice/entry is reached.
       storage.removeStaleActiveCalls(20).catch(() => {});
-
-      const user = await getOrCreateUser(fromNumber);
-
-      // Fire-and-forget — removes lingering rows from a previous missed status callback.
-      storage.removeActiveCallsByUser(user.id).catch(() => {});
-
-      // Register call as active — scoped to this region
-      await storage.registerActiveCall(callSid, user.id, region.id);
       storage.logCall(callSid, fromNumber, region.phoneNumber, region.id).catch(() => {});
-      console.log(`[voice] [${region.slug}] Registered active call ${callSid} for userId=${user.id}`);
-
       registerStatusCallback(callSid, req).catch(() => {});
 
-      // Play greeting + disclaimer immediately so the caller hears audio while
-      // /voice/entry runs its membership checks — eliminates silent round-trip.
+      const regionId = region.id;
+      getOrCreateUser(fromNumber)
+        .then(user => {
+          storage.removeActiveCallsByUser(user.id).catch(() => {});
+          return storage.registerActiveCall(callSid, user.id, regionId);
+        })
+        .then(() => console.log(`[voice] [${slug}] registered active call ${callSid} from ${fromNumber}`))
+        .catch(err  => console.error(`[voice] [${slug}] active-call registration failed ${callSid}:`, err));
+
+      // Respond immediately — no user-lookup delay before audio starts.
       playPrompt(twiml, req, "system_greeting.mp3",
         "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
       playPrompt(twiml, req, "disclaimer.mp3",
