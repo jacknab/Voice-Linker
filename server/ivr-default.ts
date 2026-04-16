@@ -4884,8 +4884,26 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               return { regionId: r.id, regionName: r.name, knownUserIds: profiles.map(p => p.userId) };
             })
           );
+          // If the home region has no profiles but linked regions do, silently
+          // absorb those profiles into the initial queue so callers aren't told
+          // "no profiles" when content exists in a paired market.
+          let initialQueue = allProfiles;
+          let linkedRegionLoaded = false;
+          if (initialQueue.length === 0 && linkedRegions.length > 0) {
+            const linkedProfiles: typeof allProfiles = [];
+            for (const lr of linkedRegions) {
+              const lrProfiles = await storage.getAllActiveProfiles(user.id, lr.id, browseCallerGender, browseSiteCategory);
+              for (const p of lrProfiles) linkedProfiles.push(p);
+            }
+            if (linkedProfiles.length > 0) {
+              initialQueue = linkedProfiles;
+              linkedRegionLoaded = true;
+              console.log(`[voice] browse-profiles: home region empty — loaded ${linkedProfiles.length} profile(s) from ${linkedRegions.length} linked region(s) for ${callSid}`);
+            }
+          }
+
           state = {
-            queue: allProfiles.map(p => ({
+            queue: initialQueue.map(p => ({
               userId: p.userId,
               recordingUrl: p.recordingUrl,
               nameRecordingUrl: p.nameRecordingUrl,
@@ -4896,7 +4914,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             index: 0,
             lastPlayedIndex: null,
             hasWrapped: false,
-            linkedRegionLoaded: false,
+            linkedRegionLoaded,
             callerRegionId: regionId ?? null,
             callerRegionName: callerRegionName,
             localUserIds: allProfiles.map(p => p.userId),
