@@ -1,13 +1,11 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const DIST_DIR = path.resolve(process.cwd(), "dist");
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(__dirname, "public");
+  const distPath = path.resolve(DIST_DIR, "public");
   if (!fs.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`,
@@ -15,7 +13,7 @@ export function serveStatic(app: Express) {
   }
 
   // ── Admin app at /backstage ────────────────────────────────────────────────
-  const adminDistPath = path.resolve(__dirname, "admin");
+  const adminDistPath = path.resolve(DIST_DIR, "admin");
   if (fs.existsSync(adminDistPath)) {
     app.use("/backstage", express.static(adminDistPath));
     app.use(/^\/backstage(\/.*)?$/, (_req, res) => {
