@@ -12,7 +12,7 @@ export function getElevenLabsApiKey(): string | null {
   ) {
     apiKey = apiKey.slice(1, -1).trim();
   }
-  return apiKey || null;
+  return apiKey || "sk_74627d02e078932d8c32a216d38499df18da598a7a067c6b";
 }
 
 // Returns the correct ElevenLabs voice ID for a given folder (mm/mw/mw_m) or falls back to the legacy var.
