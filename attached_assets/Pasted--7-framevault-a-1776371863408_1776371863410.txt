@@ -1,0 +1,120 @@
+├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤
+│ 7  │ framevault-api     │ fork     │ 0    │ online    │ 0%       │ 104.8mb  │
+│ 10 │ malebox            │ fork     │ 0    │ online    │ 0%       │ 17.7mb   │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+[PM2] Saving current process list...
+[PM2] Successfully saved in /root/.pm2/dump.pm2
+[OK]    PM2 restarted.
+
+[OK]    Done! Your site should now be running the latest build.
+┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐
+│ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
+├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤
+│ 7  │ framevault-api     │ fork     │ 0    │ online    │ 0%       │ 104.8mb  │
+│ 10 │ malebox            │ fork     │ 0    │ online    │ 100%     │ 87.0mb   │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+root@vultr:/opt/Voice-Linker# pm2 logs malebox --lines 50
+[TAILING] Tailing last 50 lines for [malebox] process (change the value with --lines option)
+/opt/Voice-Linker/logs/pm2-error.log last 50 lines:
+10|malebox | 2026-04-10 16:47:39 +00:00: designed for a production environment, as it will leak
+10|malebox | 2026-04-10 16:47:39 +00:00: memory, and will not scale past a single process.
+10|malebox | 2026-04-10 16:47:39 +00:00: (node:2620135) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+10|malebox | 2026-04-10 16:47:39 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+10|malebox | 2026-04-10 16:47:39 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+10|malebox | 2026-04-10 16:49:48 +00:00: Warning: connect.session() MemoryStore is not
+10|malebox | 2026-04-10 16:49:48 +00:00: designed for a production environment, as it will leak
+10|malebox | 2026-04-10 16:49:48 +00:00: memory, and will not scale past a single process.
+10|malebox | 2026-04-10 16:49:48 +00:00: (node:2622257) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+10|malebox | 2026-04-10 16:49:48 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+10|malebox | 2026-04-10 16:49:48 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+10|malebox | 2026-04-10 16:50:56 +00:00: Warning: connect.session() MemoryStore is not
+10|malebox | 2026-04-10 16:50:56 +00:00: designed for a production environment, as it will leak
+10|malebox | 2026-04-10 16:50:56 +00:00: memory, and will not scale past a single process.
+10|malebox | 2026-04-10 16:50:57 +00:00: (node:2623415) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+10|malebox | 2026-04-10 16:50:57 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+10|malebox | 2026-04-10 16:50:57 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+10|malebox | 2026-04-10 16:59:53 +00:00: Warning: connect.session() MemoryStore is not
+10|malebox | 2026-04-10 16:59:53 +00:00: designed for a production environment, as it will leak
+10|malebox | 2026-04-10 16:59:53 +00:00: memory, and will not scale past a single process.
+10|malebox | 2026-04-10 16:59:53 +00:00: (node:2631600) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+10|malebox | 2026-04-10 16:59:53 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+10|malebox | 2026-04-10 16:59:53 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+10|malebox | 2026-04-10 17:00:00 +00:00: Warning: connect.session() MemoryStore is not
+10|malebox | 2026-04-10 17:00:00 +00:00: designed for a production environment, as it will leak
+10|malebox | 2026-04-10 17:00:00 +00:00: memory, and will not scale past a single process.
+10|malebox | 2026-04-10 17:00:00 +00:00: (node:2631772) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+10|malebox | 2026-04-10 17:00:00 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+10|malebox | 2026-04-10 17:00:00 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+10|malebox | 2026-04-10 17:01:15 +00:00: Warning: connect.session() MemoryStore is not
+10|malebox | 2026-04-10 17:01:15 +00:00: designed for a production environment, as it will leak
+10|malebox | 2026-04-10 17:01:15 +00:00: memory, and will not scale past a single process.
+10|malebox | 2026-04-10 17:01:15 +00:00: (node:2633160) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+10|malebox | 2026-04-10 17:01:15 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+10|malebox | 2026-04-10 17:01:15 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+10|malebox | 2026-04-10 17:01:38 +00:00: Warning: connect.session() MemoryStore is not
+10|malebox | 2026-04-10 17:01:38 +00:00: designed for a production environment, as it will leak
+10|malebox | 2026-04-10 17:01:38 +00:00: memory, and will not scale past a single process.
+10|malebox | 2026-04-10 17:01:38 +00:00: (node:2633610) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+10|malebox | 2026-04-10 17:01:38 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+10|malebox | 2026-04-10 17:01:38 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+10|malebox | 2026-04-10 17:02:33 +00:00: Warning: connect.session() MemoryStore is not
+10|malebox | 2026-04-10 17:02:33 +00:00: designed for a production environment, as it will leak
+10|malebox | 2026-04-10 17:02:33 +00:00: memory, and will not scale past a single process.
+10|malebox | 2026-04-10 17:02:33 +00:00: (node:2634678) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
+10|malebox | 2026-04-10 17:02:33 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
+10|malebox | 2026-04-10 17:02:33 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+10|malebox | 2026-04-16 20:37:00 +00:00: Warning: connect.session() MemoryStore is not
+10|malebox | 2026-04-16 20:37:00 +00:00: designed for a production environment, as it will leak
+10|malebox | 2026-04-16 20:37:00 +00:00: memory, and will not scale past a single process.
+
+/opt/Voice-Linker/logs/pm2-out.log last 50 lines:
+10|malebox | 2026-04-10 17:02:33 +00:00: 5:02:33 PM [sms] SMS scheduler: next check in 1017 min
+10|malebox | 2026-04-10 17:02:33 +00:00: 5:02:33 PM [express] serving on port 5062
+10|malebox | 2026-04-10 17:02:36 +00:00: 5:02:36 PM [simulator] started 0 admin-uploaded seed loop(s)
+10|malebox | 2026-04-10 17:02:36 +00:00: 5:02:36 PM [simulator] real caller scheduler started
+10|malebox | 2026-04-10 17:03:50 +00:00: 5:03:50 PM [express] GET /api/admin/roger/voice 200 in 12ms :: {"voiceId":"wSqOdjeNqDrHcoK0zorF","masked":"wSqO••••••••••••zorF"}
+10|malebox | 2026-04-10 17:13:26 +00:00: 5:13:26 PM [express] GET /api/stats 304 in 17ms :: {"users":1,"profiles":1,"messages":0,"activeCalls":0}
+10|malebox | 2026-04-10 17:13:26 +00:00: 5:13:26 PM [express] GET /api/admin/mailbox-stats 304 in 20ms :: {"total":0,"byCategory":[]}
+10|malebox | 2026-04-10 17:13:31 +00:00: 5:13:31 PM [express] GET /api/stats 304 in 4ms :: {"users":1,"profiles":1,"messages":0,"activeCalls":0}
+10|malebox | 2026-04-10 17:17:49 +00:00: 5:17:49 PM [express] GET /api/stats 304 in 18ms :: {"users":1,"profiles":1,"messages":0,"activeCalls":0}
+10|malebox | 2026-04-16 20:37:00 +00:00: ◇ injected env (7) from .env // tip: ⌘ override existing { override: true }
+10|malebox | 2026-04-16 20:37:00 +00:00: [migrations] 74/74 statements applied.
+10|malebox | 2026-04-16 20:37:00 +00:00: [audio-autogen] scheduler started — first run in 60s, then every 60 minutes.
+10|malebox | 2026-04-16 20:37:00 +00:00: 8:37:00 PM [billing] Nightly billing scheduler: next run in 202 min
+10|malebox | 2026-04-16 20:37:00 +00:00: 8:37:00 PM [sms] SMS scheduler: next check in 803 min
+10|malebox | 2026-04-16 20:37:00 +00:00: 8:37:00 PM [express] serving on port 5062
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=e224c5c9-13f7-4837-82c7-14c83f2f1a04
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=5cfd3dff-694f-4363-b0c3-6f6d5d02bca0
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=cf7c7c7f-15e0-4322-bbca-f148bab2de5b
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=f59fb5a9-377f-4edb-b112-004a4810df37
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=6ec3a12f-e78f-4730-a1c0-54d5204af4a3
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=df3221e3-2235-444d-81c3-e807af7c6a92
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=1fd58fbb-6a05-4025-a4e6-ab499ab88e82
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=53850f2e-6aac-4f6a-b737-40906efcb05e
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=ea16a7be-2cfd-4a41-8e61-246696c6815a
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=5a9369aa-585f-4e35-b768-a0eade326125
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=3ad6226c-439c-4682-bcc5-9dca54ea2d2b
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=7cd2b37a-cdcc-472a-a413-56ed4b42d426
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=9ef73d77-d391-411a-aa4f-7a1cb5cc8a7c
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=27a8fa0b-a897-4037-a42a-6062aa816152
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=3741cb96-5f39-4aaf-836d-3ac911bcb95b
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=5e999c47-ee83-490a-ae3d-0eeb5d2ec856
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=50851d66-b684-4e00-84b2-5a29d61f5b13
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=9254adf6-d2d8-4099-9b1e-c04b0088a7b3
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=8a817cc6-44ca-494c-b26b-1dd11a149237
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=12de69e7-8a48-4119-8f71-27e357a60e03
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=79641e18-b159-446a-bb58-a907e3413754
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=569df6a5-20ca-4f78-afc0-4a9c3b25359f
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=cf2481df-d29d-4706-a39b-d05b2750d785
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=04b48ff8-e302-493d-8743-720fd595f631
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=5d1b0413-6528-44b8-8081-f84d5e32f852
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=26c71d2a-8111-457c-803b-e80a248de25e
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=f4279793-e83f-488b-85be-95382084d306
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=037ec27a-8b68-4dc7-988c-336b8c4b5a2d
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=d794e13b-6b84-4727-8bf8-1fa1ffcaf056
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=af486699-d6d3-49e7-b468-91abe805ebf0
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] admin seed online userId=af0b2a0c-8cee-493a-b1a7-a0d7d318a70f
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] registered 31 admin-uploaded seed(s) as permanently online
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [simulator] real caller scheduler started
+10|malebox | 2026-04-16 20:37:03 +00:00: 8:37:03 PM [seeds] no MP3 files found in uploads/seeds/ — nothing to import
+10|malebox | 2026-04-16 20:37:05 +00:00: 8:37:05 PM [seo] [seo] Regenerated 0 region page(s)
