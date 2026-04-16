@@ -240,9 +240,26 @@ const MIGRATIONS: string[] = [
     created_at TIMESTAMPTZ DEFAULT now()
   )`,
 
+  // ── web_users (columns added after initial table creation) ──────────────────
+  `ALTER TABLE web_users ADD COLUMN IF NOT EXISTS linked_phone_number TEXT`,
+  `ALTER TABLE web_users ADD COLUMN IF NOT EXISTS linked_membership_number TEXT`,
+  `ALTER TABLE web_users ADD COLUMN IF NOT EXISTS link_attempts INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE web_users ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE web_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`,
+
+  // ── audit_logs (column added after initial table creation) ──────────────────
+  `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS target_label TEXT`,
+
   // ── zip_codes / regions / region_links (early tables, probably exist, but safe) ──
   `ALTER TABLE regions ADD COLUMN IF NOT EXISTS description TEXT`,
   `ALTER TABLE regions ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true`,
+
+  // ── region_links (may not exist on older installs) ────────────────────────
+  `CREATE TABLE IF NOT EXISTS region_links (
+    region_id UUID NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
+    linked_region_id UUID NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
+    PRIMARY KEY (region_id, linked_region_id)
+  )`,
 ];
 
 export async function runStartupMigrations(): Promise<void> {
