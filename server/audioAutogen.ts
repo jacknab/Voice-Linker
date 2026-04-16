@@ -230,11 +230,18 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "promo_code_prompt.mp3",   text: "Enter your promotional code followed by the pound key. Press star to cancel." },
 
   // ── Membership management ──────────────────────────────────────────────────
-  { filename: "unblock_confirm.mp3",     text: "To confirm you want to unblock all callers, press 1. Press any other key to cancel and return to the previous menu." },
-  { filename: "unblock_done.mp3",        text: "All callers are unblocked." },
-  { filename: "cancelled_returning.mp3", text: "Cancelled. Returning to the previous menu." },
-  { filename: "cancelled.mp3",           text: "Cancelled." },
-  { filename: "account_not_found.mp3",   text: "Could not find your account. Please try again." },
+  { filename: "manage_tier_free_trial.mp3", text: "You are on a free trial." },
+  { filename: "manage_tier_active.mp3",     text: "You have an active membership." },
+  { filename: "manage_tier_none.mp3",       text: "You do not have an active membership." },
+  { filename: "manage_pin_set.mp3",         text: "You have a PIN set." },
+  { filename: "manage_pin_not_set.mp3",     text: "You do not have a PIN set." },
+  { filename: "manage_menu_mm.mp3",         text: "To purchase a membership press 1. To set or change your access PIN press 2. To unblock all callers press 3. To return to the main menu press 9." },
+  { filename: "manage_menu_mw.mp3",         text: "To purchase a membership press 1. To unblock all callers press 3. To return to the main menu press 9." },
+  { filename: "unblock_confirm.mp3",        text: "To confirm you want to unblock all callers, press 1. Press any other key to cancel and return to the previous menu." },
+  { filename: "unblock_done.mp3",           text: "All callers are unblocked." },
+  { filename: "cancelled_returning.mp3",    text: "Cancelled. Returning to the previous menu." },
+  { filename: "cancelled.mp3",              text: "Cancelled." },
+  { filename: "account_not_found.mp3",      text: "Could not find your account. Please try again." },
 
   // ── Message review ─────────────────────────────────────────────────────────
   { filename: "send_or_cancel.mp3", text: "Press 1 to send. Press 2 to cancel." },

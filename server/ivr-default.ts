@@ -4042,11 +4042,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const tierMsg = tier === "free_trial" ? "You are on a free trial." : tier !== "none" ? "You have an active membership." : "You do not have an active membership.";
 
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-manage-membership" });
-      if (isMW) {
-        gather.say(`${tierMsg} Press 1 to purchase a membership. Press 3 to unblock all callers. Press 9 to return to the main menu.`);
+      if (tier === "free_trial") {
+        playPrompt(gather, req, "manage_tier_free_trial.mp3", "You are on a free trial.");
+      } else if (tier !== "none") {
+        playPrompt(gather, req, "manage_tier_active.mp3", "You have an active membership.");
       } else {
-        const pinStatus = user.membershipPin ? "You have a PIN set." : "You do not have a PIN set.";
-        gather.say(`${tierMsg} ${pinStatus} Press 1 to purchase a membership. Press 2 to set or change your access PIN. Press 3 to unblock all callers. Press 9 to return to the main menu.`);
+        playPrompt(gather, req, "manage_tier_none.mp3", "You do not have an active membership.");
+      }
+      if (isMW) {
+        playPrompt(gather, req, "manage_menu_mw.mp3", "To purchase a membership press 1. To unblock all callers press 3. To return to the main menu press 9.");
+      } else {
+        if (user.membershipPin) {
+          playPrompt(gather, req, "manage_pin_set.mp3", "You have a PIN set.");
+        } else {
+          playPrompt(gather, req, "manage_pin_not_set.mp3", "You do not have a PIN set.");
+        }
+        playPrompt(gather, req, "manage_menu_mm.mp3", "To purchase a membership press 1. To set or change your access PIN press 2. To unblock all callers press 3. To return to the main menu press 9.");
       }
       twiml.redirect("/voice/manage-membership");
     } catch (error) {
