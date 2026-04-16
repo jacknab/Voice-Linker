@@ -901,14 +901,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
 
     try {
-      await storage.removeStaleActiveCalls(20);
+      // Fire-and-forget cleanup — doesn't affect response content.
+      storage.removeStaleActiveCalls(20).catch(() => {});
       const user = await getOrCreateUser(fromNumber);
-      // Remove any lingering active call rows for this user (e.g. status callback was missed)
-      await storage.removeActiveCallsByUser(user.id);
+      // Fire-and-forget — removes lingering rows from a previous missed status callback.
+      storage.removeActiveCallsByUser(user.id).catch(() => {});
       await storage.registerActiveCall(callSid, user.id);
       storage.logCall(callSid, fromNumber, req.body?.To || null, null).catch(() => {});
       console.log(`[voice] Registered active call ${callSid} for userId=${user.id}`);
       registerStatusCallback(callSid, req).catch(() => {});
+
+      // Play greeting + disclaimer immediately so the caller hears audio while
+      // /voice/entry runs its membership checks in parallel — eliminates the
+      // silent round-trip that previously happened between /voice and /voice/entry.
+      playPrompt(twiml, req, "system_greeting.mp3",
+        "Welcome to the Male Box. this service assumes no responsibility for personal meetings.");
+      playPrompt(twiml, req, "disclaimer.mp3", "");
       twiml.redirect("/voice/entry");
     } catch (error) {
       console.error("[voice] /voice error:", error);
@@ -922,20 +930,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 1b. Shared Entry Flow ────────────────────────────────────────────────
   // Reached from both /voice and /voice/:slug after the call is registered.
-  // Plays the system greeting + disclaimer, then prompts for membership number entry.
+  // system_greeting + disclaimer have already played in /voice or /voice/:slug.
+  // This route handles membership/account state and plays the Roger greeting.
   app.post("/voice/entry", async (req, res) => {
     const twiml = new VoiceResponse();
 
     try {
-      // Load site settings first so the raw cache is populated before any playPrompt call.
-      // playPrompt uses getRawSiteSettingsCache() synchronously to pick the right audio folder
-      // (mm/ vs mw/), so it must be primed before the first call.
+      // Load site settings so the raw cache is populated before any playPrompt call.
+      // playPrompt uses getRawSiteSettingsCache() synchronously to pick the right audio folder.
       const entrySiteConf = await getSiteSettingsCached();
-
-      playPrompt(twiml, req, "system_greeting.mp3",
-        "Welcome to the Male Box. this service assumes no responsibility for personal meetings.");
-
-      playPrompt(twiml, req, "disclaimer.mp3", "");
 
       // Play Announcement / MOTD if enabled
       const motdCfg = await getMembershipSettingsCached();
@@ -7112,13 +7115,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Tag this call with its region for the duration of the session
       callRegion.set(callSid, region.id);
 
-      // Clean up any stale calls
-      await storage.removeStaleActiveCalls(20);
+      // Fire-and-forget cleanup — doesn't affect response content.
+      storage.removeStaleActiveCalls(20).catch(() => {});
 
       const user = await getOrCreateUser(fromNumber);
 
-      // Remove any lingering active call rows for this user (e.g. status callback was missed)
-      await storage.removeActiveCallsByUser(user.id);
+      // Fire-and-forget — removes lingering rows from a previous missed status callback.
+      storage.removeActiveCallsByUser(user.id).catch(() => {});
 
       // Register call as active — scoped to this region
       await storage.registerActiveCall(callSid, user.id, region.id);
@@ -7127,7 +7130,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       registerStatusCallback(callSid, req).catch(() => {});
 
-      // Hand off to the shared entry flow (system greeting + account state detection)
+      // Play greeting + disclaimer immediately so the caller hears audio while
+      // /voice/entry runs its membership checks — eliminates silent round-trip.
+      playPrompt(twiml, req, "system_greeting.mp3",
+        "Welcome to the Male Box. this service assumes no responsibility for personal meetings.");
+      playPrompt(twiml, req, "disclaimer.mp3", "");
+      // Hand off to the shared entry flow (account state detection + Roger greeting)
       twiml.redirect("/voice/entry");
     } catch (error) {
       console.error(`[voice] /voice/${slug} error:`, error);
