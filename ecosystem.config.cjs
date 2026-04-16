@@ -1,6 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
+// Always resolve paths relative to this config file's location,
+// regardless of which directory PM2 is launched from.
+const APP_DIR = __dirname;
+
 // Read .env file and parse it
 function parseEnvFile(filePath) {
   const env = {};
@@ -28,17 +32,22 @@ function parseEnvFile(filePath) {
   return env;
 }
 
-// Read environment variables from .env file
-const envPath = '/apps/chatline/.env';
+const envPath = path.join(APP_DIR, '.env');
 const envVars = parseEnvFile(envPath);
+
+// Ensure logs directory exists
+const logsDir = path.join(APP_DIR, 'logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
 
 module.exports = {
   apps: [
     {
       name: 'malebox',
-      script: 'dist/index.cjs',
-      cwd: '/apps/chatline',
-      env_file: '/apps/chatline/.env',
+      script: path.join(APP_DIR, 'dist', 'index.cjs'),
+      cwd: APP_DIR,
+      env_file: envPath,
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -52,8 +61,8 @@ module.exports = {
         ELEVENLABS_VOICE_ID_MW_M: envVars.ELEVENLABS_VOICE_ID_MW_M || '',
         ELEVENLABS_VOICE_ID_GAME: envVars.ELEVENLABS_VOICE_ID_GAME || ''
       },
-      error_file: '/apps/chatline/logs/pm2-error.log',
-      out_file: '/apps/chatline/logs/pm2-out.log',
+      error_file: path.join(APP_DIR, 'logs', 'pm2-error.log'),
+      out_file: path.join(APP_DIR, 'logs', 'pm2-out.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
       autorestart: true,
