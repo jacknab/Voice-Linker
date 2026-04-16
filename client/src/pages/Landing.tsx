@@ -213,13 +213,13 @@ export default function Landing() {
             <h1 style={{ fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.15, marginBottom: "1rem", color: "#fff", textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
               data-testid="hero-headline"
             >
-              {isMM ? "Talk to Real Local Guys" : "Talk to Real Locals"}<br />Right Now — {isFreeModeActive ? "It's Free!" : "Try It Free!"}
+              {isMM ? "Free Gay Chat Line — Talk to Real Local Guys" : "Free Chat Line — Talk to Real Local Singles"}<br />{isFreeModeActive ? "It's Free!" : "No App. No Credit Card. Free Trial."}
             </h1>
 
             {/* Glass pill */}
             <div style={{ display: "inline-block", background: "rgba(255,255,255,0.12)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", padding: "0.35rem 0.9rem", marginBottom: "2.5rem" }}>
               <p style={{ fontSize: "0.95rem", color: "rgba(255,255,255,0.85)", fontWeight: 400, margin: 0 }}>
-                No credit card required · Click for details
+                No credit card required
               </p>
             </div>
 

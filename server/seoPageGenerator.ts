@@ -1325,9 +1325,9 @@ export function generateHomePage(
     <div class="hero-content">
       <div class="hero-box">
         <p class="hero-age">All users must be 18 years or older</p>
-        <h1 id="hero-h1">${isMM ? "Talk to Real Local Guys" : "Talk to Real Locals"}<br />Right Now — Try It Free!</h1>
+        <h1 id="hero-h1">${isMM ? "Free Gay Chat Line — Talk to Real Local Guys" : "Free Chat Line — Talk to Real Local Singles"}<br />No App. No Credit Card. Free Trial.</h1>
         <div class="hero-pill">
-          <p>No credit card required · Click for details</p>
+          <p>No credit card required</p>
         </div>
         ${phone ? `
         <p class="hero-city">Your local <strong>${escHtml(cityFull || "area")}</strong> access number</p>
