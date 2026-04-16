@@ -195,6 +195,7 @@ interface CallerBrowseState {
   // Origin announcement throttling: max 5 random announcements per 25-greeting window
   greetingsPlayed: number;
   windowAnnouncementsUsed: number;
+  callerCountAnnounced: boolean; // true once the caller count has been played this session
 }
 const callerBrowseState = new Map<string, CallerBrowseState>();
 
@@ -4998,6 +4999,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             announcedLinkedCallerIds: [],
             greetingsPlayed: 0,
             windowAnnouncementsUsed: 0,
+            callerCountAnnounced: false,
           };
           // Only cache the state if the queue is non-empty.
           // If empty (seeds may be in an inactive phase), skip caching so the
@@ -5206,13 +5208,21 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           // Advance index, wrapping at end of queue — track first wrap
           state.lastPlayedIndex = prevIndex;
           state.index = (state.index + 1) % state.queue.length;
-          if (state.index === 0 && prevIndex > 0) state.hasWrapped = true;
+          if (state.index === 0 && prevIndex > 0) {
+            state.hasWrapped = true;
+            // Shuffle queue on each wrap so callers don't hear profiles in the same
+            // fixed order every cycle (especially noticeable with small seed pools).
+            for (let i = state.queue.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [state.queue[i], state.queue[j]] = [state.queue[j], state.queue[i]];
+            }
+          }
 
-          console.log(`[voice] Playing profile userId=${profile.userId} (position ${state.index}/${state.queue.length})`);
+          console.log(`[voice] Playing profile userId=${profile.userId} (position ${prevIndex + 1}/${state.queue.length})`);
 
-          // Announce caller count only at the very start of the queue.
-          // Count home region + all linked regions so the total is accurate.
-          if (state.index === 1) {
+          // Announce caller count exactly once per session — right before the first profile.
+          if (!state.callerCountAnnounced) {
+            state.callerCountAnnounced = true;
             const homeCount = await storage.getActiveCallerCount(user.id, regionId ?? undefined, browseCallerGender);
             let regionalTotal = homeCount;
             for (const snap of state.linkedRegionSnapshots) {
