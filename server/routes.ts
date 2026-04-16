@@ -177,7 +177,11 @@ export async function registerRoutes(
 
         let geoLat: number | null = null, geoLon: number | null = null, geoCity: string | null = null, geoState: string | null = null;
         if (!isPrivate) {
-          const geoRes = await fetch(`https://ipinfo.io/${ip}/json`);
+          const ipinfoToken = process.env.IPINFO_TOKEN;
+          const ipinfoUrl = ipinfoToken
+            ? `https://ipinfo.io/${ip}/json?token=${ipinfoToken}`
+            : `https://ipinfo.io/${ip}/json`;
+          const geoRes = await fetch(ipinfoUrl);
           if (geoRes.ok) {
             const geo = await geoRes.json() as { city?: string; region?: string; loc?: string };
             geoCity = geo.city || null;
@@ -216,7 +220,9 @@ export async function registerRoutes(
 
       const html = generateHomePage(siteSettings, allRegions, siteUrl || "https://example.com", localData);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
+      // Per-request, per-user response — must not be cached by proxies or CDNs
+      // because the phone number is specific to each visitor's IP-derived city.
+      res.setHeader("Cache-Control", "private, no-cache, no-store, must-revalidate");
       res.status(200).send(html);
     } catch (err: any) {
       console.error("[ssr] Home page generation error:", err.message);
@@ -453,7 +459,11 @@ export async function registerRoutes(
 
       if (!isPrivate) {
         try {
-          const geoRes = await fetch(`https://ipinfo.io/${ip}/json`);
+          const ipinfoToken = process.env.IPINFO_TOKEN;
+          const ipinfoUrl = ipinfoToken
+            ? `https://ipinfo.io/${ip}/json?token=${ipinfoToken}`
+            : `https://ipinfo.io/${ip}/json`;
+          const geoRes = await fetch(ipinfoUrl);
           if (geoRes.ok) {
             const geo = await geoRes.json() as {
               city?: string;

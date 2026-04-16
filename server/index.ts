@@ -14,10 +14,10 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
-// Trust the first proxy (nginx) so Express reads X-Forwarded-Proto correctly.
-// Without this, secure cookies are never sent back through the proxy and
-// every request after login comes back as 401.
-app.set("trust proxy", 1);
+// Trust all proxies so Express correctly reads X-Forwarded-For and
+// X-Forwarded-Proto headers (required for accurate IP detection behind
+// Replit's proxy/nginx and for secure cookies to work properly).
+app.set("trust proxy", true);
 
 // ── Admin Desktop App CORS ────────────────────────────────────────────────────
 // Allows the standalone admin app running on localhost to reach the API.
