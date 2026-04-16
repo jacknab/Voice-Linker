@@ -3474,6 +3474,7 @@ function IVRTesterTab() {
   const [waitingForInput,    setWaitingForInput]    = useState(false);
   const [waitingForRecording,setWaitingForRecording]= useState(false);
   const [numDigits,          setNumDigits]          = useState<number | null>(null);
+  const [finishOnKey,        setFinishOnKey]        = useState<string | null>(null);
   const [digitBuffer,        setDigitBuffer]        = useState("");
   const [loading,            setLoading]            = useState(false);
   const [elapsed,            setElapsed]            = useState(0); // centiseconds
@@ -3548,6 +3549,7 @@ function IVRTesterTab() {
     waitingForInput: boolean;
     waitingForRecording: boolean;
     numDigits: number | null;
+    finishOnKey?: string | null;
   }) {
     // Non-audio entries appear immediately; audio entries reveal one-by-one as each plays
     const immediate = result.entries.filter(e => e.type !== "play" && e.type !== "say");
@@ -3555,6 +3557,7 @@ function IVRTesterTab() {
     setWaitingForInput(result.waitingForInput);
     setWaitingForRecording(result.waitingForRecording ?? false);
     setNumDigits(result.numDigits);
+    setFinishOnKey(result.finishOnKey ?? null);
     if (result.status === "ended") {
       setEnded(true);
       setConnected(false);
@@ -3576,6 +3579,7 @@ function IVRTesterTab() {
     setWaitingForInput(false);
     setWaitingForRecording(false);
     setNumDigits(null);
+    setFinishOnKey(null);
     try {
       const res = await fetch("/api/ivr-tester/connect", {
         method: "POST",
@@ -3607,6 +3611,7 @@ function IVRTesterTab() {
     setSessionId(null);
     setWaitingForInput(false);
     setWaitingForRecording(false);
+    setFinishOnKey(null);
     setDigitBuffer("");
     scrollToBottom();
   }
@@ -3620,13 +3625,20 @@ function IVRTesterTab() {
 
     let toSend = digits;
     if (numDigits && numDigits > 1) {
-      const next = digitBuffer + digits;
-      setDigitBuffer(next);
-      setLog(prev => [...prev, { type: "keypress", content: digits, ts: Date.now() }]);
-      scrollToBottom();
-      if (next.length < numDigits) return;
-      toSend = next;
-      setDigitBuffer("");
+      if (finishOnKey && digits === finishOnKey) {
+        toSend = digitBuffer;
+        setDigitBuffer("");
+        setLog(prev => [...prev, { type: "keypress", content: digits, ts: Date.now() }]);
+        scrollToBottom();
+      } else {
+        const next = digitBuffer + digits;
+        setDigitBuffer(next);
+        setLog(prev => [...prev, { type: "keypress", content: digits, ts: Date.now() }]);
+        scrollToBottom();
+        if (next.length < numDigits) return;
+        toSend = next;
+        setDigitBuffer("");
+      }
     }
 
     setLoading(true);
@@ -3657,7 +3669,7 @@ function IVRTesterTab() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canType, sessionId, connected, ended, loading, numDigits, digitBuffer]);
+  }, [canType, sessionId, connected, ended, loading, numDigits, digitBuffer, finishOnKey]);
 
   // ── Keys layout ──────────────────────────────────────────────────────────
   const keys = ["1","2","3","4","5","6","7","8","9","*","0","#"];

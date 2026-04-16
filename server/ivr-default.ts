@@ -614,7 +614,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     let user = await storage.getUserByPhone(effectivePhone);
     if (!user) {
-      user = await storage.createUser({ phoneNumber: effectivePhone });
+      try {
+        user = await storage.createUser({ phoneNumber: effectivePhone });
+      } catch (err: any) {
+        if (err?.code !== "23505") throw err;
+        user = await storage.getUserByPhone(effectivePhone);
+        if (!user) throw err;
+      }
     }
     return user;
   }
@@ -4546,7 +4552,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/promo-code", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 10, action: "/voice/handle-promo-code", finishOnKey: "#", timeout: 15 });
-    playPrompt(gather, req, "promo_code_prompt.mp3", "Enter your promotional code followed by the pound key. Press star to cancel.");
+    playPrompt(gather, req, "promo_code_prompt.mp3", "Enter your promotional code followed by the pound key. To cancel, press pound now.");
     twiml.redirect("/voice/main-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -4557,7 +4563,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const digits = (req.body?.Digits as string) ?? "";
     const fromNumber = req.body?.From as string;
 
-    if (!digits || digits === "*") {
+    if (!digits || digits === "*" || digits === "#") {
       playPrompt(twiml, req, "cancelled.mp3", "Cancelled.");
       twiml.redirect("/voice/main-menu");
       res.type("text/xml");
