@@ -4537,6 +4537,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const user = await getOrCreateUser(fromNumber);
         const profile = await storage.getProfile(user.id);
         if (profile?.recordingUrl) {
+          playPrompt(twiml, req, "here_is_your_greeting.mp3", "Here is what your greeting sounds like.");
           if (profile.nameRecordingUrl) {
             safePlayRecording(twiml, profile.nameRecordingUrl, req, "");
           }
@@ -4606,6 +4607,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const user = await getOrCreateUser(fromNumber);
         const profile = await storage.getProfile(user.id);
         if (profile?.recordingUrl) {
+          playPrompt(twiml, req, "here_is_your_greeting.mp3", "Here is what your greeting sounds like.");
           safePlayRecording(twiml, profile.recordingUrl, req, "Your greeting is not available for playback right now.");
         } else {
           playPrompt(twiml, req, "no_greeting_found.mp3", "No recording found.");
