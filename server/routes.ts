@@ -155,10 +155,10 @@ export async function registerRoutes(
   // Prime the site settings cache so playPrompt can use category-specific audio on first call
   getSiteSettingsCached().catch(() => {});
 
-  // ── SSR Landing Page (GET /) ───────────────────────────────────────────────
-  // Serves fully server-rendered HTML so search engines can crawl and index it.
-  // In development, skip SSR so Vite serves the React app (Landing.tsx) instead.
-  // Also accessible at /seo-preview in any environment for testing.
+  // ── SSR Landing Page (/seo-preview only) ─────────────────────────────────
+  // The React app (Landing.tsx) serves at "/" in all environments so the
+  // design is consistent between development and production.
+  // The SEO-rendered version is still accessible at /seo-preview for testing.
   const ssrHandler = async (_req: Request, res: Response) => {
     try {
       const [siteSettings, allRegions] = await Promise.all([
@@ -175,9 +175,6 @@ export async function registerRoutes(
       res.status(500).send("Service temporarily unavailable");
     }
   };
-  if (process.env.NODE_ENV === "production") {
-    app.get("/", ssrHandler);
-  }
   app.get("/seo-preview", ssrHandler);
 
   // ── Auth routes ───────────────────────────────────────────────────────────
