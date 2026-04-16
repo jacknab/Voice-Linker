@@ -916,7 +916,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // silent round-trip that previously happened between /voice and /voice/entry.
       playPrompt(twiml, req, "system_greeting.mp3",
         "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
-      playPrompt(twiml, req, "disclaimer.mp3", "");
+      playPrompt(twiml, req, "disclaimer.mp3",
+        "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
       twiml.redirect("/voice/entry");
     } catch (error) {
       console.error("[voice] /voice error:", error);
@@ -7134,7 +7135,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // /voice/entry runs its membership checks — eliminates silent round-trip.
       playPrompt(twiml, req, "system_greeting.mp3",
         "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
-      playPrompt(twiml, req, "disclaimer.mp3", "");
+      playPrompt(twiml, req, "disclaimer.mp3",
+        "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
       // Hand off to the shared entry flow (account state detection + Roger greeting)
       twiml.redirect("/voice/entry");
     } catch (error) {
