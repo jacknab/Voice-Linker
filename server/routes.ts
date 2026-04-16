@@ -13,7 +13,7 @@ import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
 import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger, getVoiceIdForGame, getElevenLabsApiKey } from "./elevenlabs";
-import { triggerLocationAudio } from "./audioAutogen";
+import { triggerLocationAudio, forceRegenAllSystemPrompts } from "./audioAutogen";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 
@@ -1244,6 +1244,18 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (e) {
       res.status(500).json({ message: "Failed to delete file" });
+    }
+  });
+
+  // Force-delete all autogen-managed system prompt files then immediately regenerate them.
+  // Fixes "old audio stuck" issues where sidecar-less files were silently skipped.
+  app.post("/api/admin/tts/force-regen-system", async (_req, res) => {
+    try {
+      const result = await forceRegenAllSystemPrompts();
+      res.json({ ok: true, deleted: result.queued, message: `Deleted ${result.queued} file(s). Regeneration started in background — check back in a few minutes.` });
+    } catch (e: any) {
+      console.error("[admin/tts/force-regen-system] failed:", e);
+      res.status(500).json({ message: e?.message ?? "Force regen failed" });
     }
   });
 

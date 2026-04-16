@@ -666,6 +666,42 @@ async function safeRun() {
   }
 }
 
+/**
+ * Delete every autogen-managed system prompt file (and its sidecar) so the
+ * next autogen run (triggered immediately) regenerates them all from scratch.
+ * This fixes the "old audio won't update" problem where sidecar-less files
+ * were silently skipped.  Called by the admin Force Regenerate endpoint.
+ */
+export async function forceRegenAllSystemPrompts(): Promise<{ queued: number }> {
+  let deleted = 0;
+
+  // ── Category folder prompts (MM_PROMPTS, MW_PROMPTS, MW_M_PROMPTS) ────────
+  for (const { folder, prompts } of FOLDERS) {
+    const dir = path.join(UPLOADS_DIR, folder);
+    for (const prompt of prompts) {
+      if (!prompt.filename) continue;
+      const mp3 = path.join(dir, prompt.filename);
+      const txt = mp3.replace(/\.mp3$/i, ".txt");
+      try { if (fs.existsSync(mp3)) { fs.unlinkSync(mp3); deleted++; } } catch { /* ignore */ }
+      try { if (fs.existsSync(txt)) { fs.unlinkSync(txt); } } catch { /* ignore */ }
+    }
+  }
+
+  // ── Roger greeting files (uploads/ root) ─────────────────────────────────
+  for (const prompt of ROGER_PROMPTS) {
+    const mp3 = path.join(UPLOADS_DIR, prompt.filename);
+    const txt = mp3.replace(/\.mp3$/i, ".txt");
+    try { if (fs.existsSync(mp3)) { fs.unlinkSync(mp3); deleted++; } } catch { /* ignore */ }
+    try { if (fs.existsSync(txt)) { fs.unlinkSync(txt); } } catch { /* ignore */ }
+  }
+
+  // Kick off an immediate autogen run so files get regenerated right away.
+  safeRun().catch(err => console.error("[audio-autogen] force-regen run failed:", err));
+
+  console.log(`[audio-autogen] force-regen: deleted ${deleted} file(s), regeneration queued.`);
+  return { queued: deleted };
+}
+
 const INTERVAL_MS = 60 * 60 * 1000;
 const STARTUP_DELAY_MS = 60 * 1000;
 

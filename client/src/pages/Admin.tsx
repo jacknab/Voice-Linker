@@ -1989,6 +1989,7 @@ function TTSTab() {
   const [pushingPrompt, setPushingPrompt] = useState<Set<string>>(new Set());
   const [pushingAllPrompts, setPushingAllPrompts] = useState(false);
   const [vpsUrlInput, setVpsUrlInput] = useState<string>(() => getVpsUrl() || "");
+  const [forceRegenPending, setForceRegenPending] = useState(false);
 
   // Load saved prompt texts from server on mount
   const { data: savedPromptTexts } = useQuery<Record<string, string>>({
@@ -2239,6 +2240,25 @@ function TTSTab() {
     audio.onended = () => { setPlayingPromptKey(null); promptAudioRef.current = null; };
     audio.onerror = () => { setPlayingPromptKey(null); promptAudioRef.current = null; };
     audio.play();
+  }
+
+  async function handleForceRegenSystem() {
+    if (forceRegenPending) return;
+    setForceRegenPending(true);
+    try {
+      const res = await fetch("/api/admin/tts/force-regen-system", { method: "POST" });
+      const data = await res.json().catch(() => ({})) as { deleted?: number; message?: string };
+      if (!res.ok) throw new Error((data as any).message ?? "Failed");
+      toast({
+        title: "Force regeneration started",
+        description: data.message ?? `${data.deleted ?? 0} file(s) deleted. Audio will regenerate in the background.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
+    } catch (err: any) {
+      toast({ title: "Force regen failed", description: err.message, variant: "destructive" });
+    } finally {
+      setForceRegenPending(false);
+    }
   }
 
   async function handleGenerateMissing() {
@@ -2863,6 +2883,16 @@ function TTSTab() {
               title="Regenerate every prompt (overwrites existing)"
             >
               <Wand2 size={11} /> Regen All
+            </button>
+            <button
+              data-testid="btn-force-regen-system"
+              onClick={handleForceRegenSystem}
+              disabled={forceRegenPending}
+              className={C.btnGhost + " text-xs border-red-300 text-red-600 hover:bg-red-50"}
+              title="Delete all system prompt audio files and regenerate them from scratch — fixes stuck/outdated audio"
+            >
+              {forceRegenPending ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+              Force Regen System
             </button>
             <button
               data-testid="btn-push-all-prompts"
