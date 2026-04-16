@@ -114,6 +114,8 @@ export interface IStorage {
   getZipEntryById(id: string): Promise<ZipCode | undefined>;
   getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }>;
 
+  markAllMessagesReadFromSender(fromUserId: string, toUserId: string): Promise<void>;
+
   // Block list
   isUserBlocked(blockerId: string, blockedUserId: string): Promise<boolean>;
   blockUser(blockerId: string, blockedUserId: string): Promise<void>;
@@ -547,14 +549,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUnreadMessage(userId: string): Promise<Message | undefined> {
+    // Exclude messages from callers this user has blocked
+    const blockedByMe = await db
+      .select({ id: blockedUsers.blockedUserId })
+      .from(blockedUsers)
+      .where(eq(blockedUsers.blockerId, userId));
+    const blockedIds = blockedByMe.map(r => r.id);
+
     const [message] = await db.select()
       .from(messages)
       .where(and(
         eq(messages.toUserId, userId),
-        eq(messages.isRead, false)
+        eq(messages.isRead, false),
+        ...(blockedIds.length > 0 ? [notInArray(messages.fromUserId, blockedIds)] : [])
       ))
       .limit(1);
     return message;
+  }
+
+  async markAllMessagesReadFromSender(fromUserId: string, toUserId: string): Promise<void> {
+    await db.update(messages)
+      .set({ isRead: true })
+      .where(and(
+        eq(messages.fromUserId, fromUserId),
+        eq(messages.toUserId, toUserId),
+        eq(messages.isRead, false)
+      ));
   }
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
@@ -827,9 +847,26 @@ export class DatabaseStorage implements IStorage {
       ? or(inArray(profiles.userId, realIds), virtualProfileCondition)
       : virtualProfileCondition;
 
+    // Apply the same block filter as getAllActiveProfiles
+    const blockedByMeForCount = await db.select({ blockedUserId: blockedUsers.blockedUserId })
+      .from(blockedUsers)
+      .where(eq(blockedUsers.blockerId, excludeUserId));
+    const blockedMeForCount = await db.select({ blockerId: blockedUsers.blockerId })
+      .from(blockedUsers)
+      .where(eq(blockedUsers.blockedUserId, excludeUserId));
+    const hiddenIdsForCount = [
+      ...blockedByMeForCount.map(r => r.blockedUserId),
+      ...blockedMeForCount.map(r => r.blockerId),
+    ];
+
+    const baseCondForCount = and(conditions, not(eq(profiles.userId, excludeUserId)));
+    const finalCondForCount = hiddenIdsForCount.length > 0
+      ? and(baseCondForCount, notInArray(profiles.userId, hiddenIdsForCount))
+      : baseCondForCount;
+
     const [result] = await db.select({ count: count() })
       .from(profiles)
-      .where(and(conditions, not(eq(profiles.userId, excludeUserId))));
+      .where(finalCondForCount);
     return result.count;
   }
 

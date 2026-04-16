@@ -5507,7 +5507,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // ── Block the message sender ──────────────────────────────────────────
         if (fromNumber && senderId) {
           const user = await getOrCreateUser(fromNumber);
-          await storage.markMessageRead(msgId);
+          // Mark ALL unread messages from this sender as read so they don't surface again
+          await storage.markAllMessagesReadFromSender(senderId, user.id);
           await storage.blockUser(user.id, senderId);
           removeFromBrowseQueue(callSid, senderId);
           console.log(`[voice] handle-message-menu: userId=${user.id} blocked senderId=${senderId}`);
@@ -6189,6 +6190,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // ── Block the invite initiator ───────────────────────────────────────
         invite.status = "declined";
         pendingLiveInvites.delete(user.id);
+        await storage.markAllMessagesReadFromSender(initiatorUserId, user.id);
         await storage.blockUser(user.id, initiatorUserId);
         removeFromBrowseQueue(callSid, initiatorUserId);
         console.log(`[live-connect] handle-live-invite: userId=${user.id} blocked initiatorUserId=${initiatorUserId}`);
@@ -6388,6 +6390,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const user = await getOrCreateUser(fromNumber);
         if (returnTo === "mailbox" || returnTo === "category" || returnTo === "voicemail-inbox" || returnTo === "voicemail-saved") {
           await syncBilling(callSid);
+        }
+        // Block check: if the recipient has blocked this caller, silently discard the message
+        const recipientBlockedSender = toUserId ? await storage.isUserBlocked(toUserId, user.id) : false;
+        if (recipientBlockedSender) {
+          console.log(`[voice] handle-review-message: message discarded — toUserId=${toUserId} has blocked userId=${user.id}`);
+          // Play neutral "message sent" so the blocked caller doesn't know they're blocked
+          playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
+          twiml.redirect(cancelReturnPath(returnTo, category));
+          res.type("text/xml");
+          return res.send(twiml.toString());
         }
         const sentMessage = await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
         // Queue sent message for human admin review
