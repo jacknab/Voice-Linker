@@ -209,13 +209,27 @@ const NEW_CALLER_ANNOUNCE_PROBABILITY = 0.1;
 function removeFromBrowseQueue(callSid: string, userId: string): void {
   const state = callerBrowseState.get(callSid);
   if (!state) return;
-  const removedIdx = state.queue.findIndex(p => p.userId === userId);
-  if (removedIdx === -1) return;
-  state.queue.splice(removedIdx, 1);
+  const removedIndexes: number[] = [];
+  state.queue = state.queue.filter((p, idx) => {
+    if (p.userId === userId) {
+      removedIndexes.push(idx);
+      return false;
+    }
+    return true;
+  });
+  if (removedIndexes.length === 0) return;
   // Keep the index pointing at the next unplayed entry
-  if (state.index > removedIdx) state.index = Math.max(0, state.index - 1);
+  const removedBeforeIndex = removedIndexes.filter(idx => idx < state.index).length;
+  if (removedBeforeIndex > 0) state.index = Math.max(0, state.index - removedBeforeIndex);
   if (state.index >= state.queue.length) state.index = 0;
-  console.log(`[voice] removeFromBrowseQueue: removed userId=${userId} from queue for callSid=${callSid}, remaining=${state.queue.length}`);
+  if (state.lastPlayedIndex !== null) {
+    const removedBeforeLastPlayed = removedIndexes.filter(idx => idx < state.lastPlayedIndex!).length;
+    const removedLastPlayed = removedIndexes.includes(state.lastPlayedIndex);
+    state.lastPlayedIndex = removedLastPlayed
+      ? null
+      : Math.max(0, state.lastPlayedIndex - removedBeforeLastPlayed);
+  }
+  console.log(`[voice] removeFromBrowseQueue: removed ${removedIndexes.length} entr${removedIndexes.length === 1 ? "y" : "ies"} for userId=${userId} from queue for callSid=${callSid}, remaining=${state.queue.length}`);
 }
 
 // Maps CallSid → regionId for the duration of a call
@@ -5881,19 +5895,34 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const profileUserId = (req.query.profileUserId as string) || "";
     const attempt = parseInt((req.query.attempt as string) || "1", 10);
 
-    if (attempt >= 2) {
-      playPrompt(twiml, req, "connector_idle_goodbye.mp3",
-        "You're apparently having issues right now, or have fallen asleep. Sweet dreams.");
-      twiml.hangup();
-    } else {
-      const repeatGather = twiml.gather({
-        numDigits: 1,
-        action: `/voice/handle-profile-menu?profileUserId=${encodeURIComponent(profileUserId)}`,
-        timeout: 10,
-      });
-      playPrompt(repeatGather, req, "profile_options.mp3",
-        "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-      twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profileUserId)}&attempt=2`);
+    try {
+      const fromNumber = req.body?.From as string | undefined;
+      if (fromNumber && profileUserId) {
+        const user = await getOrCreateUser(fromNumber);
+        if (await storage.isUserBlocked(user.id, profileUserId)) {
+          twiml.redirect("/voice/browse-profiles");
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        }
+      }
+
+      if (attempt >= 2) {
+        playPrompt(twiml, req, "connector_idle_goodbye.mp3",
+          "You're apparently having issues right now, or have fallen asleep. Sweet dreams.");
+        twiml.hangup();
+      } else {
+        const repeatGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-profile-menu?profileUserId=${encodeURIComponent(profileUserId)}`,
+          timeout: 10,
+        });
+        playPrompt(repeatGather, req, "profile_options.mp3",
+          "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+        twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profileUserId)}&attempt=2`);
+      }
+    } catch (error) {
+      console.error("[voice] /voice/connector-timeout error:", error);
+      twiml.redirect("/voice/browse-profiles");
     }
 
     res.type("text/xml");
