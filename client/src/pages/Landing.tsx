@@ -213,7 +213,7 @@ export default function Landing() {
             <h1 style={{ fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.15, marginBottom: "1rem", color: "#fff", textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
               data-testid="hero-headline"
             >
-              {isMM ? "Free Gay Chat Line — Talk to Real Local Guys" : "Free Chat Line — Talk to Real Local Singles"}<br />Right Now — {isFreeModeActive ? "It's Free!" : "Try It Free!"}
+              {isMM ? "Free Gay Chat Line —" : "Free Chat Line —"}<br />{isMM ? "Talk to Real Local Guys" : "Talk to Real Local Singles"}<br />Right Now — {isFreeModeActive ? "It's Free!" : "Try It Free!"}
             </h1>
 
             {/* Glass pill */}
