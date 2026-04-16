@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  update.sh  —  Pull latest code, rebuild, and restart PM2
-#  Run this from your git repo directory on the VPS:
+#  Run from your git repo directory on the VPS:
 #    bash update.sh
 # =============================================================================
 
@@ -31,36 +31,30 @@ success "Dependencies installed."
 # ── 3. Build ──────────────────────────────────────────────────────────────────
 info "Building production bundle..."
 npm run build
-success "Build complete."
+success "Build complete — dist/ is ready at $APP_DIR/dist/"
 
-# ── 4. Update ecosystem.config.cjs to point to this directory ─────────────────
-# Patch the cwd in ecosystem.config.cjs so PM2 uses the right folder
-if grep -q "cwd:" ecosystem.config.cjs; then
-  sed -i "s|cwd: '.*'|cwd: '${APP_DIR}'|g" ecosystem.config.cjs
-  info "Updated ecosystem.config.cjs cwd → $APP_DIR"
-fi
+# ── 4. Rewrite ecosystem.config.cjs with correct paths ───────────────────────
+# Do this BEFORE touching PM2 so the config is correct when we start
+info "Patching ecosystem.config.cjs → cwd: $APP_DIR"
+sed -i "s|cwd: '.*'|cwd: '${APP_DIR}'|g" ecosystem.config.cjs
+sed -i "s|env_file: '.*'|env_file: '${APP_DIR}/.env'|g" ecosystem.config.cjs
+sed -i "s|error_file: '.*'|error_file: '${APP_DIR}/logs/pm2-error.log'|g" ecosystem.config.cjs
+sed -i "s|out_file: '.*'|out_file: '${APP_DIR}/logs/pm2-out.log'|g" ecosystem.config.cjs
 
-# Also update the .env path reference if it still points to /apps/chatline
-if grep -q "/apps/chatline" ecosystem.config.cjs; then
-  sed -i "s|/apps/chatline|${APP_DIR}|g" ecosystem.config.cjs
-  info "Updated ecosystem.config.cjs env paths → $APP_DIR"
-fi
+# Make sure the logs directory exists
+mkdir -p "$APP_DIR/logs"
+success "ecosystem.config.cjs patched."
 
-# ── 5. Restart PM2 ────────────────────────────────────────────────────────────
-info "Restarting PM2..."
+# ── 5. Force-reload PM2 with the new config ───────────────────────────────────
+# pm2 restart does NOT re-read the ecosystem file — we must delete + re-start
+info "Stopping and removing old PM2 process..."
+pm2 delete malebox 2>/dev/null || true
 
-# Check if the process exists in PM2
-if pm2 list | grep -q "malebox"; then
-  pm2 restart malebox --update-env
-  success "PM2 process 'malebox' restarted."
-else
-  # If not registered, start it fresh from ecosystem config
-  info "No existing PM2 process found — starting fresh..."
-  pm2 start ecosystem.config.cjs
-  pm2 save
-  success "PM2 process 'malebox' started."
-fi
+info "Starting PM2 with updated config..."
+pm2 start "$APP_DIR/ecosystem.config.cjs"
+pm2 save --force
+success "PM2 process 'malebox' started fresh from $APP_DIR."
 
 echo ""
-success "Update complete! Check your site — it should be running the latest code."
+success "Update complete! Your site should now be running the latest build."
 pm2 status malebox
