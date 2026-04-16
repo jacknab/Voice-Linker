@@ -4271,7 +4271,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               : []
           );
           // Snapshot each linked region so we can detect new callers joining them later
-          const linkedRegions = regionId ? await storage.getLinkedRegions(regionId) : [];
+          const linkedRegions = regionId ? await storage.getLinkedRegions(regionId).catch(() => [] as Awaited<ReturnType<typeof storage.getLinkedRegions>>) : [];
           const linkedRegionSnapshots = await Promise.all(
             linkedRegions.map(async (r) => {
               const profiles = await storage.getAllActiveProfiles(user.id, r.id);
@@ -4319,7 +4319,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         } else {
           // ── Linked-region offer: queue has looped at least once ──────────────
           if (state.hasWrapped && !state.linkedRegionLoaded && regionId) {
-            const linkedRegions = await storage.getLinkedRegions(regionId);
+            const linkedRegions = await storage.getLinkedRegions(regionId).catch(() => [] as Awaited<ReturnType<typeof storage.getLinkedRegions>>);
             if (linkedRegions.length > 0) {
               state.hasWrapped = false; // clear so we don't re-trigger until next full loop
               const ids = linkedRegions.map(r => r.id).join(",");
