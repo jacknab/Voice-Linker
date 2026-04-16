@@ -860,9 +860,15 @@ export class DatabaseStorage implements IStorage {
     ];
 
     const baseCondForCount = and(conditions, not(eq(profiles.userId, excludeUserId)));
-    const finalCondForCount = hiddenIdsForCount.length > 0
+    const blockCondForCount = hiddenIdsForCount.length > 0
       ? and(baseCondForCount, notInArray(profiles.userId, hiddenIdsForCount))
       : baseCondForCount;
+    // Mirror the same minimum-duration guard used in getAllActiveProfiles.
+    const MIN_GREETING_SECONDS = 3;
+    const finalCondForCount = and(
+      blockCondForCount,
+      or(isNull(profiles.recordingDuration), gte(profiles.recordingDuration, MIN_GREETING_SECONDS)),
+    );
 
     const [result] = await db.select({ count: count() })
       .from(profiles)
@@ -939,9 +945,17 @@ export class DatabaseStorage implements IStorage {
     ];
 
     const baseCondition = and(conditions, not(eq(profiles.userId, excludeUserId)));
-    const finalCondition = hiddenIds.length > 0
+    const blockCondition = hiddenIds.length > 0
       ? and(baseCondition, notInArray(profiles.userId, hiddenIds))
       : baseCondition;
+    // Exclude greetings that are too short to be useful (< 3 s).
+    // NULL duration means the field wasn't captured at record time — keep those to avoid
+    // hiding legacy profiles that have valid-sounding recordings.
+    const MIN_GREETING_SECONDS = 3;
+    const finalCondition = and(
+      blockCondition,
+      or(isNull(profiles.recordingDuration), gte(profiles.recordingDuration, MIN_GREETING_SECONDS)),
+    );
 
     const rows = await db.select({ profile: profiles })
       .from(profiles)
