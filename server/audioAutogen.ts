@@ -9,7 +9,7 @@
 
 import fs from "fs";
 import path from "path";
-import { generateTTS, getVoiceIdForRoger } from "./elevenlabs";
+import { generateTTS, getVoiceIdForFolder, getVoiceIdForRoger } from "./elevenlabs";
 import { reverseGeocodeNeighborhood } from "./zipLookup";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -476,6 +476,45 @@ async function runAudioAutogen(): Promise<void> {
   }
 }
 
+// ── Location audio sidecar helpers ──────────────────────────────────────────
+// Location files fingerprint BOTH the text and the voice ID so that a voice
+// change (ELEVENLABS_VOICE_ID_MM env var update) forces regeneration.
+// Unlike main prompts (where no sidecar = legacy = keep), a missing sidecar
+// on a location file is treated as stale — those files were generated before
+// the sidecar system existed and may carry the wrong voice.
+
+function locationFingerprint(text: string, voiceId: string): string {
+  return `${text.trim()}|${voiceId}`;
+}
+
+function locationNeedsRegeneration(filePath: string, text: string, voiceId: string): boolean {
+  if (!fs.existsSync(filePath)) return true;
+  const sidecarPath = filePath.replace(/\.mp3$/i, ".txt");
+  if (!fs.existsSync(sidecarPath)) return true; // no sidecar = old file, voice unknown — regenerate
+  try {
+    const stored = fs.readFileSync(sidecarPath, "utf8").trim();
+    if (stored !== locationFingerprint(text, voiceId)) {
+      // Text or voice ID changed — delete stale audio and sidecar.
+      fs.unlinkSync(filePath);
+      fs.unlinkSync(sidecarPath);
+      return true;
+    }
+  } catch { /* unreadable sidecar — regenerate to be safe */
+    return true;
+  }
+  return false;
+}
+
+function writeLocationSidecar(filePath: string, text: string, voiceId: string): void {
+  try {
+    fs.writeFileSync(
+      filePath.replace(/\.mp3$/i, ".txt"),
+      locationFingerprint(text, voiceId),
+      "utf8",
+    );
+  } catch { /* non-fatal */ }
+}
+
 // ── Location audio helpers ──────────────────────────────────────────────────
 
 /**
@@ -512,9 +551,11 @@ async function generateLocationForAllFolders(location: string): Promise<void> {
   } catch { /* fall back to all */ }
   for (const folder of folders) {
     const filePath = path.join(UPLOADS_DIR, folder, filename);
-    if (fs.existsSync(filePath)) continue;
+    const voiceId = getVoiceIdForFolder(folder);
+    if (!locationNeedsRegeneration(filePath, text, voiceId)) continue;
     try {
       await generateTTS(text, filename, folder);
+      writeLocationSidecar(filePath, text, voiceId);
       console.log(`[audio-autogen] trigger: generated ${folder}/${filename}`);
       await sleep(DELAY_MS);
     } catch (err: any) {
@@ -581,10 +622,12 @@ async function runLocationAutogen(): Promise<void> {
 
     for (const folder of voiceFolders) {
       const filePath = path.join(UPLOADS_DIR, folder, filename);
-      if (fs.existsSync(filePath)) { skipped++; continue; }
+      const voiceId = getVoiceIdForFolder(folder);
+      if (!locationNeedsRegeneration(filePath, text, voiceId)) { skipped++; continue; }
 
       try {
         await generateTTS(text, filename, folder);
+        writeLocationSidecar(filePath, text, voiceId);
         console.log(`[audio-autogen] generated location audio: ${folder}/${filename}`);
         generated++;
         await sleep(DELAY_MS);
