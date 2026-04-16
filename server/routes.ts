@@ -157,8 +157,9 @@ export async function registerRoutes(
 
   // ── SSR Landing Page (GET /) ───────────────────────────────────────────────
   // Serves fully server-rendered HTML so search engines can crawl and index it.
-  // Registered before all other routes so it takes priority over the SPA catch-all.
-  app.get("/", async (_req: Request, res: Response) => {
+  // In development, skip SSR so Vite serves the React app (Landing.tsx) instead.
+  // Also accessible at /seo-preview in any environment for testing.
+  const ssrHandler = async (_req: Request, res: Response) => {
     try {
       const [siteSettings, allRegions] = await Promise.all([
         storage.getSiteSettings(),
@@ -173,7 +174,11 @@ export async function registerRoutes(
       console.error("[ssr] Home page generation error:", err.message);
       res.status(500).send("Service temporarily unavailable");
     }
-  });
+  };
+  if (process.env.NODE_ENV === "production") {
+    app.get("/", ssrHandler);
+  }
+  app.get("/seo-preview", ssrHandler);
 
   // ── Auth routes ───────────────────────────────────────────────────────────
   app.use(authRouter);
