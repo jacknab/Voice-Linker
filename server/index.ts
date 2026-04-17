@@ -6,7 +6,6 @@ import session from "express-session";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { startSimulator } from "./simulator";
-import { startAudioAutogen } from "./audioAutogen";
 import { runStartupMigrations } from "./migrations";
 import { importSeedFolder } from "./seedImport";
 import { createServer } from "http";
@@ -162,9 +161,6 @@ app.use((req, res, next) => {
     await startSimulator().catch(err => console.error("[simulator] startup error:", err));
     importSeedFolder().catch(err => console.error("[seeds] startup import error:", err));
   }, 3000);
-
-  // Start the hourly audio auto-generation cron (generates any missing prompt MP3s via ElevenLabs)
-  startAudioAutogen();
 
   // Periodically purge any active_calls rows that are more than 20 minutes old.
   // This catches calls where Twilio's status callback never fired (e.g. network issues).
