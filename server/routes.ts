@@ -1297,11 +1297,22 @@ export async function registerRoutes(
         : path.join(UPLOADS_DIR, filename);
 
       if (!fs.existsSync(filePath)) return res.status(404).json({ message: "File not found" });
+
       fs.unlinkSync(filePath);
+
+      // Also delete the sidecar .txt file if it exists so autogen correctly
+      // detects the file as missing on the next manual run.
+      const sidecarPath = filePath.replace(/\.mp3$/i, ".txt");
+      if (fs.existsSync(sidecarPath)) {
+        try { fs.unlinkSync(sidecarPath); } catch { /* non-fatal */ }
+      }
+
       const fileLabel = targetFolder ? `${targetFolder}/${filename}` : filename;
+      console.log(`[admin] deleted audio file: ${fileLabel}`);
       logAudit("audio_deleted", { targetType: "audio", targetLabel: fileLabel });
       res.status(204).send();
-    } catch (e) {
+    } catch (e: any) {
+      console.error("[admin] delete audio failed:", e?.message ?? e);
       res.status(500).json({ message: "Failed to delete file" });
     }
   });
