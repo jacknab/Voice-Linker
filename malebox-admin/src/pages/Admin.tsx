@@ -7091,7 +7091,6 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "sms-marketing",  label: "SMS Marketing",     icon: <Send size={15} /> },
   { id: "support",        label: "Support Tickets",   icon: <Headphones size={15} /> },
   { id: "phone-testing",  label: "Phone Testing",     icon: <PhoneCall size={15} /> },
-  { id: "ivr-flow",       label: "IVR Flow Map",      icon: <GitBranch size={15} /> },
   { id: "phone-numbers",  label: "Phone Numbers",     icon: <Phone size={15} /> },
   { id: "blocked",        label: "Blocked Numbers",   icon: <X size={15} /> },
   { id: "promo-codes",    label: "Promo Codes",       icon: <Tag size={15} /> },
