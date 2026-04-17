@@ -15,6 +15,53 @@ A complete, production-ready phone chat line system powered by Twilio, ElevenLab
 
 ---
 
+## KEY FEATURES
+
+- Fully automated IVR phone system — callers navigate by keypad, no app required
+- IP geolocation on every visit — visitors see their nearest local number instantly
+- Auto-generated SEO city pages — add a region in admin and a full landing page appears automatically
+- AI host personality (Roger) — monitors callers in real time and injects ElevenLabs voice prompts to keep them engaged
+- "Busted" AI game — injects a fake AI caller into the browse queue; winners earn free minutes
+- Dual market support — MM (Men seeking Men) and MW (Men seeking Women) modes with separate IVR flows
+- Per-minute and per-day billing modes — both configurable from the admin panel
+- Stripe web and IVR payments — callers can pay by phone keypad or online
+- PayPal payments — web-based PayPal checkout supported alongside Stripe
+- Virtual caller simulator — populate the line with seed profiles so it feels active from launch
+- IVR simulator in the browser — test the full phone experience without picking up a phone
+- Auto-moderation — transcribes every recording and rejects ones containing phone numbers or low-quality audio
+- SMS marketing — schedule bulk text campaigns to your entire caller database
+- Promo code system — issue codes for free minutes with usage limits and expiry dates
+- Membership card generator — create and issue physical or digital top-up cards with PIN
+- Full audit log — every admin action recorded with timestamp
+- Production-ready — ships with PM2 config, systemd service file, and database migration scripts
+
+---
+
+## WHAT'S INCLUDED
+
+- Full TypeScript source code — server, client web app, and admin panel
+- PostgreSQL database schema with automated migration scripts
+- Admin dashboard (separate React application)
+- Member-facing web portal (register, purchase, view balance)
+- Public SEO website with auto-generating regional city pages
+- IVR flow diagram and browser-based IVR simulator
+- PM2 ecosystem config for production process management
+- Systemd service file for Linux server auto-start on reboot
+- README with setup, configuration, and deployment instructions
+- All environment variable documentation
+
+---
+
+## WHO IT'S FOR
+
+- **Entrepreneurs** looking to launch a niche phone chat line or party line business with no prior telephony experience
+- **Adult entertainment operators** who want a turnkey, white-label platform ready to brand and go live
+- **Developers** building a bespoke phone dating or voice community product for a client
+- **Existing chat line businesses** looking to replace outdated or costly legacy systems with a modern, self-hosted platform
+- **Digital marketers** who want the built-in SEO infrastructure to rank local city pages and drive organic call traffic
+
+---
+
 ## LONG DESCRIPTION
 
 ### What Is Phone Booth?
