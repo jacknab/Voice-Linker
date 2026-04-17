@@ -85,14 +85,45 @@ Whether you're building a gay chat line, a singles party line, a dating-by-voice
 - Simulates realistic caller behavior — joins browsing queue, accepts invitations, goes offline
 - Fully configurable — set how many virtual callers are online at any time
 
-#### SEO Web Layer
-- Server-side rendered (SSR) landing page with IP-based geolocation
-- Every visitor automatically sees the local phone number for their nearest region
-- Automatic generation of SEO-optimized regional pages (e.g., `/regions/denver`) for every active region
-- Programmatic sitemap and robots.txt generation
-- Rich structured data — WebSite, Organization, Service, HowTo, FAQPage schema markup
-- Open Graph and Twitter Card tags for social sharing
-- Member web portal — register, link phone number, view balance, purchase membership online
+#### Public Website — Auto-Populates as You Add Regions
+
+The platform includes a fully built, SEO-optimized public website that **requires zero manual content work**. Every time you add a new region (local phone number) in the admin panel, the website updates itself automatically — no developer needed.
+
+**How it works:**
+- Add a region in the admin panel (name, phone number, zip code)
+- The server instantly generates a fully written, SEO-optimized city landing page at `/regions/your-city`
+- The homepage updates its local number grid automatically
+- The sitemap and robots.txt regenerate to include the new page
+
+**What each auto-generated city page includes:**
+- A unique, keyword-rich title and meta description specific to that city
+- A local H1 headline with the city name and phone number
+- Multiple long-form content sections (Why use the service, How it works, Privacy, Community) — all dynamically written with the city name woven throughout
+- A step-by-step "How To" guide
+- A full FAQ section — 6+ questions, all city-specific
+- Structured data markup (FAQPage, HowTo, Service, LocalBusiness schemas) for Google rich results
+- Internal links to other regional pages and back to the homepage
+- The city's local access phone number displayed prominently as a clickable `tel:` link
+
+**Smart homepage geolocation:**
+- Every visitor to the homepage is silently geolocated by IP address on the server before the page is sent
+- The nearest region's phone number is injected into the HTML server-side — the visitor sees their local number before the page even finishes loading
+- No JavaScript required for this — it's fully server-side rendered (SSR) so it works for all users including search engine crawlers
+
+**SEO infrastructure included:**
+- Auto-generated XML sitemap listing every regional page
+- robots.txt with correct crawl directives
+- Canonical tags on every page
+- Open Graph and Twitter Card meta tags (with og:image) for rich social sharing previews
+- Structured data — WebSite, Organization, Service, HowTo, FAQPage, and LocalBusiness schemas
+- Hero image preloaded for fast Largest Contentful Paint (Core Web Vitals)
+- Per-request Cache-Control headers — each visitor gets their own personalised response, never a cached version meant for someone else
+
+**Member web portal (included):**
+- Public registration and login
+- Link a phone number to a web account
+- View remaining minutes and call history
+- Purchase membership plans directly online via Stripe or PayPal
 
 ---
 
