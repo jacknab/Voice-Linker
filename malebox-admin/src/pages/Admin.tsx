@@ -12,6 +12,7 @@ import {
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
   BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send, Headphones,
+  FileText, ExternalLink,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import {
@@ -74,7 +75,7 @@ interface AudioHealth {
   };
 }
 
-type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
+type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "seo-pages" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
 
 interface FlaggedItem {
   id: string;
@@ -6951,6 +6952,124 @@ function TranscriptionsTab() {
   );
 }
 
+// ── SeoPagesTab ───────────────────────────────────────────────────────────────
+interface SeoPage {
+  slug: string;
+  url: string;
+  sizeBytes: number;
+  builtAt: string;
+}
+
+function SeoPagesTab() {
+  const { toast } = useToast();
+
+  const { data, isLoading, refetch } = useQuery<{ pages: SeoPage[]; total: number }>({
+    queryKey: ["/api/admin/seo-pages"],
+  });
+
+  const rebuildMutation = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/admin/rebuild-seo-pages"),
+    onSuccess: (res: any) => {
+      toast({ title: "SEO pages rebuilt", description: `${res?.pagesBuilt ?? 0} page(s) generated + sitemap updated` });
+      refetch();
+    },
+    onError: () => toast({ title: "Failed to rebuild SEO pages", variant: "destructive" }),
+  });
+
+  const pages = data?.pages ?? [];
+
+  function formatSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleString();
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold text-gray-800">Generated SEO Pages</h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            One page is auto-generated per active region. Pages are served at <code className="bg-gray-100 px-1 rounded">/regions/&#123;slug&#125;</code>
+          </p>
+        </div>
+        <button
+          data-testid="btn-seo-rebuild-all"
+          onClick={() => rebuildMutation.mutate()}
+          disabled={rebuildMutation.isPending}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-xs font-semibold disabled:opacity-50"
+        >
+          <RefreshCw size={12} className={rebuildMutation.isPending ? "animate-spin" : ""} />
+          {rebuildMutation.isPending ? "Building..." : "Rebuild All Pages"}
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-gray-400 text-sm py-8 justify-center">
+          <Loader2 size={16} className="animate-spin" /> Loading pages...
+        </div>
+      ) : pages.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <FileText size={32} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">No pages generated yet</p>
+          <p className="text-xs mt-1">Add active regions and click "Rebuild All Pages" to generate city landing pages.</p>
+        </div>
+      ) : (
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
+                <th className="px-4 py-3 text-left font-semibold">Slug / City</th>
+                <th className="px-4 py-3 text-left font-semibold hidden sm:table-cell">URL</th>
+                <th className="px-4 py-3 text-right font-semibold hidden md:table-cell">Size</th>
+                <th className="px-4 py-3 text-right font-semibold">Last Built</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {pages.map((page) => (
+                <tr key={page.slug} className="hover:bg-gray-50 transition-colors" data-testid={`row-seo-page-${page.slug}`}>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800">
+                    /{page.slug}
+                  </td>
+                  <td className="px-4 py-3 hidden sm:table-cell">
+                    <a
+                      href={page.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-blue-600 hover:underline text-xs font-mono truncate max-w-xs"
+                      data-testid={`link-seo-page-${page.slug}`}
+                    >
+                      {page.url}
+                      <ExternalLink size={10} className="shrink-0" />
+                    </a>
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-500 text-xs hidden md:table-cell font-mono">
+                    {formatSize(page.sizeBytes)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-400 text-xs">
+                    {formatDate(page.builtAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-50 border-t border-gray-200">
+                <td colSpan={4} className="px-4 py-2 text-xs text-gray-500 font-mono">
+                  {pages.length} page{pages.length !== 1 ? "s" : ""} on disk
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boolean }[] = [
   // ── Main
   { id: "dashboard",      label: "Dashboard",        icon: <LayoutDashboard size={15} /> },
@@ -6963,6 +7082,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "cards",          label: "Member Cards",      icon: <CreditCard size={15} /> },
   { id: "audio-gen",      label: "Audio Gen",         icon: <Volume2 size={15} /> },
   { id: "regions",        label: "Regions",           icon: <Globe size={15} /> },
+  { id: "seo-pages",      label: "SEO Pages",         icon: <FileText size={15} /> },
   { id: "announcements",  label: "Announcements",     icon: <Megaphone size={15} /> },
   // ── System Settings
   { id: "analytics",      label: "Analytics",         icon: <BarChart2 size={15} />,  dividerBefore: true },
@@ -7548,6 +7668,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "voice-profiles"  && <VoiceProfilesTab key={String(showUpload)} />}
           {activeTab === "transcriptions"  && <TranscriptionsTab />}
           {activeTab === "regions"         && <RegionsTab />}
+          {activeTab === "seo-pages"      && <SeoPagesTab />}
           {activeTab === "memberships"    && <MembershipsTab />}
           {activeTab === "cards"          && <MembershipCardsTab />}
           {activeTab === "audio-gen"      && <TTSTab />}

@@ -2146,6 +2146,41 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: list all generated SEO pages
+  app.get("/api/admin/seo-pages", async (_req, res) => {
+    try {
+      const fs = await import("fs");
+      const pathMod = await import("path");
+      const regionsDir = pathMod.join(process.cwd(), "client/public/regions");
+      const siteUrl = process.env.SITE_URL?.replace(/\/$/, "")
+        ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "example.com"}`;
+
+      const pages: { slug: string; url: string; sizeBytes: number; builtAt: string }[] = [];
+
+      if (fs.existsSync(regionsDir)) {
+        const entries = fs.readdirSync(regionsDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const filePath = pathMod.join(regionsDir, entry.name, "index.html");
+          if (!fs.existsSync(filePath)) continue;
+          const stat = fs.statSync(filePath);
+          pages.push({
+            slug: entry.name,
+            url: `${siteUrl}/regions/${entry.name}`,
+            sizeBytes: stat.size,
+            builtAt: stat.mtime.toISOString(),
+          });
+        }
+      }
+
+      pages.sort((a, b) => a.slug.localeCompare(b.slug));
+      res.json({ pages, total: pages.length });
+    } catch (e) {
+      console.error("[seo] list-seo-pages failed:", e);
+      res.status(500).json({ message: "Failed to list SEO pages" });
+    }
+  });
+
   app.post("/api/regions", async (req, res) => {
     try {
       const { name, slug, stateAbbreviation, phoneNumber, timezone, maxCapacity, description, isActive, linkedRegionIds, defaultZipCode } = req.body;
