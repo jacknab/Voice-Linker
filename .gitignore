@@ -10,3 +10,8 @@ vite.config.ts.*
 
 # Generated/uploaded audio files — managed per-server, not in git
 uploads/
+
+# Auto-generated SEO files — written at runtime per-server, not in git
+client/public/sitemap.xml
+client/public/robots.txt
+client/public/regions/

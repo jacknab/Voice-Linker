@@ -14,24 +14,39 @@ success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 info "App directory: $APP_DIR"
 
-# ── 1. Pull latest code ───────────────────────────────────────────────────────
+# ── 1. Discard local changes to server-generated files ───────────────────────
+# These files are auto-generated at runtime (SEO pages, sitemap, robots.txt).
+# They change on every server restart so they always conflict with git pull.
+info "Resetting auto-generated files before pull..."
+GENERATED_FILES=(
+  "client/public/sitemap.xml"
+  "client/public/robots.txt"
+  "client/public/regions/index.html"
+)
+for f in "${GENERATED_FILES[@]}"; do
+  if git ls-files --error-unmatch "$APP_DIR/$f" &>/dev/null 2>&1; then
+    git checkout -- "$APP_DIR/$f" 2>/dev/null && info "  Reset: $f" || true
+  fi
+done
+success "Generated files reset."
+
+# ── 2. Pull latest code ───────────────────────────────────────────────────────
 info "Pulling latest code from GitHub..."
 cd "$APP_DIR"
-git stash 2>/dev/null || true
 git pull origin main
 success "Code updated."
 
-# ── 2. Install dependencies ───────────────────────────────────────────────────
+# ── 3. Install dependencies ───────────────────────────────────────────────────
 info "Installing dependencies..."
 npm install --legacy-peer-deps
 success "Dependencies installed."
 
-# ── 3. Build ──────────────────────────────────────────────────────────────────
+# ── 4. Build ──────────────────────────────────────────────────────────────────
 info "Building production bundle..."
 npm run build
 success "Build complete."
 
-# ── 4. Force-reload PM2 with fresh config ────────────────────────────────────
+# ── 5. Force-reload PM2 with fresh config ────────────────────────────────────
 # ecosystem.config.cjs now uses __dirname so paths are always correct.
 # We delete + re-start so PM2 picks up the config fresh every time.
 info "Restarting PM2..."
