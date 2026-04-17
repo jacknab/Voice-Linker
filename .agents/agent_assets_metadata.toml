@@ -143,3 +143,9 @@ id = "NC_y-qjyFBoLiX1uYKpWw"
 uri = "file://docs/admin-setup.md"
 type = "text"
 title = "Admin Console — Setup Guide (Updated)"
+
+[[outputs]]
+id = "jly9JuSeSfO9jZUkFlgZ-"
+uri = "file://codecanyon-listing.md"
+type = "text"
+title = "CodeCanyon Listing — Phone Booth IVR Platform"
