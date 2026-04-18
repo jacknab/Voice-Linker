@@ -5045,8 +5045,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
         const retryCount = parseInt((req.query?.browseRetry as string) ?? "0", 10);
         if (state.queue.length === 0) {
+          // Clear stale state so the next visit rebuilds the queue fresh from the DB.
+          // This is critical for two cases:
+          //   1. All callers were blocked mid-session — after unblocking, the queue
+          //      must be rebuilt with the now-visible profiles rather than reusing
+          //      the old empty queue that never expires.
+          //   2. Seeds were temporarily in their inactive phase — a fresh rebuild
+          //      on each retry naturally picks them back up once they go active again.
+          callerBrowseState.delete(callSid);
           if (retryCount < 2) {
-            // Seeds may be temporarily in their inactive phase — wait a moment and retry
             twiml.pause({ length: 3 });
             twiml.redirect(`/voice/browse-profiles?browseRetry=${retryCount + 1}`);
           } else {
@@ -5233,6 +5240,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
 
           const profile = state.queue[state.index];
+
+          // Safety guard: if this profile was blocked after the queue was built
+          // (e.g. blocked via the message inbox in the same session), skip it now
+          // rather than playing their greeting audio.
+          if (await storage.isUserBlocked(user.id, profile.userId)) {
+            removeFromBrowseQueue(callSid, profile.userId);
+            twiml.redirect("/voice/browse-profiles");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+
           const prevIndex = state.index;
 
           // Advance index, wrapping at end of queue — track first wrap
