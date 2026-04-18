@@ -5083,14 +5083,37 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           //   • Callers who were blocked after the queue was built
           //   • Callers who were unblocked (empty queue clears → state is deleted
           //     → next visit rebuilds with newly visible profiles)
-          // getAllActiveProfiles applies the block filter and only returns callers
-          // currently in activeCalls, so any stale entry is correctly removed.
+          //
+          // Profiles are fetched per-region using the same region scope that was
+          // used when the queue was originally built — home region + any linked
+          // regions the caller explicitly opted into.  This means a Denver caller
+          // only sees Denver (and opted-in) profiles; no cross-region leakage.
+          // The same fetched results are reused for new-caller detection below,
+          // so the total number of DB calls is identical to the old approach.
+
+          const reconActiveIds = new Set<string>();
+
+          // Home region
+          let currentLocalProfiles: Awaited<ReturnType<typeof storage.getAllActiveProfiles>> = [];
+          if (regionId) {
+            currentLocalProfiles = await storage.getAllActiveProfiles(user.id, regionId, browseCallerGender, browseSiteCategory);
+            for (const p of currentLocalProfiles) reconActiveIds.add(p.userId);
+          }
+
+          // Each linked region the caller has opted into
+          const linkedSnapshotResults: Awaited<ReturnType<typeof storage.getAllActiveProfiles>>[] = [];
+          for (const snap of state.linkedRegionSnapshots) {
+            const snapProfiles = await storage.getAllActiveProfiles(user.id, snap.regionId, browseCallerGender, browseSiteCategory);
+            linkedSnapshotResults.push(snapProfiles);
+            for (const p of snapProfiles) reconActiveIds.add(p.userId);
+          }
+
+          // Prune offline/blocked callers.  The AI imposter entry (bust-game) has
+          // no real activeCalls row and must never be removed by reconciliation.
           {
-            const allActiveNow = await storage.getAllActiveProfiles(user.id, undefined, browseCallerGender, browseSiteCategory);
-            const allActiveIds = new Set(allActiveNow.map(p => p.userId));
             const AI_ID = engagementEngine.BUST_GAME_AI_USER_ID;
             const queueBefore = state.queue.length;
-            state.queue = state.queue.filter(p => allActiveIds.has(p.userId) || p.userId === AI_ID);
+            state.queue = state.queue.filter(p => reconActiveIds.has(p.userId) || p.userId === AI_ID);
             if (state.index >= state.queue.length) state.index = 0;
             if (state.queue.length < queueBefore) {
               console.log(`[voice] browse-profiles: reconciled — pruned ${queueBefore - state.queue.length} offline/blocked caller(s), remaining=${state.queue.length} for ${callSid}`);
@@ -5098,10 +5121,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
 
           // ── New caller alerts: home region ("close to you") + linked regions ("from [city]") ──
+          // Reuse the profiles already fetched above — no extra DB calls needed.
+
           // Check for new callers in the home region first
           if (regionId) {
             const knownLocalIds = new Set([...state.localUserIds, ...state.announcedNewLocalIds]);
-            const currentLocalProfiles = await storage.getAllActiveProfiles(user.id, regionId);
             const newLocalCaller = currentLocalProfiles.find(p => !knownLocalIds.has(p.userId));
 
             if (newLocalCaller) {
@@ -5156,9 +5180,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
 
           // Check for new callers in each linked region ("new caller from [city]")
-          for (const snapshot of state.linkedRegionSnapshots) {
+          for (let snapIdx = 0; snapIdx < state.linkedRegionSnapshots.length; snapIdx++) {
+            const snapshot = state.linkedRegionSnapshots[snapIdx];
+            const currentLinkedProfiles = linkedSnapshotResults[snapIdx];
             const knownLinkedIds = new Set([...snapshot.knownUserIds, ...state.announcedLinkedCallerIds]);
-            const currentLinkedProfiles = await storage.getAllActiveProfiles(user.id, snapshot.regionId);
             const newLinkedCaller = currentLinkedProfiles.find(p => !knownLinkedIds.has(p.userId));
 
             if (newLinkedCaller) {
