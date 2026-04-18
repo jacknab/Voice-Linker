@@ -4426,6 +4426,24 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             }
           }
 
+          // ── Queue reconciliation: sync queue against current live state ─────────
+          // On every browse visit, fetch the full cross-region active+unblocked set
+          // and prune any queue entries that are no longer valid.  This handles:
+          //   • Callers who went offline since the queue was built
+          //   • Callers who were blocked after the queue was built
+          //   • Callers who were unblocked (empty queue clears → state is deleted
+          //     → next visit rebuilds with newly visible profiles)
+          {
+            const allActiveNow = await storage.getAllActiveProfiles(user.id, undefined, browseCallerGender, browseSiteCategory);
+            const allActiveIds = new Set(allActiveNow.map(p => p.userId));
+            const queueBefore = state.queue.length;
+            state.queue = state.queue.filter(p => allActiveIds.has(p.userId));
+            if (state.index >= state.queue.length) state.index = 0;
+            if (state.queue.length < queueBefore) {
+              console.log(`[voice] browse-profiles: reconciled — pruned ${queueBefore - state.queue.length} offline/blocked caller(s), remaining=${state.queue.length} for ${callSid}`);
+            }
+          }
+
           // ── New caller alerts: home region ("close to you") + linked regions ("from [city]") ──
           // Check for new callers in the home region first
           if (regionId) {
