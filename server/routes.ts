@@ -23,6 +23,7 @@ import { profiles } from "@shared/schema";
 import { eq, isNull, or } from "drizzle-orm";
 import { PROMPT_LIBRARY, ROGER_V3_TEXTS, GAME_AI_GREETING_SCRIPTS, GAME_AI_GREETING_COUNT } from "./engagementEngine";
 import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage, generateHomePage } from "./seoPageGenerator";
+import OpenAI from "openai";
 
 // ─── City Audio Helper ────────────────────────────────────────────────────────
 // Generates a shared ElevenLabs audio file for a region's city name so the
@@ -4097,6 +4098,147 @@ END OF KNOWLEDGE BASE
 
   // ─── Clean URLs for region SEO pages ──────────────────────────────────────
   // Serves /denver instead of /regions/denver.html
+  // ── AI SEO Page Generator ─────────────────────────────────────────────────
+  app.post("/api/admin/ai-seo-generate", async (req, res) => {
+    try {
+      const { topic, keyword, extraContext } = req.body as {
+        topic?: string;
+        keyword?: string;
+        extraContext?: string;
+      };
+
+      if (!topic || !keyword) {
+        return res.status(400).json({ message: "topic and keyword are required" });
+      }
+
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ message: "OPENAI_API_KEY is not configured" });
+      }
+
+      const openai = new OpenAI({ apiKey });
+
+      const siteSettings = await storage.getSiteSettings();
+      const siteName = siteSettings?.siteName ?? "Chat Line";
+
+      const systemPrompt = `You are an expert SEO content writer specializing in adult chat line services. 
+Your task is to generate a complete, self-contained HTML page that is highly optimized to rank on page 1 of Google.
+The HTML you produce must:
+- Be a full standalone HTML document (<!DOCTYPE html> through </html>)
+- Include all necessary <meta> tags: title, description, keywords, Open Graph, Twitter Card
+- Use proper H1, H2, H3 heading hierarchy with the target keyword naturally embedded
+- Include schema.org JSON-LD structured data (LocalBusiness or Service type)
+- Have a canonical <link> tag
+- Contain compelling, original body content of at least 600 words targeting the keyword
+- Include internal anchor links and a clear call-to-action section
+- Be mobile-friendly (include a viewport meta tag)
+- Use clean, semantic HTML5 with inline CSS for styling (use a professional dark theme with gold accents)
+- Include a FAQ section (minimum 5 questions) addressing user search intent
+- Include a "Benefits" or "Why Choose Us" section
+- Do NOT include external script or stylesheet links (fully self-contained)
+Return ONLY the raw HTML — no markdown fences, no explanation.`;
+
+      const userPrompt = `Site Name: ${siteName}
+Topic: ${topic}
+Primary Keyword: ${keyword}
+${extraContext ? `Additional Context: ${extraContext}` : ""}
+
+Generate a complete SEO-optimized HTML page for this chat line service targeting the keyword "${keyword}".`;
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 4000,
+      });
+
+      const html = completion.choices[0]?.message?.content ?? "";
+      if (!html) {
+        return res.status(500).json({ message: "OpenAI returned empty response" });
+      }
+
+      // Save the file to client/public/ai-seo/
+      const aiSeoDir = path.join(process.cwd(), "client", "public", "ai-seo");
+      if (!fs.existsSync(aiSeoDir)) fs.mkdirSync(aiSeoDir, { recursive: true });
+
+      // Create a slug from keyword
+      const slug = keyword.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const filename = `${slug}.html`;
+      const filePath = path.join(aiSeoDir, filename);
+      fs.writeFileSync(filePath, html, "utf8");
+
+      const siteUrl = process.env.SITE_URL?.replace(/\/$/, "")
+        ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "example.com"}`;
+
+      console.log(`[ai-seo] Generated page for keyword: ${keyword} -> ${filename}`);
+      res.json({ ok: true, html, slug, url: `${siteUrl}/ai-seo/${filename}` });
+    } catch (e: any) {
+      console.error("[ai-seo] Generation failed:", e);
+      res.status(500).json({ message: e?.message ?? "Failed to generate page" });
+    }
+  });
+
+  // List all AI-generated SEO pages
+  app.get("/api/admin/ai-seo-pages", async (_req, res) => {
+    try {
+      const aiSeoDir = path.join(process.cwd(), "client", "public", "ai-seo");
+      const siteUrl = process.env.SITE_URL?.replace(/\/$/, "")
+        ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "example.com"}`;
+
+      if (!fs.existsSync(aiSeoDir)) {
+        return res.json({ pages: [] });
+      }
+
+      const files = fs.readdirSync(aiSeoDir).filter(f => f.endsWith(".html"));
+      const pages = files.map(f => {
+        const stat = fs.statSync(path.join(aiSeoDir, f));
+        const slug = f.replace(".html", "");
+        return {
+          filename: f,
+          slug,
+          url: `${siteUrl}/ai-seo/${f}`,
+          sizeBytes: stat.size,
+          builtAt: stat.mtime.toISOString(),
+        };
+      });
+
+      pages.sort((a, b) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime());
+      res.json({ pages });
+    } catch (e: any) {
+      console.error("[ai-seo] list pages failed:", e);
+      res.status(500).json({ message: "Failed to list AI SEO pages" });
+    }
+  });
+
+  // Delete an AI-generated SEO page
+  app.delete("/api/admin/ai-seo-pages/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const safeSlug = slug.replace(/[^a-z0-9-]/g, "");
+      const filePath = path.join(process.cwd(), "client", "public", "ai-seo", `${safeSlug}.html`);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ message: "Failed to delete page" });
+    }
+  });
+
+  // Serve AI SEO pages
+  app.get("/ai-seo/:filename", (req, res, next) => {
+    const { filename } = req.params;
+    if (!filename.endsWith(".html")) return next();
+    const safeName = filename.replace(/[^a-z0-9.-]/g, "");
+    const filePath = path.join(process.cwd(), "client", "public", "ai-seo", safeName);
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      next();
+    }
+  });
+
   // Matches any single-segment slug that hasn't been handled by a prior route.
   const REGIONS_DIR = path.join(process.cwd(), "client", "public", "regions");
   app.get(/^\/([a-z0-9][a-z0-9-]*)$/, (req, res, next) => {

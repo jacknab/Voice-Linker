@@ -74,7 +74,7 @@ interface AudioHealth {
   };
 }
 
-type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "seo-pages" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
+type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "seo-pages" | "ai-seo-gen" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
 
 interface FlaggedItem {
   id: string;
@@ -8219,6 +8219,240 @@ function TranscriptionsTab() {
   );
 }
 
+// ── AiSeoGenTab ───────────────────────────────────────────────────────────────
+interface AiSeoGeneratedPage {
+  filename: string;
+  slug: string;
+  url: string;
+  sizeBytes: number;
+  builtAt: string;
+}
+
+function AiSeoGenTab() {
+  const { toast } = useToast();
+  const [topic, setTopic] = useState("");
+  const [keyword, setKeyword] = useState("");
+  const [extraContext, setExtraContext] = useState("");
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewSlug, setPreviewSlug] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const { data: pagesData, refetch: refetchPages, isLoading: pagesLoading } = useQuery<{ pages: AiSeoGeneratedPage[] }>({
+    queryKey: ["/api/admin/ai-seo-pages"],
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/ai-seo-generate", { topic, keyword, extraContext });
+      return res as { ok: boolean; html: string; slug: string; url: string };
+    },
+    onSuccess: (data) => {
+      toast({ title: "Page generated!", description: `Saved as /ai-seo/${data.slug}.html` });
+      setPreviewHtml(data.html);
+      setPreviewSlug(data.slug);
+      setPreviewUrl(data.url);
+      refetchPages();
+    },
+    onError: (err: any) => {
+      toast({ title: "Generation failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (slug: string) => apiRequest("DELETE", `/api/admin/ai-seo-pages/${slug}`),
+    onSuccess: () => {
+      toast({ title: "Page deleted" });
+      if (previewSlug && deleteMutation.variables === previewSlug) {
+        setPreviewHtml(null);
+        setPreviewSlug(null);
+        setPreviewUrl(null);
+      }
+      refetchPages();
+    },
+    onError: () => toast({ title: "Failed to delete page", variant: "destructive" }),
+  });
+
+  const pages = pagesData?.pages ?? [];
+
+  function formatSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-bold text-gray-800">AI SEO Page Generator</h2>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Use GPT-4 to generate fully optimized, standalone HTML landing pages designed to rank on page 1 of Google.
+        </p>
+      </div>
+
+      {/* Generator Form */}
+      <div className="border border-gray-200 rounded-xl p-5 bg-gradient-to-br from-blue-50 to-indigo-50 space-y-4">
+        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <Wand2 size={14} className="text-indigo-600" />
+          Generate New Page
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Topic *</label>
+            <input
+              data-testid="input-ai-seo-topic"
+              type="text"
+              value={topic}
+              onChange={e => setTopic(e.target.value)}
+              placeholder="e.g. Local Chat Lines in Denver"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+            <p className="text-[10px] text-gray-400">The subject / theme of the page</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Primary Keyword *</label>
+            <input
+              data-testid="input-ai-seo-keyword"
+              type="text"
+              value={keyword}
+              onChange={e => setKeyword(e.target.value)}
+              placeholder="e.g. chat line Denver"
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            />
+            <p className="text-[10px] text-gray-400">The exact keyword to rank for on Google</p>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Extra Context <span className="font-normal text-gray-400">(optional)</span></label>
+          <textarea
+            data-testid="input-ai-seo-extra"
+            value={extraContext}
+            onChange={e => setExtraContext(e.target.value)}
+            placeholder="e.g. Target audience: men 25-45. Emphasize free trial. Phone number: 800-555-1234."
+            rows={3}
+            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none"
+          />
+          <p className="text-[10px] text-gray-400">Any additional details for the AI: audience, phone number, city, offers, etc.</p>
+        </div>
+        <button
+          data-testid="btn-ai-seo-generate"
+          onClick={() => generateMutation.mutate()}
+          disabled={generateMutation.isPending || !topic.trim() || !keyword.trim()}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {generateMutation.isPending ? (
+            <><Loader2 size={14} className="animate-spin" /> Generating with GPT-4… (may take 15–30s)</>
+          ) : (
+            <><Wand2 size={14} /> Generate SEO Page</>
+          )}
+        </button>
+      </div>
+
+      {/* Preview */}
+      {previewHtml && (
+        <div className="border border-indigo-200 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 border-b border-indigo-200">
+            <span className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
+              <FileText size={12} /> Preview — <span className="font-mono">/ai-seo/{previewSlug}.html</span>
+            </span>
+            <div className="flex items-center gap-2">
+              {previewUrl && (
+                <a
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="link-ai-seo-preview"
+                  className="flex items-center gap-1 text-xs text-indigo-600 hover:underline font-semibold"
+                >
+                  Open Page <ExternalLink size={10} />
+                </a>
+              )}
+              <button
+                onClick={() => setPreviewHtml(null)}
+                className="text-gray-400 hover:text-gray-600 text-xs"
+                data-testid="btn-close-preview"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </div>
+          <iframe
+            data-testid="iframe-ai-seo-preview"
+            srcDoc={previewHtml}
+            className="w-full h-[500px] bg-white"
+            sandbox="allow-same-origin"
+            title="AI SEO Page Preview"
+          />
+        </div>
+      )}
+
+      {/* Generated Pages List */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Generated Pages ({pages.length})</h3>
+        {pagesLoading ? (
+          <div className="flex items-center gap-2 text-gray-400 text-sm py-6 justify-center">
+            <Loader2 size={14} className="animate-spin" /> Loading…
+          </div>
+        ) : pages.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+            <Wand2 size={28} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm font-medium">No pages generated yet</p>
+            <p className="text-xs mt-1">Fill in the form above and click Generate to create your first AI SEO page.</p>
+          </div>
+        ) : (
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
+                  <th className="px-4 py-3 text-left font-semibold">Slug / File</th>
+                  <th className="px-4 py-3 text-left font-semibold hidden sm:table-cell">URL</th>
+                  <th className="px-4 py-3 text-right font-semibold hidden md:table-cell">Size</th>
+                  <th className="px-4 py-3 text-right font-semibold">Generated</th>
+                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pages.map((page) => (
+                  <tr key={page.slug} className="hover:bg-gray-50 transition-colors" data-testid={`row-ai-seo-${page.slug}`}>
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800">{page.filename}</td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
+                      <a
+                        href={page.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-blue-600 hover:underline text-xs font-mono truncate max-w-xs"
+                        data-testid={`link-ai-seo-${page.slug}`}
+                      >
+                        {page.url} <ExternalLink size={10} className="shrink-0" />
+                      </a>
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-500 text-xs hidden md:table-cell font-mono">
+                      {formatSize(page.sizeBytes)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-400 text-xs">
+                      {new Date(page.builtAt).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        data-testid={`btn-delete-ai-seo-${page.slug}`}
+                        onClick={() => deleteMutation.mutate(page.slug)}
+                        disabled={deleteMutation.isPending}
+                        className="text-red-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                        title="Delete page"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── SeoPagesTab ───────────────────────────────────────────────────────────────
 interface SeoPage {
   slug: string;
@@ -8350,6 +8584,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "audio-gen",      label: "Audio Gen",         icon: <Volume2 size={15} /> },
   { id: "regions",        label: "Regions",           icon: <Globe size={15} /> },
   { id: "seo-pages",      label: "SEO Pages",         icon: <FileText size={15} /> },
+  { id: "ai-seo-gen",     label: "AI SEO Generator",  icon: <Wand2 size={15} /> },
   { id: "announcements",  label: "Announcements",     icon: <Megaphone size={15} /> },
   // ── System Settings
   { id: "analytics",      label: "Analytics",         icon: <BarChart2 size={15} />,  dividerBefore: true },
@@ -9008,6 +9243,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "transcriptions"  && <TranscriptionsTab />}
           {activeTab === "regions"         && <RegionsTab />}
           {activeTab === "seo-pages"      && <SeoPagesTab />}
+          {activeTab === "ai-seo-gen"     && <AiSeoGenTab />}
           {activeTab === "memberships"    && <MembershipsTab />}
           {activeTab === "cards"          && <MembershipCardsTab />}
           {activeTab === "audio-gen"      && <TTSTab />}
