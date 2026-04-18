@@ -197,43 +197,12 @@ interface CallerBrowseState {
   windowAnnouncementsUsed: number;
   callerCountAnnounced: boolean; // true once the caller count has been played this session
 }
-const callerBrowseState = new Map<string, CallerBrowseState>();
 
 // Probability (0–1) that a newly-detected caller triggers an audible announcement.
 // When the roll fails the caller is still silently queued so they are eventually heard,
 // but no "new caller closest to you" / "new caller from [city]" interrupt fires.
 // Keeping this below 1.0 prevents the prompt from feeling routine.
 const NEW_CALLER_ANNOUNCE_PROBABILITY = 0.1;
-
-// Remove a specific userId from the browse queue for a given call session
-function removeFromBrowseQueue(callSid: string, userId: string): void {
-  const state = callerBrowseState.get(callSid);
-  if (!state) return;
-  const removedIndexes: number[] = [];
-  state.queue = state.queue.filter((p, idx) => {
-    if (p.userId === userId) {
-      removedIndexes.push(idx);
-      return false;
-    }
-    return true;
-  });
-  if (removedIndexes.length === 0) return;
-  // Keep the index pointing at the next unplayed entry
-  const removedBeforeIndex = removedIndexes.filter(idx => idx < state.index).length;
-  if (removedBeforeIndex > 0) state.index = Math.max(0, state.index - removedBeforeIndex);
-  if (state.index >= state.queue.length) state.index = 0;
-  if (state.lastPlayedIndex !== null) {
-    const removedBeforeLastPlayed = removedIndexes.filter(idx => idx < state.lastPlayedIndex!).length;
-    const removedLastPlayed = removedIndexes.includes(state.lastPlayedIndex);
-    state.lastPlayedIndex = removedLastPlayed
-      ? null
-      : Math.max(0, state.lastPlayedIndex - removedBeforeLastPlayed);
-  }
-  console.log(`[voice] removeFromBrowseQueue: removed ${removedIndexes.length} entr${removedIndexes.length === 1 ? "y" : "ies"} for userId=${userId} from queue for callSid=${callSid}, remaining=${state.queue.length}`);
-}
-
-// Maps CallSid → regionId for the duration of a call
-const callRegion = new Map<string, string>();
 
 // ─── Mailbox Category Browse State ─────────────────────────────────────────
 interface CategoryBrowseState {
@@ -864,8 +833,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } catch (err) {
         console.error(`[status] Error removing active call ${callSid}:`, err);
       }
-      // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, region mapping, membership override, gender selection, and engagement state
-      callerBrowseState.delete(callSid);
+      // Clean up per-call payment/session, name recording, greeting draft, time flags, membership override, gender selection, and engagement state
       engagementEngine.cleanupEngagementState(callSid);
       categoryBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
@@ -873,7 +841,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       pendingGreetingDrafts.delete(callSid);
       callTimeAnnounced.delete(callSid);
       callWarningShown.delete(callSid);
-      callRegion.delete(callSid);
       callMembershipOverride.delete(callSid);
       callCardOverride.delete(callSid);
       pendingMembershipEntries.delete(callSid);
@@ -903,7 +870,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   });
 
   // ─── 1. Initial Webhook: POST /voice ──────────────────────────────────────
-  app.post("/voice", (req, res) => {
+  app.post("/voice", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string | undefined;
     const callSid    = req.body?.CallSid as string | undefined;
@@ -916,31 +883,31 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       return res.send(twiml.toString());
     }
 
-    // ── All DB work is fire-and-forget — nothing blocks the TwiML response. ──
-    // The greeting + disclaimer take ~8-10 s for Twilio to play, giving every
-    // async operation below far more than enough time to complete before
-    // /voice/entry is hit.
-    getSiteSettingsCached().catch(() => {});            // warms playPrompt cache for downstream routes
-    storage.removeStaleActiveCalls(20).catch(() => {}); // housekeeping
-    storage.logCall(callSid, fromNumber, calledTo, null).catch(() => {});
-    registerStatusCallback(callSid, req).catch(() => {});
+    try {
+      await getSiteSettingsCached();
+      storage.removeStaleActiveCalls(20).catch(() => {});
+      storage.logCall(callSid, fromNumber, calledTo, null).catch(() => {});
+      registerStatusCallback(callSid, req).catch(() => {});
 
-    // Register the active call in the background — /voice/entry is reached
-    // only after ~8-10 s of audio, so this always completes in time.
-    getOrCreateUser(fromNumber)
-      .then(user => {
-        storage.removeActiveCallsByUser(user.id).catch(() => {});
-        return storage.registerActiveCall(callSid, user.id);
-      })
-      .then(() => console.log(`[voice] registered active call ${callSid} from ${fromNumber}`))
-      .catch(err  => console.error(`[voice] active-call registration failed ${callSid}:`, err));
+      const user = await getOrCreateUser(fromNumber);
+      await storage.removeActiveCallsByUser(user.id);
+      await storage.registerActiveCall(callSid, user.id);
+      const caller = await storage.getCallerByCallSid(callSid);
+      console.log(`[voice] registered caller ${callSid} from ${fromNumber}`);
 
-    // Respond immediately — caller hears audio with zero DB-wait silence.
-    playPrompt(twiml, req, "system_greeting.mp3",
-      "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
-    playPrompt(twiml, req, "disclaimer.mp3",
-      "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
-    twiml.redirect("/voice/entry");
+      if (!caller?.greetingPlayed) {
+        playPrompt(twiml, req, "system_greeting.mp3",
+          "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
+        playPrompt(twiml, req, "disclaimer.mp3",
+          "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
+        await storage.markCallerGreetingPlayed(callSid);
+      }
+      twiml.redirect("/voice/entry");
+    } catch (err) {
+      console.error(`[voice] caller registration failed ${callSid}:`, err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
 
     res.type("text/xml");
     res.send(twiml.toString());
@@ -4792,7 +4759,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       const user = await getOrCreateUser(fromNumber);
-      const regionId = callRegion.get(callSid);
+      const regionId = (await storage.getCallerByCallSid(callSid))?.regionId ?? undefined;
 
       // Restricted users cannot go live
       if (user.accountStatus === "restricted") {
@@ -4857,7 +4824,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       await syncBilling(callSid);
 
       const user = await getOrCreateUser(fromNumber);
-      const regionId = callRegion.get(callSid);
+      const callerRecord = await storage.getCallerByCallSid(callSid);
+      const regionId = callerRecord?.regionId ?? undefined;
 
       // Resolve caller's location for proximity sorting
       const callerZip = user.zipCodeId ? await storage.getZipEntryById(user.zipCodeId) : null;
@@ -4890,18 +4858,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Treat them identically to an MM caller: no gender filter, MM profile pool.
       let browseSiteCategory = browseSiteConf.siteCategory ?? "MM";
       try {
-        const activeCall = await storage.getActiveCallByUserId(user.id);
-        if (activeCall?.seeking === "msm") {
+        if (callerRecord?.seeking === "msm") {
           browseCallerGender = null;
           browseSiteCategory = "MM";
         }
       } catch (_e) { /* non-fatal — fall through with defaults */ }
-      const hasActiveBrowseSession = callerBrowseState.has(callSid) &&
-        (callerBrowseState.get(callSid)!.queue.length > 0);
-      const availableCount = hasActiveBrowseSession
-        ? 1  // session active — bypass gate, queue handles empty state itself
-        : await storage.getAvailableProfileCount(user.id, regionId, browseCallerGender, browseSiteCategory);
-      console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, callerGender=${browseCallerGender}, availableProfiles=${availableCount}, sessionActive=${hasActiveBrowseSession}`);
+      const availableCount = await storage.getAvailableProfileCount(user.id, regionId, browseCallerGender, browseSiteCategory);
+      console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, callerGender=${browseCallerGender}, availableProfiles=${availableCount}`);
 
       if (availableCount === 0) {
         playPrompt(twiml, req, "no_profiles.mp3", "There are no profiles available right now. Please call back later.");
@@ -4970,9 +4933,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(msgGather, req, "message_options.mp3", "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound.");
         twiml.redirect("/voice/main-menu");
       } else {
-        // Build the queue once per caller, then advance position on each visit
-        let state = callerBrowseState.get(callSid);
-        if (!state) {
+        // Build the queue directly from the callers table on each visit.
+        let state: CallerBrowseState;
+        {
           const allProfiles = await storage.getAllActiveProfiles(user.id, regionId, browseCallerGender, browseSiteCategory);
 
           // Look up the caller's region name for announcements ("new caller closest to you" vs "new caller from [city]")
@@ -5035,7 +4998,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           // If empty (seeds may be in an inactive phase), skip caching so the
           // next browse-profiles visit rebuilds from the live activeCalls table.
           if (state.queue.length > 0) {
-            callerBrowseState.set(callSid, state);
+            const targetUserId = req.query?.targetUserId as string | undefined;
+            const afterUserId = req.query?.afterUserId as string | undefined;
+            const targetIndex = targetUserId ? state.queue.findIndex(p => p.userId === targetUserId) : -1;
+            const afterIndex = afterUserId ? state.queue.findIndex(p => p.userId === afterUserId) : -1;
+            if (targetIndex >= 0) {
+              state.index = targetIndex;
+            } else if (afterIndex >= 0) {
+              state.index = (afterIndex + 1) % state.queue.length;
+            }
           }
 
           // ── Initialize Roger Mood Engine for this session ────────────────────
@@ -5052,7 +5023,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           //      the old empty queue that never expires.
           //   2. Seeds were temporarily in their inactive phase — a fresh rebuild
           //      on each retry naturally picks them back up once they go active again.
-          callerBrowseState.delete(callSid);
           if (retryCount < 2) {
             twiml.pause({ length: 3 });
             twiml.redirect(`/voice/browse-profiles?browseRetry=${retryCount + 1}`);
@@ -5291,13 +5261,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           // (e.g. blocked via the message inbox in the same session), skip it now
           // rather than playing their greeting audio.
           if (await storage.isUserBlocked(user.id, profile.userId)) {
-            removeFromBrowseQueue(callSid, profile.userId);
             twiml.redirect("/voice/browse-profiles");
             res.type("text/xml");
             return res.send(twiml.toString());
           }
 
           const prevIndex = state.index;
+          const previousProfile = state.queue[(prevIndex - 1 + state.queue.length) % state.queue.length];
 
           // Advance index, wrapping at end of queue — track first wrap
           state.lastPlayedIndex = prevIndex;
@@ -5329,7 +5299,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one
           const profileGather = twiml.gather({
             numDigits: 1,
-            action: `/voice/handle-profile-menu?profileUserId=${profile.userId}`,
+            action: `/voice/handle-profile-menu?profileUserId=${profile.userId}&previousProfileUserId=${previousProfile?.userId ?? ""}`,
             timeout: 10,
           });
 
@@ -5440,10 +5410,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const digit = req.body?.Digits as string | undefined;
       const linkedRegionIds = ((req.query.linkedRegionIds as string) || "").split(",").filter(Boolean);
       const linkedRegionNames = ((req.query.linkedRegionNames as string) || "").split("||").map(n => n.trim()).filter(Boolean);
-      const callSid = req.body?.CallSid as string;
       const fromNumber = req.body?.From as string;
-
-      const state = callerBrowseState.get(callSid);
 
       // Determine if caller chose a specific linked region (digit 1, 2, or 3)
       // Any digit beyond the number of linked regions (or no digit) = start-over
@@ -5455,43 +5422,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         ? linkedRegionNames[chosenIndex]
         : null;
 
-      if (chosenRegionId && state) {
-        // Load profiles from the chosen linked region only
+      if (chosenRegionId) {
         const user = await getOrCreateUser(fromNumber);
         const linkedProfiles = await storage.getAllActiveProfiles(user.id, chosenRegionId);
 
         if (linkedProfiles.length > 0) {
-          // Replace the queue with the chosen region's profiles, each tagged with that region
-          state.queue = linkedProfiles.map(p => ({
-            userId: p.userId,
-            recordingUrl: p.recordingUrl,
-            nameRecordingUrl: p.nameRecordingUrl,
-            regionId: chosenRegionId,
-            regionName: chosenRegionName,
-            isPreExisting: true,
-          }));
-          state.index = 0;
-          state.hasWrapped = false;
-          state.linkedRegionLoaded = true;
           console.log(`[voice] handle-nearby-callers: loaded ${linkedProfiles.length} profiles from "${chosenRegionName}" (regionId=${chosenRegionId})`);
-          // Announce the chosen city by name via TTS (region-specific — can't use a static prompt)
           twiml.say(`Now playing callers from ${chosenRegionName}.`);
         } else {
-          // No callers online in that region — restart local queue
-          state.index = 0;
-          state.linkedRegionLoaded = true;
-          state.hasWrapped = false;
           playPrompt(twiml, req, "nearby_callers_none.mp3",
             `There are no callers online in ${chosenRegionName ?? "that area"} right now. Starting your area over.`);
         }
         twiml.redirect("/voice/browse-profiles");
       } else {
-        // Start-over digit, timeout, or unrecognised input → restart local queue from beginning
-        if (state) {
-          state.index = 0;
-          state.linkedRegionLoaded = true; // don't offer again this session
-          state.hasWrapped = false;
-        }
         twiml.redirect("/voice/browse-profiles");
       }
     } catch (err) {
@@ -5614,7 +5557,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           // Mark ALL unread messages from this sender as read so they don't surface again
           await storage.markAllMessagesReadFromSender(senderId, user.id);
           await storage.blockUser(user.id, senderId);
-          removeFromBrowseQueue(callSid, senderId);
           console.log(`[voice] handle-message-menu: userId=${user.id} blocked senderId=${senderId}`);
           runBlockAutoChecks(senderId).catch(console.error);
         }
@@ -5729,7 +5671,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (profileUserId && engagementEngine.isGameTarget(callSid2, profileUserId)) {
           engagementEngine.markGameTargetPassed(callSid2);
         }
-        twiml.redirect("/voice/browse-profiles");
+        twiml.redirect(`/voice/browse-profiles?afterUserId=${encodeURIComponent(profileUserId)}`);
       } else if (digit === "3") {
         // ── Live 1-on-1 Connect ─────────────────────────────────────────────
         const fromNumber = req.body?.From as string;
@@ -5816,11 +5758,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else if (digit === "4") {
         // ── Block this caller ───────────────────────────────────────────────
         const fromNumber = req.body?.From as string;
-        const callSid = req.body?.CallSid as string;
         if (fromNumber && profileUserId) {
           const user = await getOrCreateUser(fromNumber);
           await storage.blockUser(user.id, profileUserId);
-          removeFromBrowseQueue(callSid, profileUserId);
           console.log(`[voice] handle-profile-menu: userId=${user.id} blocked profileUserId=${profileUserId}`);
           runBlockAutoChecks(profileUserId).catch(console.error);
         }
@@ -5828,12 +5768,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "5") {
         // ── Play previous profile ───────────────────────────────────────────
-        const callSid = req.body?.CallSid as string;
-        const state = callerBrowseState.get(callSid);
-        if (state && state.lastPlayedIndex !== null && state.lastPlayedIndex > 0) {
-          state.index = state.lastPlayedIndex - 1;
-          console.log(`[voice] handle-profile-menu: press 5 → rewinding to index ${state.index} for callSid=${callSid}`);
-          twiml.redirect("/voice/browse-profiles");
+        const previousProfileUserId = req.query.previousProfileUserId as string | undefined;
+        if (previousProfileUserId) {
+          twiml.redirect(`/voice/browse-profiles?targetUserId=${encodeURIComponent(previousProfileUserId)}`);
         } else {
           playPrompt(twiml, req, "no_previous_profile.mp3", "There is no previous profile. Continuing to the next.");
           twiml.redirect("/voice/browse-profiles");
@@ -5854,7 +5791,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           // For seeded (admin-uploaded) profiles, fall back to the caller's
           // region default zip code so the location sounds local.
           if (!zipEntry && targetProfile?.isAdminUploaded && callSid) {
-            const regionId = callRegion.get(callSid);
+            const regionId = (await storage.getCallerByCallSid(callSid))?.regionId;
             if (regionId) {
               const region = await storage.getRegionById(regionId);
               if (region?.defaultZipCode) {
@@ -6311,7 +6248,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         pendingLiveInvites.delete(user.id);
         await storage.markAllMessagesReadFromSender(initiatorUserId, user.id);
         await storage.blockUser(user.id, initiatorUserId);
-        removeFromBrowseQueue(callSid, initiatorUserId);
         console.log(`[live-connect] handle-live-invite: userId=${user.id} blocked initiatorUserId=${initiatorUserId}`);
         runBlockAutoChecks(initiatorUserId).catch(console.error);
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
@@ -7218,30 +7154,24 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      // Tag this call with its region for the duration of the session
-      callRegion.set(callSid, region.id);
-
-      // ── All user/call DB work is fire-and-forget — nothing blocks the response. ──
-      // Greeting + disclaimer take ~8-10 s to play, giving all async ops time to
-      // complete before /voice/entry is reached.
       storage.removeStaleActiveCalls(20).catch(() => {});
       storage.logCall(callSid, fromNumber, region.phoneNumber, region.id).catch(() => {});
       registerStatusCallback(callSid, req).catch(() => {});
 
       const regionId = region.id;
-      getOrCreateUser(fromNumber)
-        .then(user => {
-          storage.removeActiveCallsByUser(user.id).catch(() => {});
-          return storage.registerActiveCall(callSid, user.id, regionId);
-        })
-        .then(() => console.log(`[voice] [${slug}] registered active call ${callSid} from ${fromNumber}`))
-        .catch(err  => console.error(`[voice] [${slug}] active-call registration failed ${callSid}:`, err));
+      const user = await getOrCreateUser(fromNumber);
+      await storage.removeActiveCallsByUser(user.id);
+      await storage.registerActiveCall(callSid, user.id, regionId);
+      const caller = await storage.getCallerByCallSid(callSid);
+      console.log(`[voice] [${slug}] registered caller ${callSid} from ${fromNumber}`);
 
-      // Respond immediately — no user-lookup delay before audio starts.
-      playPrompt(twiml, req, "system_greeting.mp3",
-        "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
-      playPrompt(twiml, req, "disclaimer.mp3",
-        "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
+      if (!caller?.greetingPlayed) {
+        playPrompt(twiml, req, "system_greeting.mp3",
+          "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
+        playPrompt(twiml, req, "disclaimer.mp3",
+          "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
+        await storage.markCallerGreetingPlayed(callSid);
+      }
       // Hand off to the shared entry flow (account state detection + Roger greeting)
       twiml.redirect("/voice/entry");
     } catch (error) {

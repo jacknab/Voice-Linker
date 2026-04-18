@@ -20,6 +20,7 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - Production startup requires `SESSION_SECRET`; development may use the local fallback only.
 - Admin console: `/backstage` — pre-built into `dist/admin` on first dev startup. To force-rebuild after admin code changes, delete `dist/admin/` and restart the dev server.
 - ElevenLabs keys are normalized server-side before API calls; the VPS PM2 config also strips surrounding quotes/hidden characters from `.env` values to avoid false 401 invalid-key responses.
+- Real-time caller presence now uses the `callers` table as the database source of truth (`status`, `joined_at`, `last_ping`, `greeting_played`). Profile browsing queries this table for active callers ordered by join time, and block visibility is applied in the database query rather than against an already-cached queue.
 
 ## Roger Mood + Attention Drain Engine
 

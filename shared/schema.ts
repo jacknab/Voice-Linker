@@ -98,6 +98,28 @@ export const activeCalls = pgTable("active_calls", {
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
+export const callers = pgTable("callers", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  callSid: text("call_sid").notNull().unique(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  phoneNumber: text("phone_number").notNull(),
+  status: text("status").notNull().default("active"),
+  regionId: uuid("region_id").references(() => regions.id),
+  gender: text("gender"),
+  seeking: text("seeking"),
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+  lastPing: timestamp("last_ping").notNull().defaultNow(),
+  greetingPlayed: boolean("greeting_played").notNull().default(false),
+}, (table) => [
+  index("callers_active_joined_idx").on(table.status, table.joinedAt),
+  index("callers_user_status_idx").on(table.userId, table.status),
+  index("callers_region_status_idx").on(table.regionId, table.status),
+]);
+
+export const insertCallerSchema = createInsertSchema(callers).omit({ id: true, joinedAt: true, lastPing: true });
+export type Caller = typeof callers.$inferSelect;
+export type InsertCaller = z.infer<typeof insertCallerSchema>;
+
 // Persistent log of every inbound call — used for operator phone-number stats
 export const callLogs = pgTable("call_logs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -113,6 +135,7 @@ export const callLogs = pgTable("call_logs", {
 // Relations
 export const regionsRelations = relations(regions, ({ many }) => ({
   activeCalls: many(activeCalls),
+  callers: many(callers),
 }));
 
 export const zipCodesRelations = relations(zipCodes, ({ many }) => ({
@@ -131,6 +154,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   sentMessages: many(messages, { relationName: "sentMessages" }),
   receivedMessages: many(messages, { relationName: "receivedMessages" }),
   activeCalls: many(activeCalls),
+  callers: many(callers),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
@@ -160,6 +184,17 @@ export const activeCallsRelations = relations(activeCalls, ({ one }) => ({
   }),
   region: one(regions, {
     fields: [activeCalls.regionId],
+    references: [regions.id],
+  }),
+}));
+
+export const callersRelations = relations(callers, ({ one }) => ({
+  user: one(users, {
+    fields: [callers.userId],
+    references: [users.id],
+  }),
+  region: one(regions, {
+    fields: [callers.regionId],
     references: [regions.id],
   }),
 }));

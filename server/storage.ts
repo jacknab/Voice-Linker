@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { regions, regionLinks, users, profiles, messages, activeCalls, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, personalityProfiles, rogerPromptHistory, supportTickets, ivrErrorReports, type Region, type InsertRegion, type User, type Profile, type Message, type ActiveCall, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate, type PersonalityProfile, type InsertPersonalityProfile, type SupportTicket, type IvrErrorReport } from "@shared/schema";
+import { regions, regionLinks, users, profiles, messages, callers, membershipSettings, siteSettings, blockedUsers, zipCodes, callLogs, flaggedContent, promoCodes, promoRedemptions, auditLogs, webUsers, webUserAltPhones, mailboxes, membershipLinkCodes, membershipCards, seedSessions, moderationLogs, systemPromptOverrides, smsTemplates, personalityProfiles, rogerPromptHistory, supportTickets, ivrErrorReports, type Region, type InsertRegion, type User, type Profile, type Message, type Caller, type InsertUser, type InsertProfile, type InsertMessage, type MembershipSettings, type InsertMembershipSettings, type SiteSettings, type InsertSiteSettings, type ZipCode, type FlaggedContent, type InsertFlaggedContent, type PromoCode, type InsertPromoCode, type PromoRedemption, type AuditLog, type WebUser, type WebUserAltPhone, type Mailbox, type MembershipLinkCode, type MembershipCard, type SeedSession, type ModerationLog, type InsertModerationLog, type SmsTemplate, type PersonalityProfile, type InsertPersonalityProfile, type SupportTicket, type IvrErrorReport } from "@shared/schema";
 import { eq, and, not, count, sql, inArray, notInArray, or, notLike, like, isNull, isNotNull, lt, gte, desc } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -103,6 +103,9 @@ export interface IStorage {
   registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void>;
   updateActiveCallGender(callSid: string, gender: string): Promise<void>;
   updateActiveCallSeeking(callSid: string, seeking: string): Promise<void>;
+  getCallerByCallSid(callSid: string): Promise<Caller | undefined>;
+  markCallerGreetingPlayed(callSid: string): Promise<void>;
+  touchCallerPing(callSid: string): Promise<void>;
   removeActiveCall(callSid: string): Promise<void>;
   removeActiveCallsByUser(userId: string): Promise<void>;
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
@@ -111,7 +114,7 @@ export interface IStorage {
   getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null, seeking?: string | null): Promise<number>;
   getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null, seeking?: string | null): Promise<Profile[]>;
   getNearbyProfileUserIds(excludeUserId: string, regionId: string | undefined, callerLat: number, callerLon: number, thresholdKm: number): Promise<string[]>;
-  getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined>;
+  getActiveCallByUserId(userId: string): Promise<Caller | undefined>;
   getZipEntryById(id: string): Promise<ZipCode | undefined>;
   getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }>;
 
@@ -408,8 +411,8 @@ export class DatabaseStorage implements IStorage {
 
   async getRegionActiveUserCount(regionId: string): Promise<number> {
     const [result] = await db.select({ count: count() })
-      .from(activeCalls)
-      .where(eq(activeCalls.regionId, regionId));
+      .from(callers)
+      .where(and(eq(callers.regionId, regionId), eq(callers.status, "active")));
     return result.count;
   }
 
@@ -451,7 +454,7 @@ export class DatabaseStorage implements IStorage {
         .where(eq(membershipCards.phoneNumber, userRow.phoneNumber));
     }
 
-    await db.delete(activeCalls).where(eq(activeCalls.userId, id));
+    await db.delete(callers).where(eq(callers.userId, id));
     await db.delete(messages).where(or(eq(messages.fromUserId, id), eq(messages.toUserId, id)));
     await db.delete(blockedUsers).where(or(eq(blockedUsers.blockerId, id), eq(blockedUsers.blockedUserId, id)));
     await db.delete(promoRedemptions).where(eq(promoRedemptions.userId, id));
@@ -703,24 +706,43 @@ export class DatabaseStorage implements IStorage {
   // --- Active Call Tracking ---
 
   async registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void> {
-    await db.insert(activeCalls)
-      .values({ callSid, userId, regionId: regionId ?? null })
+    const user = await this.getUserById(userId);
+    if (!user) throw new Error(`Cannot register caller for missing user ${userId}`);
+    await db.insert(callers)
+      .values({ callSid, userId, phoneNumber: user.phoneNumber, regionId: regionId ?? null, status: "active", lastPing: new Date() })
       .onConflictDoUpdate({
-        target: activeCalls.callSid,
-        set: { userId, regionId: regionId ?? null, joinedAt: sql`now()` },
+        target: callers.callSid,
+        set: { userId, phoneNumber: user.phoneNumber, regionId: regionId ?? null, status: "active", joinedAt: sql`now()`, lastPing: sql`now()`, greetingPlayed: false },
       });
   }
 
   async updateActiveCallGender(callSid: string, gender: string): Promise<void> {
-    await db.update(activeCalls)
-      .set({ gender })
-      .where(eq(activeCalls.callSid, callSid));
+    await db.update(callers)
+      .set({ gender, lastPing: new Date() })
+      .where(eq(callers.callSid, callSid));
   }
 
   async updateActiveCallSeeking(callSid: string, seeking: string): Promise<void> {
-    await db.update(activeCalls)
-      .set({ seeking })
-      .where(eq(activeCalls.callSid, callSid));
+    await db.update(callers)
+      .set({ seeking, lastPing: new Date() })
+      .where(eq(callers.callSid, callSid));
+  }
+
+  async getCallerByCallSid(callSid: string): Promise<Caller | undefined> {
+    const [caller] = await db.select().from(callers).where(eq(callers.callSid, callSid)).limit(1);
+    return caller;
+  }
+
+  async markCallerGreetingPlayed(callSid: string): Promise<void> {
+    await db.update(callers)
+      .set({ greetingPlayed: true, lastPing: new Date() })
+      .where(eq(callers.callSid, callSid));
+  }
+
+  async touchCallerPing(callSid: string): Promise<void> {
+    await db.update(callers)
+      .set({ lastPing: new Date() })
+      .where(eq(callers.callSid, callSid));
   }
 
   async removeActiveCall(callSid: string): Promise<void> {
@@ -730,12 +752,14 @@ export class DatabaseStorage implements IStorage {
       SET completed_at = now()
       WHERE call_sid = ${callSid} AND completed_at IS NULL
     `);
-    await db.delete(activeCalls).where(eq(activeCalls.callSid, callSid));
+    await db.update(callers)
+      .set({ status: "disconnected", lastPing: new Date() })
+      .where(eq(callers.callSid, callSid));
   }
 
   async removeActiveCallsByUser(userId: string): Promise<void> {
     // Find call SIDs for this user, mark their logs complete, then remove
-    const rows = await db.select({ callSid: activeCalls.callSid }).from(activeCalls).where(eq(activeCalls.userId, userId));
+    const rows = await db.select({ callSid: callers.callSid }).from(callers).where(and(eq(callers.userId, userId), eq(callers.status, "active")));
     for (const { callSid } of rows) {
       await db.execute(sql`
         UPDATE call_logs
@@ -743,10 +767,12 @@ export class DatabaseStorage implements IStorage {
         WHERE call_sid = ${callSid} AND completed_at IS NULL
       `);
     }
-    await db.delete(activeCalls).where(eq(activeCalls.userId, userId));
+    await db.update(callers)
+      .set({ status: "disconnected", lastPing: new Date() })
+      .where(and(eq(callers.userId, userId), eq(callers.status, "active")));
   }
 
-  // Finalize call logs that have no completedAt and no matching active_calls entry.
+  // Finalize call logs that have no completedAt and no matching active caller entry.
   // Catches cases where the active call was already purged but the log was never finalized.
   async finalizeOrphanedCallLogs(olderThanMinutes: number): Promise<void> {
     await db.execute(sql`
@@ -755,7 +781,7 @@ export class DatabaseStorage implements IStorage {
           completed_at = now()
       WHERE completed_at IS NULL
         AND started_at < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'
-        AND call_sid NOT IN (SELECT call_sid FROM active_calls)
+        AND call_sid NOT IN (SELECT call_sid FROM callers WHERE status = 'active')
         AND call_sid NOT LIKE '${sql.raw(VIRTUAL_PREFIX)}%'
     `);
   }
@@ -767,16 +793,19 @@ export class DatabaseStorage implements IStorage {
       SET duration_seconds = GREATEST(0, EXTRACT(EPOCH FROM (now() - started_at))::integer),
           completed_at = now()
       WHERE call_sid IN (
-        SELECT call_sid FROM active_calls
-        WHERE joined_at < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'
+        SELECT call_sid FROM callers
+        WHERE last_ping < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'
+          AND status = 'active'
           AND call_sid NOT LIKE '${sql.raw(VIRTUAL_PREFIX)}%'
       ) AND completed_at IS NULL
     `);
-    await db.delete(activeCalls)
+    await db.update(callers)
+      .set({ status: "disconnected", lastPing: new Date() })
       .where(
         and(
-          sql`joined_at < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'`,
-          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`)
+          sql`last_ping < now() - interval '${sql.raw(String(olderThanMinutes))} minutes'`,
+          eq(callers.status, "active"),
+          notLike(callers.callSid, `${VIRTUAL_PREFIX}%`)
         )
       );
   }
@@ -786,211 +815,78 @@ export class DatabaseStorage implements IStorage {
     const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
     const conditions = regionId
       ? and(
-          not(eq(activeCalls.userId, excludeUserId)),
-          eq(activeCalls.regionId, regionId),
-          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
+          eq(callers.status, "active"),
+          not(eq(callers.userId, excludeUserId)),
+          eq(callers.regionId, regionId),
+          ...(oppositeGender ? [eq(callers.gender, oppositeGender)] : []),
+          sql`NOT EXISTS (
+            SELECT 1 FROM ${blockedUsers}
+            WHERE (${blockedUsers.blockerId} = ${excludeUserId} AND ${blockedUsers.blockedUserId} = ${callers.userId})
+               OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
+          )`
         )
       : and(
-          not(eq(activeCalls.userId, excludeUserId)),
-          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
+          eq(callers.status, "active"),
+          not(eq(callers.userId, excludeUserId)),
+          ...(oppositeGender ? [eq(callers.gender, oppositeGender)] : []),
+          sql`NOT EXISTS (
+            SELECT 1 FROM ${blockedUsers}
+            WHERE (${blockedUsers.blockerId} = ${excludeUserId} AND ${blockedUsers.blockedUserId} = ${callers.userId})
+               OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
+          )`
         );
     const [result] = await db.select({ count: count() })
-      .from(activeCalls)
+      .from(callers)
       .where(conditions);
     return result.count;
   }
 
   async getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<number> {
-    const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
-    const isMW = currentSiteCategory === 'MW';
-
-    // Real callers — filtered by region and opposite gender on MW
-    const realCallerCondition = regionId
-      ? and(
-          not(eq(activeCalls.userId, excludeUserId)),
-          eq(activeCalls.regionId, regionId),
-          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
-          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
-        )
-      : and(
-          not(eq(activeCalls.userId, excludeUserId)),
-          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
-          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
-        );
-    const regionalUserIds = await db.select({ userId: activeCalls.userId })
-      .from(activeCalls)
-      .where(realCallerCondition);
-
-    // Virtual callers (seed sessions) — include the caller's region, any linked regions,
-    // and global (null-regionId) seeds.  This matches the queue builder which draws from
-    // linked regions so the count gate never blocks a session that would have content.
-    let linkedRegionIdsForCount: string[] = [];
-    if (regionId) {
-      const linked = await this.getLinkedRegions(regionId).catch(() => [] as Region[]);
-      linkedRegionIdsForCount = linked.map(r => r.id);
-    }
-    const virtualCondition = regionId
-      ? and(
-          like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
-          or(
-            eq(activeCalls.regionId, regionId),
-            isNull(activeCalls.regionId),
-            ...(linkedRegionIdsForCount.length > 0
-              ? [inArray(activeCalls.regionId, linkedRegionIdsForCount)]
-              : []),
-          )
-        )
-      : like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`);
-    const virtualUserIds = await db.select({ userId: activeCalls.userId })
-      .from(activeCalls)
-      .where(virtualCondition);
-
-    const realIds = regionalUserIds.map(r => r.userId);
-    const virtualIds = virtualUserIds.map(r => r.userId);
-
-    // Profile condition for virtual callers (including admin-uploaded seeds): siteCategory-scoped + gender-filtered for MW.
-    // Admin-uploaded profiles are included here via activeCalls when their seed session is running,
-    // which naturally scopes them to their assigned regionId and prevents them from appearing
-    // simultaneously in both halves of a linked region pair.
-    const virtualProfileCondition = virtualIds.length > 0
-      ? and(
-          inArray(profiles.userId, virtualIds),
-          isMW && oppositeGender
-            ? and(eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
-            : or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM'))
-        )
-      : sql`false`;
-
-    const conditions = realIds.length > 0
-      ? or(inArray(profiles.userId, realIds), virtualProfileCondition)
-      : virtualProfileCondition;
-
-    // Apply the same block filter as getAllActiveProfiles
-    const blockedByMeForCount = await db.select({ blockedUserId: blockedUsers.blockedUserId })
-      .from(blockedUsers)
-      .where(eq(blockedUsers.blockerId, excludeUserId));
-    const blockedMeForCount = await db.select({ blockerId: blockedUsers.blockerId })
-      .from(blockedUsers)
-      .where(eq(blockedUsers.blockedUserId, excludeUserId));
-    const hiddenIdsForCount = [
-      ...blockedByMeForCount.map(r => r.blockedUserId),
-      ...blockedMeForCount.map(r => r.blockerId),
-    ];
-
-    const baseCondForCount = and(conditions, not(eq(profiles.userId, excludeUserId)));
-    const blockCondForCount = hiddenIdsForCount.length > 0
-      ? and(baseCondForCount, notInArray(profiles.userId, hiddenIdsForCount))
-      : baseCondForCount;
-    // Mirror the same minimum-duration guard used in getAllActiveProfiles.
-    const MIN_GREETING_SECONDS = 3;
-    const finalCondForCount = and(
-      blockCondForCount,
-      or(isNull(profiles.recordingDuration), gte(profiles.recordingDuration, MIN_GREETING_SECONDS)),
-    );
-
-    const [result] = await db.select({ count: count() })
-      .from(profiles)
-      .where(finalCondForCount);
-    return result.count;
+    return (await this.getAllActiveProfiles(excludeUserId, regionId, callerGender, currentSiteCategory)).length;
   }
 
   async getAllActiveProfiles(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<Profile[]> {
     const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
     const isMW = currentSiteCategory === 'MW';
 
-    // Real callers — filtered by region and opposite gender on MW
-    const realCallerCondition = regionId
-      ? and(
-          not(eq(activeCalls.userId, excludeUserId)),
-          eq(activeCalls.regionId, regionId),
-          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
-          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
-        )
-      : and(
-          not(eq(activeCalls.userId, excludeUserId)),
-          notLike(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
-          ...(oppositeGender ? [eq(activeCalls.gender, oppositeGender)] : [])
-        );
-    const regionalUserIds = await db.select({ userId: activeCalls.userId })
-      .from(activeCalls)
-      .where(realCallerCondition);
-
-    // Virtual callers (seed sessions) — scoped to the same region when one is provided
-    // so the same seed profile doesn't appear simultaneously in two connected regions.
-    // Seeds with no region assignment (regionId IS NULL) are treated as global and
-    // are visible in all regions — this covers seeds started before regions were active.
-    const virtualCondition2 = regionId
-      ? and(
-          like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`),
-          or(eq(activeCalls.regionId, regionId), isNull(activeCalls.regionId))
-        )
-      : like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`);
-    const virtualUserIds = await db.select({ userId: activeCalls.userId })
-      .from(activeCalls)
-      .where(virtualCondition2);
-
-    const realIds = regionalUserIds.map(r => r.userId);
-    const virtualIds = virtualUserIds.map(r => r.userId);
-
-    // Profile condition for virtual callers (including admin-uploaded seeds): siteCategory-scoped + gender-filtered for MW.
-    // Admin-uploaded profiles are included here via activeCalls when their seed session is running,
-    // which naturally scopes them to their assigned regionId and prevents them from appearing
-    // simultaneously in both halves of a linked region pair.
-    const virtualProfileCondition = virtualIds.length > 0
-      ? and(
-          inArray(profiles.userId, virtualIds),
-          isMW && oppositeGender
-            ? and(eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
-            : or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM'))
-        )
-      : sql`false`;
-
-    const conditions = realIds.length > 0
-      ? or(inArray(profiles.userId, realIds), virtualProfileCondition)
-      : virtualProfileCondition;
-
-    // Collect all user IDs blocked in either direction so we can exclude them
-    const blockedByMe = await db.select({ blockedUserId: blockedUsers.blockedUserId })
-      .from(blockedUsers)
-      .where(eq(blockedUsers.blockerId, excludeUserId));
-    const blockedMe = await db.select({ blockerId: blockedUsers.blockerId })
-      .from(blockedUsers)
-      .where(eq(blockedUsers.blockedUserId, excludeUserId));
-
-    const hiddenIds = [
-      ...blockedByMe.map(r => r.blockedUserId),
-      ...blockedMe.map(r => r.blockerId),
-    ];
-
-    const baseCondition = and(conditions, not(eq(profiles.userId, excludeUserId)));
-    const blockCondition = hiddenIds.length > 0
-      ? and(baseCondition, notInArray(profiles.userId, hiddenIds))
-      : baseCondition;
-    // Exclude greetings that are too short to be useful (< 3 s).
-    // NULL duration means the field wasn't captured at record time — keep those to avoid
-    // hiding legacy profiles that have valid-sounding recordings.
     const MIN_GREETING_SECONDS = 3;
+    const callerScope = regionId
+      ? or(eq(callers.regionId, regionId), and(like(callers.callSid, `${VIRTUAL_PREFIX}%`), isNull(callers.regionId)))
+      : sql`true`;
+    const profileScope = isMW && oppositeGender
+      ? and(eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
+      : or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM'), like(callers.callSid, `${VIRTUAL_PREFIX}%`));
+
     const finalCondition = and(
-      blockCondition,
+      eq(callers.status, "active"),
+      callerScope,
+      not(eq(callers.userId, excludeUserId)),
+      ...(oppositeGender ? [eq(callers.gender, oppositeGender)] : []),
+      profileScope,
+      sql`NOT EXISTS (
+        SELECT 1 FROM ${blockedUsers}
+        WHERE (${blockedUsers.blockerId} = ${excludeUserId} AND ${blockedUsers.blockedUserId} = ${callers.userId})
+           OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
+      )`,
       or(isNull(profiles.recordingDuration), gte(profiles.recordingDuration, MIN_GREETING_SECONDS)),
     );
 
     const rows = await db.select({ profile: profiles })
       .from(profiles)
-      .leftJoin(users, eq(profiles.userId, users.id))
+      .innerJoin(callers, eq(profiles.userId, callers.userId))
       .where(finalCondition)
-      .orderBy(sql`RANDOM()`);
+      .orderBy(callers.joinedAt);
 
     return rows.map(r => r.profile);
   }
 
   async getNearbyProfileUserIds(excludeUserId: string, regionId: string | undefined, callerLat: number, callerLon: number, thresholdKm: number): Promise<string[]> {
-    const activeUserIds = await db.select({ userId: activeCalls.userId })
-      .from(activeCalls)
+    const activeUserIds = await db.select({ userId: callers.userId })
+      .from(callers)
       .where(
         regionId
-          ? and(not(eq(activeCalls.userId, excludeUserId)), eq(activeCalls.regionId, regionId))
-          : not(eq(activeCalls.userId, excludeUserId))
+          ? and(eq(callers.status, "active"), not(eq(callers.userId, excludeUserId)), eq(callers.regionId, regionId))
+          : and(eq(callers.status, "active"), not(eq(callers.userId, excludeUserId)))
       );
 
     const ids = activeUserIds.map(r => r.userId);
@@ -1013,8 +909,8 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async getActiveCallByUserId(userId: string): Promise<ActiveCall | undefined> {
-    const [call] = await db.select().from(activeCalls).where(eq(activeCalls.userId, userId)).limit(1);
+  async getActiveCallByUserId(userId: string): Promise<Caller | undefined> {
+    const [call] = await db.select().from(callers).where(and(eq(callers.userId, userId), eq(callers.status, "active"))).limit(1);
     return call;
   }
 
@@ -1028,6 +924,9 @@ export class DatabaseStorage implements IStorage {
 
   async blockUser(blockerId: string, blockedUserId: string): Promise<void> {
     await db.insert(blockedUsers).values({ blockerId, blockedUserId }).onConflictDoNothing();
+    await db.update(callers)
+      .set({ status: "blocked", lastPing: new Date() })
+      .where(and(eq(callers.userId, blockedUserId), eq(callers.status, "active")));
   }
 
   async getAdminBlockedList(): Promise<{
@@ -1060,6 +959,9 @@ export class DatabaseStorage implements IStorage {
     await db.delete(blockedUsers).where(
       and(eq(blockedUsers.blockerId, blockerId), eq(blockedUsers.blockedUserId, blockedUserId))
     );
+    await db.update(callers)
+      .set({ status: "active", lastPing: new Date() })
+      .where(and(eq(callers.userId, blockedUserId), eq(callers.status, "blocked")));
   }
 
   async unblockAllByUser(userId: string): Promise<number> {
@@ -1079,13 +981,13 @@ export class DatabaseStorage implements IStorage {
   async getRegionStats(regionId: string): Promise<{ activeCalls: number; voiceProfiles: number; messagesRelayed: number }> {
     // Active callers currently in this region
     const [activeResult] = await db.select({ count: count() })
-      .from(activeCalls)
-      .where(eq(activeCalls.regionId, regionId));
+      .from(callers)
+      .where(and(eq(callers.regionId, regionId), eq(callers.status, "active")));
 
     // Voice profiles: users currently active in this region + admin-uploaded profiles
-    const activeUserIds = await db.select({ userId: activeCalls.userId })
-      .from(activeCalls)
-      .where(eq(activeCalls.regionId, regionId));
+    const activeUserIds = await db.select({ userId: callers.userId })
+      .from(callers)
+      .where(and(eq(callers.regionId, regionId), eq(callers.status, "active")));
     const ids = activeUserIds.map(r => r.userId);
     const profileCondition = ids.length > 0
       ? or(inArray(profiles.userId, ids), eq(profiles.isAdminUploaded, true))
@@ -1324,7 +1226,7 @@ export class DatabaseStorage implements IStorage {
     const [userCount] = await db.select({ count: count() }).from(users);
     const [profileCount] = await db.select({ count: count() }).from(profiles);
     const [messageCount] = await db.select({ count: count() }).from(messages);
-    const [activeCount] = await db.select({ count: count() }).from(activeCalls);
+    const [activeCount] = await db.select({ count: count() }).from(callers).where(eq(callers.status, "active"));
 
     return {
       users: userCount.count,
