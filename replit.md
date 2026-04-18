@@ -17,6 +17,7 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - Build command: `npm run build` — builds both the main client app AND the admin app (`malebox-admin/` → `dist/admin`).
 - Production run command: `node ./dist/index.cjs`.
 - Database schema is managed with Drizzle using `drizzle.config.ts`; sync with `npm run db:push`.
+- Production startup requires `SESSION_SECRET`; development may use the local fallback only.
 - Admin console: `/backstage` — pre-built into `dist/admin` on first dev startup. To force-rebuild after admin code changes, delete `dist/admin/` and restart the dev server.
 - ElevenLabs keys are normalized server-side before API calls; the VPS PM2 config also strips surrounding quotes/hidden characters from `.env` values to avoid false 401 invalid-key responses.
 

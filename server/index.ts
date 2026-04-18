@@ -75,8 +75,13 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+const sessionSecret = process.env.SESSION_SECRET;
+if (process.env.NODE_ENV === "production" && !sessionSecret) {
+  throw new Error("SESSION_SECRET must be set in production");
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || "dev-fallback-secret",
+  secret: sessionSecret || "dev-fallback-secret",
   resave: false,
   saveUninitialized: false,
   cookie: {
