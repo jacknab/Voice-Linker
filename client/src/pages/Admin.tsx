@@ -74,7 +74,7 @@ interface AudioHealth {
   };
 }
 
-type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "seo-pages" | "ai-seo-gen" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
+type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "seo-pages" | "ai-seo-gen" | "live-callers" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
 
 interface FlaggedItem {
   id: string;
@@ -8219,6 +8219,215 @@ function TranscriptionsTab() {
   );
 }
 
+// ── LiveCallersTab ────────────────────────────────────────────────────────────
+interface LiveCaller {
+  callSid: string;
+  userId: string;
+  phoneNumber: string;
+  status: string;
+  gender: string | null;
+  seeking: string | null;
+  joinedAt: string;
+  lastPing: string;
+  greetingPlayed: boolean;
+  regionName: string | null;
+  regionSlug: string | null;
+  regionState: string | null;
+  membershipTier: string | null;
+  remainingSeconds: number | null;
+  isVirtual: boolean;
+  durationSeconds: number;
+}
+
+interface LiveCallersResponse {
+  callers: LiveCaller[];
+  total: number;
+  realCount: number;
+  virtualCount: number;
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+  }
+  return `${m}m ${s}s`;
+}
+
+function maskPhone(phone: string): string {
+  if (!phone) return "Unknown";
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length >= 10) {
+    return `(${digits.slice(-10, -7)}) ${digits.slice(-7, -4)}-****`;
+  }
+  return phone.slice(0, -4) + "****";
+}
+
+function LiveCallersTab() {
+  const { data, isLoading, dataUpdatedAt } = useQuery<LiveCallersResponse>({
+    queryKey: ["/api/admin/live-callers"],
+    refetchInterval: 5000,
+  });
+
+  const callers = data?.callers ?? [];
+  const [showVirtual, setShowVirtual] = useState(true);
+
+  const filtered = showVirtual ? callers : callers.filter(c => !c.isVirtual);
+  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : null;
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+            </span>
+            Live Callers
+          </h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Auto-refreshes every 5 seconds{lastUpdated && <> · Last updated {lastUpdated}</>}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+            <input
+              data-testid="toggle-show-virtual"
+              type="checkbox"
+              checked={showVirtual}
+              onChange={e => setShowVirtual(e.target.checked)}
+              className="rounded"
+            />
+            Show virtual callers
+          </label>
+        </div>
+      </div>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+          <div className="text-2xl font-black text-green-700" data-testid="stat-live-total">{data?.total ?? 0}</div>
+          <div className="text-xs text-green-600 font-semibold mt-0.5">Total Live</div>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+          <div className="text-2xl font-black text-blue-700" data-testid="stat-live-real">{data?.realCount ?? 0}</div>
+          <div className="text-xs text-blue-600 font-semibold mt-0.5">Real Callers</div>
+        </div>
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
+          <div className="text-2xl font-black text-purple-700" data-testid="stat-live-virtual">{data?.virtualCount ?? 0}</div>
+          <div className="text-xs text-purple-600 font-semibold mt-0.5">Virtual</div>
+        </div>
+      </div>
+
+      {/* Table */}
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-gray-400 text-sm py-10 justify-center">
+          <Loader2 size={16} className="animate-spin" /> Loading live callers…
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-14 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+          <Phone size={32} className="mx-auto mb-3 opacity-20" />
+          <p className="text-sm font-medium">No active callers right now</p>
+          <p className="text-xs mt-1">When someone calls in, they'll appear here instantly.</p>
+        </div>
+      ) : (
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
+                <th className="px-4 py-3 text-left font-semibold">Caller</th>
+                <th className="px-4 py-3 text-left font-semibold hidden sm:table-cell">Region</th>
+                <th className="px-4 py-3 text-left font-semibold hidden md:table-cell">Gender</th>
+                <th className="px-4 py-3 text-left font-semibold hidden lg:table-cell">Membership</th>
+                <th className="px-4 py-3 text-right font-semibold">Duration</th>
+                <th className="px-4 py-3 text-right font-semibold">Type</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.map((caller) => (
+                <tr
+                  key={caller.callSid}
+                  className="hover:bg-gray-50 transition-colors"
+                  data-testid={`row-live-caller-${caller.userId}`}
+                >
+                  <td className="px-4 py-3">
+                    <div className="font-mono text-xs font-semibold text-gray-800">{maskPhone(caller.phoneNumber)}</div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">
+                      {caller.greetingPlayed ? (
+                        <span className="text-green-600">✓ Greeting played</span>
+                      ) : (
+                        <span className="text-amber-500">⟳ In greeting</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 hidden sm:table-cell">
+                    {caller.regionName ? (
+                      <div>
+                        <div className="text-xs font-semibold text-gray-700">{caller.regionName}</div>
+                        {caller.regionState && <div className="text-[10px] text-gray-400">{caller.regionState}</div>}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    {caller.gender ? (
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                        caller.gender === "male" ? "bg-blue-100 text-blue-700" : "bg-pink-100 text-pink-700"
+                      }`}>
+                        {caller.gender}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    {caller.membershipTier ? (
+                      <div>
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                          caller.membershipTier === "premium" ? "bg-yellow-100 text-yellow-700" :
+                          caller.membershipTier === "free" ? "bg-gray-100 text-gray-500" :
+                          "bg-indigo-100 text-indigo-700"
+                        }`}>
+                          {caller.membershipTier}
+                        </span>
+                        {caller.remainingSeconds !== null && (
+                          <div className="text-[10px] text-gray-400 mt-0.5">{formatDuration(caller.remainingSeconds)} left</div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="font-mono text-xs text-gray-700 font-semibold">
+                      {formatDuration(caller.durationSeconds)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {caller.isVirtual ? (
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-600 uppercase">Virtual</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse inline-block"></span>
+                        Real
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AiSeoGenTab ───────────────────────────────────────────────────────────────
 interface AiSeoGeneratedPage {
   filename: string;
@@ -8582,6 +8791,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "memberships",    label: "$$ Memberships",    icon: <CreditCard size={15} /> },
   { id: "cards",          label: "Member Cards",      icon: <CreditCard size={15} /> },
   { id: "audio-gen",      label: "Audio Gen",         icon: <Volume2 size={15} /> },
+  { id: "live-callers",   label: "Live Callers",      icon: <PhoneCall size={15} /> },
   { id: "regions",        label: "Regions",           icon: <Globe size={15} /> },
   { id: "seo-pages",      label: "SEO Pages",         icon: <FileText size={15} /> },
   { id: "ai-seo-gen",     label: "AI SEO Generator",  icon: <Wand2 size={15} /> },
@@ -9242,6 +9452,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "voice-profiles"  && <VoiceProfilesTab key={String(showUpload)} />}
           {activeTab === "transcriptions"  && <TranscriptionsTab />}
           {activeTab === "regions"         && <RegionsTab />}
+          {activeTab === "live-callers"    && <LiveCallersTab />}
           {activeTab === "seo-pages"      && <SeoPagesTab />}
           {activeTab === "ai-seo-gen"     && <AiSeoGenTab />}
           {activeTab === "memberships"    && <MembershipsTab />}

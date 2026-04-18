@@ -20,7 +20,7 @@ import { getUncachableStripeClient } from "./stripeClient";
 import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached, getMembershipSettingsCached } from "./settings-cache";
 import { db } from "./db";
 import { profiles } from "@shared/schema";
-import { eq, isNull, or } from "drizzle-orm";
+import { eq, isNull, or, sql } from "drizzle-orm";
 import { PROMPT_LIBRARY, ROGER_V3_TEXTS, GAME_AI_GREETING_SCRIPTS, GAME_AI_GREETING_COUNT } from "./engagementEngine";
 import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage, generateHomePage } from "./seoPageGenerator";
 import OpenAI from "openai";
@@ -4098,6 +4098,47 @@ END OF KNOWLEDGE BASE
 
   // ─── Clean URLs for region SEO pages ──────────────────────────────────────
   // Serves /denver instead of /regions/denver.html
+  // ── Live Callers Dashboard ────────────────────────────────────────────────
+  app.get("/api/admin/live-callers", async (_req, res) => {
+    try {
+      const VIRTUAL_PREFIX = "virtual_";
+      const result = await db.execute(sql`
+        SELECT
+          c.call_sid        AS "callSid",
+          c.user_id         AS "userId",
+          c.phone_number    AS "phoneNumber",
+          c.status,
+          c.gender,
+          c.seeking,
+          c.joined_at       AS "joinedAt",
+          c.last_ping       AS "lastPing",
+          c.greeting_played AS "greetingPlayed",
+          r.name            AS "regionName",
+          r.slug            AS "regionSlug",
+          r.state_abbreviation AS "regionState",
+          u.membership_tier AS "membershipTier",
+          u.remaining_seconds AS "remainingSeconds"
+        FROM callers c
+        LEFT JOIN regions r ON r.id = c.region_id
+        LEFT JOIN users u ON u.id = c.user_id
+        WHERE c.status = 'active'
+        ORDER BY c.joined_at DESC
+      `);
+
+      const rows = result.rows as any[];
+      const callersList = rows.map(row => ({
+        ...row,
+        isVirtual: String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX),
+        durationSeconds: Math.floor((Date.now() - new Date(row.joinedAt).getTime()) / 1000),
+      }));
+
+      res.json({ callers: callersList, total: callersList.length, realCount: callersList.filter(c => !c.isVirtual).length, virtualCount: callersList.filter(c => c.isVirtual).length });
+    } catch (e: any) {
+      console.error("[live-callers] Failed:", e);
+      res.status(500).json({ message: "Failed to fetch live callers" });
+    }
+  });
+
   // ── AI SEO Page Generator ─────────────────────────────────────────────────
   app.post("/api/admin/ai-seo-generate", async (req, res) => {
     try {
