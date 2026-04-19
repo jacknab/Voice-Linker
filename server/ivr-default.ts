@@ -20,6 +20,39 @@ const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
+function describeIvrState(pathname: string): string {
+  const path = pathname.toLowerCase();
+  if (path === "/" || path === "/entry" || path.includes("entry-check")) return "Entering system";
+  if (path.includes("gender-select")) return "Selecting caller type";
+  if (path.includes("membership-card") || path.includes("membership-pin") || path.includes("membership-entry") || path.includes("membership-sign-in")) return "Entering membership credentials";
+  if (path.includes("membership-purchase") || path.includes("purchase") || path.includes("payment") || path.includes("stripe")) return "Buying membership";
+  if (path.includes("membership-center") || path.includes("manage-membership") || path.includes("set-pin")) return "Managing membership";
+  if (path.includes("free-trial")) return "Hearing free trial offer";
+  if (path.includes("phone-booth") || path.includes("greeting-setup") || path.includes("save-name") || path.includes("save-profile")) return "Recording profile greeting";
+  if (path.includes("recording-rejected")) return "Fixing rejected recording";
+  if (path.includes("main-menu") || path.includes("mw-main-menu")) return "At main menu";
+  if (path.includes("browse-profiles") || path.includes("browse-category-ads") || path.includes("nearby-callers") || path.includes("category-ad-menu")) return "Browsing callers";
+  if (path.includes("engagement-interrupt") || path.includes("roger")) return "Listening to Roger prompt";
+  if (path.includes("voicemail-inbox") || path.includes("voicemail-saved")) return "Listening to voicemail";
+  if (path.includes("voicemail") || path.includes("message")) return "Using voicemail";
+  if (path.includes("mailbox-lookup")) return "Looking up mailbox";
+  if (path.includes("mailbox-message") || path.includes("sender-menu")) return "Leaving mailbox message";
+  if (path.includes("record-mailbox") || path.includes("record-category-ad") || path.includes("save-mailbox") || path.includes("save-category-ad")) return "Recording personal ad";
+  if (path.includes("setup-mailbox")) return "Setting up mailbox";
+  if (path.includes("my-mailbox") || path.includes("mailbox-menu") || path.includes("ad-category") || path.includes("category")) return "Using mailbox";
+  if (path.includes("live-connect")) return "Live connect";
+  if (path.includes("promo-code")) return "Entering promo code";
+  if (path.includes("customer-service") || path.includes("cs-")) return "Customer service";
+  if (path.includes("time-warning")) return "Low balance warning";
+  if (path.includes("transcription-callback")) return "Processing transcription";
+  return pathname.replace(/^\//, "").replace(/-/g, " ") || "In call";
+}
+
+function getRequestCallSid(req: Request): string | null {
+  const raw = req.body?.CallSid ?? req.query?.CallSid ?? req.body?.callSid ?? req.query?.callSid;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+}
+
 
 function centsToLabel(cents: number): string {
   const dollars = Math.floor(cents / 100);
@@ -528,6 +561,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // Log all voice webhook requests
   app.use("/voice", (req: Request, _res: Response, next: NextFunction) => {
     console.log(`[voice] ${req.method} ${req.path} | From=${req.body?.From} CallSid=${req.body?.CallSid} Digits=${req.body?.Digits} CallStatus=${req.body?.CallStatus}`);
+    const callSid = getRequestCallSid(req);
+    if (callSid && req.path !== "/status") {
+      storage.updateCallerIvrState(callSid, describeIvrState(req.path), `/voice${req.path === "/" ? "" : req.path}`)
+        .catch(err => console.error("[voice] IVR state update failed:", err.message));
+    }
     next();
   });
 

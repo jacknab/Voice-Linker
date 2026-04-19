@@ -3606,6 +3606,14 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
     refetchInterval: 15000,
   });
 
+  const { data: liveCallersData, dataUpdatedAt: liveCallersUpdatedAt } = useQuery<LiveCallersResponse>({
+    queryKey: ["/api/admin/live-callers"],
+    refetchInterval: 5000,
+  });
+
+  const liveCallers = liveCallersData?.callers ?? [];
+  const lastLiveFeedUpdate = liveCallersUpdatedAt ? new Date(liveCallersUpdatedAt).toLocaleTimeString() : null;
+
   const items = [
     { label: "Live on the Line", value: stats?.activeCalls ?? 0, icon: <PhoneCall size={18} className="text-emerald-500" /> },
     { label: "Registered Users", value: stats?.users ?? 0, icon: <Phone size={18} className="text-[#f5a623]" /> },
@@ -3625,6 +3633,54 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
             <div className={C.statLabel}>{item.label}</div>
           </div>
         ))}
+      </div>
+
+      <div className="border border-gray-200 rounded-xl bg-white overflow-hidden" data-testid="card-live-caller-feed">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Headphones size={15} className="text-emerald-500" />
+            <span className="font-mono font-bold text-sm tracking-widest uppercase text-gray-800">Live Caller Feed</span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-mono font-bold uppercase tracking-wider" data-testid="status-live-feed-count">
+              {liveCallersData?.realCount ?? 0} real / {liveCallersData?.total ?? 0} total
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[10px] text-gray-400">
+              Auto-refresh 5s{lastLiveFeedUpdate ? ` · ${lastLiveFeedUpdate}` : ""}
+            </span>
+            <button
+              data-testid="btn-open-live-callers"
+              type="button"
+              onClick={() => onNavigate?.("live-callers")}
+              className="font-mono text-xs text-[#f5a623] hover:text-amber-700 transition-colors"
+            >
+              Full Feed →
+            </button>
+          </div>
+        </div>
+        <div className="p-5">
+          {liveCallers.length === 0 ? (
+            <div className="text-gray-400 font-mono text-xs text-center py-5">No active calls right now.</div>
+          ) : (
+            <div className="space-y-2">
+              {liveCallers.slice(0, 6).map(caller => (
+                <div key={caller.callSid} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors" data-testid={`row-live-feed-${caller.userId}`}>
+                  <div className="min-w-0">
+                    <div className="font-mono text-xs font-bold text-gray-800">{maskPhone(caller.phoneNumber)}</div>
+                    <div className="font-mono text-[10px] text-gray-400 truncate">{caller.currentIvrPath ?? "/voice"}{caller.regionName ? ` · ${caller.regionName}` : ""}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-mono text-[10px] font-bold uppercase tracking-wider" data-testid={`status-live-state-${caller.userId}`}>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {caller.currentIvrState ?? "Connected"}
+                    </div>
+                    <div className="font-mono text-[10px] text-gray-400 mt-1">{formatDuration(caller.durationSeconds)} on line</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Voicemail Inbox Panel */}
@@ -8225,6 +8281,9 @@ interface LiveCaller {
   userId: string;
   phoneNumber: string;
   status: string;
+  currentIvrState: string | null;
+  currentIvrPath: string | null;
+  currentIvrUpdatedAt: string | null;
   gender: string | null;
   seeking: string | null;
   joinedAt: string;
@@ -8237,6 +8296,7 @@ interface LiveCaller {
   remainingSeconds: number | null;
   isVirtual: boolean;
   durationSeconds: number;
+  stateAgeSeconds: number | null;
 }
 
 interface LiveCallersResponse {
@@ -8340,6 +8400,7 @@ function LiveCallersTab() {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
                 <th className="px-4 py-3 text-left font-semibold">Caller</th>
+                <th className="px-4 py-3 text-left font-semibold">IVR State</th>
                 <th className="px-4 py-3 text-left font-semibold hidden sm:table-cell">Region</th>
                 <th className="px-4 py-3 text-left font-semibold hidden md:table-cell">Gender</th>
                 <th className="px-4 py-3 text-left font-semibold hidden lg:table-cell">Membership</th>
@@ -8362,6 +8423,15 @@ function LiveCallersTab() {
                       ) : (
                         <span className="text-amber-500">⟳ In greeting</span>
                       )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wide" data-testid={`status-ivr-state-${caller.userId}`}>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
+                      {caller.currentIvrState ?? "Connected"}
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-1 font-mono truncate max-w-44" data-testid={`text-ivr-path-${caller.userId}`}>
+                      {caller.currentIvrPath ?? "/voice"}{caller.stateAgeSeconds != null ? ` · ${formatDuration(caller.stateAgeSeconds)} ago` : ""}
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">

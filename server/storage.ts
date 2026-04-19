@@ -103,6 +103,7 @@ export interface IStorage {
   registerActiveCall(callSid: string, userId: string, regionId?: string): Promise<void>;
   updateActiveCallGender(callSid: string, gender: string): Promise<void>;
   updateActiveCallSeeking(callSid: string, seeking: string): Promise<void>;
+  updateCallerIvrState(callSid: string, state: string, path: string): Promise<void>;
   getCallerByCallSid(callSid: string): Promise<Caller | undefined>;
   markCallerGreetingPlayed(callSid: string): Promise<void>;
   touchCallerPing(callSid: string): Promise<void>;
@@ -712,10 +713,10 @@ export class DatabaseStorage implements IStorage {
     const user = await this.getUserById(userId);
     if (!user) throw new Error(`Cannot register caller for missing user ${userId}`);
     await db.insert(callers)
-      .values({ callSid, userId, phoneNumber: user.phoneNumber, regionId: regionId ?? null, status: "active", lastPing: new Date() })
+      .values({ callSid, userId, phoneNumber: user.phoneNumber, regionId: regionId ?? null, status: "active", currentIvrState: "Connected", currentIvrPath: "/voice", currentIvrUpdatedAt: new Date(), lastPing: new Date() })
       .onConflictDoUpdate({
         target: callers.callSid,
-        set: { userId, phoneNumber: user.phoneNumber, regionId: regionId ?? null, status: "active", joinedAt: sql`now()`, lastPing: sql`now()`, greetingPlayed: false },
+        set: { userId, phoneNumber: user.phoneNumber, regionId: regionId ?? null, status: "active", currentIvrState: "Connected", currentIvrPath: "/voice", currentIvrUpdatedAt: sql`now()`, joinedAt: sql`now()`, lastPing: sql`now()`, greetingPlayed: false },
       });
   }
 
@@ -729,6 +730,12 @@ export class DatabaseStorage implements IStorage {
     await db.update(callers)
       .set({ seeking, lastPing: new Date() })
       .where(eq(callers.callSid, callSid));
+  }
+
+  async updateCallerIvrState(callSid: string, state: string, path: string): Promise<void> {
+    await db.update(callers)
+      .set({ currentIvrState: state, currentIvrPath: path, currentIvrUpdatedAt: new Date(), lastPing: new Date() })
+      .where(and(eq(callers.callSid, callSid), eq(callers.status, "active")));
   }
 
   async getCallerByCallSid(callSid: string): Promise<Caller | undefined> {

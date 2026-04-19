@@ -3039,6 +3039,29 @@ interface MailboxStats {
   byCategory: { category: string | null; count: number }[];
 }
 
+interface LiveCaller {
+  callSid: string;
+  userId: string;
+  phoneNumber: string;
+  status: string;
+  currentIvrState: string | null;
+  currentIvrPath: string | null;
+  currentIvrUpdatedAt: string | null;
+  regionName: string | null;
+  membershipTier: string | null;
+  remainingSeconds: number | null;
+  isVirtual: boolean;
+  durationSeconds: number;
+  stateAgeSeconds: number | null;
+}
+
+interface LiveCallersResponse {
+  callers: LiveCaller[];
+  total: number;
+  realCount: number;
+  virtualCount: number;
+}
+
 interface RedisStatus {
   configured: boolean;
   connected: boolean;
@@ -3046,6 +3069,25 @@ interface RedisStatus {
   latencyMs: number | null;
   activeSessions: number;
   error: string | null;
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+  }
+  return `${m}m ${s}s`;
+}
+
+function maskPhone(phone: string): string {
+  if (!phone) return "Unknown";
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length >= 10) {
+    return `(${digits.slice(-10, -7)}) ${digits.slice(-7, -4)}-****`;
+  }
+  return phone.slice(0, -4) + "****";
 }
 
 function DashboardTab() {
@@ -3066,6 +3108,14 @@ function DashboardTab() {
     enabled: isMM,
     refetchInterval: 30000,
   });
+
+  const { data: liveCallersData, dataUpdatedAt: liveCallersUpdatedAt } = useQuery<LiveCallersResponse>({
+    queryKey: ["/api/admin/live-callers"],
+    refetchInterval: 5000,
+  });
+
+  const liveCallers = liveCallersData?.callers ?? [];
+  const lastLiveFeedUpdate = liveCallersUpdatedAt ? new Date(liveCallersUpdatedAt).toLocaleTimeString() : null;
 
   const { data: redisStatus, isLoading: redisLoading, isFetching: redisFetching, refetch: refetchRedis } = useQuery<RedisStatus>({
     queryKey: ["/api/admin/redis/status"],
@@ -3101,6 +3151,44 @@ function DashboardTab() {
             <div className={C.statLabel}>{item.label}</div>
           </div>
         ))}
+      </div>
+
+      <div className="border border-gray-200 rounded-xl bg-white overflow-hidden" data-testid="card-live-caller-feed">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Headphones size={15} className="text-emerald-500" />
+            <span className="font-mono font-bold text-sm tracking-widest uppercase text-gray-800">Live Caller Feed</span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-mono font-bold uppercase tracking-wider" data-testid="status-live-feed-count">
+              {liveCallersData?.realCount ?? 0} real / {liveCallersData?.total ?? 0} total
+            </span>
+          </div>
+          <span className="font-mono text-[10px] text-gray-400">
+            Auto-refresh 5s{lastLiveFeedUpdate ? ` · ${lastLiveFeedUpdate}` : ""}
+          </span>
+        </div>
+        <div className="p-5">
+          {liveCallers.length === 0 ? (
+            <div className="text-gray-400 font-mono text-xs text-center py-5">No active calls right now.</div>
+          ) : (
+            <div className="space-y-2">
+              {liveCallers.slice(0, 6).map(caller => (
+                <div key={caller.callSid} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors" data-testid={`row-live-feed-${caller.userId}`}>
+                  <div className="min-w-0">
+                    <div className="font-mono text-xs font-bold text-gray-800">{maskPhone(caller.phoneNumber)}</div>
+                    <div className="font-mono text-[10px] text-gray-400 truncate">{caller.currentIvrPath ?? "/voice"}{caller.regionName ? ` · ${caller.regionName}` : ""}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-mono text-[10px] font-bold uppercase tracking-wider" data-testid={`status-live-state-${caller.userId}`}>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      {caller.currentIvrState ?? "Connected"}
+                    </div>
+                    <div className="font-mono text-[10px] text-gray-400 mt-1">{formatDuration(caller.durationSeconds)} on line</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Redis Status Card ─────────────────────────────────────────────── */}

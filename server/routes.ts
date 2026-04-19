@@ -4129,6 +4129,9 @@ END OF KNOWLEDGE BASE
           c.user_id         AS "userId",
           c.phone_number    AS "phoneNumber",
           c.status,
+          c.current_ivr_state AS "currentIvrState",
+          c.current_ivr_path AS "currentIvrPath",
+          c.current_ivr_updated_at AS "currentIvrUpdatedAt",
           c.gender,
           c.seeking,
           c.joined_at       AS "joinedAt",
@@ -4149,8 +4152,10 @@ END OF KNOWLEDGE BASE
       const rows = result.rows as any[];
       const callersList = rows.map(row => ({
         ...row,
-        isVirtual: String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX),
+        currentIvrState: row.currentIvrState ?? (String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX) ? "Virtual caller online" : "Connected"),
+        isVirtual: String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX) || String(row.callSid ?? "").startsWith("virtual_"),
         durationSeconds: Math.floor((Date.now() - new Date(row.joinedAt).getTime()) / 1000),
+        stateAgeSeconds: row.currentIvrUpdatedAt ? Math.floor((Date.now() - new Date(row.currentIvrUpdatedAt).getTime()) / 1000) : null,
       }));
 
       res.json({ callers: callersList, total: callersList.length, realCount: callersList.filter(c => !c.isVirtual).length, virtualCount: callersList.filter(c => c.isVirtual).length });

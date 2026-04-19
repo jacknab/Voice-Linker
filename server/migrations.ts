@@ -43,6 +43,10 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE active_calls ADD COLUMN IF NOT EXISTS gender TEXT`,
   `ALTER TABLE active_calls ADD COLUMN IF NOT EXISTS seeking TEXT`,
 
+  `ALTER TABLE callers ADD COLUMN IF NOT EXISTS current_ivr_state TEXT`,
+  `ALTER TABLE callers ADD COLUMN IF NOT EXISTS current_ivr_path TEXT`,
+  `ALTER TABLE callers ADD COLUMN IF NOT EXISTS current_ivr_updated_at TIMESTAMPTZ`,
+
   // ── call_logs ────────────────────────────────────────────────────────────
   `ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS region_id UUID`,
   `ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS to_phone_number TEXT`,
