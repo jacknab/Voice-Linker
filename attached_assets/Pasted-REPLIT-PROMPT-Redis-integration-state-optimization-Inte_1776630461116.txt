@@ -1,0 +1,110 @@
+REPLIT PROMPT (Redis integration + state optimization)
+
+Integrate Redis into the existing phone IVR system as an external performance and session state layer. Do NOT change the overall call flow, queue logic, or IVR structure.
+
+Redis is running externally on the VPS and is accessible via environment variable REDIS_URL.
+
+🎯 Scope of change
+
+Only introduce Redis for:
+
+session state
+active buffer (3-greeting queue)
+block cache (fast lookup)
+
+Do NOT change:
+
+IVR menu flow
+greeting generation logic
+region system
+database schema
+🧠 Required Redis usage
+1. Session state (per caller)
+
+Store live caller session in Redis:
+
+session:{caller_id}
+
+Includes:
+
+region_id
+current state (LISTENING / MENU / LIVE_CONNECT)
+time remaining
+temporary flags
+
+Session data must be:
+
+overwritten on update (not appended)
+short-lived (use TTL)
+2. Active greeting buffer (rolling queue)
+
+Replace any in-memory or DB-based queue with Redis:
+
+buffer:{caller_id}
+
+Rules:
+
+max 3 greetings at any time
+updated after each playback or skip
+refilled from DB when size < 3
+never preloads full region queue
+3. Block cache (session-level fast filter)
+
+Maintain Redis cache for blocked users:
+
+blocks:{caller_id}
+
+Rules:
+
+loaded from DB on session start
+updated immediately when user blocks someone
+used for all greeting filtering (pre-DB query exclusion)
+⚙️ Behavior rules
+Redis is NOT the source of truth
+DB remains authoritative for users, greetings, and blocks
+Redis is only for real-time performance state
+On session start:
+load session from DB → store in Redis
+load block list → store in Redis
+On block action:
+write to DB
+immediately update Redis cache
+On greeting playback:
+pull from Redis buffer
+remove item after play/skip
+refill from DB only if buffer < 3
+🔁 Buffer refill logic
+
+When buffer size < 3:
+
+query DB for next eligible greetings
+exclude:
+seen greetings (if tracked in DB/session)
+blocked users (from Redis cache)
+current buffer items
+append results to Redis buffer until size = 3 or no results remain
+⏳ TTL rules
+session keys: expire after inactivity (e.g. 30 min)
+buffer keys: expire after short inactivity (e.g. 5–10 min)
+block cache: refresh on session start and updates
+🚫 Strict constraints
+Do NOT simulate Redis in memory
+Do NOT duplicate Redis state in global variables
+Do NOT change IVR routing logic
+Do NOT merge Redis logic into live connector
+Do NOT use Redis as permanent storage
+🎯 Goal
+
+Improve system performance and consistency by moving:
+
+session state
+active buffer
+block caching
+
+into Redis, while keeping database as the single source of truth.
+
+System should:
+
+reduce database reads
+eliminate stale state issues
+improve real-time responsiveness of playback and menu actions

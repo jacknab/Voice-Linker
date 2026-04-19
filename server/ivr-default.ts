@@ -13,6 +13,8 @@ import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
 import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText, ROGER_PROMPTS } from "./audioAutogen";
+import type { BrowseQueueItem, CallerBrowseState } from "./ivr-browse-state";
+import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -188,32 +190,7 @@ function haversineDistanceMiles(lat1: number, lon1: number, lat2: number, lon2: 
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Per-caller profile browsing state: rolling buffer system (max 3 items at a time)
-type BrowseQueueItem = { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; regionId?: string | null; regionName?: string | null; isPreExisting?: boolean; lat?: number | null; lon?: number | null };
-interface CallerBrowseState {
-  // Rolling buffer — max 3 items; front item (index 0) is always the next to play
-  queue: BrowseQueueItem[];
-  // Seen greetings this cycle — used to prevent duplicates on refill (NOT the block list)
-  seenUserIds: string[];
-  // Session-level block cache: pre-filter applied before ANY greeting selection.
-  // This is entirely separate from seenUserIds / buffer / queue logic.
-  // Synced from the DB blocked_users table on session start and on each browse visit.
-  blockedUserIds: Set<string>;
-  // The profile most recently played — for "Press 5 go back"
-  lastPlayedProfile: BrowseQueueItem | null;
-  linkedRegionLoaded: boolean; // true once the caller accepted a linked-region queue
-  callerRegionId: string | null;   // the region the listening caller dialed into
-  callerRegionName: string | null; // human-readable name of that region
-  localUserIds: string[];      // user IDs from the original local-region snapshot (for new-caller detection)
-  announcedNewLocalIds: string[]; // new local (home region) callers already announced or queued
-  // Multi-region linking support
-  linkedRegionSnapshots: { regionId: string; regionName: string; knownUserIds: string[] }[];
-  announcedLinkedCallerIds: string[]; // user IDs announced as "new caller from [city]"
-  // Origin announcement throttling: max 5 random announcements per 25-greeting window
-  greetingsPlayed: number;
-  windowAnnouncementsUsed: number;
-  callerCountAnnounced: boolean; // true once the caller count has been played this session
-}
+// BrowseQueueItem and CallerBrowseState are imported from ./ivr-browse-state
 
 // Probability (0–1) that a newly-detected caller triggers an audible announcement.
 // When the roll fails the caller is still silently queued so they are eventually heard,
@@ -228,7 +205,7 @@ interface CategoryBrowseState {
   index: number;
 }
 const categoryBrowseState = new Map<string, CategoryBrowseState>();
-const callerProfileBrowseStates = new Map<string, CallerBrowseState>(); // callSid → rolling buffer state
+// callerProfileBrowseStates replaced by Redis-backed getBrowseState/setBrowseState/deleteBrowseState
 
 // Feature flag — set ENABLE_MAILBOX=false in .env to hide mailboxes & personal ads from the IVR
 const MAILBOX_ENABLED = process.env.ENABLE_MAILBOX !== "false";
@@ -854,7 +831,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Clean up per-call payment/session, name recording, greeting draft, time flags, membership override, gender selection, and engagement state
       engagementEngine.cleanupEngagementState(callSid);
       categoryBrowseState.delete(callSid);
-      callerProfileBrowseStates.delete(callSid);
+      await deleteBrowseState(callSid);
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
       pendingGreetingDrafts.delete(callSid);
@@ -4953,16 +4930,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.redirect("/voice/main-menu");
       } else {
         // ── Rolling buffer browsing ───────────────────────────────────────────
-        // State persists across HTTP calls in callerProfileBrowseStates (keyed by callSid).
-        // The buffer holds at most 3 profiles at a time; seenUserIds tracks what this
-        // caller has already heard this cycle.  When the buffer drains after a fill, the
-        // cycle is complete and linked regions are offered (or the cycle resets).
+        // State persists across HTTP calls in Redis (keyed by callSid), with in-memory
+        // fallback when Redis is unavailable. The buffer holds at most 3 profiles at a time;
+        // seenUserIds tracks what this caller has already heard this cycle. When the buffer
+        // drains after a fill, the cycle is complete and linked regions are offered (or reset).
 
         const afterUserId   = req.query?.afterUserId   as string | undefined;
         const targetUserId  = req.query?.targetUserId  as string | undefined;
         const retryCount    = parseInt((req.query?.browseRetry as string) ?? "0", 10);
 
-        let state = callerProfileBrowseStates.get(callSid);
+        let state = await getBrowseState(callSid);
 
         if (!state) {
           // ── First visit: build initial state ─────────────────────────────────
@@ -5106,7 +5083,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             if (linkedRegions2.length > 0) {
               const ids   = linkedRegions2.map(r => r.id).join(",");
               const names = linkedRegions2.map(r => r.name).join("||");
-              callerProfileBrowseStates.set(callSid, state);
+              await setBrowseState(callSid, state);
               twiml.redirect(`/voice/nearby-callers-offer?linkedRegionIds=${encodeURIComponent(ids)}&linkedRegionNames=${encodeURIComponent(names)}`);
               res.type("text/xml");
               return res.send(twiml.toString());
@@ -5129,7 +5106,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           // Still empty — wait and retry
           if (state.queue.length === 0) {
             if (retryCount < 2) {
-              callerProfileBrowseStates.set(callSid, state);
+              await setBrowseState(callSid, state);
               twiml.pause({ length: 3 });
               twiml.redirect(`/voice/browse-profiles?browseRetry=${retryCount + 1}`);
             } else {
@@ -5203,7 +5180,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                 safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
                 playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
                 twiml.redirect("/voice/browse-profiles");
-                callerProfileBrowseStates.set(callSid, state);
+                await setBrowseState(callSid, state);
                 res.type("text/xml");
                 return res.send(twiml.toString());
               } else {
@@ -5268,7 +5245,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               safePlayRecording(alertGather, newLinkedCaller.recordingUrl, req, "This profile's greeting is not available.");
               playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
               twiml.redirect("/voice/browse-profiles");
-              callerProfileBrowseStates.set(callSid, state);
+              await setBrowseState(callSid, state);
               res.type("text/xml");
               return res.send(twiml.toString());
             } else {
@@ -5299,7 +5276,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           const followUp    = encodeURIComponent(engInterruption.followUpAction ?? "");
           const pid         = encodeURIComponent(engInterruption.id);
           console.log(`[engagement] Interrupting browse with prompt=${engInterruption.id}, followUp=${engInterruption.followUpAction ?? "none"}`);
-          callerProfileBrowseStates.set(callSid, state);
+          await setBrowseState(callSid, state);
           twiml.redirect(`/voice/engagement-interrupt?text=${encodedText}&followUp=${followUp}&pid=${pid}`);
           res.type("text/xml");
           return res.send(twiml.toString());
@@ -5332,7 +5309,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // ── Final empty guard ─────────────────────────────────────────────────
         if (state.queue.length === 0) {
           if (retryCount < 2) {
-            callerProfileBrowseStates.set(callSid, state);
+            await setBrowseState(callSid, state);
             twiml.pause({ length: 3 });
             twiml.redirect(`/voice/browse-profiles?browseRetry=${retryCount + 1}`);
           } else {
@@ -5351,7 +5328,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (state.blockedUserIds.has(profile.userId)) {
           state.queue.shift();
           // Do NOT add to seenUserIds — the block cache is the authoritative exclusion layer.
-          callerProfileBrowseStates.set(callSid, state);
+          await setBrowseState(callSid, state);
           twiml.redirect("/voice/browse-profiles");
           res.type("text/xml");
           return res.send(twiml.toString());
@@ -5426,7 +5403,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.log(`[voice] Playing profile userId=${profile.userId} (buffer=${state.queue.length}, seen=${state.seenUserIds.length})`);
 
         // Persist state before redirecting
-        callerProfileBrowseStates.set(callSid, state);
+        await setBrowseState(callSid, state);
         twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profile.userId)}&attempt=1`);
       }
     } catch (error) {
