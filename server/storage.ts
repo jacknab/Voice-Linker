@@ -143,6 +143,8 @@ export interface IStorage {
   getZipEntryByCode(code: string): Promise<ZipCode | undefined>;
   getOrCreateZipEntry(code: string, geo?: { latitude: number; longitude: number; city: string; state: string; neighborhood?: string | null }): Promise<ZipCode>;
   setUserZipCode(userId: string, zipCodeId: string): Promise<void>;
+  getUserZipCoords(userId: string): Promise<{ lat: number | null; lon: number | null }>;
+  getAllActiveProfilesWithGeo(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<(Profile & { lat: number | null; lon: number | null })[]>;
   getAllZipCodes(): Promise<ZipCode[]>;
   upsertAdminZipEntry(code: string, neighborhood: string, latitude?: number, longitude?: number): Promise<ZipCode>;
   deleteZipEntry(id: string): Promise<void>;
@@ -879,6 +881,50 @@ export class DatabaseStorage implements IStorage {
       .orderBy(callers.joinedAt);
 
     return rows.map(r => r.profile);
+  }
+
+  async getUserZipCoords(userId: string): Promise<{ lat: number | null; lon: number | null }> {
+    const [row] = await db
+      .select({ lat: zipCodes.latitude, lon: zipCodes.longitude })
+      .from(users)
+      .leftJoin(zipCodes, eq(users.zipCodeId, zipCodes.id))
+      .where(eq(users.id, userId))
+      .limit(1);
+    return { lat: row?.lat ?? null, lon: row?.lon ?? null };
+  }
+
+  async getAllActiveProfilesWithGeo(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<(Profile & { lat: number | null; lon: number | null })[]> {
+    const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
+    const isMW = currentSiteCategory === 'MW';
+    const MIN_GREETING_SECONDS = 3;
+    const callerScope = regionId
+      ? or(eq(callers.regionId, regionId), and(like(callers.callSid, `${VIRTUAL_PREFIX}%`), isNull(callers.regionId)))
+      : sql`true`;
+    const profileScope = isMW && oppositeGender
+      ? and(eq(profiles.siteCategory, 'MW'), eq(profiles.gender, oppositeGender))
+      : or(isNull(profiles.siteCategory), eq(profiles.siteCategory, 'MM'), like(callers.callSid, `${VIRTUAL_PREFIX}%`));
+    const finalCondition = and(
+      eq(callers.status, "active"),
+      callerScope,
+      not(eq(callers.userId, excludeUserId)),
+      ...(oppositeGender ? [eq(callers.gender, oppositeGender)] : []),
+      profileScope,
+      sql`NOT EXISTS (
+        SELECT 1 FROM ${blockedUsers}
+        WHERE (${blockedUsers.blockerId} = ${excludeUserId} AND ${blockedUsers.blockedUserId} = ${callers.userId})
+           OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
+      )`,
+      or(isNull(profiles.recordingDuration), gte(profiles.recordingDuration, MIN_GREETING_SECONDS)),
+    );
+    const rows = await db
+      .select({ profile: profiles, lat: zipCodes.latitude, lon: zipCodes.longitude })
+      .from(profiles)
+      .innerJoin(callers, eq(profiles.userId, callers.userId))
+      .leftJoin(users, eq(callers.userId, users.id))
+      .leftJoin(zipCodes, eq(users.zipCodeId, zipCodes.id))
+      .where(finalCondition)
+      .orderBy(callers.joinedAt);
+    return rows.map(r => ({ ...r.profile, lat: r.lat ?? null, lon: r.lon ?? null }));
   }
 
   async getNearbyProfileUserIds(excludeUserId: string, regionId: string | undefined, callerLat: number, callerLon: number, thresholdKm: number): Promise<string[]> {
