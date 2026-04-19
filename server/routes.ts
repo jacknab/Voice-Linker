@@ -634,8 +634,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Gender is required for MW profile greetings (male or female)" });
       }
 
+      // Move the uploaded file into uploads/seeds/ so the seed importer can find
+      // it on restart and the recording URL matches the expected seeds path.
+      const seedsDir = path.join(UPLOADS_DIR, "seeds");
+      if (!fs.existsSync(seedsDir)) fs.mkdirSync(seedsDir, { recursive: true });
+      const seedFilename = req.file.filename;
+      const seedDest = path.join(seedsDir, seedFilename);
+      fs.renameSync(req.file.path, seedDest);
+
       const user = await storage.getOrCreateUser(phoneNumber);
-      const recordingUrl = `/uploads/${req.file.filename}`;
+      const recordingUrl = `/uploads/seeds/${seedFilename}`;
       const profile = await storage.upsertProfile({
         userId: user.id,
         recordingUrl,
