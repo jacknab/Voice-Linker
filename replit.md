@@ -105,6 +105,7 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
                       ├─ Enter 16-digit card number
                       ├─ Enter expiry (MMYY)
                       └─ Enter CVV → charges card via Stripe API
+            └─ Press 2 → How closest caller matching works (`/voice/closest-callers-info`)
 ```
 
 ## Environment Variables (.env)

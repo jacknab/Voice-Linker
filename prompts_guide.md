@@ -101,7 +101,8 @@ Drop the recorded `.mp3` into the `uploads/` folder — the system will use your
 
 | File Name | Script to Record | When It Plays |
 |-----------|-----------------|---------------|
-| `info_menu.mp3` | "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu." | Caller presses 4 from the main menu |
+| `info_menu_v2.mp3` | "Information, prices, and membership. Press 1 for membership questions. To learn how the Male Box knows which callers are closest to you, press 2. Press 9 to return to the main menu." | Caller presses 4 from the main menu |
+| `closest_callers_info.mp3` | "If we have your ZIP code, we use it to play nearby callers first..." | Info menu → press 2 |
 | `membership_questions.mp3` | "Membership questions. Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership with a credit card. Press 9 to return to the main menu." | Info menu → press 1 |
 | `membership_how_it_works.mp3` | "Here is how membership works. As a member, you get full access to the voice line community. Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. We offer three membership options: a 24 hour pass, a 14 day membership, and a 30 day membership. Your remaining time is tracked in hours. When you have less than 60 minutes left, the system will tell you in minutes. Choose the option that works best for you." | Membership questions → press 1 |
 | `membership_pricing.mp3` | "Here are our membership prices. A 24 hour pass is 3 dollars. A 14 day membership is 10 dollars. A 30 day membership is 25 dollars. To purchase, press 3 from the membership menu." | Membership questions → press 2 |

@@ -5604,7 +5604,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/info-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-info-menu" });
-    playPrompt(gather, req, "info_menu.mp3", "Information, prices, and membership. Press 1 for membership questions. Press 9 to return to the main menu.");
+    playPrompt(gather, req, "info_menu_v2.mp3", "Information, prices, and membership. Press 1 for membership questions. To learn how the Male Box knows which callers are closest to you, press 2. Press 9 to return to the main menu.");
     twiml.redirect("/voice/info-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -5616,6 +5616,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     if (digit === "1") {
       twiml.redirect("/voice/membership-questions");
+    } else if (digit === "2") {
+      twiml.redirect("/voice/closest-callers-info");
     } else if (digit === "9") {
       twiml.redirect("/voice/main-menu");
     } else {
@@ -5623,6 +5625,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       twiml.redirect("/voice/info-menu");
     }
 
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/closest-callers-info", async (req, res) => {
+    const twiml = new VoiceResponse();
+    playPrompt(twiml, req, "closest_callers_info.mp3",
+      "Here is how the Male Box finds callers closest to you. " +
+      "If we have your ZIP code, we use it to play nearby callers first when they are available. " +
+      "Your exact location is never announced, and other callers do not get your phone number or private information. " +
+      "If no nearby callers are available, you will still hear other active callers so the line keeps moving."
+    );
+    twiml.redirect("/voice/info-menu");
     res.type("text/xml");
     res.send(twiml.toString());
   });

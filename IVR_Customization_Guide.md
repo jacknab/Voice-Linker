@@ -108,7 +108,8 @@ Then restart the server for the change to take effect. If you have a `system_gre
 
 | What to search for | What it controls |
 |---|---|
-| `info_menu.mp3` | "Press 1 for membership questions..." |
+| `info_menu_v2.mp3` | "Press 1 for membership questions. Press 2 for closest caller matching..." |
+| `closest_callers_info.mp3` | Explains how closest caller matching works |
 | `membership_how_it_works.mp3` | Full explanation of how membership works |
 | `payment_success_30day.mp3` | "Payment successful! You now have 30 Day access..." |
 | `payment_declined.mp3` | "Your card was declined." |
