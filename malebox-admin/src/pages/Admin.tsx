@@ -3039,6 +3039,15 @@ interface MailboxStats {
   byCategory: { category: string | null; count: number }[];
 }
 
+interface RedisStatus {
+  configured: boolean;
+  connected: boolean;
+  mode: "redis" | "memory";
+  latencyMs: number | null;
+  activeSessions: number;
+  error: string | null;
+}
+
 function DashboardTab() {
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
@@ -3055,6 +3064,11 @@ function DashboardTab() {
   const { data: mailboxStats } = useQuery<MailboxStats>({
     queryKey: ["/api/admin/mailbox-stats"],
     enabled: isMM,
+    refetchInterval: 30000,
+  });
+
+  const { data: redisStatus, isLoading: redisLoading, isFetching: redisFetching, refetch: refetchRedis } = useQuery<RedisStatus>({
+    queryKey: ["/api/admin/redis/status"],
     refetchInterval: 30000,
   });
 
@@ -3077,6 +3091,112 @@ function DashboardTab() {
             <div className={C.statLabel}>{item.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* ── Redis Status Card ─────────────────────────────────────────────── */}
+      <div data-testid="card-redis-status" className={C.card}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+              {redisStatus?.connected
+                ? <CheckCircle size={14} className="text-emerald-600" />
+                : redisStatus?.configured
+                  ? <AlertCircle size={14} className="text-red-500" />
+                  : <AlertCircle size={14} className="text-amber-500" />
+              }
+              Redis State Store
+            </h3>
+            <p className="text-gray-400 font-mono text-xs -mt-1">
+              Real-time caller browse session persistence. Refreshes every 30s.
+            </p>
+          </div>
+          <button
+            data-testid="btn-refresh-redis"
+            type="button"
+            onClick={() => refetchRedis()}
+            disabled={redisFetching}
+            className={C.btnGhost}
+          >
+            <RefreshCw size={12} className={redisFetching ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Connection Status */}
+          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50" data-testid="status-redis-connection">
+            <div className={C.label}>Connection</div>
+            {redisLoading ? (
+              <div className="text-gray-500 font-mono text-xs flex items-center gap-1.5">
+                <Loader2 size={12} className="animate-spin" /> Checking...
+              </div>
+            ) : (
+              <>
+                <div className={`font-mono text-sm font-bold flex items-center gap-1.5 ${
+                  redisStatus?.connected ? "text-emerald-700" : redisStatus?.configured ? "text-red-600" : "text-amber-700"
+                }`}>
+                  {redisStatus?.connected
+                    ? <CheckCircle size={13} />
+                    : redisStatus?.configured
+                      ? <XCircle size={13} />
+                      : <AlertTriangle size={13} />
+                  }
+                  {redisStatus?.connected ? "Connected" : redisStatus?.configured ? "Unreachable" : "Not configured"}
+                </div>
+                <div className="text-gray-400 font-mono text-[10px] mt-1">
+                  Mode: <span className="font-bold text-gray-600">{redisStatus?.mode ?? "—"}</span>
+                </div>
+                {redisStatus?.error && (
+                  <div className="text-red-500 font-mono text-[10px] mt-1 break-words">{redisStatus.error}</div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Latency */}
+          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50" data-testid="status-redis-latency">
+            <div className={C.label}>Ping Latency</div>
+            {redisLoading ? (
+              <div className="text-gray-500 font-mono text-xs flex items-center gap-1.5">
+                <Loader2 size={12} className="animate-spin" /> Checking...
+              </div>
+            ) : (
+              <>
+                <div className={`font-mono text-2xl font-bold ${
+                  redisStatus?.latencyMs == null ? "text-gray-300" :
+                  redisStatus.latencyMs < 5 ? "text-emerald-600" :
+                  redisStatus.latencyMs < 20 ? "text-amber-500" : "text-red-500"
+                }`}>
+                  {redisStatus?.latencyMs != null ? `${redisStatus.latencyMs}ms` : "—"}
+                </div>
+                <div className="text-gray-400 font-mono text-[10px] mt-1">
+                  {redisStatus?.latencyMs == null ? "Not available" :
+                   redisStatus.latencyMs < 5 ? "Excellent" :
+                   redisStatus.latencyMs < 20 ? "Good" : "High latency"}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Active Sessions */}
+          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50" data-testid="status-redis-sessions">
+            <div className={C.label}>Active Browse Sessions</div>
+            {redisLoading ? (
+              <div className="text-gray-500 font-mono text-xs flex items-center gap-1.5">
+                <Loader2 size={12} className="animate-spin" /> Checking...
+              </div>
+            ) : (
+              <>
+                <div className="font-mono text-2xl font-bold text-[#f5a623]">
+                  {redisStatus?.activeSessions ?? 0}
+                </div>
+                <div className="text-gray-400 font-mono text-[10px] mt-1">
+                  {redisStatus?.mode === "redis" ? "Stored in Redis (30min TTL)" : "Stored in memory"}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {isMM && (

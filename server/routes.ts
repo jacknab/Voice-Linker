@@ -16,6 +16,7 @@ import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger, getVo
 import { triggerLocationAudio, forceRegenAllSystemPrompts } from "./audioAutogen";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
+import { getRedisStatus } from "./redis";
 
 import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached, getMembershipSettingsCached } from "./settings-cache";
 import { db } from "./db";
@@ -1511,6 +1512,15 @@ export async function registerRoutes(
   });
 
   // Return Roger's current ElevenLabs voice ID (masked for display).
+  app.get("/api/admin/redis/status", async (_req, res) => {
+    try {
+      const status = await getRedisStatus();
+      res.json(status);
+    } catch (err) {
+      res.json({ configured: false, connected: false, mode: "memory", latencyMs: null, activeSessions: 0, error: String(err) });
+    }
+  });
+
   app.get("/api/admin/roger/voice", (_req, res) => {
     const id = getVoiceIdForRoger();
     const masked = id.length > 8 ? `${id.slice(0, 4)}${"•".repeat(id.length - 8)}${id.slice(-4)}` : id;

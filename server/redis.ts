@@ -26,6 +26,7 @@ const memoryFallback = new Map<string, CallerBrowseState>();
 
 let redisClient: Redis | null = null;
 let redisAvailable = false;
+let redisConfigured = false;
 
 function getClient(): Redis | null {
   if (redisClient) return redisAvailable ? redisClient : null;
@@ -35,6 +36,8 @@ function getClient(): Redis | null {
     console.log("[redis] REDIS_URL not set — using in-memory fallback for browse state");
     return null;
   }
+
+  redisConfigured = true;
 
   try {
     const client = new Redis(url, {
@@ -70,6 +73,56 @@ function getClient(): Redis | null {
 
 // Initialize eagerly so connection is established before first request
 getClient();
+
+export interface RedisStatus {
+  configured: boolean;
+  connected: boolean;
+  mode: "redis" | "memory";
+  latencyMs: number | null;
+  activeSessions: number;
+  error: string | null;
+}
+
+export async function getRedisStatus(): Promise<RedisStatus> {
+  const configured = redisConfigured || !!process.env.REDIS_URL;
+  const client = getClient();
+
+  if (!client || !redisAvailable) {
+    return {
+      configured,
+      connected: false,
+      mode: "memory",
+      latencyMs: null,
+      activeSessions: memoryFallback.size,
+      error: configured ? "Redis configured but not reachable" : null,
+    };
+  }
+
+  let latencyMs: number | null = null;
+  let activeSessions = 0;
+  let error: string | null = null;
+
+  try {
+    const start = Date.now();
+    await client.ping();
+    latencyMs = Date.now() - start;
+
+    // Count active browse sessions (keys matching browse:*)
+    const keys = await client.keys("browse:*");
+    activeSessions = keys.length;
+  } catch (err) {
+    error = err instanceof Error ? err.message : "Unknown error";
+  }
+
+  return {
+    configured,
+    connected: redisAvailable,
+    mode: "redis",
+    latencyMs,
+    activeSessions,
+    error,
+  };
+}
 
 export async function getBrowseState(callSid: string): Promise<CallerBrowseState | undefined> {
   const client = getClient();

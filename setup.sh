@@ -277,11 +277,11 @@ show_menu() {
         "2"  "  Configuration Variables Setup" \
         ""   "  ─────────────────────────────────────────────────" \
         "3"  "  Resume from Step 1  –  Swap space" \
-        "4"  "  Resume from Step 2  –  System packages & Node.js" \
+        "4"  "  Resume from Step 2  –  System packages, Node.js & Redis" \
         "5"  "  Resume from Step 3  –  Firewall (UFW + fail2ban)" \
         "6"  "  Resume from Step 4  –  npm install + .env setup" \
         "7"  "  Resume from Step 5  –  PostgreSQL database & user" \
-        "8"  "  Resume from Step 6  –  .env configuration" \
+        "8"  "  Resume from Step 6  –  .env + Redis configuration" \
         "9"  "  Resume from Step 7  –  Uploads directory" \
         "10" "  Resume from Step 8  –  Database schema (Drizzle push)" \
         "11" "  Resume from Step 9  –  Production build" \
@@ -463,7 +463,7 @@ do_step_1() {
 
 # ── Step 2 – System packages ──────────────────────────────────────────────────
 do_step_2() {
-    hdr "Step 2/10  System packages"
+    hdr "Step 2/10  System packages (Node.js, PostgreSQL, Nginx, Redis)"
     sudo apt-get update -qq
     sudo apt-get install -y -qq \
         curl wget git openssl ca-certificates gnupg lsb-release \
@@ -565,6 +565,25 @@ do_step_2() {
         success "Certbot installed."
     else
         info "Certbot already present — skipping."
+    fi
+
+    # Redis
+    if ! command -v redis-server &>/dev/null; then
+        info "Installing Redis..."
+        sudo apt-get install -y redis-server -qq
+        success "Redis $(redis-server --version | grep -oP 'v=\K[\d.]+' || echo 'installed')."
+    else
+        info "Redis $(redis-server --version | grep -oP 'v=\K[\d.]+' || echo '?') already present — skipping install."
+    fi
+
+    # Enable Redis service (config and password are set in Step 6 alongside .env)
+    if ! sudo systemctl is-enabled redis-server &>/dev/null 2>&1; then
+        sudo systemctl enable redis-server
+        info "Redis service enabled."
+    fi
+    if ! sudo systemctl is-active --quiet redis-server 2>/dev/null; then
+        sudo systemctl start redis-server
+        info "Redis service started."
     fi
 
     success "All system packages ready."
@@ -827,6 +846,71 @@ EOF
     fi
     chmod 600 "${APP_DIR}/.env"
     info ".env permissions set to 600."
+
+    # ── Redis: generate password, configure redis.conf, write REDIS_URL ────────
+    if command -v redis-server &>/dev/null && [ -f "/etc/redis/redis.conf" ]; then
+        info "Configuring Redis..."
+
+        # Reuse existing password from .env if present, otherwise generate fresh
+        REDIS_PASSWORD=""
+        if grep -q "^REDIS_URL=" "${APP_DIR}/.env" 2>/dev/null; then
+            REDIS_PASSWORD=$(grep "^REDIS_URL=" "${APP_DIR}/.env" \
+                | sed -nE 's|^redis://:([^@]+)@.*|\1|p' || true)
+        fi
+        if [ -z "${REDIS_PASSWORD:-}" ]; then
+            REDIS_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)
+            info "Generated new Redis password."
+        else
+            info "Reusing existing Redis password from .env."
+        fi
+
+        # Bind to localhost only
+        if sudo grep -q "^bind " /etc/redis/redis.conf; then
+            sudo sed -i 's/^bind .*/bind 127.0.0.1/' /etc/redis/redis.conf
+        else
+            echo "bind 127.0.0.1" | sudo tee -a /etc/redis/redis.conf > /dev/null
+        fi
+
+        # Remove any leftover commented-out requirepass lines, then set the password
+        sudo sed -i '/^# *requirepass /d' /etc/redis/redis.conf
+        if sudo grep -q "^requirepass " /etc/redis/redis.conf; then
+            sudo sed -i "s/^requirepass .*/requirepass ${REDIS_PASSWORD}/" /etc/redis/redis.conf
+        else
+            echo "requirepass ${REDIS_PASSWORD}" | sudo tee -a /etc/redis/redis.conf > /dev/null
+        fi
+
+        # Memory limit — only add once
+        if ! sudo grep -q "^maxmemory " /etc/redis/redis.conf; then
+            echo "maxmemory 128mb"         | sudo tee -a /etc/redis/redis.conf > /dev/null
+            echo "maxmemory-policy allkeys-lru" | sudo tee -a /etc/redis/redis.conf > /dev/null
+            info "Redis maxmemory set to 128mb (allkeys-lru eviction)."
+        fi
+
+        # Enable AOF persistence
+        if ! sudo grep -q "^appendonly yes" /etc/redis/redis.conf; then
+            sudo sed -i 's/^appendonly no/appendonly yes/' /etc/redis/redis.conf \
+                || echo "appendonly yes" | sudo tee -a /etc/redis/redis.conf > /dev/null
+            info "Redis AOF persistence enabled."
+        fi
+
+        # Restart Redis with new config
+        sudo systemctl restart redis-server
+        sleep 1
+
+        # Verify
+        if redis-cli -a "${REDIS_PASSWORD}" ping 2>/dev/null | grep -q PONG; then
+            success "Redis is responding to PING."
+        else
+            warn "Redis ping failed — check /etc/redis/redis.conf manually."
+        fi
+
+        # Write REDIS_URL to .env
+        local REDIS_URL="redis://:${REDIS_PASSWORD}@127.0.0.1:6379"
+        upsert_env "REDIS_URL" "${REDIS_URL}"
+        success "REDIS_URL written to .env: redis://:****@127.0.0.1:6379"
+    else
+        warn "Redis not installed — skipping REDIS_URL setup. Run Step 2 to install Redis first."
+    fi
 }
 
 # ── Step 7 – Uploads directory ────────────────────────────────────────────────
@@ -1230,6 +1314,7 @@ run_from() {
     echo -e "    PM2 list  : pm2 list"
     echo -e "    Nginx log : sudo tail -f /var/log/nginx/malebox_error.log"
     echo -e "    Firewall  : sudo ufw status"
+    echo -e "    Redis     : redis-cli -a \$(grep REDIS_URL ${APP_DIR}/.env | sed -nE 's|redis://:([^@]+)@.*|\\1|p') ping"
     echo ""
     echo -e "  ${BOLD}${YELLOW}Fill in your API keys in .env then restart:${RESET}"
     echo -e "    nano ${APP_DIR}/.env"
@@ -1237,6 +1322,7 @@ run_from() {
     echo -e "    TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER"
     echo -e "    ELEVENLABS_API_KEY / ELEVENLABS_VOICE_ID"
     echo -e "    STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET"
+    echo -e "    (REDIS_URL is auto-configured by Step 6)"
     echo ""
     echo -e "    pm2 restart ${SERVICE_NAME}"
     echo -e "${BOLD}${GREEN}════════════════════════════════════════════════${RESET}"
