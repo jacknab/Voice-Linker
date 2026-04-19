@@ -823,29 +823,48 @@ export class DatabaseStorage implements IStorage {
   async getActiveCallerCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number> {
     // If callerGender is provided, count only opposite-gender callers (MW systems)
     const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
-    // Include virtual callers (VIRTUAL- prefix with null regionId) so they are counted
-    // the same way they appear in the browse pool.
-    const callerScope = regionId
-      ? or(
-          eq(callers.regionId, regionId),
-          and(like(callers.callSid, `${VIRTUAL_PREFIX}%`), isNull(callers.regionId)),
-        )
+    const regionScope = regionId
+      ? sql`(c.region_id = ${regionId} OR (c.call_sid LIKE ${`${VIRTUAL_PREFIX}%`} AND c.region_id IS NULL))`
       : sql`true`;
-    const conditions = and(
-      eq(callers.status, "active"),
-      not(eq(callers.userId, excludeUserId)),
-      callerScope,
-      ...(oppositeGender ? [eq(callers.gender, oppositeGender)] : []),
-      sql`NOT EXISTS (
-        SELECT 1 FROM ${blockedUsers}
-        WHERE (${blockedUsers.blockerId} = ${excludeUserId} AND ${blockedUsers.blockedUserId} = ${callers.userId})
-           OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
-      )`
-    );
-    const [result] = await db.select({ count: count() })
-      .from(callers)
-      .where(conditions);
-    return result.count;
+    const callerGenderScope = oppositeGender
+      ? sql`c.gender = ${oppositeGender}`
+      : sql`true`;
+    const seedGenderScope = oppositeGender
+      ? sql`p.gender = ${oppositeGender} AND p.site_category = 'MW'`
+      : sql`true`;
+
+    const result = await db.execute<{ count: number }>(sql`
+      SELECT COUNT(DISTINCT user_id)::int AS count
+      FROM (
+        SELECT c.user_id
+        FROM ${callers} c
+        WHERE c.status = 'active'
+          AND c.user_id <> ${excludeUserId}
+          AND ${regionScope}
+          AND ${callerGenderScope}
+          AND NOT EXISTS (
+            SELECT 1 FROM ${blockedUsers} b
+            WHERE (b.blocker_id = ${excludeUserId} AND b.blocked_user_id = c.user_id)
+               OR (b.blocker_id = c.user_id AND b.blocked_user_id = ${excludeUserId})
+          )
+
+        UNION
+
+        SELECT ss.user_id
+        FROM ${seedSessions} ss
+        INNER JOIN ${profiles} p ON p.user_id = ss.user_id
+        WHERE ss.ended_at IS NULL
+          AND ss.scheduled_end_at > now()
+          AND ss.user_id <> ${excludeUserId}
+          AND ${seedGenderScope}
+          AND NOT EXISTS (
+            SELECT 1 FROM ${blockedUsers} b
+            WHERE (b.blocker_id = ${excludeUserId} AND b.blocked_user_id = ss.user_id)
+               OR (b.blocker_id = ss.user_id AND b.blocked_user_id = ${excludeUserId})
+          )
+      ) counted_callers
+    `);
+    return Number(result.rows[0]?.count ?? 0);
   }
 
   async getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null): Promise<number> {
