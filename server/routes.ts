@@ -16,7 +16,7 @@ import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger, getVo
 import { triggerLocationAudio, forceRegenAllSystemPrompts } from "./audioAutogen";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
-import { getRedisStatus } from "./redis";
+import { getRedisStatus, flushBrowseSessions } from "./redis";
 
 import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached, getMembershipSettingsCached } from "./settings-cache";
 import { db } from "./db";
@@ -1518,6 +1518,17 @@ export async function registerRoutes(
       res.json(status);
     } catch (err) {
       res.json({ configured: false, connected: false, mode: "memory", latencyMs: null, activeSessions: 0, error: String(err) });
+    }
+  });
+
+  app.post("/api/admin/redis/flush", async (_req, res) => {
+    try {
+      const result = await flushBrowseSessions();
+      console.log(`[admin] Redis flush: ${result.flushedRedis} Redis keys + ${result.flushedMemory} memory entries cleared`);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      console.error("[admin] Redis flush error:", err);
+      res.status(500).json({ ok: false, error: String(err) });
     }
   });
 

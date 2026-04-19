@@ -3072,6 +3072,16 @@ function DashboardTab() {
     refetchInterval: 30000,
   });
 
+  const [flushConfirm, setFlushConfirm] = useState(false);
+  const flushMutation = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/admin/redis/flush"),
+    onSuccess: () => {
+      setFlushConfirm(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/redis/status"] });
+    },
+    onError: () => setFlushConfirm(false),
+  });
+
   const items = [
     { label: "Live on the Line", value: stats?.activeCalls ?? 0, icon: <PhoneCall size={18} className="text-emerald-500" /> },
     { label: "Registered Users", value: stats?.users ?? 0, icon: <Phone size={18} className="text-[#f5a623]" /> },
@@ -3110,16 +3120,52 @@ function DashboardTab() {
               Real-time caller browse session persistence. Refreshes every 30s.
             </p>
           </div>
-          <button
-            data-testid="btn-refresh-redis"
-            type="button"
-            onClick={() => refetchRedis()}
-            disabled={redisFetching}
-            className={C.btnGhost}
-          >
-            <RefreshCw size={12} className={redisFetching ? "animate-spin" : ""} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Flush — two-step inline confirm */}
+            {flushConfirm ? (
+              <div className="flex items-center gap-1.5 border border-red-300 bg-red-50 rounded-md px-2 py-1">
+                <span className="font-mono text-[10px] text-red-700 font-bold">Flush all sessions?</span>
+                <button
+                  data-testid="btn-flush-redis-confirm"
+                  type="button"
+                  onClick={() => flushMutation.mutate()}
+                  disabled={flushMutation.isPending}
+                  className="font-mono text-[10px] font-bold text-white bg-red-600 hover:bg-red-700 px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                >
+                  {flushMutation.isPending ? <Loader2 size={10} className="animate-spin inline" /> : "Yes, flush"}
+                </button>
+                <button
+                  data-testid="btn-flush-redis-cancel"
+                  type="button"
+                  onClick={() => setFlushConfirm(false)}
+                  disabled={flushMutation.isPending}
+                  className="font-mono text-[10px] text-gray-500 hover:text-gray-700 px-1 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                data-testid="btn-flush-redis"
+                type="button"
+                onClick={() => setFlushConfirm(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-mono text-xs font-medium text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 hover:border-red-300 transition-colors"
+              >
+                <Trash2 size={11} />
+                Flush
+              </button>
+            )}
+            <button
+              data-testid="btn-refresh-redis"
+              type="button"
+              onClick={() => refetchRedis()}
+              disabled={redisFetching}
+              className={C.btnGhost}
+            >
+              <RefreshCw size={12} className={redisFetching ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

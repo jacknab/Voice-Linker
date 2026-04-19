@@ -165,3 +165,30 @@ export async function deleteBrowseState(callSid: string): Promise<void> {
     console.error("[redis] deleteBrowseState error:", err);
   }
 }
+
+export interface FlushResult {
+  flushedRedis: number;
+  flushedMemory: number;
+  mode: "redis" | "memory";
+}
+
+export async function flushBrowseSessions(): Promise<FlushResult> {
+  const memoryCount = memoryFallback.size;
+  memoryFallback.clear();
+
+  const client = getClient();
+  if (!client || !redisAvailable) {
+    return { flushedRedis: 0, flushedMemory: memoryCount, mode: "memory" };
+  }
+
+  try {
+    const keys = await client.keys("browse:*");
+    if (keys.length > 0) {
+      await client.del(...keys);
+    }
+    return { flushedRedis: keys.length, flushedMemory: memoryCount, mode: "redis" };
+  } catch (err) {
+    console.error("[redis] flushBrowseSessions error:", err);
+    return { flushedRedis: 0, flushedMemory: memoryCount, mode: "redis" };
+  }
+}
