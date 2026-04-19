@@ -16,7 +16,10 @@
  */
 
 import { config as loadEnv } from "dotenv";
-loadEnv();
+// Try common env file locations on both dev and VPS deployments
+loadEnv({ path: ".env" });
+loadEnv({ path: ".env.local", override: false });
+loadEnv({ path: "/opt/Voice-Linker/.env", override: false });
 
 import fs from "fs";
 import path from "path";
