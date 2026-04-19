@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import { getVoiceIdForFolder } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
-import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
+import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, scheduleAutoModCheck } from "./autoModeration";
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
 import * as engagementEngine from "./engagementEngine";
@@ -2010,6 +2010,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const callSid  = req.body?.CallSid as string;
     const fromNumber = req.body?.From as string;
+
+    // A real caller just arrived — kick off seed activity (fire and forget)
+    triggerSeedActivity().catch(() => {});
 
     // MW systems have their own main menu — bounce there automatically so all
     // sub-routes that redirect to /voice/main-menu land in the right place.
