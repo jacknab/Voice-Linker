@@ -5452,6 +5452,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     return "/voice/browse-profiles";
   }
 
+  function advanceBrowseQueueAfterMessage(callSid: string, toUserId: string, returnTo: string): void {
+    if (!callSid || !toUserId || returnTo) return;
+    removeFromBrowseQueue(callSid, toUserId);
+  }
+
   app.post("/voice/review-message", async (req, res) => {
     const twiml = new VoiceResponse();
     const callSid = req.body?.CallSid as string;
@@ -5520,12 +5525,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const recipientBlockedSender = toUserId ? await storage.isUserBlocked(toUserId, user.id) : false;
         if (recipientBlockedSender) {
           console.log(`[voice] handle-review-message: message discarded — toUserId=${toUserId} has blocked userId=${user.id}`);
+          advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
           playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
           twiml.redirect(cancelReturnPath(returnTo, category));
           res.type("text/xml");
           return res.send(twiml.toString());
         }
         const sentMessage = await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
+        advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
         // Queue sent message for human admin review
         storage.createFlaggedItem({
           contentType: "message",
@@ -5591,6 +5598,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
+      advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
       if (returnTo === "mailbox") {
         playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
         twiml.redirect("/voice/my-mailbox");

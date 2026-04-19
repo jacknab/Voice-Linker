@@ -6504,6 +6504,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     return "/voice/browse-profiles";
   }
 
+  async function advanceBrowseQueueAfterMessage(callSid: string, toUserId: string, returnTo: string): Promise<void> {
+    if (!callSid || !toUserId || returnTo) return;
+    const state = await getBrowseState(callSid);
+    if (!state) return;
+    if (!state.seenUserIds.includes(toUserId)) {
+      state.seenUserIds.push(toUserId);
+    }
+    state.queue = state.queue.filter(p => p.userId !== toUserId);
+    await setBrowseState(callSid, state);
+    console.log(`[voice] advanceBrowseQueueAfterMessage: advanced past userId=${toUserId} for callSid=${callSid}`);
+  }
+
   app.post("/voice/review-message", async (req, res) => {
     const twiml = new VoiceResponse();
     const callSid = req.body?.CallSid as string;
@@ -6572,6 +6584,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const recipientBlockedSender = toUserId ? await storage.isUserBlocked(toUserId, user.id) : false;
         if (recipientBlockedSender) {
           console.log(`[voice] handle-review-message: message discarded — toUserId=${toUserId} has blocked userId=${user.id}`);
+          await advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
           // Play neutral "message sent" so the blocked caller doesn't know they're blocked
           playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
           twiml.redirect(cancelReturnPath(returnTo, category));
@@ -6579,6 +6592,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           return res.send(twiml.toString());
         }
         const sentMessage = await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
+        await advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
         // Queue sent message for human admin review
         storage.createFlaggedItem({
           contentType: "message",
@@ -6650,6 +6664,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
+      await advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
       engagementEngine.trackMessageSent(callSid);
       if (returnTo === "mailbox") {
         playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
