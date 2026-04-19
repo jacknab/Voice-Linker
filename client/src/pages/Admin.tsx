@@ -8321,9 +8321,9 @@ function maskPhone(phone: string): string {
   if (!phone) return "Unknown";
   const digits = phone.replace(/\D/g, "");
   if (digits.length >= 10) {
-    return `(${digits.slice(-10, -7)}) ${digits.slice(-7, -4)}-****`;
+    return `(${digits.slice(-10, -7)}) ${digits.slice(-7, -4)}-${digits.slice(-4)}`;
   }
-  return phone.slice(0, -4) + "****";
+  return phone;
 }
 
 function LiveCallersTab() {

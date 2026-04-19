@@ -821,30 +821,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getActiveCallerCount(excludeUserId: string, regionId?: string, callerGender?: string | null): Promise<number> {
-    // If callerGender is provided, count only opposite-gender real callers (MW systems)
+    // If callerGender is provided, count only opposite-gender callers (MW systems)
     const oppositeGender = callerGender === 'male' ? 'female' : callerGender === 'female' ? 'male' : null;
-    const conditions = regionId
-      ? and(
-          eq(callers.status, "active"),
-          not(eq(callers.userId, excludeUserId)),
+    // Include virtual callers (VIRTUAL- prefix with null regionId) so they are counted
+    // the same way they appear in the browse pool.
+    const callerScope = regionId
+      ? or(
           eq(callers.regionId, regionId),
-          ...(oppositeGender ? [eq(callers.gender, oppositeGender)] : []),
-          sql`NOT EXISTS (
-            SELECT 1 FROM ${blockedUsers}
-            WHERE (${blockedUsers.blockerId} = ${excludeUserId} AND ${blockedUsers.blockedUserId} = ${callers.userId})
-               OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
-          )`
+          and(like(callers.callSid, `${VIRTUAL_PREFIX}%`), isNull(callers.regionId)),
         )
-      : and(
-          eq(callers.status, "active"),
-          not(eq(callers.userId, excludeUserId)),
-          ...(oppositeGender ? [eq(callers.gender, oppositeGender)] : []),
-          sql`NOT EXISTS (
-            SELECT 1 FROM ${blockedUsers}
-            WHERE (${blockedUsers.blockerId} = ${excludeUserId} AND ${blockedUsers.blockedUserId} = ${callers.userId})
-               OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
-          )`
-        );
+      : sql`true`;
+    const conditions = and(
+      eq(callers.status, "active"),
+      not(eq(callers.userId, excludeUserId)),
+      callerScope,
+      ...(oppositeGender ? [eq(callers.gender, oppositeGender)] : []),
+      sql`NOT EXISTS (
+        SELECT 1 FROM ${blockedUsers}
+        WHERE (${blockedUsers.blockerId} = ${excludeUserId} AND ${blockedUsers.blockedUserId} = ${callers.userId})
+           OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
+      )`
+    );
     const [result] = await db.select({ count: count() })
       .from(callers)
       .where(conditions);

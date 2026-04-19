@@ -512,7 +512,18 @@ function safePlayRecording(
     return;
   }
   const isLocal = recordingUrl.startsWith("/uploads/");
-  if (isLocal || hasTwilioCredentials()) {
+  if (isLocal) {
+    // Verify the local file exists before pointing Twilio at it.
+    // A missing file causes Express to return a 404 HTML page which Twilio
+    // plays as a brief static blip — far worse than a TTS fallback.
+    const diskPath = path.join(process.cwd(), recordingUrl);
+    if (!fs.existsSync(diskPath)) {
+      if (fallbackText) node.say(fallbackText);
+      console.warn(`[audio] Local file not found, using fallback: ${recordingUrl}`);
+      return;
+    }
+    node.play(audioProxyUrl(recordingUrl, req));
+  } else if (hasTwilioCredentials()) {
     node.play(audioProxyUrl(recordingUrl, req));
   } else {
     if (fallbackText) node.say(fallbackText);
