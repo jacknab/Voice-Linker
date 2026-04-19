@@ -1,0 +1,79 @@
+Refactor the existing greeting queue system without changing the overall IVR architecture or call flow.
+
+The system already works with:
+
+welcome/disclaimer flow
+caller lookup + membership logic
+region-based greeting system
+main menu routing into live system
+
+DO NOT modify these areas.
+
+🎯 Scope of this change
+
+Only refactor the greeting queue handling logic inside the live system.
+
+🔧 Required Change: Replace full queue with rolling buffer system
+Each caller must NOT have a full prebuilt queue.
+Instead, implement a rolling buffer system per caller:
+buffer size = 3 greetings maximum at any time
+The buffer must always represent:
+the next available greetings the caller has NOT heard in their region
+🧠 Core behavior rules
+1. Per-caller state must include:
+region_id
+seen_greetings (persistent list or table reference)
+active_buffer (max 3 greetings at a time)
+2. Buffer population logic
+
+Whenever buffer size is < 3:
+
+query database for next available greetings in caller’s region
+exclude:
+caller’s own greetings
+greetings already in seen_greetings
+greetings already in active_buffer
+fill until buffer reaches 3 or no more results exist
+3. Playback logic
+
+When a greeting is:
+
+played OR skipped OR blocked:
+immediately mark it as seen
+remove it from buffer
+trigger buffer refill check
+4. Region completion behavior
+
+If:
+
+no more eligible greetings exist in region
+AND buffer is empty
+
+Then:
+
+trigger “region cycle complete” state
+route caller to existing menu system:
+option to reset region cycle (clears seen_greetings)
+or expand to other regions (if enabled)
+5. Critical constraints
+DO NOT create or use a full queue snapshot
+DO NOT preload all region greetings
+DO NOT share buffer between callers
+DO NOT tie buffer logic into live connector
+Buffer must be rebuilt dynamically from DB only
+⚙️ Expected outcome
+
+Each caller experience becomes:
+
+always 1–3 upcoming greetings ready
+continuous refill system
+no duplicate greetings within cycle
+clean reset after region completion
+🎯 Goal
+
+Replace brittle queue snapshots with a stable rolling 3-item buffer system that ensures:
+
+freshness
+no duplication
+consistent per-caller experience
+correct region cycle behavior

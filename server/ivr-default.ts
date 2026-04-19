@@ -178,16 +178,19 @@ interface GreetingDraft {
 }
 const pendingGreetingDrafts = new Map<string, GreetingDraft>(); // CallSid → draft
 
-// Per-caller profile browsing state: each caller gets their own queue + position
+// Per-caller profile browsing state: rolling buffer system (max 3 items at a time)
+type BrowseQueueItem = { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; regionId?: string | null; regionName?: string | null; isPreExisting?: boolean };
 interface CallerBrowseState {
-  queue: { userId: string; recordingUrl: string; nameRecordingUrl?: string | null; regionId?: string | null; regionName?: string | null; isPreExisting?: boolean }[];
-  index: number;
-  lastPlayedIndex: number | null; // index of the most-recently played profile (for Press 5 "go back")
-  hasWrapped: boolean;        // true after the queue index cycled back to 0
+  // Rolling buffer — max 3 items; front item (index 0) is always the next to play
+  queue: BrowseQueueItem[];
+  // Seen greetings this cycle — used to prevent duplicates on refill
+  seenUserIds: string[];
+  // The profile most recently played — for "Press 5 go back"
+  lastPlayedProfile: BrowseQueueItem | null;
   linkedRegionLoaded: boolean; // true once the caller accepted a linked-region queue
   callerRegionId: string | null;   // the region the listening caller dialed into
   callerRegionName: string | null; // human-readable name of that region
-  localUserIds: string[];      // user IDs from the original local-region queue snapshot
+  localUserIds: string[];      // user IDs from the original local-region snapshot (for new-caller detection)
   announcedNewLocalIds: string[]; // new local (home region) callers already announced or queued
   // Multi-region linking support
   linkedRegionSnapshots: { regionId: string; regionName: string; knownUserIds: string[] }[];
@@ -211,6 +214,7 @@ interface CategoryBrowseState {
   index: number;
 }
 const categoryBrowseState = new Map<string, CategoryBrowseState>();
+const callerProfileBrowseStates = new Map<string, CallerBrowseState>(); // callSid → rolling buffer state
 
 // Feature flag — set ENABLE_MAILBOX=false in .env to hide mailboxes & personal ads from the IVR
 const MAILBOX_ENABLED = process.env.ENABLE_MAILBOX !== "false";
@@ -836,6 +840,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Clean up per-call payment/session, name recording, greeting draft, time flags, membership override, gender selection, and engagement state
       engagementEngine.cleanupEngagementState(callSid);
       categoryBrowseState.delete(callSid);
+      callerProfileBrowseStates.delete(callSid);
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
       pendingGreetingDrafts.delete(callSid);
@@ -4933,29 +4938,38 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(msgGather, req, "message_options.mp3", "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound.");
         twiml.redirect("/voice/main-menu");
       } else {
-        // Build the queue directly from the callers table on each visit.
-        let state: CallerBrowseState;
-        {
+        // ── Rolling buffer browsing ───────────────────────────────────────────
+        // State persists across HTTP calls in callerProfileBrowseStates (keyed by callSid).
+        // The buffer holds at most 3 profiles at a time; seenUserIds tracks what this
+        // caller has already heard this cycle.  When the buffer drains after a fill, the
+        // cycle is complete and linked regions are offered (or the cycle resets).
+
+        const afterUserId   = req.query?.afterUserId   as string | undefined;
+        const targetUserId  = req.query?.targetUserId  as string | undefined;
+        const retryCount    = parseInt((req.query?.browseRetry as string) ?? "0", 10);
+
+        let state = callerProfileBrowseStates.get(callSid);
+
+        if (!state) {
+          // ── First visit: build initial state ─────────────────────────────────
           const allProfiles = await storage.getAllActiveProfiles(user.id, regionId, browseCallerGender, browseSiteCategory);
 
-          // Look up the caller's region name for announcements ("new caller closest to you" vs "new caller from [city]")
           let callerRegionName: string | null = null;
           if (regionId) {
             const callerRegion = await storage.getRegionById(regionId);
             callerRegionName = callerRegion?.name ?? null;
           }
 
-          // Snapshot each linked region so we can detect new callers joining them later
-          const linkedRegions = regionId ? await storage.getLinkedRegions(regionId).catch(() => [] as Awaited<ReturnType<typeof storage.getLinkedRegions>>) : [];
+          const linkedRegions = regionId
+            ? await storage.getLinkedRegions(regionId).catch(() => [] as Awaited<ReturnType<typeof storage.getLinkedRegions>>)
+            : [];
           const linkedRegionSnapshots = await Promise.all(
             linkedRegions.map(async (r) => {
               const profiles = await storage.getAllActiveProfiles(user.id, r.id);
               return { regionId: r.id, regionName: r.name, knownUserIds: profiles.map(p => p.userId) };
             })
           );
-          // If the home region has no profiles but linked regions do, silently
-          // absorb those profiles into the initial queue so callers aren't told
-          // "no profiles" when content exists in a paired market.
+
           let initialQueue = allProfiles;
           let linkedRegionLoaded = false;
           if (initialQueue.length === 0 && linkedRegions.length > 0) {
@@ -4971,21 +4985,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             }
           }
 
+          const initialBuffer: BrowseQueueItem[] = initialQueue.slice(0, 3).map(p => ({
+            userId: p.userId,
+            recordingUrl: p.recordingUrl,
+            nameRecordingUrl: p.nameRecordingUrl,
+            regionId: regionId ?? null,
+            regionName: callerRegionName,
+            isPreExisting: true,
+          }));
+
           state = {
-            queue: initialQueue.map(p => ({
-              userId: p.userId,
-              recordingUrl: p.recordingUrl,
-              nameRecordingUrl: p.nameRecordingUrl,
-              regionId: regionId ?? null,
-              regionName: callerRegionName,
-              isPreExisting: true,
-            })),
-            index: 0,
-            lastPlayedIndex: null,
-            hasWrapped: false,
+            queue: initialBuffer,
+            seenUserIds: [],
+            lastPlayedProfile: null,
             linkedRegionLoaded,
             callerRegionId: regionId ?? null,
-            callerRegionName: callerRegionName,
+            callerRegionName,
             localUserIds: allProfiles.map(p => p.userId),
             announcedNewLocalIds: [],
             linkedRegionSnapshots,
@@ -4994,348 +5009,351 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             windowAnnouncementsUsed: 0,
             callerCountAnnounced: false,
           };
-          // Only cache the state if the queue is non-empty.
-          // If empty (seeds may be in an inactive phase), skip caching so the
-          // next browse-profiles visit rebuilds from the live activeCalls table.
-          if (state.queue.length > 0) {
-            const targetUserId = req.query?.targetUserId as string | undefined;
-            const afterUserId = req.query?.afterUserId as string | undefined;
-            const targetIndex = targetUserId ? state.queue.findIndex(p => p.userId === targetUserId) : -1;
-            const afterIndex = afterUserId ? state.queue.findIndex(p => p.userId === afterUserId) : -1;
-            if (targetIndex >= 0) {
-              state.index = targetIndex;
-            } else if (afterIndex >= 0) {
-              state.index = (afterIndex + 1) % state.queue.length;
+
+          engagementEngine.initEngagementState(callSid, user.id);
+          console.log(`[voice] browse-profiles: new session for ${callSid} — buffer=${state.queue.length} (region=${callerRegionName ?? "none"}, linkedRegions=${linkedRegions.length})`);
+        } else {
+          // ── Returning visit ───────────────────────────────────────────────────
+          if (targetUserId) {
+            // Press-5 go-back: inject the last-played profile at the front of the buffer.
+            // Do NOT mark it as seen so it can replay cleanly.
+            const alreadyInBuffer = state.queue.some(p => p.userId === targetUserId);
+            if (!alreadyInBuffer && state.lastPlayedProfile?.userId === targetUserId) {
+              state.queue.unshift(state.lastPlayedProfile);
+              if (state.queue.length > 3) state.queue.pop();
+            }
+          } else if (afterUserId) {
+            // Normal advance (press-2 skip, block, etc.): mark as seen and remove from buffer.
+            if (!state.seenUserIds.includes(afterUserId)) {
+              state.seenUserIds.push(afterUserId);
+            }
+            state.queue = state.queue.filter(p => p.userId !== afterUserId);
+          }
+        }
+
+        // ── Refill buffer to max 3 from DB (excluding seen + current buffer) ──
+        const AI_ID = engagementEngine.BUST_GAME_AI_USER_ID;
+        {
+          const bufferIds  = new Set(state.queue.map(p => p.userId));
+          const excluded   = new Set([...state.seenUserIds, ...bufferIds]);
+
+          const fillFrom = async (rid: string | undefined, rName: string | null, rId: string | null) => {
+            if (state!.queue.length >= 3) return;
+            const avail = await storage.getAllActiveProfiles(user.id, rid, browseCallerGender, browseSiteCategory);
+            for (const p of avail) {
+              if (excluded.has(p.userId) || p.userId === AI_ID) continue;
+              if (state!.queue.length >= 3) break;
+              state!.queue.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, regionId: rId, regionName: rName, isPreExisting: false });
+              excluded.add(p.userId);
+            }
+          };
+
+          if (!state.linkedRegionLoaded) {
+            await fillFrom(state.callerRegionId ?? undefined, state.callerRegionName, state.callerRegionId);
+          } else {
+            for (const snap of state.linkedRegionSnapshots) {
+              await fillFrom(snap.regionId, snap.regionName, snap.regionId);
+              if (state.queue.length >= 3) break;
+            }
+          }
+        }
+
+        // ── Cycle-complete detection: buffer empty after fill ─────────────────
+        if (state.queue.length === 0) {
+          if (state.seenUserIds.length > 0 && !state.linkedRegionLoaded && state.callerRegionId) {
+            // Offer linked regions before resetting
+            const linkedRegions2 = await storage.getLinkedRegions(state.callerRegionId).catch(() => [] as Awaited<ReturnType<typeof storage.getLinkedRegions>>);
+            if (linkedRegions2.length > 0) {
+              const ids   = linkedRegions2.map(r => r.id).join(",");
+              const names = linkedRegions2.map(r => r.name).join("||");
+              callerProfileBrowseStates.set(callSid, state);
+              twiml.redirect(`/voice/nearby-callers-offer?linkedRegionIds=${encodeURIComponent(ids)}&linkedRegionNames=${encodeURIComponent(names)}`);
+              res.type("text/xml");
+              return res.send(twiml.toString());
             }
           }
 
-          // ── Initialize Roger Mood Engine for this session ────────────────────
-          engagementEngine.initEngagementState(callSid, user.id);
-          console.log(`[voice] browse-profiles: built queue of ${state.queue.length} profiles for ${callSid} (region=${callerRegionName ?? "none"}, ${linkedRegions.length} linked regions)`);
+          // Reset cycle: clear seenUserIds and refill
+          if (state.seenUserIds.length > 0) {
+            console.log(`[voice] browse-profiles: cycle complete for ${callSid} — resetting seenUserIds`);
+            state.seenUserIds = [];
+            const resetAvail = await storage.getAllActiveProfiles(user.id, state.callerRegionId ?? undefined, browseCallerGender, browseSiteCategory);
+            for (const p of resetAvail) {
+              if (state.queue.length >= 3) break;
+              state.queue.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, regionId: state.callerRegionId, regionName: state.callerRegionName, isPreExisting: false });
+            }
+          }
+
+          // Still empty — wait and retry
+          if (state.queue.length === 0) {
+            if (retryCount < 2) {
+              callerProfileBrowseStates.set(callSid, state);
+              twiml.pause({ length: 3 });
+              twiml.redirect(`/voice/browse-profiles?browseRetry=${retryCount + 1}`);
+            } else {
+              playPrompt(twiml, req, "no_profiles.mp3", "No profiles are available right now. Please try again later.");
+              twiml.redirect("/voice/main-menu");
+            }
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
         }
 
-        const retryCount = parseInt((req.query?.browseRetry as string) ?? "0", 10);
+        // ── Reconciliation: prune offline/blocked callers from buffer ─────────
+        let currentLocalProfiles: Awaited<ReturnType<typeof storage.getAllActiveProfiles>> = [];
+        const reconActiveIds = new Set<string>();
+        if (state.callerRegionId) {
+          currentLocalProfiles = await storage.getAllActiveProfiles(user.id, state.callerRegionId, browseCallerGender, browseSiteCategory);
+          for (const p of currentLocalProfiles) reconActiveIds.add(p.userId);
+        } else {
+          const globalProfiles = await storage.getAllActiveProfiles(user.id, undefined, browseCallerGender, browseSiteCategory);
+          for (const p of globalProfiles) reconActiveIds.add(p.userId);
+          currentLocalProfiles = globalProfiles;
+        }
+
+        const linkedSnapshotResults: Awaited<ReturnType<typeof storage.getAllActiveProfiles>>[] = [];
+        for (const snap of state.linkedRegionSnapshots) {
+          const snapProfiles = await storage.getAllActiveProfiles(user.id, snap.regionId, browseCallerGender, browseSiteCategory);
+          linkedSnapshotResults.push(snapProfiles);
+          for (const p of snapProfiles) reconActiveIds.add(p.userId);
+        }
+
+        {
+          const queueBefore = state.queue.length;
+          state.queue = state.queue.filter(p => reconActiveIds.has(p.userId) || p.userId === AI_ID);
+          if (state.queue.length < queueBefore) {
+            console.log(`[voice] browse-profiles: reconciled — pruned ${queueBefore - state.queue.length} offline/blocked from buffer, remaining=${state.queue.length} for ${callSid}`);
+          }
+        }
+
+        // ── New caller alerts: home region ("close to you") + linked regions ("from [city]") ──
+        if (state.callerRegionId) {
+          const knownLocalIds = new Set([...state.localUserIds, ...state.announcedNewLocalIds]);
+          const newLocalCaller = currentLocalProfiles.find(p => !knownLocalIds.has(p.userId));
+
+          if (newLocalCaller) {
+            state.announcedNewLocalIds.push(newLocalCaller.userId);
+            const announceLocal = Math.random() < NEW_CALLER_ANNOUNCE_PROBABILITY;
+
+            if (!state.linkedRegionLoaded) {
+              if (announceLocal) {
+                console.log(`[voice] browse-profiles: announcing new home-region caller userId=${newLocalCaller.userId} to ${callSid}`);
+                const alertGather = twiml.gather({
+                  numDigits: 1,
+                  action: `/voice/handle-profile-menu?profileUserId=${newLocalCaller.userId}`,
+                  timeout: 10,
+                });
+                playPrompt(alertGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
+                if (newLocalCaller.nameRecordingUrl) {
+                  safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
+                }
+                safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
+                playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+                twiml.redirect("/voice/browse-profiles");
+                callerProfileBrowseStates.set(callSid, state);
+                res.type("text/xml");
+                return res.send(twiml.toString());
+              } else {
+                console.log(`[voice] browse-profiles: silently queuing new home-region caller userId=${newLocalCaller.userId} for ${callSid} (random skip)`);
+                state.queue.splice(0, 0, {
+                  userId: newLocalCaller.userId,
+                  recordingUrl: newLocalCaller.recordingUrl,
+                  nameRecordingUrl: newLocalCaller.nameRecordingUrl,
+                  regionId: null,
+                  regionName: null,
+                });
+                if (state.queue.length > 3) state.queue.pop();
+              }
+            } else {
+              console.log(`[voice] browse-profiles: ${announceLocal ? "announcing" : "silently queuing"} home-region caller userId=${newLocalCaller.userId} in linked-region queue for ${callSid}`);
+              state.queue.splice(0, 0, {
+                userId: newLocalCaller.userId,
+                recordingUrl: newLocalCaller.recordingUrl,
+                nameRecordingUrl: newLocalCaller.nameRecordingUrl,
+                regionId: announceLocal ? state.callerRegionId : null,
+                regionName: announceLocal ? state.callerRegionName : null,
+              });
+              if (state.queue.length > 3) state.queue.pop();
+            }
+          }
+        }
+
+        for (let snapIdx = 0; snapIdx < state.linkedRegionSnapshots.length; snapIdx++) {
+          const snapshot = state.linkedRegionSnapshots[snapIdx];
+          const currentLinkedProfiles = linkedSnapshotResults[snapIdx];
+          const knownLinkedIds = new Set([...snapshot.knownUserIds, ...state.announcedLinkedCallerIds]);
+          const newLinkedCaller = currentLinkedProfiles.find(p => !knownLinkedIds.has(p.userId));
+
+          if (newLinkedCaller) {
+            state.announcedLinkedCallerIds.push(newLinkedCaller.userId);
+            const announceLinked = Math.random() < NEW_CALLER_ANNOUNCE_PROBABILITY;
+
+            if (announceLinked) {
+              console.log(`[voice] browse-profiles: announcing new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} to ${callSid}`);
+              const alertGather = twiml.gather({
+                numDigits: 1,
+                action: `/voice/handle-profile-menu?profileUserId=${newLinkedCaller.userId}`,
+                timeout: 10,
+              });
+              const linkedRegionRecord = await storage.getRegionById(snapshot.regionId).catch(() => null);
+              const linkedSlug = linkedRegionRecord?.slug ?? snapshot.regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+              const linkedCityFile = `city_${linkedSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
+              const linkedCityFilePath = path.join(UPLOADS_DIR, linkedCityFile);
+              if (fs.existsSync(linkedCityFilePath)) {
+                alertGather.play(`${baseUrl(req)}/uploads/${linkedCityFile}`);
+              } else {
+                alertGather.say(`New caller from ${snapshot.regionName}.`);
+              }
+              if (newLinkedCaller.nameRecordingUrl) {
+                safePlayRecording(alertGather, newLinkedCaller.nameRecordingUrl, req, "");
+              }
+              safePlayRecording(alertGather, newLinkedCaller.recordingUrl, req, "This profile's greeting is not available.");
+              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+              twiml.redirect("/voice/browse-profiles");
+              callerProfileBrowseStates.set(callSid, state);
+              res.type("text/xml");
+              return res.send(twiml.toString());
+            } else {
+              console.log(`[voice] browse-profiles: silently queuing new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} for ${callSid} (random skip)`);
+              state.queue.splice(0, 0, {
+                userId: newLinkedCaller.userId,
+                recordingUrl: newLinkedCaller.recordingUrl,
+                nameRecordingUrl: newLinkedCaller.nameRecordingUrl,
+                regionId: null,
+                regionName: null,
+              });
+              if (state.queue.length > 3) state.queue.pop();
+            }
+          }
+        }
+
+        // ── Engagement Engine interrupt check ─────────────────────────────────
+        let excludedRogerIds = new Set<string>();
+        try {
+          excludedRogerIds = await storage.getExcludedRogerPromptIds(fromNumber, engagementEngine.PROMPT_LIBRARY.length);
+        } catch (err) {
+          console.error("[engagement] failed to fetch roger prompt history:", err);
+        }
+
+        const engInterruption = engagementEngine.getInterruption(callSid, excludedRogerIds);
+        if (engInterruption) {
+          const encodedText = encodeURIComponent(engInterruption.lineText);
+          const followUp    = encodeURIComponent(engInterruption.followUpAction ?? "");
+          const pid         = encodeURIComponent(engInterruption.id);
+          console.log(`[engagement] Interrupting browse with prompt=${engInterruption.id}, followUp=${engInterruption.followUpAction ?? "none"}`);
+          callerProfileBrowseStates.set(callSid, state);
+          twiml.redirect(`/voice/engagement-interrupt?text=${encodedText}&followUp=${followUp}&pid=${pid}`);
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        }
+
+        // ── Bust Game: inject AI imposter into buffer ─────────────────────────
+        const engState = engagementEngine.getEngagementState(callSid);
+        if (engState?.gameStarted && engState.gameBustTargetUserId === AI_ID && !engState.gameBustTargetInjected) {
+          const greetingIndex = 1 + Math.floor(Math.random() * engagementEngine.GAME_AI_GREETING_COUNT);
+          const greetingFile  = `game_greeting_${greetingIndex}.mp3`;
+          const greetingPath  = path.join(UPLOADS_DIR, greetingFile);
+          if (fs.existsSync(greetingPath)) {
+            const offset   = 1 + Math.floor(Math.random() * Math.max(1, Math.min(state.queue.length, 2)));
+            const insertAt = Math.min(offset, state.queue.length);
+            state.queue.splice(insertAt, 0, {
+              userId: AI_ID,
+              recordingUrl: `/uploads/${greetingFile}`,
+              nameRecordingUrl: null,
+              regionId: state.callerRegionId,
+              regionName: null,
+            });
+            if (state.queue.length > 3) state.queue.pop();
+            engagementEngine.markGameTargetInjected(callSid);
+            console.log(`[engagement] Injected AI imposter (${greetingFile}) at buffer[${insertAt}]`);
+          } else {
+            console.warn(`[engagement] Game greeting file not found: ${greetingFile} — re-trying on next browse cycle`);
+          }
+        }
+
+        // ── Final empty guard ─────────────────────────────────────────────────
         if (state.queue.length === 0) {
-          // Clear stale state so the next visit rebuilds the queue fresh from the DB.
-          // This is critical for two cases:
-          //   1. All callers were blocked mid-session — after unblocking, the queue
-          //      must be rebuilt with the now-visible profiles rather than reusing
-          //      the old empty queue that never expires.
-          //   2. Seeds were temporarily in their inactive phase — a fresh rebuild
-          //      on each retry naturally picks them back up once they go active again.
           if (retryCount < 2) {
+            callerProfileBrowseStates.set(callSid, state);
             twiml.pause({ length: 3 });
             twiml.redirect(`/voice/browse-profiles?browseRetry=${retryCount + 1}`);
           } else {
             playPrompt(twiml, req, "no_profiles.mp3", "No profiles are available right now. Please try again later.");
             twiml.redirect("/voice/main-menu");
           }
-        } else {
-          // ── Linked-region offer: queue has looped at least once ──────────────
-          if (state.hasWrapped && !state.linkedRegionLoaded && regionId) {
-            const linkedRegions = await storage.getLinkedRegions(regionId).catch(() => [] as Awaited<ReturnType<typeof storage.getLinkedRegions>>);
-            if (linkedRegions.length > 0) {
-              state.hasWrapped = false; // clear so we don't re-trigger until next full loop
-              const ids = linkedRegions.map(r => r.id).join(",");
-              const names = linkedRegions.map(r => r.name).join("||");
-              twiml.redirect(`/voice/nearby-callers-offer?linkedRegionIds=${encodeURIComponent(ids)}&linkedRegionNames=${encodeURIComponent(names)}`);
-              res.type("text/xml");
-              return res.send(twiml.toString());
-            } else {
-              state.linkedRegionLoaded = true; // no linked regions — stop checking
-            }
-          }
-
-          // ── Queue reconciliation: sync queue against current live state ─────────
-          // On every browse visit, fetch the full cross-region active+unblocked set
-          // and prune any queue entries that are no longer valid.  This handles:
-          //   • Callers who went offline since the queue was built
-          //   • Callers who were blocked after the queue was built
-          //   • Callers who were unblocked (empty queue clears → state is deleted
-          //     → next visit rebuilds with newly visible profiles)
-          //
-          // Profiles are fetched per-region using the same region scope that was
-          // used when the queue was originally built — home region + any linked
-          // regions the caller explicitly opted into.  This means a Denver caller
-          // only sees Denver (and opted-in) profiles; no cross-region leakage.
-          // The same fetched results are reused for new-caller detection below,
-          // so the total number of DB calls is identical to the old approach.
-
-          const reconActiveIds = new Set<string>();
-
-          // Home region
-          let currentLocalProfiles: Awaited<ReturnType<typeof storage.getAllActiveProfiles>> = [];
-          if (regionId) {
-            currentLocalProfiles = await storage.getAllActiveProfiles(user.id, regionId, browseCallerGender, browseSiteCategory);
-            for (const p of currentLocalProfiles) reconActiveIds.add(p.userId);
-          }
-
-          // Each linked region the caller has opted into
-          const linkedSnapshotResults: Awaited<ReturnType<typeof storage.getAllActiveProfiles>>[] = [];
-          for (const snap of state.linkedRegionSnapshots) {
-            const snapProfiles = await storage.getAllActiveProfiles(user.id, snap.regionId, browseCallerGender, browseSiteCategory);
-            linkedSnapshotResults.push(snapProfiles);
-            for (const p of snapProfiles) reconActiveIds.add(p.userId);
-          }
-
-          // Prune offline/blocked callers.  The AI imposter entry (bust-game) has
-          // no real activeCalls row and must never be removed by reconciliation.
-          {
-            const AI_ID = engagementEngine.BUST_GAME_AI_USER_ID;
-            const queueBefore = state.queue.length;
-            state.queue = state.queue.filter(p => reconActiveIds.has(p.userId) || p.userId === AI_ID);
-            if (state.index >= state.queue.length) state.index = 0;
-            if (state.queue.length < queueBefore) {
-              console.log(`[voice] browse-profiles: reconciled — pruned ${queueBefore - state.queue.length} offline/blocked caller(s), remaining=${state.queue.length} for ${callSid}`);
-            }
-          }
-
-          // ── New caller alerts: home region ("close to you") + linked regions ("from [city]") ──
-          // Reuse the profiles already fetched above — no extra DB calls needed.
-
-          // Check for new callers in the home region first
-          if (regionId) {
-            const knownLocalIds = new Set([...state.localUserIds, ...state.announcedNewLocalIds]);
-            const newLocalCaller = currentLocalProfiles.find(p => !knownLocalIds.has(p.userId));
-
-            if (newLocalCaller) {
-              state.announcedNewLocalIds.push(newLocalCaller.userId);
-              const announceLocal = Math.random() < NEW_CALLER_ANNOUNCE_PROBABILITY;
-
-              if (!state.linkedRegionLoaded) {
-                if (announceLocal) {
-                  // ── Home-region browsing: interrupt immediately with announcement ──
-                  console.log(`[voice] browse-profiles: announcing new home-region caller userId=${newLocalCaller.userId} to ${callSid}`);
-                  const alertGather = twiml.gather({
-                    numDigits: 1,
-                    action: `/voice/handle-profile-menu?profileUserId=${newLocalCaller.userId}`,
-                    timeout: 10,
-                  });
-                  playPrompt(alertGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
-                  if (newLocalCaller.nameRecordingUrl) {
-                    safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
-                  }
-                  safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
-                  playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-                  twiml.redirect("/voice/browse-profiles");
-                  res.type("text/xml");
-                  return res.send(twiml.toString());
-                } else {
-                  // ── Silently splice as next in queue — no announcement ─────────
-                  console.log(`[voice] browse-profiles: silently queuing new home-region caller userId=${newLocalCaller.userId} for ${callSid} (random skip)`);
-                  state.queue.splice(state.index, 0, {
-                    userId: newLocalCaller.userId,
-                    recordingUrl: newLocalCaller.recordingUrl,
-                    nameRecordingUrl: newLocalCaller.nameRecordingUrl,
-                    regionId: null,   // null = no "closest to you" prefix when played
-                    regionName: null,
-                  });
-                  // Fall through — plays normally without fanfare
-                }
-              } else {
-                // ── Linked-region browsing: splice into queue as the next item ─
-                // When announced, regionId === callerRegionId triggers "closest to you" prefix.
-                // When silent, regionId is null so no prefix plays.
-                console.log(`[voice] browse-profiles: ${announceLocal ? "announcing" : "silently queuing"} home-region caller userId=${newLocalCaller.userId} in linked-region queue for ${callSid}`);
-                state.queue.splice(state.index, 0, {
-                  userId: newLocalCaller.userId,
-                  recordingUrl: newLocalCaller.recordingUrl,
-                  nameRecordingUrl: newLocalCaller.nameRecordingUrl,
-                  regionId: announceLocal ? state.callerRegionId : null,
-                  regionName: announceLocal ? state.callerRegionName : null,
-                });
-                // Fall through — the current browse-profiles iteration will play this entry next
-              }
-            }
-          }
-
-          // Check for new callers in each linked region ("new caller from [city]")
-          for (let snapIdx = 0; snapIdx < state.linkedRegionSnapshots.length; snapIdx++) {
-            const snapshot = state.linkedRegionSnapshots[snapIdx];
-            const currentLinkedProfiles = linkedSnapshotResults[snapIdx];
-            const knownLinkedIds = new Set([...snapshot.knownUserIds, ...state.announcedLinkedCallerIds]);
-            const newLinkedCaller = currentLinkedProfiles.find(p => !knownLinkedIds.has(p.userId));
-
-            if (newLinkedCaller) {
-              state.announcedLinkedCallerIds.push(newLinkedCaller.userId);
-              const announceLinked = Math.random() < NEW_CALLER_ANNOUNCE_PROBABILITY;
-
-              if (announceLinked) {
-                // ── Announce with city audio interrupt ────────────────────────
-                console.log(`[voice] browse-profiles: announcing new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} to ${callSid}`);
-                const alertGather = twiml.gather({
-                  numDigits: 1,
-                  action: `/voice/handle-profile-menu?profileUserId=${newLinkedCaller.userId}`,
-                  timeout: 10,
-                });
-                const linkedRegionRecord = await storage.getRegionById(snapshot.regionId).catch(() => null);
-                const linkedSlug = linkedRegionRecord?.slug ?? snapshot.regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-                const linkedCityFile = `city_${linkedSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
-                const linkedCityFilePath = path.join(UPLOADS_DIR, linkedCityFile);
-                if (fs.existsSync(linkedCityFilePath)) {
-                  alertGather.play(`${baseUrl(req)}/uploads/${linkedCityFile}`);
-                } else {
-                  alertGather.say(`New caller from ${snapshot.regionName}.`);
-                }
-                if (newLinkedCaller.nameRecordingUrl) {
-                  safePlayRecording(alertGather, newLinkedCaller.nameRecordingUrl, req, "");
-                }
-                safePlayRecording(alertGather, newLinkedCaller.recordingUrl, req, "This profile's greeting is not available.");
-                playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-                twiml.redirect("/voice/browse-profiles");
-                res.type("text/xml");
-                return res.send(twiml.toString());
-              } else {
-                // ── Silently splice as next in queue — no announcement ────────
-                console.log(`[voice] browse-profiles: silently queuing new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} for ${callSid} (random skip)`);
-                state.queue.splice(state.index, 0, {
-                  userId: newLinkedCaller.userId,
-                  recordingUrl: newLinkedCaller.recordingUrl,
-                  nameRecordingUrl: newLinkedCaller.nameRecordingUrl,
-                  regionId: null,   // null = no "from [city]" prefix when played
-                  regionName: null,
-                });
-                // Fall through — plays normally without fanfare
-              }
-            }
-          }
-
-          // ── Engagement Engine interrupt check ────────────────────────────────
-          // Fetch prompts this caller has already heard in the last 24 h so the
-          // engine can skip them and Roger always sounds fresh.
-          let excludedRogerIds = new Set<string>();
-          try {
-            excludedRogerIds = await storage.getExcludedRogerPromptIds(
-              fromNumber,
-              engagementEngine.PROMPT_LIBRARY.length,
-            );
-          } catch (err) {
-            console.error("[engagement] failed to fetch roger prompt history:", err);
-          }
-
-          const engInterruption = engagementEngine.getInterruption(callSid, excludedRogerIds);
-          if (engInterruption) {
-            const encodedText = encodeURIComponent(engInterruption.lineText);
-            const followUp = encodeURIComponent(engInterruption.followUpAction ?? "");
-            const pid = encodeURIComponent(engInterruption.id);
-            console.log(`[engagement] Interrupting browse with prompt=${engInterruption.id}, followUp=${engInterruption.followUpAction ?? "none"}`);
-            twiml.redirect(`/voice/engagement-interrupt?text=${encodedText}&followUp=${followUp}&pid=${pid}`);
-            res.type("text/xml");
-            return res.send(twiml.toString());
-          }
-
-          // ── Busted Game: inject AI imposter at a random queue position ────────
-          const engState = engagementEngine.getEngagementState(callSid);
-          if (engState?.gameStarted && engState.gameBustTargetUserId === engagementEngine.BUST_GAME_AI_USER_ID && !engState.gameBustTargetInjected) {
-            // Pick one of the 5 pre-generated AI greeting files at random
-            const greetingIndex = 1 + Math.floor(Math.random() * engagementEngine.GAME_AI_GREETING_COUNT);
-            const greetingFile  = `game_greeting_${greetingIndex}.mp3`;
-            const greetingPath  = path.join(UPLOADS_DIR, greetingFile);
-
-            if (fs.existsSync(greetingPath)) {
-              // Inject at a random offset (2–7 profiles ahead, not always immediately next)
-              // so repeat callers cannot learn the pattern.
-              const remaining  = state.queue.length - state.index;
-              const maxOffset  = Math.max(2, Math.min(remaining, 7));
-              const offset     = 1 + Math.floor(Math.random() * maxOffset);
-              const insertAt   = Math.min(state.index + offset, state.queue.length);
-
-              state.queue.splice(insertAt, 0, {
-                userId: engagementEngine.BUST_GAME_AI_USER_ID,
-                recordingUrl: `/uploads/${greetingFile}`,
-                nameRecordingUrl: null,
-                regionId: regionId ?? null,
-                regionName: null,
-              });
-              engagementEngine.markGameTargetInjected(callSid);
-              console.log(`[engagement] Injected AI imposter (${greetingFile}) at queue[${insertAt}] — offset=${offset} from current index=${state.index}`);
-            } else {
-              // Audio file not yet generated — skip injection silently this pass
-              console.warn(`[engagement] Game greeting file not found: ${greetingFile} — re-trying on next browse cycle`);
-            }
-          }
-
-          const profile = state.queue[state.index];
-
-          // Safety guard: if this profile was blocked after the queue was built
-          // (e.g. blocked via the message inbox in the same session), skip it now
-          // rather than playing their greeting audio.
-          if (await storage.isUserBlocked(user.id, profile.userId)) {
-            twiml.redirect("/voice/browse-profiles");
-            res.type("text/xml");
-            return res.send(twiml.toString());
-          }
-
-          const prevIndex = state.index;
-          const previousProfile = state.queue[(prevIndex - 1 + state.queue.length) % state.queue.length];
-
-          // Advance index, wrapping at end of queue — track first wrap
-          state.lastPlayedIndex = prevIndex;
-          state.index = (state.index + 1) % state.queue.length;
-          if (state.index === 0 && prevIndex > 0) {
-            state.hasWrapped = true;
-            // Shuffle queue on each wrap so callers don't hear profiles in the same
-            // fixed order every cycle (especially noticeable with small seed pools).
-            for (let i = state.queue.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [state.queue[i], state.queue[j]] = [state.queue[j], state.queue[i]];
-            }
-          }
-
-          console.log(`[voice] Playing profile userId=${profile.userId} (position ${prevIndex + 1}/${state.queue.length})`);
-
-          // Announce caller count exactly once per session — right before the first profile.
-          if (!state.callerCountAnnounced) {
-            state.callerCountAnnounced = true;
-            const homeCount = await storage.getActiveCallerCount(user.id, regionId ?? undefined, browseCallerGender);
-            let regionalTotal = homeCount;
-            for (const snap of state.linkedRegionSnapshots) {
-              regionalTotal += await storage.getActiveCallerCount(user.id, snap.regionId, browseCallerGender);
-            }
-            console.log(`[voice] browse-profiles: announcing caller count: ${regionalTotal} (home=${homeCount}, linkedRegions=${state.linkedRegionSnapshots.length})`);
-            playCallerCount(twiml, req, regionalTotal);
-          }
-
-          // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one
-          const profileGather = twiml.gather({
-            numDigits: 1,
-            action: `/voice/handle-profile-menu?profileUserId=${profile.userId}&previousProfileUserId=${previousProfile?.userId ?? ""}`,
-            timeout: 10,
-          });
-
-          // Announce caller origin ("closest to you" / "from [city]") randomly:
-          // max 5 injections per 25-greeting window, distributed at random positions.
-          // Uses a shrinking probability so budget is always fully consumed naturally.
-          const WINDOW_SIZE = 25;
-          const MAX_PER_WINDOW = 5;
-          const posInWindow = state.greetingsPlayed % WINDOW_SIZE;
-          if (posInWindow === 0 && state.greetingsPlayed > 0) {
-            state.windowAnnouncementsUsed = 0; // start of a new window — reset budget
-          }
-          const remainingInWindow = WINDOW_SIZE - posInWindow;
-          const remainingBudget = MAX_PER_WINDOW - state.windowAnnouncementsUsed;
-          // Only announce for callers who joined AFTER the listener — pre-existing callers play silently
-          const announceProbability = !profile.isPreExisting && remainingBudget > 0 ? remainingBudget / remainingInWindow : 0;
-          const shouldAnnounceOrigin = Math.random() < announceProbability;
-
-          if (shouldAnnounceOrigin) {
-            if (!profile.regionId || profile.regionId === state.callerRegionId) {
-              playPrompt(profileGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
-            } else if (profile.regionName) {
-              profileGather.say(`New caller from ${profile.regionName}.`);
-            }
-            state.windowAnnouncementsUsed++;
-          }
-
-          state.greetingsPlayed++;
-
-          if (profile.nameRecordingUrl) {
-            safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
-          }
-          safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
-          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-          twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profile.userId)}&attempt=1`);
+          res.type("text/xml");
+          return res.send(twiml.toString());
         }
+
+        // ── Playback ──────────────────────────────────────────────────────────
+        const profile = state.queue[0];
+
+        // Safety guard: if this profile was blocked in-session, skip it immediately.
+        if (await storage.isUserBlocked(user.id, profile.userId)) {
+          state.queue.shift();
+          if (!state.seenUserIds.includes(profile.userId)) state.seenUserIds.push(profile.userId);
+          callerProfileBrowseStates.set(callSid, state);
+          twiml.redirect("/voice/browse-profiles");
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        }
+
+        // Capture previous profile for press-5 go-back BEFORE updating lastPlayedProfile.
+        const prevLastProfile = state.lastPlayedProfile;
+        state.lastPlayedProfile = profile;
+
+        // Announce caller count exactly once per session — right before the first profile.
+        if (!state.callerCountAnnounced) {
+          state.callerCountAnnounced = true;
+          const homeCount = await storage.getActiveCallerCount(user.id, state.callerRegionId ?? undefined, browseCallerGender);
+          let regionalTotal = homeCount;
+          for (const snap of state.linkedRegionSnapshots) {
+            regionalTotal += await storage.getActiveCallerCount(user.id, snap.regionId, browseCallerGender);
+          }
+          console.log(`[voice] browse-profiles: announcing caller count: ${regionalTotal} (home=${homeCount}, linkedRegions=${state.linkedRegionSnapshots.length})`);
+          playCallerCount(twiml, req, regionalTotal);
+        }
+
+        // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one.
+        const profileGather = twiml.gather({
+          numDigits: 1,
+          action: `/voice/handle-profile-menu?profileUserId=${profile.userId}&previousProfileUserId=${prevLastProfile?.userId ?? ""}`,
+          timeout: 10,
+        });
+
+        // Announce caller origin ("closest to you" / "from [city]") randomly:
+        // max 5 injections per 25-greeting window.
+        const WINDOW_SIZE = 25;
+        const MAX_PER_WINDOW = 5;
+        const posInWindow = state.greetingsPlayed % WINDOW_SIZE;
+        if (posInWindow === 0 && state.greetingsPlayed > 0) state.windowAnnouncementsUsed = 0;
+        const remainingInWindow = WINDOW_SIZE - posInWindow;
+        const remainingBudget   = MAX_PER_WINDOW - state.windowAnnouncementsUsed;
+        const announceProbability = !profile.isPreExisting && remainingBudget > 0 ? remainingBudget / remainingInWindow : 0;
+        const shouldAnnounceOrigin = Math.random() < announceProbability;
+
+        if (shouldAnnounceOrigin) {
+          if (!profile.regionId || profile.regionId === state.callerRegionId) {
+            playPrompt(profileGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
+          } else if (profile.regionName) {
+            profileGather.say(`New caller from ${profile.regionName}.`);
+          }
+          state.windowAnnouncementsUsed++;
+        }
+
+        state.greetingsPlayed++;
+
+        if (profile.nameRecordingUrl) {
+          safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
+        }
+        safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
+        playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+
+        console.log(`[voice] Playing profile userId=${profile.userId} (buffer=${state.queue.length}, seen=${state.seenUserIds.length})`);
+
+        // Persist state before redirecting
+        callerProfileBrowseStates.set(callSid, state);
+        twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profile.userId)}&attempt=1`);
       }
     } catch (error) {
       console.error("[voice] /voice/browse-profiles error:", error);

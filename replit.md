@@ -21,6 +21,7 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 - Admin console: `/backstage` — pre-built into `dist/admin` on first dev startup. To force-rebuild after admin code changes, delete `dist/admin/` and restart the dev server.
 - ElevenLabs keys are normalized server-side before API calls; the VPS PM2 config also strips surrounding quotes/hidden characters from `.env` values to avoid false 401 invalid-key responses.
 - Real-time caller presence now uses the `callers` table as the database source of truth (`status`, `joined_at`, `last_ping`, `greeting_played`). Profile browsing queries this table for active callers ordered by join time, and block visibility is applied in the database query rather than against an already-cached queue.
+- **Greeting queue refactor (rolling buffer)**: `browse-profiles` no longer snapshots the full profile list on every call. Instead a per-callSid `CallerBrowseState` is stored in `callerProfileBrowseStates` (module-level Map). The buffer holds ≤ 3 profiles at a time and refills from DB on each visit, excluding `seenUserIds`. Advancement uses `afterUserId` URL param (press-2 skip marks the profile as seen + removes it from buffer). Press-5 go-back injects `lastPlayedProfile` at the buffer front. Cycle-complete is detected when the buffer is empty after a fill, at which point linked regions are offered or the cycle resets. State is cleaned up in the call-status webhook alongside other per-call Maps.
 
 ## Roger Mood + Attention Drain Engine
 
