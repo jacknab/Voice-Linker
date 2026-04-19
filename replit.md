@@ -50,6 +50,8 @@ A Twilio-powered voice party line where callers can record profiles, browse othe
 
 - Mood switches every 60–90s (randomized); major events (skip/message/game) force an immediate recalc
 - **155+ prompts** in `PROMPT_LIBRARY` each tagged with `requiredMoods`, `minAttentionDrain`, `maxAttentionDrain`
+- Membership-card callers are routed through `/voice/entry-check-card`; after card validation this route now plays Roger's greeting before the main menu and avoids double-announcing time with `callTimeAnnounced`.
+- The confirm-send message route (`/voice/handle-review-message`) feeds successful/silent-discard sends into `engagementEngine.trackMessageSent(callSid)` so Roger's reward/engagement mood logic remains connected after the review-message refactor.
 
 ### Admin: Audio Gen → Roger Tab
 - `GET /api/admin/roger/prompts` returns the full prompt library with audio file status

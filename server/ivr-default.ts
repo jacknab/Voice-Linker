@@ -1554,6 +1554,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           "Your calling card has no remaining time. Please use a different card.");
         twiml.hangup();
       } else {
+        const fromNumber = req.body?.From as string;
+        if (fromNumber) {
+          const user = await getOrCreateUser(fromNumber);
+          await playRogerGreetingAudio(twiml, req, user, fromNumber, callSid);
+        }
+        if (!callTimeAnnounced.has(callSid)) {
+          playTimeRemaining(twiml, req, Math.floor(card.valueSeconds / 60));
+          callTimeAnnounced.add(callSid);
+        }
         const siteConf = await getSiteSettingsCached();
         twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
       }
@@ -1600,6 +1609,29 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     return find("roger_welcome_longtime.mp3");
   }
 
+  async function playRogerGreetingAudio(
+    twiml: InstanceType<typeof VoiceResponse>,
+    req: Request,
+    user: Awaited<ReturnType<typeof getOrCreateUser>>,
+    fromNumber: string,
+    callSid: string,
+  ): Promise<void> {
+    const isNewCaller = !user.membershipTier;
+    const [lastCallDate, todayCallCount] = await Promise.all([
+      storage.getLastCallTimestamp(fromNumber, callSid),
+      storage.getTodayCallCount(fromNumber, callSid),
+    ]);
+    const { filename: rogerFile, fallback: rogerFallback } = rogerGreetingVariant(isNewCaller, lastCallDate, todayCallCount);
+    const filepath = path.join(UPLOADS_DIR, rogerFile);
+
+    if (fs.existsSync(filepath)) {
+      twiml.play(`${baseUrl(req)}/uploads/${rogerFile}`);
+    } else {
+      console.warn(`[roger-greeting] Pre-generated file missing: ${rogerFile} — using TTS fallback`);
+      twiml.say({ voice: "alice" }, rogerFallback);
+    }
+  }
+
   /**
    * Inline Roger greeting — appends Roger audio + time announcement to twiml
    * and adds the main-menu redirect. Reuses the already-fetched user and
@@ -1614,20 +1646,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     membershipConf: Awaited<ReturnType<typeof getMembershipSettingsCached>>,
   ): Promise<void> {
     const isNewCaller = !user.membershipTier;
-    const [lastCallDate, todayCallCount] = await Promise.all([
-      storage.getLastCallTimestamp(fromNumber, callSid),
-      storage.getTodayCallCount(fromNumber, callSid),
-    ]);
-    const { filename: rogerFile, fallback: rogerFallback } = rogerGreetingVariant(isNewCaller, lastCallDate, todayCallCount);
-    const filepath = path.join(UPLOADS_DIR, rogerFile);
-
-    // Play pre-generated Roger greeting; fall back to Twilio TTS if file is missing.
-    if (fs.existsSync(filepath)) {
-      twiml.play(`${baseUrl(req)}/uploads/${rogerFile}`);
-    } else {
-      console.warn(`[roger-greeting] Pre-generated file missing: ${rogerFile} — using TTS fallback`);
-      twiml.say({ voice: "alice" }, rogerFallback);
-    }
+    await playRogerGreetingAudio(twiml, req, user, fromNumber, callSid);
 
     const rogerFreeMode = isFreeModeActive(membershipConf);
 
@@ -6585,6 +6604,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (recipientBlockedSender) {
           console.log(`[voice] handle-review-message: message discarded — toUserId=${toUserId} has blocked userId=${user.id}`);
           await advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
+          engagementEngine.trackMessageSent(callSid);
           // Play neutral "message sent" so the blocked caller doesn't know they're blocked
           playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
           twiml.redirect(cancelReturnPath(returnTo, category));
@@ -6593,6 +6613,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         const sentMessage = await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
         await advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
+        engagementEngine.trackMessageSent(callSid);
         // Queue sent message for human admin review
         storage.createFlaggedItem({
           contentType: "message",
