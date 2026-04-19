@@ -6,4 +6,4 @@ Disallow: /backstage
 # Crawl-delay for well-behaved bots
 Crawl-delay: 1
 
-Sitemap: https://4d1f2f4f-1b04-467e-bae5-18dc6c45fd72-00-2rxu90wdxst7j.janeway.replit.dev/sitemap.xml
+Sitemap: https://80c49d7b-bf71-45b8-be8a-f9edb540a5ec-00-3aqz0yqa3rizp.riker.replit.dev/sitemap.xml
