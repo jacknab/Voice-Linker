@@ -183,8 +183,12 @@ type BrowseQueueItem = { userId: string; recordingUrl: string; nameRecordingUrl?
 interface CallerBrowseState {
   // Rolling buffer — max 3 items; front item (index 0) is always the next to play
   queue: BrowseQueueItem[];
-  // Seen greetings this cycle — used to prevent duplicates on refill
+  // Seen greetings this cycle — used to prevent duplicates on refill (NOT the block list)
   seenUserIds: string[];
+  // Session-level block cache: pre-filter applied before ANY greeting selection.
+  // This is entirely separate from seenUserIds / buffer / queue logic.
+  // Synced from the DB blocked_users table on session start and on each browse visit.
+  blockedUserIds: Set<string>;
   // The profile most recently played — for "Press 5 go back"
   lastPlayedProfile: BrowseQueueItem | null;
   linkedRegionLoaded: boolean; // true once the caller accepted a linked-region queue
@@ -4985,18 +4989,25 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             }
           }
 
-          const initialBuffer: BrowseQueueItem[] = initialQueue.slice(0, 3).map(p => ({
-            userId: p.userId,
-            recordingUrl: p.recordingUrl,
-            nameRecordingUrl: p.nameRecordingUrl,
-            regionId: regionId ?? null,
-            regionName: callerRegionName,
-            isPreExisting: true,
-          }));
+          // ── Load session-level block cache (separate from seen/buffer logic) ──
+          const initialBlockedIds = await storage.getBlockedUserIdSet(user.id);
+
+          const initialBuffer: BrowseQueueItem[] = initialQueue
+            .filter(p => !initialBlockedIds.has(p.userId))
+            .slice(0, 3)
+            .map(p => ({
+              userId: p.userId,
+              recordingUrl: p.recordingUrl,
+              nameRecordingUrl: p.nameRecordingUrl,
+              regionId: regionId ?? null,
+              regionName: callerRegionName,
+              isPreExisting: true,
+            }));
 
           state = {
             queue: initialBuffer,
             seenUserIds: [],
+            blockedUserIds: initialBlockedIds,
             lastPlayedProfile: null,
             linkedRegionLoaded,
             callerRegionId: regionId ?? null,
@@ -5014,16 +5025,31 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           console.log(`[voice] browse-profiles: new session for ${callSid} — buffer=${state.queue.length} (region=${callerRegionName ?? "none"}, linkedRegions=${linkedRegions.length})`);
         } else {
           // ── Returning visit ───────────────────────────────────────────────────
+
+          // Re-sync block cache from DB on every returning visit.
+          // This is the ONLY mechanism that picks up new blocks pressed mid-session
+          // (handle-profile-menu press-4 calls storage.blockUser then redirects here).
+          // Block cache is completely separate from seenUserIds / buffer logic.
+          state.blockedUserIds = await storage.getBlockedUserIdSet(user.id);
+
+          // Immediately prune buffer against the updated block cache.
+          // This handles the case where the caller blocked someone who was buffered.
+          state.queue = state.queue.filter(p => !state!.blockedUserIds.has(p.userId));
+
           if (targetUserId) {
             // Press-5 go-back: inject the last-played profile at the front of the buffer.
             // Do NOT mark it as seen so it can replay cleanly.
+            // Respect block cache — do not re-inject a profile the caller just blocked.
             const alreadyInBuffer = state.queue.some(p => p.userId === targetUserId);
-            if (!alreadyInBuffer && state.lastPlayedProfile?.userId === targetUserId) {
+            if (!alreadyInBuffer && state.lastPlayedProfile?.userId === targetUserId && !state.blockedUserIds.has(targetUserId)) {
               state.queue.unshift(state.lastPlayedProfile);
               if (state.queue.length > 3) state.queue.pop();
             }
           } else if (afterUserId) {
             // Normal advance (press-2 skip, block, etc.): mark as seen and remove from buffer.
+            // Note: a blocked user's afterUserId is added to seenUserIds here too, which is
+            // harmless — the block cache is the authoritative exclusion, seenUserIds is just
+            // the cycle-duplicate filter.
             if (!state.seenUserIds.includes(afterUserId)) {
               state.seenUserIds.push(afterUserId);
             }
@@ -5041,6 +5067,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             if (state!.queue.length >= 3) return;
             const avail = await storage.getAllActiveProfiles(user.id, rid, browseCallerGender, browseSiteCategory);
             for (const p of avail) {
+              // Block cache is the top-level pre-filter — checked before seen/buffer exclusions
+              if (state!.blockedUserIds.has(p.userId)) continue;
               if (excluded.has(p.userId) || p.userId === AI_ID) continue;
               if (state!.queue.length >= 3) break;
               state!.queue.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, regionId: rId, regionName: rName, isPreExisting: false });
@@ -5073,13 +5101,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             }
           }
 
-          // Reset cycle: clear seenUserIds and refill
+          // Reset cycle: clear seenUserIds and refill (block cache is NOT reset)
           if (state.seenUserIds.length > 0) {
             console.log(`[voice] browse-profiles: cycle complete for ${callSid} — resetting seenUserIds`);
             state.seenUserIds = [];
             const resetAvail = await storage.getAllActiveProfiles(user.id, state.callerRegionId ?? undefined, browseCallerGender, browseSiteCategory);
             for (const p of resetAvail) {
               if (state.queue.length >= 3) break;
+              // Block cache pre-filter: never re-introduce blocked users on cycle reset
+              if (state.blockedUserIds.has(p.userId)) continue;
               state.queue.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, regionId: state.callerRegionId, regionName: state.callerRegionName, isPreExisting: false });
             }
           }
@@ -5127,9 +5157,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
 
         // ── New caller alerts: home region ("close to you") + linked regions ("from [city]") ──
+        // Block cache pre-filter: never alert on a blocked user, regardless of when they joined.
         if (state.callerRegionId) {
           const knownLocalIds = new Set([...state.localUserIds, ...state.announcedNewLocalIds]);
-          const newLocalCaller = currentLocalProfiles.find(p => !knownLocalIds.has(p.userId));
+          const newLocalCaller = currentLocalProfiles.find(p => !knownLocalIds.has(p.userId) && !state!.blockedUserIds.has(p.userId));
 
           if (newLocalCaller) {
             state.announcedNewLocalIds.push(newLocalCaller.userId);
@@ -5182,7 +5213,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           const snapshot = state.linkedRegionSnapshots[snapIdx];
           const currentLinkedProfiles = linkedSnapshotResults[snapIdx];
           const knownLinkedIds = new Set([...snapshot.knownUserIds, ...state.announcedLinkedCallerIds]);
-          const newLinkedCaller = currentLinkedProfiles.find(p => !knownLinkedIds.has(p.userId));
+          // Block cache pre-filter: skip blocked users in linked-region alerts too
+          const newLinkedCaller = currentLinkedProfiles.find(p => !knownLinkedIds.has(p.userId) && !state!.blockedUserIds.has(p.userId));
 
           if (newLinkedCaller) {
             state.announcedLinkedCallerIds.push(newLinkedCaller.userId);
@@ -5288,10 +5320,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // ── Playback ──────────────────────────────────────────────────────────
         const profile = state.queue[0];
 
-        // Safety guard: if this profile was blocked in-session, skip it immediately.
-        if (await storage.isUserBlocked(user.id, profile.userId)) {
+        // Safety guard: if this profile is in the block cache, skip it immediately.
+        // Uses O(1) cache lookup — no DB query needed.
+        if (state.blockedUserIds.has(profile.userId)) {
           state.queue.shift();
-          if (!state.seenUserIds.includes(profile.userId)) state.seenUserIds.push(profile.userId);
+          // Do NOT add to seenUserIds — the block cache is the authoritative exclusion layer.
           callerProfileBrowseStates.set(callSid, state);
           twiml.redirect("/voice/browse-profiles");
           res.type("text/xml");

@@ -122,6 +122,7 @@ export interface IStorage {
 
   // Block list
   isUserBlocked(blockerId: string, blockedUserId: string): Promise<boolean>;
+  getBlockedUserIdSet(blockerId: string): Promise<Set<string>>;
   blockUser(blockerId: string, blockedUserId: string): Promise<void>;
   unblockUser(blockerId: string, blockedUserId: string): Promise<void>;
   unblockAllByUser(userId: string): Promise<number>;
@@ -920,6 +921,14 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(blockedUsers.blockerId, blockerId), eq(blockedUsers.blockedUserId, blockedUserId)))
       .limit(1);
     return !!row;
+  }
+
+  async getBlockedUserIdSet(blockerId: string): Promise<Set<string>> {
+    const rows = await db
+      .select({ blockedUserId: blockedUsers.blockedUserId })
+      .from(blockedUsers)
+      .where(eq(blockedUsers.blockerId, blockerId));
+    return new Set(rows.map(r => r.blockedUserId));
   }
 
   async blockUser(blockerId: string, blockedUserId: string): Promise<void> {
