@@ -65,12 +65,17 @@ info "Installing dependencies..."
 npm install --legacy-peer-deps
 success "Dependencies installed."
 
-# ── 4. Build ──────────────────────────────────────────────────────────────────
+# ── 4. Run database migrations ────────────────────────────────────────────────
+info "Applying database migrations..."
+npm run db:push
+success "Migrations applied."
+
+# ── 5. Build ──────────────────────────────────────────────────────────────────
 info "Building production bundle..."
 npm run build
 success "Build complete."
 
-# ── 5. Force-reload PM2 with fresh config ────────────────────────────────────
+# ── 6. Force-reload PM2 with fresh config ────────────────────────────────────
 # ecosystem.config.cjs now uses __dirname so paths are always correct.
 # We delete + re-start so PM2 picks up the config fresh every time.
 info "Restarting PM2..."
