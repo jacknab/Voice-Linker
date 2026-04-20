@@ -204,6 +204,7 @@ When browsing profiles, callers can press **3** to request a live direct connect
 - Invitee: when they press 2 (next profile), sees the invite instead → chime + "This caller [name] would like to connect live" → press 1 accept / 2 decline / 3 hear greeting
 - On accept: Twilio REST API redirects initiator mid-ring to join Twilio conference room; both hear "Connecting you now…"; either can press # or hang up to exit
 - On timeout/decline: initiator hears failure message and returns to phone booth
+- Profile browsing press-5 previous greeting uses `previousProfileUserId` plus the Redis/in-memory browse state fallback; connector timeout repeat menus preserve this ID so callers can still hear the previous greeting after the first menu timeout.
 
 **In-memory state (ivr-default.ts):**
 - `pendingLiveInvites` — targetUserId → invite (TTL 30s)

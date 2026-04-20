@@ -5487,7 +5487,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
         // Persist state before redirecting
         await setBrowseState(callSid, state);
-        twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profile.userId)}&attempt=1`);
+        twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profile.userId)}&previousProfileUserId=${encodeURIComponent(prevLastProfile?.userId ?? "")}&attempt=1`);
       }
     } catch (error) {
       console.error("[voice] /voice/browse-profiles error:", error);
@@ -5921,10 +5921,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else if (digit === "5") {
         // ── Play previous profile ───────────────────────────────────────────
         const previousProfileUserId = req.query.previousProfileUserId as string | undefined;
-        if (previousProfileUserId) {
-          twiml.redirect(`/voice/browse-profiles?targetUserId=${encodeURIComponent(previousProfileUserId)}`);
+        const callSid = req.body?.CallSid as string | undefined;
+        const browseState = callSid ? await getBrowseState(callSid) : null;
+        const resolvedPreviousProfileUserId =
+          previousProfileUserId ||
+          browseState?.previousLastPlayedProfile?.userId ||
+          null;
+        if (resolvedPreviousProfileUserId) {
+          twiml.redirect(`/voice/browse-profiles?targetUserId=${encodeURIComponent(resolvedPreviousProfileUserId)}`);
         } else {
-          playPrompt(twiml, req, "live_connect_left_line.mp3", "That caller has left the line.");
+          playPrompt(twiml, req, "invalid_choice.mp3", "There is no previous greeting yet.");
           twiml.redirect("/voice/browse-profiles");
         }
       } else if (digit === "6") {
@@ -6052,6 +6058,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/connector-timeout", async (req, res) => {
     const twiml = new VoiceResponse();
     const profileUserId = (req.query.profileUserId as string) || "";
+    const previousProfileUserId = (req.query.previousProfileUserId as string) || "";
     const attempt = parseInt((req.query.attempt as string) || "1", 10);
 
     try {
@@ -6072,12 +6079,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else {
         const repeatGather = twiml.gather({
           numDigits: 1,
-          action: `/voice/handle-profile-menu?profileUserId=${encodeURIComponent(profileUserId)}`,
+          action: `/voice/handle-profile-menu?profileUserId=${encodeURIComponent(profileUserId)}&previousProfileUserId=${encodeURIComponent(previousProfileUserId)}`,
           timeout: 10,
         });
         playPrompt(repeatGather, req, "profile_options.mp3",
           "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-        twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profileUserId)}&attempt=2`);
+        twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profileUserId)}&previousProfileUserId=${encodeURIComponent(previousProfileUserId)}&attempt=2`);
       }
     } catch (error) {
       console.error("[voice] /voice/connector-timeout error:", error);
