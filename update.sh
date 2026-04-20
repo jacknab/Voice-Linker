@@ -14,6 +14,23 @@ success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 info "App directory: $APP_DIR"
 
+ENV_FILE="$APP_DIR/.env"
+ENV_BACKUP=""
+cleanup() {
+  if [ -n "${ENV_BACKUP:-}" ] && [ -f "$ENV_BACKUP" ]; then
+    rm -f "$ENV_BACKUP"
+  fi
+}
+trap cleanup EXIT
+
+if [ -f "$ENV_FILE" ]; then
+  ENV_BACKUP="$(mktemp)"
+  cp -p "$ENV_FILE" "$ENV_BACKUP"
+  cd "$APP_DIR"
+  git update-index --skip-worktree .env 2>/dev/null || true
+  info "Protected local .env from git pull changes."
+fi
+
 # ── 1. Discard local changes to server-generated files ───────────────────────
 # These files are auto-generated at runtime (SEO pages, sitemap, robots.txt).
 # They change on every server restart so they always conflict with git pull.
@@ -34,6 +51,13 @@ success "Generated files reset."
 info "Pulling latest code from GitHub..."
 cd "$APP_DIR"
 git pull origin main
+if [ -n "${ENV_BACKUP:-}" ] && [ -f "$ENV_BACKUP" ]; then
+  if [ ! -f "$ENV_FILE" ] || ! cmp -s "$ENV_FILE" "$ENV_BACKUP"; then
+    cp -p "$ENV_BACKUP" "$ENV_FILE"
+    info "Restored local .env after pull."
+  fi
+  chmod 600 "$ENV_FILE" 2>/dev/null || true
+fi
 success "Code updated."
 
 # ── 3. Install dependencies ───────────────────────────────────────────────────
