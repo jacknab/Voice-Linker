@@ -5921,7 +5921,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (previousProfileUserId) {
           twiml.redirect(`/voice/browse-profiles?targetUserId=${encodeURIComponent(previousProfileUserId)}`);
         } else {
-          playPrompt(twiml, req, "no_previous_profile.mp3", "There is no previous profile. Continuing to the next.");
+          playPrompt(twiml, req, "live_connect_left_line.mp3", "That caller has left the line.");
           twiml.redirect("/voice/browse-profiles");
         }
       } else if (digit === "6") {

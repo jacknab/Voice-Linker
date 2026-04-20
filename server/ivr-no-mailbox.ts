@@ -4377,6 +4377,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               return { regionId: r.id, regionName: r.name, knownUserIds: profiles.map(p => p.userId) };
             })
           );
+          const startIndex = Math.min(3, Math.max(0, allProfiles.length - 1));
           state = {
             queue: allProfiles.map(p => ({
               userId: p.userId,
@@ -4385,7 +4386,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               isNearby: nearbySet.has(p.userId),
               isPreExisting: true,
             })),
-            index: 0,
+            index: startIndex,
             lastPlayedIndex: null,
             hasWrapped: false,
             linkedRegionLoaded: false,
@@ -5047,12 +5048,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             twiml.redirect("/voice/browse-profiles");
           } else {
             // First profile in the session — no previous exists, replay the current one
-            playPrompt(twiml, req, "no_previous_profile.mp3", "There is no previous profile.");
+            playPrompt(twiml, req, "live_connect_left_line.mp3", "That caller has left the line.");
             state.index = state.lastPlayedIndex;
             twiml.redirect("/voice/browse-profiles");
           }
         } else {
-          playPrompt(twiml, req, "no_previous_profile.mp3", "There is no previous profile.");
+          playPrompt(twiml, req, "live_connect_left_line.mp3", "That caller has left the line.");
           twiml.redirect("/voice/browse-profiles");
         }
       } else if (digit === "6") {
