@@ -1,7 +1,7 @@
 import { storage } from "./storage";
 import { db } from "./db";
-import { profiles, activeCalls } from "@shared/schema";
-import { eq, like } from "drizzle-orm";
+import { profiles, callers } from "@shared/schema";
+import { and, eq, like } from "drizzle-orm";
 import { log } from "./index";
 
 export const VIRTUAL_PREFIX = "VIRTUAL-";
@@ -11,6 +11,7 @@ const activeSessions = new Set<string>();
 
 // Concurrency cap for real-caller seed sessions
 const MAX_REAL_CALLER_SEEDS = 10;
+const MAX_ADMIN_SEEDS = 3;
 
 // How many minutes between real-caller background scheduler checks
 const SCHEDULER_INTERVAL_MS = 15 * 60 * 1000;
@@ -40,26 +41,45 @@ async function pickRegionForSeed(): Promise<string | undefined> {
   return pool[Math.floor(Math.random() * pool.length)].id;
 }
 
-// ─── Admin seed session: online for full duration, no cycling ─────────────────
-// Admin seeds stay continuously online for 45–60 min once triggered.
+// ─── Admin seed session: small rotating subset with on/off cycling ────────────
 async function runAdminSeedSession(userId: string): Promise<void> {
   const callSid = `${VIRTUAL_PREFIX}${userId}`;
-  const sessionMinutes = randomBetween(45, 60);
+  const sessionMinutes = randomBetween(20, 35);
   const sessionEnd = Date.now() + sessionMinutes * 60 * 1000;
 
   await storage.startSeedSession(userId, "admin_uploaded", new Date(sessionEnd)).catch(err =>
     log(`seed session record error userId=${userId}: ${err}`, "simulator"),
   );
 
-  await storage.registerActiveCall(callSid, userId, undefined);
   log(
-    `admin seed ON userId=${userId} duration=${sessionMinutes}min (stays online until session ends)`,
+    `admin seed session START userId=${userId} duration=${sessionMinutes}min`,
     "simulator",
   );
 
-  // Stay online until the session expires or the seed is removed
   while (activeSessions.has(userId) && Date.now() < sessionEnd) {
-    await sleep(60 * 1000);
+    const profile = await storage.getProfile(userId);
+    if (!profile) {
+      activeSessions.delete(userId);
+      break;
+    }
+
+    const remainingMs = sessionEnd - Date.now();
+    if (remainingMs <= 0) break;
+
+    await storage.registerActiveCall(callSid, userId, undefined);
+    log(`admin seed ON  userId=${userId}`, "simulator");
+
+    const activeDuration = Math.min(randomBetween(90, 240) * 1000, remainingMs);
+    await sleep(activeDuration);
+
+    if (!activeSessions.has(userId)) break;
+
+    await storage.removeActiveCall(callSid);
+    log(`admin seed OFF userId=${userId}`, "simulator");
+
+    const remainingAfterOff = sessionEnd - Date.now();
+    if (remainingAfterOff <= 0) break;
+    await sleep(Math.min(randomBetween(60, 240) * 1000, remainingAfterOff));
   }
 
   await storage.removeActiveCall(callSid).catch(() => {});
@@ -68,7 +88,7 @@ async function runAdminSeedSession(userId: string): Promise<void> {
   );
 
   activeSessions.delete(userId);
-  log(`admin seed OFF userId=${userId} (session ended)`, "simulator");
+  log(`admin seed session END userId=${userId}`, "simulator");
 }
 
 // ─── Real-caller seed session: on/off cycling ────────────────────────────────
@@ -137,11 +157,16 @@ export async function triggerSeedActivity(): Promise<void> {
       .from(profiles)
       .where(eq(profiles.isAdminUploaded, true));
 
+    const activeAdminCount = adminProfiles.filter(({ userId }) => activeSessions.has(userId)).length;
+    const slots = Math.max(0, Math.min(MAX_ADMIN_SEEDS, adminProfiles.length) - activeAdminCount);
+    if (slots <= 0) return;
+
+    const shuffledProfiles = [...adminProfiles].sort(() => Math.random() - 0.5);
     let started = 0;
-    for (const { userId } of adminProfiles) {
+    for (const { userId } of shuffledProfiles) {
+      if (started >= slots) break;
       if (!activeSessions.has(userId)) {
         activeSessions.add(userId);
-        // Admin seeds use null regionId so they appear in every region
         runAdminSeedSession(userId).catch(err =>
           log(`admin seed session error userId=${userId}: ${err}`, "simulator"),
         );
@@ -150,7 +175,7 @@ export async function triggerSeedActivity(): Promise<void> {
     }
 
     if (started > 0) {
-      log(`triggered ${started} admin seed session(s) on caller arrival`, "simulator");
+      log(`triggered ${started} admin seed session(s) on caller arrival (${activeAdminCount + started}/${Math.min(MAX_ADMIN_SEEDS, adminProfiles.length)} active)`, "simulator");
     }
   } catch (err) {
     log(`triggerSeedActivity error: ${err}`, "simulator");
@@ -205,7 +230,10 @@ async function runRealCallerScheduler(): Promise<void> {
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
 async function clearVirtualEntries(): Promise<void> {
-  await db.delete(activeCalls).where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));
+  await db
+    .update(callers)
+    .set({ status: "disconnected", lastPing: new Date() })
+    .where(like(callers.callSid, `${VIRTUAL_PREFIX}%`));
 }
 
 export async function startSimulator(): Promise<void> {
@@ -259,9 +287,9 @@ export function getActiveVirtualCallers(): Set<string> {
 // Returns which userIds are currently "live" (have an active VIRTUAL- entry)
 export async function getLiveVirtualUserIds(): Promise<Set<string>> {
   const rows = await db
-    .select({ userId: activeCalls.userId })
-    .from(activeCalls)
-    .where(like(activeCalls.callSid, `${VIRTUAL_PREFIX}%`));
+    .select({ userId: callers.userId })
+    .from(callers)
+    .where(and(like(callers.callSid, `${VIRTUAL_PREFIX}%`), eq(callers.status, "active")));
 
   return new Set(rows.map(r => r.userId));
 }
