@@ -3171,11 +3171,11 @@ function DashboardTab() {
           {liveCallers.length === 0 ? (
             <div className="text-gray-400 font-mono text-xs text-center py-5">No active calls right now.</div>
           ) : (
-            <div className="space-y-2">
-              {liveCallers.slice(0, 6).map(caller => (
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {liveCallers.map(caller => (
                 <div key={caller.callSid} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors" data-testid={`row-live-feed-${caller.userId}`}>
                   <div className="min-w-0">
-                    <div className="font-mono text-xs font-bold text-gray-800">{maskPhone(caller.phoneNumber)}</div>
+                    <div className="font-mono text-xs font-bold text-gray-800">{caller.phoneNumber}</div>
                     <div className="font-mono text-[10px] text-gray-400 truncate">{caller.currentIvrPath ?? "/voice"}{caller.regionName ? ` · ${caller.regionName}` : ""}</div>
                   </div>
                   <div className="text-right shrink-0">
