@@ -261,6 +261,9 @@ const MM_PROMPTS: Prompt[] = [
   // ── Mailbox ────────────────────────────────────────────────────────────────
   { filename: "mailbox_has_greeting.mp3",   text: "You already have a mailbox greeting recorded. Press 1 to record a new greeting. Press 2 to hear your current greeting. Press 9 to return to your mailbox." },
   { filename: "caller_no_mailbox_ad.mp3",   text: "This caller no longer has a mailbox ad." },
+  { filename: "category_ad_options.mp3",    text: "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu." },
+  { filename: "last_message_sent.mp3",      text: "Last message you sent this caller." },
+  { filename: "no_messages_yet.mp3",        text: "You have not sent this caller any messages." },
 
   // ── Engagement / game ──────────────────────────────────────────────────────
   { filename: "cant_message_ai.mp3", text: "You can't message an AI. Nice try though. Back to browsing." },

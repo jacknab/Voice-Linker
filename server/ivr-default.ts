@@ -3699,12 +3699,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       });
       adGather.say(`Mailbox ${ad.mailboxNumber.split("").join(", ")}.`);
       safePlayRecording(adGather, ad.adRecordingUrl, req, "This ad is not available.");
-      adGather.say(
-        "Press 1 to send a message to this guy. " +
-        "Press 2 to hear the next ad. " +
-        "Press 9 to return to the category menu. " +
-        "Press pound to return to the mailbox menu."
-      );
+      playPrompt(adGather, req, "category_ad_options.mp3",
+        "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu.");
       twiml.redirect(`/voice/browse-category-ads?category=${category}`);
     } catch (err) {
       console.error("[voice] /voice/browse-category-ads error:", err);
@@ -5687,10 +5683,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             timeout: 10,
           });
           if (lastSent?.recordingUrl) {
-            replayGather.say("Here is the last message you sent this caller.");
+            playPrompt(replayGather, req, "replay_last_message.mp3", "Here is the last message you sent this caller.");
             safePlayRecording(replayGather, lastSent.recordingUrl, req, "");
           } else {
-            replayGather.say("You have not sent this caller a message yet.");
+            playPrompt(replayGather, req, "no_message_sent.mp3", "You have not sent this caller a message yet.");
           }
           playPrompt(replayGather, req, "message_options.mp3", MSG_MENU_PROMPT);
           twiml.redirect("/voice/browse-profiles");
@@ -5729,13 +5725,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           safePlayRecording(greetingGather, senderProfile.recordingUrl, req, "This caller's greeting is not available.");
         } else {
-          greetingGather.say("This caller's greeting is not available.");
+          playPrompt(greetingGather, req, "greeting_not_available.mp3", "This caller's greeting is not available.");
         }
         if (senderActiveCall?.regionId) {
           const region = await storage.getRegionById(senderActiveCall.regionId);
-          greetingGather.say(region ? `This caller is from ${region.name}.` : "This caller's location is not available.");
+          if (region) {
+            greetingGather.say(`This caller is from ${region.name}.`);
+          } else {
+            playPrompt(greetingGather, req, "location_not_available.mp3", "This caller's location is not available.");
+          }
         } else {
-          greetingGather.say("This caller's location is not available.");
+          playPrompt(greetingGather, req, "location_not_available.mp3", "This caller's location is not available.");
         }
         playPrompt(greetingGather, req, "message_options.mp3", MSG_MENU_PROMPT);
         twiml.redirect("/voice/browse-profiles");
@@ -5976,7 +5976,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             playPrompt(locationGather, req, locationToFilename(location),
               `This caller is located in ${location}. To send them a message, press 1.`);
           } else {
-            locationGather.say("This caller's location is not available. To send them a message, press 1.");
+            playPrompt(locationGather, req, "location_not_available_send.mp3", "This caller's location is not available. To send them a message, press 1.");
           }
           twiml.redirect("/voice/browse-profiles");
         } else {
@@ -6388,11 +6388,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           timeout: 20,
         });
         if (lastMsg?.recordingUrl) {
-          replayGather.say("Last message you sent this caller.");
+          playPrompt(replayGather, req, "last_message_sent.mp3", "Last message you sent this caller.");
           replayGather.pause({ length: 1 });
           safePlayRecording(replayGather, lastMsg.recordingUrl, req, "");
         } else {
-          replayGather.say("You have not sent this caller any messages.");
+          playPrompt(replayGather, req, "no_messages_yet.mp3", "You have not sent this caller any messages.");
         }
         playPrompt(replayGather, req, "live_invite_options.mp3",
           "To connect live with this caller press 1. To reply with a message press 2. " +
@@ -6432,7 +6432,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           playPrompt(locationGather, req, locationToFilename(location),
             `This caller is located in ${location}.`);
         } else {
-          locationGather.say("This caller's location is not available.");
+          playPrompt(locationGather, req, "location_not_available.mp3", "This caller's location is not available.");
         }
         playPrompt(locationGather, req, "live_invite_options.mp3",
           "To connect live with this caller press 1. To reply with a message press 2. " +
