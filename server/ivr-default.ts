@@ -7042,16 +7042,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         maxAttempts: 2,
       } as any) as any;
 
-      pay.prompt({ ["for"]: "cardNumber" })
-        .say("Please enter your 16-digit card number, then press pound.");
-      pay.prompt({ ["for"]: "expirationDate" })
-        .say(
-          "Enter your expiration date, then press pound. " +
-          "Enter the 2-digit month followed by the last 2 digits of the year. " +
-          "For example, for February 2027 enter 0 2 2 7, then press pound."
-        );
-      pay.prompt({ ["for"]: "securityCode" })
-        .say("Enter your 3 or 4 digit security code, then press pound.");
+      playPrompt(pay.prompt({ ["for"]: "cardNumber" }), req, "collect_card_number.mp3",
+        "Please enter your 16-digit card number, then press pound.");
+      playPrompt(pay.prompt({ ["for"]: "expirationDate" }), req, "collect_card_expiry.mp3",
+        "Enter your expiration date, then press pound. Enter the 2-digit month followed by the last 2 digits of the year.");
+      playPrompt(pay.prompt({ ["for"]: "securityCode" }), req, "collect_security_code.mp3",
+        "Enter your 3 or 4 digit security code, then press pound.");
 
     } catch (err: any) {
       const errStatus = err.status ?? "?";

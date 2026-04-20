@@ -230,6 +230,11 @@ const MM_PROMPTS: Prompt[] = [
   // ── Purchase / package ─────────────────────────────────────────────────────
   { filename: "package_load_error.mp3",  text: "We're having trouble loading package information. To return to the main menu press 9. To cancel press pound." },
   { filename: "promo_code_prompt.mp3",   text: "Enter your promotional code followed by the pound key. Press star to cancel." },
+  { filename: "collect_card_number.mp3",       text: "Please enter your 16-digit card number now." },
+  { filename: "collect_card_number_retry.mp3", text: "That number doesn't look right. Please try again and enter your 16-digit card number." },
+  { filename: "collect_card_expiry.mp3",       text: "Please enter your card's expiration date. Enter the 2-digit month followed by the 2-digit year." },
+  { filename: "collect_security_code.mp3",     text: "Enter your 3 or 4 digit security code, then press pound." },
+  { filename: "card_number_invalid.mp3",       text: "We were unable to verify that card number. Please check your card and try again." },
 
   // ── Membership management ──────────────────────────────────────────────────
   { filename: "manage_tier_free_trial.mp3", text: "You are on a free trial." },
