@@ -11,18 +11,24 @@ export type BrowseQueueItem = {
 
 export interface CallerBrowseState {
   queue: BrowseQueueItem[];
+  // ── ivr-default fields ─────────────────────────────────────────────────────
   seenUserIds: string[];
   blockedUserIds: Set<string>;
   lastPlayedProfile: BrowseQueueItem | null;
   previousLastPlayedProfile: BrowseQueueItem | null;
-  linkedRegionLoaded: boolean;
   callerRegionId: string | null;
   callerRegionName: string | null;
+  callerCountAnnounced: boolean;
+  // ── ivr-no-mailbox fields (index-based queue navigation) ───────────────────
+  index: number;
+  lastPlayedIndex: number | null;
+  hasWrapped: boolean;
+  // ── shared fields ──────────────────────────────────────────────────────────
+  linkedRegionLoaded: boolean;
   localUserIds: string[];
   announcedNewLocalIds: string[];
   linkedRegionSnapshots: { regionId: string; regionName: string; knownUserIds: string[] }[];
   announcedLinkedCallerIds: string[];
   greetingsPlayed: number;
   windowAnnouncementsUsed: number;
-  callerCountAnnounced: boolean;
 }

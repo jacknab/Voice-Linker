@@ -5071,16 +5071,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             blockedUserIds: initialBlockedIds,
             lastPlayedProfile: null,
             previousLastPlayedProfile: null,
-            linkedRegionLoaded,
             callerRegionId: regionId ?? null,
             callerRegionName,
+            callerCountAnnounced: false,
+            index: 0,
+            lastPlayedIndex: null,
+            hasWrapped: false,
+            linkedRegionLoaded,
             localUserIds: allProfiles.map(p => p.userId),
             announcedNewLocalIds: [],
             linkedRegionSnapshots,
             announcedLinkedCallerIds: [],
             greetingsPlayed: 0,
             windowAnnouncementsUsed: 0,
-            callerCountAnnounced: false,
           };
 
           engagementEngine.initEngagementState(callSid, user.id);
