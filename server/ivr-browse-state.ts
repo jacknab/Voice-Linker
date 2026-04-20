@@ -14,6 +14,7 @@ export interface CallerBrowseState {
   seenUserIds: string[];
   blockedUserIds: Set<string>;
   lastPlayedProfile: BrowseQueueItem | null;
+  previousLastPlayedProfile: BrowseQueueItem | null;
   linkedRegionLoaded: boolean;
   callerRegionId: string | null;
   callerRegionName: string | null;

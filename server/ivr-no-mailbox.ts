@@ -5034,12 +5034,25 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // ── Play previous profile ───────────────────────────────────────────
         const callSid = req.body?.CallSid as string;
         const state = callerBrowseState.get(callSid);
-        if (state && state.lastPlayedIndex !== null && state.lastPlayedIndex > 0) {
-          state.index = state.lastPlayedIndex - 1;
-          console.log(`[voice] handle-profile-menu: press 5 → rewinding to index ${state.index} for callSid=${callSid}`);
-          twiml.redirect("/voice/browse-profiles");
+        if (state && state.lastPlayedIndex !== null) {
+          if (state.lastPlayedIndex > 0) {
+            // Normal case: rewind to the profile played before the current one
+            state.index = state.lastPlayedIndex - 1;
+            console.log(`[voice] handle-profile-menu: press 5 → rewinding to index ${state.index} for callSid=${callSid}`);
+            twiml.redirect("/voice/browse-profiles");
+          } else if (state.hasWrapped && state.queue.length > 1) {
+            // Wrapped around: previous of index 0 is the last item in the queue
+            state.index = state.queue.length - 1;
+            console.log(`[voice] handle-profile-menu: press 5 → wrap-back to index ${state.index} for callSid=${callSid}`);
+            twiml.redirect("/voice/browse-profiles");
+          } else {
+            // First profile in the session — no previous exists, replay the current one
+            playPrompt(twiml, req, "no_previous_profile.mp3", "There is no previous profile.");
+            state.index = state.lastPlayedIndex;
+            twiml.redirect("/voice/browse-profiles");
+          }
         } else {
-          playPrompt(twiml, req, "no_previous_profile.mp3", "There is no previous profile. Continuing to the next.");
+          playPrompt(twiml, req, "no_previous_profile.mp3", "There is no previous profile.");
           twiml.redirect("/voice/browse-profiles");
         }
       } else if (digit === "6") {

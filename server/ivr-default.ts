@@ -5070,6 +5070,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             seenUserIds: [],
             blockedUserIds: initialBlockedIds,
             lastPlayedProfile: null,
+            previousLastPlayedProfile: null,
             linkedRegionLoaded,
             callerRegionId: regionId ?? null,
             callerRegionName,
@@ -5098,12 +5099,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           state.queue = state.queue.filter(p => !state!.blockedUserIds.has(p.userId));
 
           if (targetUserId) {
-            // Press-5 go-back: inject the last-played profile at the front of the buffer.
+            // Press-5 go-back: re-inject the previous profile at the front of the buffer.
+            // previousLastPlayedProfile holds the profile played before the current one.
             // Do NOT mark it as seen so it can replay cleanly.
             // Respect block cache — do not re-inject a profile the caller just blocked.
             const alreadyInBuffer = state.queue.some(p => p.userId === targetUserId);
-            if (!alreadyInBuffer && state.lastPlayedProfile?.userId === targetUserId && !state.blockedUserIds.has(targetUserId)) {
-              state.queue.unshift(state.lastPlayedProfile);
+            const profileToRestore = state.previousLastPlayedProfile?.userId === targetUserId
+              ? state.previousLastPlayedProfile
+              : state.lastPlayedProfile?.userId === targetUserId
+                ? state.lastPlayedProfile
+                : null;
+            if (!alreadyInBuffer && profileToRestore && !state.blockedUserIds.has(targetUserId)) {
+              state.queue.unshift(profileToRestore);
               if (state.queue.length > 3) state.queue.pop();
             }
           } else if (afterUserId) {
@@ -5408,6 +5415,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
         // Capture previous profile for press-5 go-back BEFORE updating lastPlayedProfile.
         const prevLastProfile = state.lastPlayedProfile;
+        state.previousLastPlayedProfile = state.lastPlayedProfile;
         state.lastPlayedProfile = profile;
 
         // Announce caller count exactly once per session — right before the first profile.
