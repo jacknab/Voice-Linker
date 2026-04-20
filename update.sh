@@ -50,7 +50,7 @@ success "Generated files reset."
 # ── 2. Pull latest code ───────────────────────────────────────────────────────
 info "Pulling latest code from GitHub..."
 cd "$APP_DIR"
-git pull origin main
+git pull --rebase origin main || git reset --hard origin/main
 if [ -n "${ENV_BACKUP:-}" ] && [ -f "$ENV_BACKUP" ]; then
   if [ ! -f "$ENV_FILE" ] || ! cmp -s "$ENV_FILE" "$ENV_BACKUP"; then
     cp -p "$ENV_BACKUP" "$ENV_FILE"
