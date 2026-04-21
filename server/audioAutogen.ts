@@ -677,25 +677,46 @@ async function safeRun() {
 }
 
 /**
+ * Helper: delete every .mp3 and .txt sidecar file inside a folder.
+ * Does NOT delete user recordings (timestamp-named files like 1774045714166-196436.mp3).
+ * Returns the number of mp3 files deleted.
+ */
+function wipePromptFolder(folder: string): number {
+  let deleted = 0;
+  const dir = path.join(UPLOADS_DIR, folder);
+  if (!fs.existsSync(dir)) return 0;
+  try {
+    for (const file of fs.readdirSync(dir)) {
+      // Skip timestamp-named user recordings (digits-only prefix before the hyphen)
+      if (/^\d{10,}-\d+\.(mp3|txt)$/i.test(file)) continue;
+      const fullPath = path.join(dir, file);
+      try {
+        fs.unlinkSync(fullPath);
+        if (/\.mp3$/i.test(file)) deleted++;
+      } catch { /* ignore individual file errors */ }
+    }
+  } catch { /* ignore dir read errors */ }
+  return deleted;
+}
+
+/**
  * Delete every autogen-managed system prompt file (and its sidecar) so the
  * next autogen run (triggered immediately) regenerates them all from scratch.
- * This fixes the "old audio won't update" problem where sidecar-less files
- * were silently skipped.  Called by the admin Force Regenerate endpoint.
+ * Also wipes the now-disabled mw/ and mw_m/ folders since all audio is
+ * consolidated to the MM voice only.
+ * Called by the admin Force Regenerate endpoint.
  */
 export async function forceRegenAllSystemPrompts(): Promise<{ queued: number }> {
   let deleted = 0;
 
-  // ── Category folder prompts (MM_PROMPTS, MW_PROMPTS, MW_M_PROMPTS) ────────
-  for (const { folder, prompts } of FOLDERS) {
-    const dir = path.join(UPLOADS_DIR, folder);
-    for (const prompt of prompts) {
-      if (!prompt.filename) continue;
-      const mp3 = path.join(dir, prompt.filename);
-      const txt = mp3.replace(/\.mp3$/i, ".txt");
-      try { if (fs.existsSync(mp3)) { fs.unlinkSync(mp3); deleted++; } } catch { /* ignore */ }
-      try { if (fs.existsSync(txt)) { fs.unlinkSync(txt); } } catch { /* ignore */ }
-    }
+  // ── Active category folders (currently only mm/) ──────────────────────────
+  for (const { folder } of FOLDERS) {
+    deleted += wipePromptFolder(folder);
   }
+
+  // ── Disabled folders — wipe entirely so old MW/MW_M voice files are gone ──
+  deleted += wipePromptFolder("mw");
+  deleted += wipePromptFolder("mw_m");
 
   // ── Roger greeting files (uploads/ root) ─────────────────────────────────
   for (const prompt of ROGER_PROMPTS) {
@@ -705,10 +726,10 @@ export async function forceRegenAllSystemPrompts(): Promise<{ queued: number }> 
     try { if (fs.existsSync(txt)) { fs.unlinkSync(txt); } } catch { /* ignore */ }
   }
 
-  // Kick off an immediate autogen run so files get regenerated right away.
+  // Kick off an immediate autogen run so mm/ files get regenerated right away.
   safeRun().catch(err => console.error("[audio-autogen] force-regen run failed:", err));
 
-  console.log(`[audio-autogen] force-regen: deleted ${deleted} file(s), regeneration queued.`);
+  console.log(`[audio-autogen] force-regen: deleted ${deleted} file(s) across mm/, mw/, mw_m/, regeneration queued.`);
   return { queued: deleted };
 }
 

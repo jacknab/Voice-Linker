@@ -895,6 +895,7 @@ export class DatabaseStorage implements IStorage {
            OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
       )`,
       or(isNull(profiles.recordingDuration), gte(profiles.recordingDuration, MIN_GREETING_SECONDS)),
+      isNotNull(profiles.recordingUrl),
     );
 
     const rows = await db.select({ profile: profiles })
@@ -938,6 +939,7 @@ export class DatabaseStorage implements IStorage {
            OR (${blockedUsers.blockerId} = ${callers.userId} AND ${blockedUsers.blockedUserId} = ${excludeUserId})
       )`,
       or(isNull(profiles.recordingDuration), gte(profiles.recordingDuration, MIN_GREETING_SECONDS)),
+      isNotNull(profiles.recordingUrl),
     );
     const rows = await db
       .select({ profile: profiles, lat: zipCodes.latitude, lon: zipCodes.longitude })

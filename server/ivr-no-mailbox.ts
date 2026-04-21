@@ -5580,7 +5580,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   }
 
   function advanceBrowseQueueAfterMessage(callSid: string, toUserId: string, returnTo: string): void {
-    if (!callSid || !toUserId || returnTo) return;
+    if (!callSid || !toUserId) return;
     removeFromBrowseQueue(callSid, toUserId).catch(console.error);
   }
 

@@ -6551,7 +6551,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   }
 
   async function advanceBrowseQueueAfterMessage(callSid: string, toUserId: string, returnTo: string): Promise<void> {
-    if (!callSid || !toUserId || returnTo) return;
+    if (!callSid || !toUserId) return;
     const state = await getBrowseState(callSid);
     if (!state) return;
     if (!state.seenUserIds.includes(toUserId)) {
