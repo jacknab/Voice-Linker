@@ -1,7 +1,7 @@
 import { storage } from "./storage";
 import { db } from "./db";
 import { profiles, callers } from "@shared/schema";
-import { and, eq, like } from "drizzle-orm";
+import { and, eq, like, not } from "drizzle-orm";
 import { log } from "./index";
 
 export const VIRTUAL_PREFIX = "VIRTUAL-";
@@ -23,6 +23,43 @@ function randomBetween(min: number, max: number): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Returns true if at least one non-virtual active call exists
+async function hasRealCallers(): Promise<boolean> {
+  try {
+    const rows = await db
+      .select({ callSid: callers.callSid })
+      .from(callers)
+      .where(and(eq(callers.status, "active"), not(like(callers.callSid, `${VIRTUAL_PREFIX}%`))))
+      .limit(1);
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+// Sleeps in POLL_INTERVAL chunks; resolves early if `stopWhen()` returns true.
+// Returns true if stopWhen triggered, false if the full duration elapsed.
+const POLL_INTERVAL_MS = 15_000;
+async function sleepWatched(durationMs: number, stopWhen: () => Promise<boolean>): Promise<boolean> {
+  const deadline = Date.now() + durationMs;
+  while (Date.now() < deadline) {
+    await sleep(Math.min(POLL_INTERVAL_MS, deadline - Date.now()));
+    if (await stopWhen()) return true;
+  }
+  return false;
+}
+
+// Waits until at least one real caller is on the line (polls every POLL_INTERVAL_MS).
+async function waitForRealCaller(sessionEndMs: number, userId: string): Promise<boolean> {
+  while (activeSessions.has(userId) && Date.now() < sessionEndMs) {
+    if (await hasRealCallers()) return true;
+    const remaining = sessionEndMs - Date.now();
+    if (remaining <= 0) break;
+    await sleep(Math.min(POLL_INTERVAL_MS, remaining));
+  }
+  return false;
 }
 
 // ─── Region assignment helpers ────────────────────────────────────────────────
@@ -63,23 +100,41 @@ async function runAdminSeedSession(userId: string): Promise<void> {
       break;
     }
 
+    // Gate: only go online when a real caller is present
+    if (!(await hasRealCallers())) {
+      log(`admin seed WAITING (no real callers) userId=${userId}`, "simulator");
+      const found = await waitForRealCaller(sessionEnd, userId);
+      if (!found) break; // session expired while waiting
+    }
+
     const remainingMs = sessionEnd - Date.now();
     if (remainingMs <= 0) break;
 
     await storage.registerActiveCall(callSid, userId, undefined);
     log(`admin seed ON  userId=${userId}`, "simulator");
 
+    // Stay online for up to activeDuration, but drop off immediately if real callers leave
     const activeDuration = Math.min(randomBetween(90, 240) * 1000, remainingMs);
-    await sleep(activeDuration);
+    const noRealCallers = await sleepWatched(activeDuration, async () => !(await hasRealCallers()));
 
-    if (!activeSessions.has(userId)) break;
+    if (!activeSessions.has(userId)) {
+      await storage.removeActiveCall(callSid).catch(() => {});
+      break;
+    }
 
     await storage.removeActiveCall(callSid);
-    log(`admin seed OFF userId=${userId}`, "simulator");
+    if (noRealCallers) {
+      log(`admin seed OFF (no real callers) userId=${userId}`, "simulator");
+    } else {
+      log(`admin seed OFF userId=${userId}`, "simulator");
+    }
 
     const remainingAfterOff = sessionEnd - Date.now();
     if (remainingAfterOff <= 0) break;
-    await sleep(Math.min(randomBetween(60, 240) * 1000, remainingAfterOff));
+    // If we went offline because callers left, skip the normal idle gap and wait for callers instead
+    if (!noRealCallers) {
+      await sleep(Math.min(randomBetween(60, 240) * 1000, remainingAfterOff));
+    }
   }
 
   await storage.removeActiveCall(callSid).catch(() => {});
@@ -117,24 +172,42 @@ async function runSeedSession(
       break;
     }
 
+    // Gate: only go online when a real caller is present
+    if (!(await hasRealCallers())) {
+      log(`virtual caller WAITING (no real callers) userId=${userId}`, "simulator");
+      const found = await waitForRealCaller(sessionEnd, userId);
+      if (!found) break; // session expired while waiting
+    }
+
     const remainingMs = sessionEnd - Date.now();
     if (remainingMs <= 0) break;
 
     await storage.registerActiveCall(callSid, userId, regionId);
     log(`virtual caller ON  userId=${userId} regionId=${regionId ?? "all"}`, "simulator");
 
+    // Stay online for up to activeDuration, but drop off immediately if real callers leave
     const activeDuration = Math.min(randomBetween(60, 300) * 1000, remainingMs);
-    await sleep(activeDuration);
+    const noRealCallers = await sleepWatched(activeDuration, async () => !(await hasRealCallers()));
 
-    if (!activeSessions.has(userId)) break;
+    if (!activeSessions.has(userId)) {
+      await storage.removeActiveCall(callSid).catch(() => {});
+      break;
+    }
 
     await storage.removeActiveCall(callSid);
-    log(`virtual caller OFF userId=${userId}`, "simulator");
+    if (noRealCallers) {
+      log(`virtual caller OFF (no real callers) userId=${userId}`, "simulator");
+    } else {
+      log(`virtual caller OFF userId=${userId}`, "simulator");
+    }
 
-    const inactiveDuration = randomBetween(30, 180) * 1000;
     const remainingAfterOff = sessionEnd - Date.now();
     if (remainingAfterOff <= 0) break;
-    await sleep(Math.min(inactiveDuration, remainingAfterOff));
+    // If we went offline because callers left, skip the normal idle gap and wait for callers instead
+    if (!noRealCallers) {
+      const inactiveDuration = randomBetween(30, 180) * 1000;
+      await sleep(Math.min(inactiveDuration, remainingAfterOff));
+    }
   }
 
   await storage.removeActiveCall(callSid).catch(() => {});
