@@ -5303,10 +5303,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/live-connect-wait", async (req, res) => {
     const twiml = new VoiceResponse();
     const targetUserId = req.query.targetUserId as string;
-    const waited = req.query.waited as string | undefined;
+    const MAX_RING_LOOPS = 3; // 3 × 10 s = 30 seconds maximum
 
     try {
       const invite = pendingLiveInvites.get(targetUserId);
+      const ringCountTop = parseInt((req.query.ringCount as string) ?? "0", 10) || 0;
 
       if (!invite) {
         // Invite was cleaned up (timed out or already handled)
@@ -5322,25 +5323,37 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           startConferenceOnEnter: true,
           endConferenceOnExit: true,
           beep: false,
-          exitKeys: "#",
         });
-      } else if (invite.status === "declined" || waited || Date.now() - invite.createdAt > LIVE_INVITE_TTL_MS) {
+      } else if (invite.status === "declined" || ringCountTop >= MAX_RING_LOOPS || Date.now() - invite.createdAt > LIVE_INVITE_TTL_MS) {
         // Timed out or explicitly declined
         pendingLiveInvites.delete(targetUserId);
         playPrompt(twiml, req, "live_connect_failed.mp3",
           "We were unable to connect your call. Returning you to the male box.");
         twiml.redirect("/voice/browse-profiles");
       } else {
-        // Still pending — first visit: announce + ring
-        const targetProfile = await storage.getProfile(targetUserId).catch(() => null);
-        twiml.say("Calling");
-        if (targetProfile?.nameRecordingUrl) {
-          safePlayRecording(twiml, targetProfile.nameRecordingUrl, req, "");
+        // Still pending — announce + ring, then loop back to check status
+        const ringCount = parseInt((req.query.ringCount as string) ?? "0", 10) || 0;
+        if (ringCount === 0) {
+          const targetProfile = await storage.getProfile(targetUserId).catch(() => null);
+          playPrompt(twiml, req, "calling.mp3", "Calling");
+          if (targetProfile?.nameRecordingUrl) {
+            safePlayRecording(twiml, targetProfile.nameRecordingUrl, req, "");
+          }
+          playPrompt(twiml, req, "now.mp3", "now.");
         }
-        twiml.say("now.");
-        playPrompt(twiml, req, "live_connect_ringing.mp3", "");
-        // After ringing, check status (handles case where B accepts at the last second)
-        twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}&waited=1`);
+        // Play ringing audio if it exists; guarantee a 10-second pause otherwise so the
+        // loop does not race through instantly when the audio file is missing.
+        const cat2 = getRawSiteSettingsCache()?.siteCategory?.toLowerCase() ?? "mm";
+        const ringFileCat2  = path.join(UPLOADS_DIR, cat2, "live_connect_ringing.mp3");
+        const ringFileRoot2 = path.join(UPLOADS_DIR, "live_connect_ringing.mp3");
+        if (fs.existsSync(ringFileCat2)) {
+          twiml.play(`${baseUrl(req)}/uploads/${cat2}/live_connect_ringing.mp3`);
+        } else if (fs.existsSync(ringFileRoot2)) {
+          twiml.play(`${baseUrl(req)}/uploads/live_connect_ringing.mp3`);
+        } else {
+          twiml.pause({ length: 10 });
+        }
+        twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}&ringCount=${ringCount + 1}`);
       }
     } catch (error) {
       console.error("[live-connect] live-connect-wait error:", error);

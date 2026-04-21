@@ -6245,7 +6245,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           startConferenceOnEnter: true,
           endConferenceOnExit: true,
           beep: false,
-          exitKeys: "#",
         });
       } else if (invite.status === "declined") {
         // B explicitly declined
@@ -6269,8 +6268,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           playPrompt(twiml, req, "now.mp3", "now.");
         }
-        // Play the 10-second international ringing clip
-        playPrompt(twiml, req, "live_connect_ringing.mp3", "");
+        // Play the ringing clip if it exists; always guarantee a 10-second pause so the
+        // wait loop does not race through instantly when the audio file is missing.
+        const cat = getRawSiteSettingsCache()?.siteCategory?.toLowerCase() ?? "mm";
+        const ringFileCat  = path.join(UPLOADS_DIR, cat, "live_connect_ringing.mp3");
+        const ringFileRoot = path.join(UPLOADS_DIR, "live_connect_ringing.mp3");
+        if (fs.existsSync(ringFileCat)) {
+          twiml.play(`${baseUrl(req)}/uploads/${cat}/live_connect_ringing.mp3`);
+        } else if (fs.existsSync(ringFileRoot)) {
+          twiml.play(`${baseUrl(req)}/uploads/live_connect_ringing.mp3`);
+        } else {
+          // No ringing audio uploaded yet — wait 10 seconds via <Pause> so Twilio can
+          // interrupt this leg via REST API when Caller B accepts.
+          twiml.pause({ length: 10 });
+        }
         // Loop back and increment the counter
         twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}&ringCount=${ringCount + 1}`);
       }
@@ -6360,7 +6371,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           startConferenceOnEnter: true,
           endConferenceOnExit: true,
           beep: false,
-          exitKeys: "#",
           maxParticipants: 2,
         });
 
@@ -6476,7 +6486,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         startConferenceOnEnter: true,
         endConferenceOnExit: true,
         beep: false,
-        exitKeys: "#",
         maxParticipants: 2,
       });
     } catch (error) {
