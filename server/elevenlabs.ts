@@ -18,15 +18,15 @@ export function getElevenLabsApiKey(): string | null {
 // Returns the correct ElevenLabs voice ID for a given folder (mm/mw/mw_m) or falls back to the legacy var.
 export function getVoiceIdForFolder(folder?: string | null): string {
   if (folder === "mm") {
-    return process.env.ELEVENLABS_VOICE_ID_MM || "JZ3e95uoTACVf6tXaaEi";
+    return process.env.ELEVENLABS_VOICE_ID_MM || "vDchjyOZZytffNeZXfZK";
   }
   if (folder === "mw") {
     return process.env.ELEVENLABS_VOICE_ID_MW || "ucgJ8SdlW1CZr9MIm8BP";
   }
   if (folder === "mw_m") {
-    return process.env.ELEVENLABS_VOICE_ID_MW_M || "JZ3e95uoTACVf6tXaaEi";
+    return process.env.ELEVENLABS_VOICE_ID_MW_M || "vDchjyOZZytffNeZXfZK";
   }
-  return process.env.ELEVENLABS_VOICE_ID_MM || "JZ3e95uoTACVf6tXaaEi";
+  return process.env.ELEVENLABS_VOICE_ID_MM || "vDchjyOZZytffNeZXfZK";
 }
 
 /** Returns Roger's dedicated ElevenLabs voice ID. Falls back to the shared voice ID. */
