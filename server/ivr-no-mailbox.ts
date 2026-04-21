@@ -4532,13 +4532,41 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             for (const p of snapProfiles) reconActiveIds.add(p.userId);
           }
 
-          // Prune offline/blocked callers
+          // Prune offline/blocked callers, then re-add any known callers who came back online.
+          // Without the re-add step, seed callers that cycle off briefly get removed and
+          // never return to the queue, causing the same smaller subset to repeat.
           {
             const queueBefore = state.queue.length;
             state.queue = state.queue.filter(p => reconActiveIds.has(p.userId));
             if (state.index >= state.queue.length) state.index = 0;
-            if (state.queue.length < queueBefore) {
-              console.log(`[voice] browse-profiles: reconciled — pruned ${queueBefore - state.queue.length} offline/blocked caller(s), remaining=${state.queue.length} for ${callSid}`);
+            const pruned = queueBefore - state.queue.length;
+            if (pruned > 0) {
+              console.log(`[voice] browse-profiles: reconciled — pruned ${pruned} offline/blocked caller(s), remaining=${state.queue.length} for ${callSid}`);
+            }
+
+            // Build a lookup of all currently-active profiles so we can re-add returning callers
+            const activeProfileMap = new Map<string, { recordingUrl: string; nameRecordingUrl?: string | null }>();
+            for (const p of currentLocalProfiles) activeProfileMap.set(p.userId, p);
+            for (const snapProfiles of linkedSnapshotResults) {
+              for (const p of snapProfiles) activeProfileMap.set(p.userId, p);
+            }
+
+            // Known callers = were in the original queue build OR already announced as new
+            const knownCallerIds = new Set([...state.localUserIds, ...state.announcedNewLocalIds]);
+            const queueUserIds = new Set(state.queue.map(q => q.userId));
+            let readded = 0;
+            for (const userId of knownCallerIds) {
+              if (reconActiveIds.has(userId) && !queueUserIds.has(userId)) {
+                const p = activeProfileMap.get(userId);
+                if (p) {
+                  state.queue.push({ userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, isPreExisting: true });
+                  queueUserIds.add(userId);
+                  readded++;
+                }
+              }
+            }
+            if (readded > 0) {
+              console.log(`[voice] browse-profiles: re-added ${readded} caller(s) that came back online for ${callSid}`);
             }
           }
 
