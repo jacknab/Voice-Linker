@@ -269,52 +269,52 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "cant_message_ai.mp3", text: "You can't message an AI. Nice try though. Back to browsing." },
 ];
 
-// ── MW prompts (uploads/mw/) — female voice for male callers ──────────────
-const MW_PROMPTS: Prompt[] = [
-  { filename: "gender_select.mp3",  text: "Guys, press one to talk to women. Women, press three to talk to guys." },
-  { filename: "mw_main_menu.mp3",   text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. For the men seeking men line press 5. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
-  ...MM_PROMPTS.filter(p =>
-    p.filename !== "main_menu.mp3" &&
-    p.filename !== "mw_main_menu.mp3"
-  ).map(p => {
-    if (p.filename === "phone_booth_welcome.mp3")
-      return { ...p, text: "Welcome to the live connector. Greetings from all the local women here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." };
-    if (p.filename === "welcome_record_name.mp3")
-      return { ...p, text: "You need to record a greeting to introduce yourself to the women first. Let's record the name you want to use. After the tone, record just your first name." };
-    if (p.filename === "live_connect_ended.mp3")
-      return { ...p, text: "Your live connection has ended. Returning you to the live connector." };
-    if (p.filename === "live_connect_failed.mp3")
-      return { ...p, text: "We were unable to connect your call. Returning you to the live connector." };
-    if (p.filename === "phrase_callers_on_the_line.mp3")
-      return { ...p, text: "women on the line." };
-    if (p.filename === "phrase_caller_on_the_line.mp3")
-      return { ...p, text: "woman on the line." };
-    return p;
-  }),
-];
+// ── MW prompts (uploads/mw/) — DISABLED: using MM voice only ──────────────
+// const MW_PROMPTS: Prompt[] = [
+//   { filename: "gender_select.mp3",  text: "Guys, press one to talk to women. Women, press three to talk to guys." },
+//   { filename: "mw_main_menu.mp3",   text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. For the men seeking men line press 5. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+//   ...MM_PROMPTS.filter(p =>
+//     p.filename !== "main_menu.mp3" &&
+//     p.filename !== "mw_main_menu.mp3"
+//   ).map(p => {
+//     if (p.filename === "phone_booth_welcome.mp3")
+//       return { ...p, text: "Welcome to the live connector. Greetings from all the local women here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." };
+//     if (p.filename === "welcome_record_name.mp3")
+//       return { ...p, text: "You need to record a greeting to introduce yourself to the women first. Let's record the name you want to use. After the tone, record just your first name." };
+//     if (p.filename === "live_connect_ended.mp3")
+//       return { ...p, text: "Your live connection has ended. Returning you to the live connector." };
+//     if (p.filename === "live_connect_failed.mp3")
+//       return { ...p, text: "We were unable to connect your call. Returning you to the live connector." };
+//     if (p.filename === "phrase_callers_on_the_line.mp3")
+//       return { ...p, text: "women on the line." };
+//     if (p.filename === "phrase_caller_on_the_line.mp3")
+//       return { ...p, text: "woman on the line." };
+//     return p;
+//   }),
+// ];
 
-// ── MW_M prompts (uploads/mw_m/) — male voice for female callers ──────────
-const MW_M_PROMPTS: Prompt[] = [
-  { filename: "mw_main_menu.mp3",  text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. For the men seeking men line press 5. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
-  ...MM_PROMPTS.filter(p =>
-    p.filename !== "main_menu.mp3" &&
-    p.filename !== "mw_main_menu.mp3"
-  ).map(p => {
-    if (p.filename === "phone_booth_welcome.mp3")
-      return { ...p, text: "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." };
-    if (p.filename === "welcome_record_name.mp3")
-      return { ...p, text: "You need to record a greeting to introduce yourself to the guys first. Let's record the name you want to use. After the tone, record just your first name." };
-    if (p.filename === "live_connect_ended.mp3")
-      return { ...p, text: "Your live connection has ended. Returning you to the live connector." };
-    if (p.filename === "live_connect_failed.mp3")
-      return { ...p, text: "We were unable to connect your call. Returning you to the live connector." };
-    if (p.filename === "phrase_callers_on_the_line.mp3")
-      return { ...p, text: "guys on the line." };
-    if (p.filename === "phrase_caller_on_the_line.mp3")
-      return { ...p, text: "guy on the line." };
-    return p;
-  }),
-];
+// ── MW_M prompts (uploads/mw_m/) — DISABLED: using MM voice only ──────────
+// const MW_M_PROMPTS: Prompt[] = [
+//   { filename: "mw_main_menu.mp3",  text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. For the men seeking men line press 5. To manage your membership press 8. For customer service press 0. To repeat these choices press 9." },
+//   ...MM_PROMPTS.filter(p =>
+//     p.filename !== "main_menu.mp3" &&
+//     p.filename !== "mw_main_menu.mp3"
+//   ).map(p => {
+//     if (p.filename === "phone_booth_welcome.mp3")
+//       return { ...p, text: "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." };
+//     if (p.filename === "welcome_record_name.mp3")
+//       return { ...p, text: "You need to record a greeting to introduce yourself to the guys first. Let's record the name you want to use. After the tone, record just your first name." };
+//     if (p.filename === "live_connect_ended.mp3")
+//       return { ...p, text: "Your live connection has ended. Returning you to the live connector." };
+//     if (p.filename === "live_connect_failed.mp3")
+//       return { ...p, text: "We were unable to connect your call. Returning you to the live connector." };
+//     if (p.filename === "phrase_callers_on_the_line.mp3")
+//       return { ...p, text: "guys on the line." };
+//     if (p.filename === "phrase_caller_on_the_line.mp3")
+//       return { ...p, text: "guy on the line." };
+//     return p;
+//   }),
+// ];
 
 /**
  * Generate the full spoken text for a time-remaining announcement.
@@ -354,10 +354,11 @@ function numberToWords(n: number): string {
   return o === 0 ? t : `${t}-${ones[o]}`;
 }
 
+// NOTE: mw and mw_m folders are disabled — MM voice only.
 const FOLDERS: { folder: string; prompts: Prompt[] }[] = [
   { folder: "mm",   prompts: MM_PROMPTS },
-  { folder: "mw",   prompts: MW_PROMPTS },
-  { folder: "mw_m", prompts: MW_M_PROMPTS },
+  // { folder: "mw",   prompts: MW_PROMPTS },
+  // { folder: "mw_m", prompts: MW_M_PROMPTS },
 ];
 
 // ── Roger greeting variants (uploads/ root, Roger voice, eleven_v3) ────────
@@ -466,23 +467,23 @@ async function runAudioAutogen(): Promise<void> {
     }
   }
 
-  // ── Roger greeting variants (root uploads/ dir, Roger voice, eleven_v3) ──
-  const rogerVoiceId = getVoiceIdForRoger();
-  for (const prompt of ROGER_PROMPTS) {
-    const filePath = path.join(UPLOADS_DIR, prompt.filename);
-    if (!needsRegeneration(filePath, prompt.text)) { skipped++; continue; }
-    try {
-      await generateTTS(prompt.text.trim(), prompt.filename, undefined, rogerVoiceId, "eleven_v3");
-      writeSidecar(filePath, prompt.text);
-      console.log(`[audio-autogen] generated roger/${prompt.filename}`);
-      generated++;
-      await sleep(DELAY_MS);
-    } catch (err: any) {
-      console.error(`[audio-autogen] failed roger/${prompt.filename}: ${err?.message ?? err}`);
-      failed++;
-      await sleep(DELAY_MS);
-    }
-  }
+  // ── Roger greeting variants — DISABLED: using MM voice only ──
+  // const rogerVoiceId = getVoiceIdForRoger();
+  // for (const prompt of ROGER_PROMPTS) {
+  //   const filePath = path.join(UPLOADS_DIR, prompt.filename);
+  //   if (!needsRegeneration(filePath, prompt.text)) { skipped++; continue; }
+  //   try {
+  //     await generateTTS(prompt.text.trim(), prompt.filename, undefined, rogerVoiceId, "eleven_v3");
+  //     writeSidecar(filePath, prompt.text);
+  //     console.log(`[audio-autogen] generated roger/${prompt.filename}`);
+  //     generated++;
+  //     await sleep(DELAY_MS);
+  //   } catch (err: any) {
+  //     console.error(`[audio-autogen] failed roger/${prompt.filename}: ${err?.message ?? err}`);
+  //     failed++;
+  //     await sleep(DELAY_MS);
+  //   }
+  // }
 
   if (generated > 0 || failed > 0) {
     console.log(`[audio-autogen] run complete — generated: ${generated}, failed: ${failed}, already existed: ${skipped}`);
