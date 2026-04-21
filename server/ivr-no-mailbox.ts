@@ -3089,6 +3089,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const ad = state.queue[state.index];
       state.index++;
 
+      // Rejection gate — intercept before the send-message menu plays
+      if (user.recordingRejectionReason && user.recordingRejectionType === "greeting") {
+        const rejectionRoute = user.recordingRejectionReason === "phone_number"
+          ? "/voice/recording-rejected-phone-number"
+          : "/voice/recording-rejected-unclear";
+        twiml.redirect(rejectionRoute);
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       const adGather = twiml.gather({
         numDigits: 1,
         action: `/voice/handle-category-ad-menu?toUserId=${ad.userId}&mailboxNumber=${ad.mailboxNumber}&category=${category}`,
@@ -3159,6 +3169,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/handle-mailbox-lookup", async (req, res) => {
     const twiml = new VoiceResponse();
     const digits = req.body?.Digits as string;
+    const fromNumber = req.body?.From as string;
     const mode = (req.query.mode as string) || "listen";
 
     try {
@@ -3191,6 +3202,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
         res.type("text/xml");
         return res.send(twiml.toString());
+      }
+
+      // Rejection gate — intercept before the send-message menu plays
+      if (fromNumber) {
+        const lookupUser = await getOrCreateUser(fromNumber);
+        if (lookupUser.recordingRejectionReason && lookupUser.recordingRejectionType === "greeting") {
+          const rejectionRoute = lookupUser.recordingRejectionReason === "phone_number"
+            ? "/voice/recording-rejected-phone-number"
+            : "/voice/recording-rejected-unclear";
+          twiml.redirect(rejectionRoute);
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        }
       }
 
       const adGather = twiml.gather({
