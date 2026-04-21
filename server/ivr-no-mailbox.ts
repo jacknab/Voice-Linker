@@ -1745,11 +1745,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           const storeStatus = status === "silent" ? "completed" : status;
           await storage.updateProfileTranscription(recordingUrl, text, storeStatus);
           console.log(`[transcribe] Profile stored for userId=${user.id}: status=${storeStatus}`);
+          // Run auto-mod immediately after transcription — don't wait for the 65s timer
+          await runTranscriptionAutoChecks(recordingUrl, text);
         }).catch(err => console.error("[transcribe] save-profile error:", err));
       }
       console.log(`[voice] Profile saved immediately for userId=${user.id} (dur=${recordingDuration}s)`);
 
-      // Schedule auto-mod + human review queue after 65 seconds
+      // Schedule 65-second fallback: if transcription never arrived, treat as blank/unclear
       scheduleAutoModCheck(recordingUrl, user.id, "greeting");
 
       twiml.redirect("/voice/review-greeting");
