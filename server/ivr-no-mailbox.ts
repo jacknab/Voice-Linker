@@ -4270,6 +4270,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const user = await getOrCreateUser(fromNumber);
       const regionId = callRegion.get(callSid);
 
+      // ── Greeting rejection gate ───────────────────────────────────────────
+      // If auto-mod has rejected this caller's greeting, intercept them here
+      // before they can send messages. Routes them to the re-record flow.
+      if (user.recordingRejectionReason && user.recordingRejectionType === "greeting") {
+        const rejectionRoute = user.recordingRejectionReason === "phone_number"
+          ? "/voice/recording-rejected-phone-number"
+          : "/voice/recording-rejected-unclear";
+        twiml.redirect(rejectionRoute);
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       // Resolve caller's location for proximity sorting
       const callerZip = user.zipCodeId ? await storage.getZipEntryById(user.zipCodeId) : null;
       let callerLat = callerZip?.latitude ?? null;
