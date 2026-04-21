@@ -2662,17 +2662,21 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           startBilling(callSid, fromNumber);
         }
         const senderProfile = await storage.getProfile(unreadMessage.fromUserId);
+        const recipientProfile = await storage.getProfile(user.id);
         const msgGather = twiml.gather({
           numDigits: 1,
           action: `/voice/handle-mailbox-message?msgId=${unreadMessage.id}&senderId=${unreadMessage.fromUserId}`,
           timeout: 10,
         });
+        playPrompt(msgGather, req, "chime.mp3", "");
+        if (recipientProfile?.nameRecordingUrl) {
+          safePlayRecording(msgGather, recipientProfile.nameRecordingUrl, req, "");
+        }
         if (senderProfile?.nameRecordingUrl) {
-          msgGather.say("New message.");
           safePlayRecording(msgGather, senderProfile.nameRecordingUrl, req, "");
-          msgGather.say("has sent you a message.");
+          msgGather.say("has sent you this message.");
         } else {
-          msgGather.say("You have a new message.");
+          msgGather.say("has sent you this message.");
         }
         safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available.");
         msgGather.say(
@@ -4326,8 +4330,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
       if (unreadMessage) {
-        // Fetch sender's profile to get their name recording
+        // Fetch sender's and recipient's profiles to get their name recordings
         const senderProfile = await storage.getProfile(unreadMessage.fromUserId);
+        const recipientProfile = await storage.getProfile(user.id);
 
         // Nest <Play> + name announcement inside <Gather>
         const msgGather = twiml.gather({
@@ -4335,12 +4340,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           action: `/voice/handle-message-menu?msgId=${unreadMessage.id}&senderId=${unreadMessage.fromUserId}`,
           timeout: 10,
         });
+        playPrompt(msgGather, req, "chime.mp3", "");
+        if (recipientProfile?.nameRecordingUrl) {
+          safePlayRecording(msgGather, recipientProfile.nameRecordingUrl, req, "");
+        }
         if (senderProfile?.nameRecordingUrl) {
-          msgGather.say("New message.");
           safePlayRecording(msgGather, senderProfile.nameRecordingUrl, req, "");
-          msgGather.say("has sent you a message.");
+          msgGather.say("has sent you this message.");
         } else {
-          msgGather.say("You have a new message.");
+          msgGather.say("has sent you this message.");
         }
         safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available for playback.");
         playPrompt(msgGather, req, "message_options.mp3", "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound.");
