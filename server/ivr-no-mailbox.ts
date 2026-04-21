@@ -4053,6 +4053,27 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // Press 1 = accept/keep, press 2 = re-record, press 3 = hear it back.
   app.post("/voice/review-greeting", async (req, res) => {
     const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+
+    try {
+      // Check if auto-mod has already rejected this recording while the caller
+      // was listening to the review menu. This route loops on each Gather timeout
+      // so the rejection is caught within seconds of the transcription check firing.
+      if (fromNumber) {
+        const reviewUser = await getOrCreateUser(fromNumber);
+        if (reviewUser.recordingRejectionReason && reviewUser.recordingRejectionType === "greeting") {
+          const rejectionRoute = reviewUser.recordingRejectionReason === "phone_number"
+            ? "/voice/recording-rejected-phone-number"
+            : "/voice/recording-rejected-unclear";
+          twiml.redirect(rejectionRoute);
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        }
+      }
+    } catch (_err) {
+      // Non-fatal — fall through to show the review menu normally
+    }
+
     const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-review-greeting" });
     playPrompt(gather, req, "review_greeting.mp3",
       "If you're happy with the way your greeting sounds, press 1. " +
