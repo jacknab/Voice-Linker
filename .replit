@@ -43,6 +43,7 @@ waitForPort = 5000
 
 [agent]
 expertMode = true
+stack = "FULLSTACK_JS"
 
 [userenv]
 
@@ -53,3 +54,6 @@ PORT = "5000"
 ENABLE_MAILBOX = "true"
 ELEVENLABS_VOICE_ID_GAME = "yjJ45q8TVCrtMhEKurxY"
 ELEVENLABS_VOICE_ID_MM = "vDchjyOZZytffNeZXfZK"
+IVR_FILE = "./ivr-default"
+NODE_ENV = "development"
+CHATBOT_API_TOKEN = "56ca41b8113055e1a9f4548bfa406a4bd37b073391e136c15a705a9e4a425b8a"
