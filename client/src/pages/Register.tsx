@@ -5,6 +5,7 @@ import { MaleBoxLogo, MaleBoxWordmark } from "@/components/SiteLayout";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useSEO } from "@/hooks/use-seo";
 
 const DEFAULT_SITE_NAME = "Male Box";
 
@@ -25,6 +26,11 @@ export default function Register() {
     retry: 1,
   });
   const siteName = siteData?.siteName || DEFAULT_SITE_NAME;
+
+  useSEO({
+    title: `Create Account — Join ${siteName} Today`,
+    description: `Create a free ${siteName} account to manage your interactive male phone chat line membership, track your minutes, and link your phone number. Join today.`,
+  });
 
   const registerMutation = useMutation({
     mutationFn: (data: { email: string; password: string }) =>

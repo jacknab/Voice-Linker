@@ -3,6 +3,7 @@ import { Phone, Loader2, Menu, X } from "lucide-react";
 import { MaleBoxLogo, MaleBoxWordmark } from "@/components/SiteLayout";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { useSEO } from "@/hooks/use-seo";
 import heroImgMM from "@assets/hero_mm_guy_phone.png";
 import heroImgMW from "@assets/image_1775035245108.png";
 
@@ -83,6 +84,15 @@ export default function Landing() {
   const csEmail = siteData?.customerServiceEmail || null;
   const csPhone = siteData?.customerServicePhone || null;
   const isMM = (siteData?.siteCategory ?? "MM") === "MM";
+
+  useSEO({
+    title: isMM
+      ? `Gay Chat Line & Gay Party Line | ${siteName} | Free Trial`
+      : `Free Chat Line for Singles | ${siteName} | Free Trial`,
+    description: isMM
+      ? `${siteName} is the #1 free gay chat line and gay party line for men in the US. Talk live to real local guys 24/7 — no app, no credit card required. Interactive male phone chat line with free trial minutes for every new caller.`
+      : `${siteName} is the free chat line for singles across the US. Talk live to real local men and women 24/7 — no app, no credit card required. Free trial minutes for every new caller on our phone chat line.`,
+  });
 
   const heroImg = isMM ? heroImgMM : heroImgMW;
   const heroAlt = isMM ? "Man on the phone" : "Woman smiling on the phone";
@@ -280,6 +290,42 @@ export default function Landing() {
           >
             Try it FOR FREE!
           </CallLink>
+        </div>
+      </section>
+
+      {/* ── KEYWORD CONTENT SECTION ── */}
+      <section style={{ background: "#fff", padding: "4rem 1.5rem" }}>
+        <div style={{ maxWidth: "860px", margin: "0 auto" }}>
+          <h2 style={{ fontSize: "clamp(1.3rem, 3vw, 1.85rem)", fontWeight: 800, color: "#111", marginBottom: "1rem", lineHeight: 1.3 }}>
+            {isMM
+              ? `What Is an Interactive Male Phone Chat Line?`
+              : `What Is a Singles Phone Chat Line?`}
+          </h2>
+          <p style={{ fontSize: "1rem", color: "#444", lineHeight: 1.8, marginBottom: "1.75rem" }}>
+            {isMM
+              ? `An interactive male phone chat line is a live voice community where gay, bi, and curious men connect by phone — no apps, no photos, no swiping. ${siteName} is one of the premier interactive male chat lines in the US, letting callers browse real voice greetings, leave private voice messages, and go live one-on-one with someone they're interested in. All it takes is a phone call to your local access number. New callers get free trial minutes, and the line is active 24 hours a day with real men near you.`
+              : `A singles phone chat line is a live voice community where real men and women connect by phone — no apps, no photos, no swiping. ${siteName} is a premier chat line for singles across the US, letting callers browse real voice greetings, exchange private voice messages, and connect live one-on-one. All it takes is a call to your local access number. New callers get free trial minutes, and the line runs 24 hours a day.`}
+          </p>
+
+          <h2 style={{ fontSize: "clamp(1.2rem, 2.5vw, 1.6rem)", fontWeight: 800, color: "#111", marginBottom: "1rem", lineHeight: 1.3 }}>
+            {isMM
+              ? `How ${siteName} Compares to Other Gay Chat Lines`
+              : `How ${siteName} Compares to Other Singles Chat Lines`}
+          </h2>
+          <p style={{ fontSize: "1rem", color: "#444", lineHeight: 1.8, marginBottom: "1.75rem" }}>
+            {isMM
+              ? `Unlike other gay chat lines, ${siteName} combines a customer toll-free local access number with a modern membership system — so you always pay for exactly what you use, with no hidden subscriptions. Our interactive male phone chat line gives you full control: record your greeting, set your own pace, block anyone instantly, and connect live only when you choose. Whether you're a first-time caller or a longtime member, the experience is designed around real connection through voice.`
+              : `Unlike other singles chat lines, ${siteName} pairs a customer toll-free local access number with a straightforward membership — pay for exactly what you use, no hidden fees. Our phone chat line for singles gives you full control: record your own greeting, browse at your own pace, block anyone with one keypress, and go live only when you're ready. Real voices, real people, real connection.`}
+          </p>
+
+          <h2 style={{ fontSize: "clamp(1.2rem, 2.5vw, 1.6rem)", fontWeight: 800, color: "#111", marginBottom: "1rem", lineHeight: 1.3 }}>
+            Free Trial — No Credit Card Required
+          </h2>
+          <p style={{ fontSize: "1rem", color: "#444", lineHeight: 1.8 }}>
+            {isMM
+              ? `Every new caller on the ${siteName} gay chat line gets free trial minutes — no credit card, no commitment, no strings. Just dial your local number and you're in. Browse greetings from real gay men in your area, send private voice messages, and connect live. Your free trial starts on your first call and lasts for 7 days, so you have plenty of time to explore the system at your own pace.`
+              : `Every new caller on ${siteName} gets free trial minutes — no credit card, no commitment. Just dial your local singles chat line number and you're in. Browse greetings from real people near you, leave voice messages, and connect live. Your free trial starts on your first call and is valid for 7 days.`}
+          </p>
         </div>
       </section>
 

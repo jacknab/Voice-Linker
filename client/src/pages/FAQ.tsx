@@ -3,6 +3,7 @@ import { Phone, ChevronDown, ChevronUp, Menu, X } from "lucide-react";
 import { MaleBoxLogo, MaleBoxWordmark } from "@/components/SiteLayout";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { useSEO } from "@/hooks/use-seo";
 
 const DEFAULT_PHONE = "000-000-0000";
 const DEFAULT_SITE_NAME = "Male Box";
@@ -407,6 +408,15 @@ export default function FAQ() {
   const footerBlurb = isMM
     ? "A gay, bi & curious live chat line. Real guys, real voices."
     : "A live chat line for men and women. Real voices, real conversations.";
+
+  useSEO({
+    title: isMM
+      ? `FAQ — Gay Chat Line Help & Tips | ${siteName}`
+      : `FAQ — Singles Phone Chat Line Help | ${siteName}`,
+    description: isMM
+      ? `Get answers about the ${siteName} interactive male phone chat line. How to call, free trial details, membership plans, privacy, and more. Customer toll-free support available 24/7.`
+      : `Get answers about the ${siteName} singles phone chat line. How to call, free trial details, membership plans, privacy, and more. Customer support available 24/7.`,
+  });
 
   const handleToggle = (i: number) => {
     setOpenIndex(prev => (prev === i ? null : i));

@@ -6,6 +6,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { SiPaypal } from "react-icons/si";
+import { useSEO } from "@/hooks/use-seo";
 
 const DEFAULT_SITE_NAME = "Male Box";
 
@@ -94,6 +95,11 @@ export default function Membership() {
   const { data: me, isLoading: authLoading } = useQuery<WebUser>({
     queryKey: ["/api/auth/me"],
     retry: false,
+  });
+
+  useSEO({
+    title: `Membership Plans — Phone Chat Line Minutes | ${siteName}`,
+    description: `Choose your ${siteName} membership plan. Affordable interactive male phone chat line minutes with no contracts. Stripe and PayPal accepted. Start with free trial minutes — no credit card needed.`,
   });
 
   const paypalEnabled = !!(settings?.paypalEmail);

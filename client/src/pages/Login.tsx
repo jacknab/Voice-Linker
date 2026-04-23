@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery as useSiteQuery } from "@tanstack/react-query";
+import { useSEO } from "@/hooks/use-seo";
 
 const DEFAULT_SITE_NAME = "Male Box";
 
@@ -24,6 +25,11 @@ export default function Login() {
     retry: 1,
   });
   const siteName = siteData?.siteName || DEFAULT_SITE_NAME;
+
+  useSEO({
+    title: `Sign In — ${siteName} Member Login`,
+    description: `Sign in to your ${siteName} phone chat line account. Manage your membership, check your minutes balance, and link your phone number.`,
+  });
 
   const loginMutation = useMutation({
     mutationFn: (data: { email: string; password: string }) =>

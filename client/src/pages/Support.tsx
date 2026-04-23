@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Phone, Mail, MessageSquare, Clock, HelpCircle } from "lucide-react";
 import { SiteNav, SiteFooter, PageHeader, SiteSettings, formatPhone, DEFAULT_SITE_NAME, DEFAULT_PHONE } from "@/components/SiteLayout";
 import { Link } from "wouter";
+import { useSEO } from "@/hooks/use-seo";
 
 export default function Support() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -21,6 +22,15 @@ export default function Support() {
   const footerBlurb = isMM
     ? "A gay, bi & curious live chat line. Real guys, real voices."
     : "A live chat line for men and women. Real voices, real conversations.";
+
+  useSEO({
+    title: isMM
+      ? `Customer Support — ${siteName} Gay Chat Line Help Center`
+      : `Customer Support — ${siteName} Chat Line Help Center`,
+    description: isMM
+      ? `Need help with ${siteName}? Our support team is here for all questions about the interactive male phone chat line — billing, calling, membership, and more. Customer toll-free access available.`
+      : `Need help with ${siteName}? Contact our support team for all questions about your singles phone chat line account — billing, calling, membership, and more.`,
+  });
 
   const topics = [
     { icon: <Phone className="w-5 h-5" />, title: "Calling Issues", desc: "Trouble connecting, call quality, or being blocked by caller ID. Make sure your number isn't marked private before calling in.", href: "/faq" },
