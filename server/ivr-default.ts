@@ -6828,7 +6828,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     playPrompt(twiml, req, "membership_pricing.mp3",
       "Here are our membership prices. " +
-      "A day pass is 3 dollars. " +
+      "A day pass is 3 dollars and expires 24 hours after purchase, regardless of how much you use the line. " +
       "A 14 day membership is 10 dollars. " +
       "A 30 day membership is 25 dollars. " +
       "To purchase, press 3 from the membership menu."

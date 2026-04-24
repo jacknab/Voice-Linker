@@ -105,7 +105,7 @@ Drop the recorded `.mp3` into the `uploads/` folder — the system will use your
 | `closest_callers_info.mp3` | "If we have your ZIP code, we use it to play nearby callers first..." | Info menu → press 2 |
 | `membership_questions.mp3` | "Membership questions. Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership with a credit card. Press 9 to return to the main menu." | Info menu → press 1 |
 | `membership_how_it_works.mp3` | "Here is how membership works. As a member, you get full access to the voice line community. Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. We offer three membership options: a day pass, a 14 day membership, and a 30 day membership. Your remaining time is tracked in hours. When you have less than 60 minutes left, the system will tell you in minutes. Choose the option that works best for you." | Membership questions → press 1 |
-| `membership_pricing.mp3` | "Here are our membership prices. A day pass is 3 dollars. A 14 day membership is 10 dollars. A 30 day membership is 25 dollars. To purchase, press 3 from the membership menu." | Membership questions → press 2 |
+| `membership_pricing.mp3` | "Here are our membership prices. A day pass is 3 dollars and expires 24 hours after purchase, regardless of how much you use the line. A 14 day membership is 10 dollars. A 30 day membership is 25 dollars. To purchase, press 3 from the membership menu." | Membership questions → press 2 |
 
 ---
 
