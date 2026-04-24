@@ -5418,25 +5418,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
         }
 
-        // ── Engagement Engine interrupt check ─────────────────────────────────
-        let excludedRogerIds = new Set<string>();
-        try {
-          excludedRogerIds = await storage.getExcludedRogerPromptIds(fromNumber, engagementEngine.PROMPT_LIBRARY.length);
-        } catch (err) {
-          console.error("[engagement] failed to fetch roger prompt history:", err);
-        }
-
-        const engInterruption = engagementEngine.getInterruption(callSid, excludedRogerIds);
-        if (engInterruption) {
-          const encodedText = encodeURIComponent(engInterruption.lineText);
-          const followUp    = encodeURIComponent(engInterruption.followUpAction ?? "");
-          const pid         = encodeURIComponent(engInterruption.id);
-          console.log(`[engagement] Interrupting browse with prompt=${engInterruption.id}, followUp=${engInterruption.followUpAction ?? "none"}`);
-          await setBrowseState(callSid, state);
-          twiml.redirect(`/voice/engagement-interrupt?text=${encodedText}&followUp=${followUp}&pid=${pid}`);
-          res.type("text/xml");
-          return res.send(twiml.toString());
-        }
+        // ── Engagement Engine interrupt check (Roger interjections) ───────────
+        // Disabled per product decision: no Roger prompts inside the live connector.
+        // The Roger welcome greeting (entry-check) is unaffected — only the in-browse
+        // interruptions are suppressed here. The /voice/engagement-interrupt route
+        // is kept for backward compatibility but is no longer triggered from browse.
 
         // ── Bust Game: inject AI imposter into buffer ─────────────────────────
         const engState = engagementEngine.getEngagementState(callSid);
