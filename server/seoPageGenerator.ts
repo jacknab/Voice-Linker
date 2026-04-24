@@ -1648,7 +1648,7 @@ export function writeRegionsIndexPage(allRegions: Region[], siteName: string, si
     <div class="content-section">
       <h2>Membership Plans &amp; Customer Toll-Free Support</h2>
       <p>After your free trial minutes are used, ${escHtml(siteName)} offers simple, affordable membership plans with no contracts and no hidden fees. Plans are available through our secure online checkout — visit the <a href="/membership" style="color:#3B82F6;">membership page</a> to see current pricing for your area. All plans include full access to the interactive male phone chat line, private voice messaging, and live one-on-one connections.</p>
-      <p>If you have questions about your membership, billing, or how to use the chat line, our customer support team is available through the voice system (press 7 from the main menu) and via email. We're committed to making sure every caller on the ${escHtml(siteName)} phone chat line has a smooth, enjoyable experience — from your first free call through every connection you make.</p>
+      <p>If you have questions about your membership, billing, or how to use the chat line, our customer support team is available via email. We're committed to making sure every caller on the ${escHtml(siteName)} phone chat line has a smooth, enjoyable experience — from your first free call through every connection you make.</p>
     </div>
   </main>
   <footer><p>&copy; <time datetime="${today}">${new Date().getFullYear()}</time> ${escHtml(siteName)} — <a href="/">Home</a> · <a href="/membership">Membership</a> · <a href="/faq">FAQ</a> · <a href="/privacy-policy">Privacy Policy</a></p></footer>

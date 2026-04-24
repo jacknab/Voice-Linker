@@ -861,7 +861,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "onboarding", filename: "zip_code_saved.mp3",           label: "Zip Code — Saved",                      text: "Got it. We'll use your zip code to show you nearby callers." },
 
   // ── 4. MAIN MENU — MM system menu (no-mailbox variant) ────────────────────
-  { group: "menu", filename: "main_menu.mp3",      label: "Main Menu",                         text: "Main menu. To enter the male box press star. To add time or purchase a membership press 2. For information on membership prices press 4. To manage your membership press 8. For customer service press 7. To hear how much time you have remaining press 0. To repeat these choices press 9." },
+  { group: "menu", filename: "main_menu.mp3",      label: "Main Menu",                         text: "Main menu. To enter the male box press star. To add time or purchase a membership press 2. For information on membership prices press 4. To manage your membership press 8. To hear how much time you have remaining press 0. To repeat these choices press 9." },
   { group: "menu", filename: "motd_main_menu.mp3", label: "MOTD — Main Menu Announcement",     text: "" },
   { group: "menu", filename: "trial_warning.mp3",  label: "Trial Time Running Low — Warning",  text: "You have less than 15 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
   { group: "menu", filename: "member_warning.mp3", label: "Membership Time Running Low",       text: "You have less than 15 minutes remaining in your membership. To renew now press 1. To continue press pound." },
@@ -1081,7 +1081,7 @@ const MW_SYSTEM_PROMPTS: typeof SYSTEM_PROMPTS = [
   // All MM prompts in order, with MW-specific text overrides applied
   ...SYSTEM_PROMPTS.flatMap(p => {
     // Replace MM main menu with MW version (different menu structure — no mailbox option)
-    if (p.filename === "main_menu.mp3") return [{ ...p, filename: "mw_main_menu.mp3", label: "MW Main Menu (MW Exclusive)", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 7. To hear how much time you have remaining press 0. To repeat these choices press 9." }];
+    if (p.filename === "main_menu.mp3") return [{ ...p, filename: "mw_main_menu.mp3", label: "MW Main Menu (MW Exclusive)", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. To hear how much time you have remaining press 0. To repeat these choices press 9." }];
     // Phone booth welcome — mentions women for male callers (most common caller on MW)
     if (p.filename === "phone_booth_welcome.mp3") return [{ ...p, label: "Live Connector — Welcome (Male Caller)", text: "Welcome to the live connector. Greetings from all the local women here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." }];
     // Name recording prompt — mentions women for male callers
@@ -1105,7 +1105,7 @@ const MW_MALE_SYSTEM_PROMPTS: typeof SYSTEM_PROMPTS = [
   // Derived from SYSTEM_PROMPTS with male-voice overrides for female callers
   ...SYSTEM_PROMPTS.flatMap(p => {
     // Replace MM main menu with MW version
-    if (p.filename === "main_menu.mp3") return [{ ...p, filename: "mw_main_menu.mp3", label: "MW Main Menu", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. For customer service press 7. To hear how much time you have remaining press 0. To repeat these choices press 9." }];
+    if (p.filename === "main_menu.mp3") return [{ ...p, filename: "mw_main_menu.mp3", label: "MW Main Menu", text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. To manage your membership press 8. To hear how much time you have remaining press 0. To repeat these choices press 9." }];
     // Phone booth welcome — mentions guys for female callers
     if (p.filename === "phone_booth_welcome.mp3") return [{ ...p, label: "Live Connector — Welcome (Female Caller)", text: "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign." }];
     // Name recording prompt — mentions guys for female callers

@@ -136,7 +136,9 @@ export default function SafetyTips() {
                 Need help right now?
               </p>
               <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.55)", margin: 0, lineHeight: 1.65 }}>
-                Dial in and press 7 from the main menu for customer service{csPhone ? `, or call our support line at ${formatPhone(csPhone)}` : ""}{csEmail ? `, or email us at ${csEmail}` : ""}.
+                {csPhone || csEmail
+                  ? `Reach our support team${csPhone ? ` by phone at ${formatPhone(csPhone)}` : ""}${csPhone && csEmail ? " or" : ""}${csEmail ? ` by email at ${csEmail}` : ""}.`
+                  : "Visit our Support page for help."}
               </p>
             </div>
           </div>
