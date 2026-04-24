@@ -19,15 +19,15 @@ export function getElevenLabsApiKey(): string | null {
 // NOTE: MW and MW_M voice IDs are intentionally disabled — all folders use the MM voice only.
 export function getVoiceIdForFolder(folder?: string | null): string {
   if (folder === "mm") {
-    return process.env.ELEVENLABS_VOICE_ID_MM || "vDchjyOZZytffNeZXfZK";
+    return process.env.ELEVENLABS_VOICE_ID_MM || "wSqOdjeNqDrHcoK0zorF";
   }
   // if (folder === "mw") {
-  //   return process.env.ELEVENLABS_VOICE_ID_MW || "ucgJ8SdlW1CZr9MIm8BP";
+  //   return process.env.ELEVENLABS_VOICE_ID_MW || "wSqOdjeNqDrHcoK0zorF";
   // }
   // if (folder === "mw_m") {
-  //   return process.env.ELEVENLABS_VOICE_ID_MW_M || "vDchjyOZZytffNeZXfZK";
+  //   return process.env.ELEVENLABS_VOICE_ID_MW_M || "wSqOdjeNqDrHcoK0zorF";
   // }
-  return process.env.ELEVENLABS_VOICE_ID_MM || "vDchjyOZZytffNeZXfZK";
+  return process.env.ELEVENLABS_VOICE_ID_MM || "wSqOdjeNqDrHcoK0zorF";
 }
 
 /** Returns Roger's dedicated ElevenLabs voice ID.
@@ -35,7 +35,7 @@ export function getVoiceIdForFolder(folder?: string | null): string {
  */
 export function getVoiceIdForRoger(): string {
   // return process.env.ELEVENLABS_VOICE_ID_ROGER || "wSqOdjeNqDrHcoK0zorF";
-  return process.env.ELEVENLABS_VOICE_ID_MM || "vDchjyOZZytffNeZXfZK";
+  return process.env.ELEVENLABS_VOICE_ID_MM || "wSqOdjeNqDrHcoK0zorF";
 }
 
 /**
@@ -44,7 +44,7 @@ export function getVoiceIdForRoger(): string {
  * that sounds like a real caller (not Roger's host voice).
  */
 export function getVoiceIdForGame(): string {
-  return process.env.ELEVENLABS_VOICE_ID_GAME || "fBD19tfE58bkETeiwUoC";
+  return process.env.ELEVENLABS_VOICE_ID_GAME || "wSqOdjeNqDrHcoK0zorF";
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
