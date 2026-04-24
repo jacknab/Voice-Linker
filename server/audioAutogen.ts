@@ -52,6 +52,8 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "profile_save_error.mp3",          text: "We could not save your profile. Please try again." },
   { filename: "recording_rejected_unclear.mp3",       text: "We need you to re-record your greeting. We couldn't understand what you said. Please speak clearly into the phone so everyone can hear what you have to say about yourself and what you're looking for. Be sure to turn down any loud music or the television before you record. To re-record, press 1." },
   { filename: "recording_rejected_phone_number.mp3",  text: "We need you to re-record your greeting. Phone numbers are not allowed in your greeting and it will not be approved if it contains one. To re-record, press 1." },
+  { filename: "recording_rejected_unclear_personal_ad.mp3",      text: "We need you to re-record your personal ad. We couldn't understand what you said. Please speak clearly into the phone so everyone can hear what you have to say. Be sure to turn down any loud music or the television before you record. To re-record, press 1." },
+  { filename: "recording_rejected_phone_number_personal_ad.mp3", text: "We need you to re-record your personal ad. Phone numbers are not allowed in your personal ad and it will not be approved if it contains one. To re-record, press 1." },
   { filename: "zip_code_prompt.mp3",             text: "Optional: enter your 5-digit zip code and we'll play callers closest to you first. Press pound to skip." },
   { filename: "zip_code_saved.mp3",              text: "Got it. We'll use your zip code to show you nearby callers." },
 
