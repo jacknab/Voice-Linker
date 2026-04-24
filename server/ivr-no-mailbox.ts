@@ -1211,13 +1211,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
           if (membershipNumber) {
             // Read the membership number digit-by-digit
-            twiml.say("Your phone number has been linked to your web account. Your membership number is:");
+            playPrompt(twiml, req, "link_phone_prefix.mp3",
+              "Your phone number has been linked to your web account. Your membership number is:");
             for (const digit of membershipNumber.replace(/\D/g, "")) {
               twiml.say(digit);
             }
-            twiml.say("You can now sign in to the web portal to manage your account.");
+            playPrompt(twiml, req, "link_phone_portal.mp3",
+              "You can now sign in to the web portal to manage your account.");
           } else {
-            twiml.say("Your phone number has been linked to your web account. You can now sign in to the web portal.");
+            playPrompt(twiml, req, "link_phone_success.mp3",
+              "Your phone number has been linked to your web account. You can now sign in to the web portal.");
           }
         } else {
           console.log(`[voice] Web link code ${digits} invalid or expired`);
@@ -1381,12 +1384,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         pendingPinAuth.delete(callSid);
         callMembershipOverride.set(callSid, memberPhone);
         console.log(`[voice] PIN accepted for membership on callSid=${callSid} → phone=${memberPhone}`);
-        twiml.say("PIN accepted. Welcome.");
+        playPrompt(twiml, req, "pin_accepted.mp3", "PIN accepted. Welcome.");
         twiml.redirect("/voice/entry-check-override");
       } else {
         pendingPinAuth.delete(callSid);
         console.log(`[voice] PIN rejected for callSid=${callSid}`);
-        twiml.say("Incorrect PIN. Please try again by calling from your registered phone number or entering your membership number again.");
+        playPrompt(twiml, req, "pin_incorrect.mp3",
+          "Incorrect PIN. Please try again by calling from your registered phone number or entering your membership number again.");
         twiml.redirect("/voice/entry-check");
       }
     } catch (err) {
@@ -1512,7 +1516,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       // ── Moderation gate ─────────────────────────────────────────────────────
       if (user.accountStatus === "banned") {
-        twiml.say("We're sorry, your access to this service has been suspended. If you believe this is an error, please contact customer support. Goodbye.");
+        playPrompt(twiml, req, "caller_banned.mp3",
+          "We're sorry, your access to this service has been suspended. If you believe this is an error, please contact customer support. Goodbye.");
         twiml.hangup();
         res.type("text/xml");
         return res.send(twiml.toString());
@@ -1867,7 +1872,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (hasMembership && remainingSeconds <= 0) {
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         if (cardId) {
-          twiml.say("Please use a different calling card.");
+          playPrompt(twiml, req, "card_no_time.mp3", "Please use a different calling card.");
           twiml.hangup();
         } else {
           twiml.redirect("/voice/membership-purchase");
@@ -1977,7 +1982,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (hasMembership && remainingSeconds <= 0 && !femaleCallers.has(callSid)) {
         playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
         if (cardId) {
-          twiml.say("Please use a different calling card.");
+          playPrompt(twiml, req, "card_no_time.mp3", "Please use a different calling card.");
           twiml.hangup();
         } else {
           twiml.redirect("/voice/membership-purchase");
@@ -2095,7 +2100,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } catch (err) {
       console.error("[voice] /voice/purchase-pre-menu settings error:", err);
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
-      gather.say("We're having trouble loading package information. To return to the main menu press 9. To cancel press pound.");
+      playPrompt(gather, req, "package_load_error.mp3",
+        "We're having trouble loading package information. To return to the main menu press 9. To cancel press pound.");
     }
 
     twiml.redirect("/voice/purchase-pre-menu");
@@ -2731,16 +2737,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         if (senderProfile?.nameRecordingUrl) {
           safePlayRecording(msgGather, senderProfile.nameRecordingUrl, req, "");
-          msgGather.say("has sent you this message.");
+          playPrompt(msgGather, req, "has_sent_you_this_message.mp3", "has sent you this message.");
         } else {
-          msgGather.say("has sent you this message.");
+          playPrompt(msgGather, req, "has_sent_you_this_message.mp3", "has sent you this message.");
         }
         safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available.");
-        msgGather.say(
-          "Press 1 to reply. " +
-          "Press 2 to hear the sender's ad. " +
-          "Press 3 to skip this message. " +
-          "Press 9 to return to the mailbox menu."
+        playPrompt(msgGather, req, "mailbox_message_options.mp3",
+          "Press 1 to reply. Press 2 to hear the sender's ad. Press 3 to skip this message. Press 9 to return to the mailbox menu."
         );
         twiml.redirect("/voice/my-mailbox");
       } else {
@@ -2755,13 +2758,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           action: "/voice/handle-my-mailbox-options",
           timeout: 10,
         });
-        gather.say(
-          `${mailboxLabel}Your mailbox has no new messages. ` +
-          (hasGreeting
-            ? "Press 1 to re-record your mailbox greeting. Press 2 to hear your current greeting. "
-            : "Press 1 to record your mailbox greeting. ") +
-          "Press 9 to return to the mailbox menu."
-        );
+        if (mailboxLabel) gather.say(mailboxLabel);
+        if (hasGreeting) {
+          playPrompt(gather, req, "mailbox_no_new_messages_with_greeting.mp3",
+            "Your mailbox has no new messages. Press 1 to re-record your mailbox greeting. Press 2 to hear your current greeting. Press 9 to return to the mailbox menu.");
+        } else {
+          playPrompt(gather, req, "mailbox_no_new_messages_no_greeting.mp3",
+            "Your mailbox has no new messages. Press 1 to record your mailbox greeting. Press 9 to return to the mailbox menu.");
+        }
         twiml.redirect("/voice/mailbox-menu");
       }
     } catch (err) {
@@ -2790,7 +2794,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (mailbox?.adRecordingUrl) {
           safePlayRecording(twiml, mailbox.adRecordingUrl, req, "Your greeting is not available for playback.");
         } else {
-          twiml.say("You have not recorded a mailbox greeting yet.");
+          playPrompt(twiml, req, "mailbox_no_greeting.mp3", "You have not recorded a mailbox greeting yet.");
         }
         twiml.redirect("/voice/my-mailbox");
       } else if (digit === "9") {
@@ -2825,15 +2829,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           action: "/voice/handle-record-mailbox-greeting",
           timeout: 10,
         });
-        gather.say(
-          "You already have a mailbox greeting recorded. " +
-          "Press 1 to record a new greeting. " +
-          "Press 2 to hear your current greeting. " +
-          "Press 9 to return to your mailbox."
-        );
+        playPrompt(gather, req, "mailbox_already_recorded.mp3",
+          "You already have a mailbox greeting recorded. Press 1 to record a new greeting. Press 2 to hear your current greeting. Press 9 to return to your mailbox.");
         twiml.redirect("/voice/my-mailbox");
       } else {
-        twiml.say("Record your mailbox greeting after the tone. Press any key when done.");
+        playPrompt(twiml, req, "mailbox_record_greeting.mp3", "Record your mailbox greeting after the tone. Press any key when done.");
         twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting" } as any);
       }
     } catch (err) {
@@ -2856,7 +2856,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const mailbox = await storage.getMailboxByUserId(user.id);
 
       if (digit === "1") {
-        twiml.say("Record your mailbox greeting after the tone. Press any key when done.");
+        playPrompt(twiml, req, "mailbox_record_greeting.mp3", "Record your mailbox greeting after the tone. Press any key when done.");
         twiml.record({ maxLength: 90, playBeep: true, action: "/voice/save-mailbox-greeting" } as any);
       } else if (digit === "2") {
         if (mailbox?.adRecordingUrl) {
@@ -2915,7 +2915,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Schedule auto-mod + human review queue after 65 seconds
       scheduleAutoModCheck(recordingUrl, user.id, "personal_ad");
 
-      twiml.say("Your mailbox greeting has been saved. Callers who enter your mailbox number will now hear this greeting.");
+      playPrompt(twiml, req, "mailbox_greeting_saved.mp3",
+        "Your mailbox greeting has been saved. Callers who enter your mailbox number will now hear this greeting.");
       twiml.redirect("/voice/my-mailbox");
     } catch (err) {
       console.error("[voice] /voice/save-mailbox-greeting error:", err);
@@ -2958,9 +2959,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           safePlayRecording(profileGather, senderProfile.recordingUrl, req, "This caller's ad is not available.");
         } else {
-          profileGather.say("This caller no longer has a mailbox ad.");
+          playPrompt(profileGather, req, "caller_no_mailbox_ad.mp3", "This caller no longer has a mailbox ad.");
         }
-        profileGather.say("Press 1 to send a message. Press 9 to return to your mailbox.");
+        playPrompt(profileGather, req, "mailbox_send_or_return.mp3",
+          "Press 1 to send a message. Press 9 to return to your mailbox.");
         twiml.redirect("/voice/my-mailbox");
       } else if (digit === "3") {
         await storage.markMessageRead(msgId);
@@ -3161,12 +3163,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       });
       adGather.say(`Mailbox ${ad.mailboxNumber.split("").join(", ")}.`);
       safePlayRecording(adGather, ad.adRecordingUrl, req, "This ad is not available.");
-      adGather.say(
-        "Press 1 to send a message to this guy. " +
-        "Press 2 to hear the next ad. " +
-        "Press 9 to return to the category menu. " +
-        "Press pound to return to the mailbox menu."
-      );
+      playPrompt(adGather, req, "mailbox_ad_browse_options.mp3",
+        "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu.");
       twiml.redirect(`/voice/browse-category-ads?category=${category}`);
     } catch (err) {
       console.error("[voice] /voice/browse-category-ads error:", err);
@@ -3279,11 +3277,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       });
       adGather.say(`Mailbox ${digits.split("").join(", ")}.`);
       safePlayRecording(adGather, mailbox.adRecordingUrl, req, "This ad is not available.");
-      adGather.say(
-        "Press 1 to send a message to this guy. " +
-        "Press 9 to look up another mailbox. " +
-        "Press pound to return to the mailbox menu."
-      );
+      playPrompt(adGather, req, "mailbox_lookup_options.mp3",
+        "Press 1 to send a message to this guy. Press 9 to look up another mailbox. Press pound to return to the mailbox menu.");
       twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
     } catch (err) {
       console.error("[voice] /voice/handle-mailbox-lookup error:", err);
@@ -3713,13 +3708,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           await storage.unblockAllByUser(user.id);
           console.log(`[voice] unblock-all: userId=${user.id} phone=${fromNumber}`);
         }
-        twiml.say("All callers are unblocked.");
+        playPrompt(twiml, req, "unblock_done.mp3", "All callers are unblocked.");
       } catch (err) {
         console.error("[voice] unblock-all error:", err);
-        twiml.say("An error occurred. Please try again.");
+        playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again.");
       }
     } else {
-      twiml.say("Cancelled. Returning to the previous menu.");
+      playPrompt(twiml, req, "cancelled_returning.mp3", "Cancelled. Returning to the previous menu.");
     }
 
     twiml.redirect("/voice/manage-membership");
@@ -3737,7 +3732,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       action: "/voice/handle-set-pin",
       timeout: 10,
     });
-    gather.say("Please enter your new 4-digit PIN.");
+    playPrompt(gather, req, "pin_enter_new.mp3", "Please enter your new 4-digit PIN.");
     twiml.redirect("/voice/manage-membership");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -3749,7 +3744,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const callSid = req.body?.CallSid as string;
 
     if (digits.length !== 4 || !/^\d{4}$/.test(digits)) {
-      twiml.say("Invalid PIN. Please enter exactly 4 digits.");
+      playPrompt(twiml, req, "pin_invalid.mp3", "Invalid PIN. Please enter exactly 4 digits.");
       twiml.redirect("/voice/set-pin");
       res.type("text/xml");
       return res.send(twiml.toString());
@@ -3762,7 +3757,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       action: "/voice/handle-confirm-pin",
       timeout: 10,
     });
-    gather.say("Please enter your PIN again to confirm.");
+    playPrompt(gather, req, "pin_confirm.mp3", "Please enter your PIN again to confirm.");
     twiml.redirect("/voice/manage-membership");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -3784,7 +3779,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
 
     if (digits !== pendingPin) {
-      twiml.say("The PINs did not match. Please try again.");
+      playPrompt(twiml, req, "pin_mismatch.mp3", "The PINs did not match. Please try again.");
       twiml.redirect("/voice/set-pin");
       res.type("text/xml");
       return res.send(twiml.toString());
@@ -3795,13 +3790,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (user) {
         await storage.updateUserMembership(user.id, { membershipPin: pendingPin });
         console.log(`[voice] PIN set for userId=${user.id} phone=${fromNumber}`);
-        twiml.say("Your PIN has been set successfully. You can now use your membership number and PIN to call in from any phone.");
+        playPrompt(twiml, req, "pin_set_success.mp3",
+          "Your PIN has been set successfully. You can now use your membership number and PIN to call in from any phone.");
       } else {
-        twiml.say("Could not find your account. Please try again.");
+        playPrompt(twiml, req, "account_not_found.mp3", "Could not find your account. Please try again.");
       }
     } catch (err) {
       console.error("[voice] PIN save error:", err);
-      twiml.say("An error occurred saving your PIN. Please try again.");
+      playPrompt(twiml, req, "pin_save_error.mp3", "An error occurred saving your PIN. Please try again.");
     }
 
     twiml.redirect("/voice/manage-membership");
@@ -4027,7 +4023,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/promo-code", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 10, action: "/voice/handle-promo-code", finishOnKey: "#", timeout: 15 });
-    gather.say("Enter your promotional code followed by the pound key. Press star to cancel.");
+    playPrompt(gather, req, "promo_code_prompt.mp3",
+      "Enter your promotional code followed by the pound key. Press star to cancel.");
     twiml.redirect("/voice/main-menu");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -4039,7 +4036,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const fromNumber = req.body?.From as string;
 
     if (!digits || digits === "*") {
-      twiml.say("Cancelled.");
+      playPrompt(twiml, req, "cancelled.mp3", "Cancelled.");
       twiml.redirect("/voice/main-menu");
       res.type("text/xml");
       return res.send(twiml.toString());
@@ -4056,7 +4053,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
     } catch (err) {
       console.error("[voice] handle-promo-code error:", err);
-      twiml.say("An error occurred. Please try again later.");
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
     }
 
     twiml.redirect("/voice/main-menu");
@@ -4295,7 +4292,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       // Restricted users cannot go live
       if (user.accountStatus === "restricted") {
-        twiml.say("We're sorry, your account has been restricted and you are not able to go live at this time. You may still listen to profiles and use other features. Please contact customer support if you have questions.");
+        playPrompt(twiml, req, "account_restricted_live.mp3",
+          "We're sorry, your account has been restricted and you are not able to go live at this time. You may still listen to profiles and use other features. Please contact customer support if you have questions.");
         twiml.redirect("/voice/main-menu");
         res.type("text/xml");
         return res.send(twiml.toString());
@@ -4429,11 +4427,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           timeout: 15,
         });
         playPrompt(inviteGather, req, "live_connect_chime.mp3", "");
-        inviteGather.say("This caller");
+        playPrompt(inviteGather, req, "live_invite_intro.mp3", "This caller");
         if (pendingInvite.initiatorNameRecordingUrl) {
           safePlayRecording(inviteGather, pendingInvite.initiatorNameRecordingUrl, req, "");
         }
-        inviteGather.say("would like to connect live with you.");
+        playPrompt(inviteGather, req, "live_invite_suffix.mp3", "would like to connect live with you.");
         playPrompt(inviteGather, req, "live_invite_options.mp3", "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4.");
         twiml.redirect("/voice/browse-profiles");
         res.type("text/xml");
@@ -4460,9 +4458,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         if (senderProfile?.nameRecordingUrl) {
           safePlayRecording(msgGather, senderProfile.nameRecordingUrl, req, "");
-          msgGather.say("has sent you this message.");
+          playPrompt(msgGather, req, "has_sent_you_this_message.mp3", "has sent you this message.");
         } else {
-          msgGather.say("has sent you this message.");
+          playPrompt(msgGather, req, "has_sent_you_this_message.mp3", "has sent you this message.");
         }
         safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available for playback.");
         playPrompt(msgGather, req, "message_options.mp3", "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound.");
@@ -4977,10 +4975,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             timeout: 10,
           });
           if (lastSent?.recordingUrl) {
-            replayGather.say("Here is the last message you sent this caller.");
+            playPrompt(replayGather, req, "replay_last_message.mp3", "Here is the last message you sent this caller.");
             safePlayRecording(replayGather, lastSent.recordingUrl, req, "");
           } else {
-            replayGather.say("You have not sent this caller a message yet.");
+            playPrompt(replayGather, req, "no_message_sent.mp3", "You have not sent this caller a message yet.");
           }
           playPrompt(replayGather, req, "message_options.mp3", MSG_MENU_PROMPT);
           twiml.redirect("/voice/browse-profiles");
@@ -4990,7 +4988,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else if (digit === "5") {
         // ── Save this message (mark read, stays in mailbox) ───────────────────
         await storage.markMessageRead(msgId);
-        twiml.say("Message saved.");
+        playPrompt(twiml, req, "message_saved.mp3", "Message saved.");
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "7") {
         // ── Block the message sender ──────────────────────────────────────────
@@ -5020,13 +5018,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           safePlayRecording(greetingGather, senderProfile.recordingUrl, req, "This caller's greeting is not available.");
         } else {
-          greetingGather.say("This caller's greeting is not available.");
+          playPrompt(greetingGather, req, "greeting_not_available.mp3", "This caller's greeting is not available.");
         }
         if (senderActiveCall?.regionId) {
           const region = await storage.getRegionById(senderActiveCall.regionId);
-          greetingGather.say(region ? `This caller is from ${region.name}.` : "This caller's location is not available.");
+          if (region) {
+            greetingGather.say(`This caller is from ${region.name}.`);
+          } else {
+            playPrompt(greetingGather, req, "location_not_available.mp3", "This caller's location is not available.");
+          }
         } else {
-          greetingGather.say("This caller's location is not available.");
+          playPrompt(greetingGather, req, "location_not_available.mp3", "This caller's location is not available.");
         }
         playPrompt(greetingGather, req, "message_options.mp3", MSG_MENU_PROMPT);
         twiml.redirect("/voice/browse-profiles");
@@ -5298,7 +5300,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             playPrompt(locationGather, req, locationToFilename(location),
               `This caller is located in ${location}. To send them a message, press 1.`);
           } else {
-            locationGather.say("This caller's location is not available. To send them a message, press 1.");
+            playPrompt(locationGather, req, "location_not_available_send.mp3",
+              "This caller's location is not available. To send them a message, press 1.");
           }
           twiml.redirect("/voice/browse-profiles");
         } else {
@@ -5566,7 +5569,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (initiatorProfile?.recordingUrl) {
           safePlayRecording(greetingGather, initiatorProfile.recordingUrl, req, "This caller's greeting is not available.");
         } else {
-          greetingGather.say("This caller's greeting is not available.");
+          playPrompt(greetingGather, req, "greeting_not_available.mp3", "This caller's greeting is not available.");
         }
         playPrompt(greetingGather, req, "live_invite_options.mp3",
           "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting again, press 3. To block this caller, press 4.");
@@ -5659,9 +5662,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // ─── 8e. Live Connect: Low Balance Warning (per-participant) ─────────────
   // Twilio calls this via announceUrl on the specific participant's conference leg.
   // Only that participant hears it — the other caller is unaffected.
-  app.post("/voice/live-low-balance-warning", (_req, res) => {
+  app.post("/voice/live-low-balance-warning", (req, res) => {
     const twiml = new VoiceResponse();
-    twiml.say("Warning: you have less than 5 minutes remaining. Please note your live connection will end when your time expires.");
+    playPrompt(twiml, req, "live_low_balance_warning.mp3",
+      "Warning: you have less than 5 minutes remaining. Please note your live connection will end when your time expires.");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -5711,7 +5715,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       playPrompt(gather, req, "review_your_message.mp3", "Here is your recorded message.");
       gather.pause({ length: 2 });
       safePlayRecording(gather, recordingUrl, req, "");
-      gather.say("Press 1 to send. Press 2 to cancel.");
+      playPrompt(gather, req, "send_or_cancel.mp3", "Press 1 to send. Press 2 to cancel.");
       // No input → cancel
       twiml.redirect(cancelReturnPath(returnTo, category));
     } catch (err) {
@@ -5785,7 +5789,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else {
         // Invalid — re-prompt
         const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-review-message", timeout: 10 });
-        gather.say("Press 1 to send. Press 2 to cancel.");
+        playPrompt(gather, req, "send_or_cancel.mp3", "Press 1 to send. Press 2 to cancel.");
         twiml.redirect(cancelReturnPath(returnTo, category));
       }
     } catch (err) {

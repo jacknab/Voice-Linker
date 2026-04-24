@@ -228,6 +228,18 @@ const MM_PROMPTS: Prompt[] = [
   { filename: "mailbox_greeting_saved.mp3",   text: "Your mailbox greeting has been saved. Callers who enter your mailbox number will now hear this greeting." },
   { filename: "mailbox_send_or_return.mp3",   text: "Press 1 to send a message. Press 9 to return to your mailbox." },
   { filename: "mailbox_message_options.mp3",  text: "Press 1 to reply. Press 2 to hear the sender's ad. Press 3 to skip this message. Press 9 to return to the mailbox menu." },
+  { filename: "mailbox_already_recorded.mp3",         text: "You already have a mailbox greeting recorded. Press 1 to record a new greeting. Press 2 to hear your current greeting. Press 9 to return to your mailbox." },
+  { filename: "caller_no_mailbox_ad.mp3",             text: "This caller no longer has a mailbox ad." },
+  { filename: "mailbox_ad_browse_options.mp3",        text: "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu." },
+  { filename: "mailbox_lookup_options.mp3",           text: "Press 1 to send a message to this guy. Press 9 to look up another mailbox. Press pound to return to the mailbox menu." },
+  { filename: "mailbox_no_new_messages_with_greeting.mp3", text: "Your mailbox has no new messages. Press 1 to re-record your mailbox greeting. Press 2 to hear your current greeting. Press 9 to return to the mailbox menu." },
+  { filename: "mailbox_no_new_messages_no_greeting.mp3",   text: "Your mailbox has no new messages. Press 1 to record your mailbox greeting. Press 9 to return to the mailbox menu." },
+
+  // ── Live connect (additional) ──────────────────────────────────────────────
+  { filename: "live_invite_intro.mp3",          text: "This caller" },
+  { filename: "live_invite_suffix.mp3",         text: "would like to connect live with you." },
+  { filename: "live_low_balance_warning.mp3",   text: "Warning: you have less than 5 minutes remaining. Please note your live connection will end when your time expires." },
+  { filename: "has_sent_you_this_message.mp3",  text: "has sent you this message." },
 
   // ── Purchase / package ─────────────────────────────────────────────────────
   { filename: "package_load_error.mp3",  text: "We're having trouble loading package information. To return to the main menu press 9. To cancel press pound." },
