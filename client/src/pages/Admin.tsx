@@ -5764,9 +5764,9 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
           <div className={C.fieldRow}><span className={C.fieldLabel}>Membership No.</span><span className={C.fieldValue}>{user.membershipNumber ? <span className="font-mono font-bold tracking-widest">{user.membershipNumber}</span> : <span className="text-gray-400">—</span>}</span></div>
           <div className={C.fieldRow}>
             <span className={C.fieldLabel}>Access PIN</span>
-            <span className={C.fieldValue}>
+            <span className={C.fieldValue} data-testid="detail-access-pin">
               {user.membershipPin
-                ? <span className="inline-flex items-center gap-2"><span className="font-mono font-bold tracking-widest">••••</span><span className="text-gray-400 text-xs">(set)</span></span>
+                ? <span className="font-mono font-bold tracking-widest">{user.membershipPin}</span>
                 : <span className="text-gray-400">Not set</span>}
             </span>
           </div>
