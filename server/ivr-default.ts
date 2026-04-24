@@ -2182,8 +2182,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "For information on membership prices press 4. " +
       "For your voicemail press 6. " +
       "To manage your membership press 8. " +
-      "To hear how much time you have remaining press 0. " +
-      "To repeat these choices press 9."
+      "Press 0 for time remaining, or 9 to repeat these choices."
     );
     twiml.redirect("/voice/main-menu");
     res.type("text/xml");
@@ -2634,8 +2633,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "To buy membership time press 2. " +
       "For the men seeking men line press 5. " +
       "To manage your membership press 8. " +
-      "To hear how much time you have remaining press 0. " +
-      "To repeat these choices press 9."
+      "Press 0 for time remaining, or 9 to repeat these choices."
     );
     twiml.redirect("/voice/mw-main-menu");
     res.type("text/xml");
