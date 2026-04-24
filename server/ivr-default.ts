@@ -1685,6 +1685,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       storage.getLastCallTimestamp(fromNumber, callSid),
       storage.getTodayCallCount(fromNumber, callSid),
     ]);
+
+    // Skip Roger entirely for frequent same-day callers (3rd+ call today).
+    // They've already heard him at least twice — go straight to the next step.
+    if (todayCallCount >= 3) {
+      console.log(`[roger-greeting] Skipped — frequent same-day caller (todayCallCount=${todayCallCount}) from=${fromNumber}`);
+      return;
+    }
+
     const { filename: rogerFile, fallback: rogerFallback } = rogerGreetingVariant(isNewCaller, lastCallDate, todayCallCount);
     const filepath = path.join(UPLOADS_DIR, rogerFile);
 
