@@ -515,6 +515,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // ─── Global key interceptor ────────────────────────────────────────────────
   // * → Membership Center  (from any single-digit menu)
   // # → Main Menu          (from any single-digit menu)
+  // 0 → Announce time remaining, then return to the same menu
   const GLOBAL_KEY_SKIP_ROUTES = new Set([
     "/handle-membership-entry",
     "/handle-membership-pin-entry",
@@ -529,6 +530,23 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     "/handle-mailbox-lookup",
     "/handle-membership-center",
   ]);
+
+  // Press-0 menu handlers whose "menu URL" cannot be derived by simply stripping "handle-"
+  // from the path. Each value is the full path to redirect back to after announcing time.
+  const PRESS_ZERO_RETURN_OVERRIDES: Record<string, string> = {
+    "/handle-mailbox-message": "/voice/my-mailbox",
+    "/handle-mailbox-sender-menu": "/voice/my-mailbox",
+    "/handle-mailbox-lookup-menu": "/voice/my-mailbox",
+    "/handle-my-mailbox-options": "/voice/my-mailbox",
+    "/handle-ad-category": "/voice/ad-category-menu",
+    "/handle-category-ad-menu": "/voice/browse-category-ads",
+    "/handle-nearby-callers": "/voice/nearby-callers-offer",
+    "/handle-membership-gateway": "/voice/membership-entry",
+    "/handle-message-menu": "/voice/browse-profiles",
+    "/handle-profile-menu": "/voice/browse-profiles",
+    "/handle-setup-mailbox-passcode-existing": "/voice/setup-mailbox-reveal",
+  };
+
   app.use("/voice", (req: Request, res: Response, next: NextFunction) => {
     if (req.method === "POST" && req.path.startsWith("/handle-") && !GLOBAL_KEY_SKIP_ROUTES.has(req.path)) {
       const digit = req.body?.Digits as string;
@@ -546,6 +564,54 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
     }
     next();
+  });
+
+  // Press 0 from any single-digit menu → announce time remaining, then return.
+  // Runs as a separate async middleware so we can look up the caller's user record.
+  app.use("/voice", async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (req.method !== "POST" || !req.path.startsWith("/handle-") || GLOBAL_KEY_SKIP_ROUTES.has(req.path)) {
+        return next();
+      }
+      const digit = req.body?.Digits as string;
+      if (digit !== "0") return next();
+
+      const fromNumber = req.body?.From as string | undefined;
+      let totalMinutes = 0;
+      if (fromNumber) {
+        try {
+          const user = await getOrCreateUser(fromNumber);
+          totalMinutes = Math.max(0, Math.floor((user.remainingSeconds ?? 0) / 60));
+        } catch (err: any) {
+          console.warn(`[press-0] User lookup failed for From=${fromNumber}: ${err?.message ?? err}`);
+        }
+      }
+
+      // Determine return URL — prefer override, fall back to "strip handle-" pattern.
+      let returnUrl = PRESS_ZERO_RETURN_OVERRIDES[req.path];
+      if (!returnUrl) {
+        const stripped = req.path.replace(/^\/handle-/, "/");
+        returnUrl = `/voice${stripped}`;
+      }
+      // Preserve any original query string (e.g. ?returnTo=, ?mode=, ?page=).
+      const queryStr = req.originalUrl.includes("?")
+        ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
+        : "";
+      if (queryStr && !returnUrl.includes("?")) {
+        returnUrl += queryStr;
+      }
+
+      console.log(`[press-0] From=${fromNumber} path=${req.path} → announcing ${totalMinutes} min, returning to ${returnUrl}`);
+
+      const twiml = new VoiceResponse();
+      playTimeRemaining(twiml, req, totalMinutes);
+      twiml.redirect(returnUrl);
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    } catch (err: any) {
+      console.error(`[press-0] middleware error: ${err?.message ?? err}`);
+      return next();
+    }
   });
 
   // --- Twilio Voice Webhooks ---
