@@ -182,6 +182,24 @@ app.use((req, res, next) => {
     }
   }, 60 * 1000); // every 1 minute
 
+  // Auto-expire stale recording-rejection flags. If a caller is auto-flagged
+  // by the moderator and then hangs up before they ever call back to hear the
+  // rejection prompt, the flag would otherwise persist forever. After 10
+  // minutes we clear it — their original greeting/ad has already been deleted
+  // by the auto-mod, so on their next call they're treated as a fresh caller
+  // and routed to record a new greeting from scratch.
+  const RECORDING_REJECTION_TTL_MIN = 10;
+  setInterval(async () => {
+    try {
+      const cleared = await storage.expireStaleRecordingRejections(RECORDING_REJECTION_TTL_MIN);
+      if (cleared > 0) {
+        log(`Expired ${cleared} stale recording-rejection flag(s) (>${RECORDING_REJECTION_TTL_MIN} min old)`, "automod");
+      }
+    } catch (err) {
+      console.error("[automod] stale recording-rejection sweep failed:", err);
+    }
+  }, 60 * 1000); // every 1 minute
+
   // Nightly per-day billing deduction — fires at 23:59 server time.
   // Only runs when billingMode is set to 'per_day' in membership settings.
   async function runNightlyDayDeduction() {

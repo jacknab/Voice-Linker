@@ -223,6 +223,7 @@ export interface IStorage {
   getUserByMailboxAdRecordingUrl(url: string): Promise<User | null>;
   setUserRecordingRejection(userId: string, reason: string, type: string): Promise<void>;
   clearUserRecordingRejection(userId: string): Promise<void>;
+  expireStaleRecordingRejections(thresholdMinutes: number): Promise<number>;
   deleteProfileByUserId(userId: string): Promise<void>;
   clearMailboxAdByUserId(userId: string): Promise<void>;
   logModerationEvent(data: InsertModerationLog): Promise<ModerationLog>;
@@ -2145,14 +2146,48 @@ export class DatabaseStorage implements IStorage {
 
   async setUserRecordingRejection(userId: string, reason: string, type: string): Promise<void> {
     await db.update(users)
-      .set({ recordingRejectionReason: reason, recordingRejectionType: type })
+      .set({
+        recordingRejectionReason: reason,
+        recordingRejectionType: type,
+        recordingRejectionFlaggedAt: new Date(),
+      })
       .where(eq(users.id, userId));
   }
 
   async clearUserRecordingRejection(userId: string): Promise<void> {
     await db.update(users)
-      .set({ recordingRejectionReason: null, recordingRejectionType: null })
+      .set({
+        recordingRejectionReason: null,
+        recordingRejectionType: null,
+        recordingRejectionFlaggedAt: null,
+      })
       .where(eq(users.id, userId));
+  }
+
+  /**
+   * Auto-expire any recording-rejection flags older than `thresholdMinutes`.
+   * Used by the periodic sweeper so callers who hang up before hearing the
+   * rejection prompt aren't permanently stuck — after the timeout, the flag
+   * is cleared and they're treated as a fresh caller (the auto-mod has
+   * already deleted the original greeting/ad, so they'll naturally be
+   * routed to record a new one).
+   *
+   * Returns the number of users whose flags were cleared.
+   */
+  async expireStaleRecordingRejections(thresholdMinutes: number): Promise<number> {
+    const cutoff = new Date(Date.now() - thresholdMinutes * 60 * 1000);
+    const result = await db.update(users)
+      .set({
+        recordingRejectionReason: null,
+        recordingRejectionType: null,
+        recordingRejectionFlaggedAt: null,
+      })
+      .where(and(
+        isNotNull(users.recordingRejectionFlaggedAt),
+        lt(users.recordingRejectionFlaggedAt, cutoff),
+      ))
+      .returning({ id: users.id });
+    return result.length;
   }
 
   async clearMailboxAdByUserId(userId: string): Promise<void> {

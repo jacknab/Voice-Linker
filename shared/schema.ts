@@ -61,6 +61,11 @@ export const users = pgTable("users", {
   // type:   "greeting" | "personal_ad" | null
   recordingRejectionReason: text("recording_rejection_reason"),
   recordingRejectionType: text("recording_rejection_type"),
+  // Timestamp captured when the rejection flag was set. Used by a periodic
+  // sweeper to auto-expire flags older than 10 minutes — so a caller who
+  // hangs up before hearing the rejection prompt isn't permanently stuck;
+  // their next call will skip the prompt and they'll just record fresh.
+  recordingRejectionFlaggedAt: timestamp("recording_rejection_flagged_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

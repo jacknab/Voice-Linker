@@ -20,6 +20,7 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status TEXT NOT NULL DEFAULT 'active'`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS recording_rejection_reason TEXT`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS recording_rejection_type TEXT`,
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS recording_rejection_flagged_at TIMESTAMPTZ`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS membership_tier TEXT`,
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS remaining_seconds INTEGER`,
