@@ -1812,7 +1812,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           await storage.updateProfileTranscription(recordingUrl, text, storeStatus);
           console.log(`[transcribe] Profile stored for userId=${user.id}: status=${storeStatus}`);
           // Run auto-mod immediately after transcription — don't wait for the 65s timer
-          await runTranscriptionAutoChecks(recordingUrl, text);
+          await runTranscriptionAutoChecks(recordingUrl, text, status);
         }).catch(err => console.error("[transcribe] save-profile error:", err));
       }
       console.log(`[voice] Profile saved immediately for userId=${user.id} (dur=${recordingDuration}s)`);

@@ -341,6 +341,7 @@ export function isLowQualityTranscription(text: string): boolean {
 export async function runTranscriptionAutoChecks(
   recordingUrl: string,
   text: string | null,
+  status?: "completed" | "failed" | "silent" | null,
 ): Promise<void> {
   try {
     // Try to find the associated user via profile first, then mailbox
@@ -361,7 +362,15 @@ export async function runTranscriptionAutoChecks(
     const typeLabel = recordingType === "greeting" ? "greeting" : "personal ad";
 
     // ── Check 1: No transcription or blank ─────────────────────────────────
+    // If transcription itself FAILED (e.g. GROQ_API_KEY not configured, network
+    // error, upstream API down), DO NOT punish the caller — give the recording
+    // the benefit of the doubt and skip auto-mod entirely. Only reject when the
+    // transcription pipeline actually ran and came back blank/silent.
     if (!text || text.trim().length === 0) {
+      if (status === "failed") {
+        console.log(`[automod-transcription] SKIP userId=${userId} type=${recordingType} reason=transcription_failed (provider error — recording NOT rejected)`);
+        return;
+      }
       console.log(`[automod-transcription] REJECT userId=${userId} type=${recordingType} reason=no_transcription`);
       await rejectRecording(userId, recordingType, "unclear", `Auto-rejected: no transcription text for ${typeLabel}`);
       return;
@@ -505,13 +514,24 @@ export function scheduleAutoModCheck(
 
       const profile = await storage.getProfile(user.id);
       const transcriptionText = profile?.transcription ?? null;
+      const transcriptionStatus = (profile?.transcriptionStatus ?? null) as
+        | "completed" | "failed" | "silent" | "pending" | null;
 
       if (transcriptionText !== null) {
         // Transcription arrived — the callback-triggered check should have already
         // handled this, but run it again as a safety net (the set guard above
         // prevents the timer from re-running if the callback already fired it).
         console.log(`[automod-timer] Fallback text check for recordingUrl=${recordingUrl}`);
-        await runTranscriptionAutoChecks(recordingUrl, transcriptionText);
+        await runTranscriptionAutoChecks(
+          recordingUrl,
+          transcriptionText,
+          transcriptionStatus === "pending" ? null : transcriptionStatus,
+        );
+      } else if (transcriptionStatus === "failed" || transcriptionStatus === "pending") {
+        // Transcription provider failed (e.g. GROQ_API_KEY missing) or never
+        // completed — DO NOT punish the caller. Their recording is preserved
+        // and a human moderator can review it later if needed.
+        console.log(`[automod-timer] Skipping rejection — transcription status=${transcriptionStatus} for recordingUrl=${recordingUrl}`);
       } else {
         // No transcription after 65s — treat as blank/unclear and reject
         console.log(`[automod-timer] No transcription after 65s for recordingUrl=${recordingUrl} — rejecting as unclear`);
