@@ -1665,8 +1665,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       return { filename: name, fallback: p ? stripEmotionTags(p.text) : "" };
     };
     if (isNewCaller || !lastCallDate) return find("roger_welcome_new.mp3");
-    // 3+ calls on the same calendar day (day ends at midnight server time)
-    if (todayCallCount >= 3) return find("roger_welcome_frequent.mp3");
     const daysSince = Math.floor((Date.now() - lastCallDate.getTime()) / 86_400_000);
     if (daysSince < 1)   return find("roger_welcome_sameday.mp3");
     if (daysSince <= 3)  return find("roger_welcome_recent.mp3");

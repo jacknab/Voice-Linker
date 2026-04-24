@@ -365,12 +365,13 @@ const FOLDERS: { folder: string; prompts: Prompt[] }[] = [
 
 // ── Roger greeting variants (uploads/ root, Roger voice, eleven_v3) ────────
 // Pre-generated so callers never hear a silent pause after the disclaimer.
-// Priority order: new caller → 3+ calls today (frequent) → same-day return
-// → 1–3 days → 4–14 days → 15–30 days → 30+ days since last call.
+// Priority order: new caller → same-day return → 1–3 days → 4–14 days
+// → 15–30 days → 30+ days since last call.
 export const ROGER_PROMPTS: Prompt[] = [
   { filename: "roger_welcome_new.mp3",       text: "[warmly] Hi, this is the Male Box. My name is Roger — your cruise director. [chuckles] Oh, look at you... a first time caller. I see. [warmly] Well in that case — let me set you up with some free time so you can check out what we have going on in here. [cheerfully] Welcome to the party, honey." },
   { filename: "roger_welcome_sameday.mp3",   text: "[warmly] Welcome back! Back again the same day? [playfully] I love the commitment. The boys are still here — let us get you in." },
-  { filename: "roger_welcome_frequent.mp3",  text: "[chuckles softly] Oh — it is you again. [playfully] Third time today, honey. At this point you practically live here. [warmly] Go on in. You already know everybody." },
+  // roger_welcome_frequent.mp3 intentionally removed — wording was too rude.
+  // 3+ same-day callers now fall through to the friendlier sameday greeting.
   { filename: "roger_welcome_recent.mp3",    text: "[warmly] Hey, welcome back. [playfully] The boys have been asking about you. Well... one of them might have been. Good to see you again." },
   { filename: "roger_welcome_fewdays.mp3",   text: "[warmly] Welcome back! It has been a few days. [mischievously] We were starting to wonder if you found someone. Either way — glad you are back. Let us see what is going on tonight." },
   { filename: "roger_welcome_weeks.mp3",     text: "[chuckles] Well, well, well. Look who remembered we exist. [warmly] I am kidding, relax. Welcome back. It has been a couple of weeks — let us see what is happening tonight." },
