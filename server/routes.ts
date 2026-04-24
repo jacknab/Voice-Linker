@@ -1345,27 +1345,34 @@ export async function registerRoutes(
   // Also annotates each entry with whether a pre-generated audio file exists.
   app.get("/api/admin/roger/prompts", (_req, res) => {
     try {
-      const enriched = PROMPT_LIBRARY.map(p => {
-        const audioFilename = `roger_${p.id}.mp3`;
-        const audioPath = path.join(UPLOADS_DIR, audioFilename);
-        const hasAudio = fs.existsSync(audioPath);
-        const v3Text = ROGER_V3_TEXTS[p.id] ?? null;
-        return {
-          id: p.id,
-          category: p.category,
-          tone: p.tone,
-          lineText: p.lineText,
-          v3Text,
-          usesV3: v3Text !== null,
-          followUpAction: p.followUpAction ?? null,
-          cooldownSeconds: p.cooldownSeconds,
-          requiredMoods: p.trigger.requiredMoods ?? [],
-          minAttentionDrain: p.trigger.minAttentionDrain ?? 0,
-          maxAttentionDrain: p.trigger.maxAttentionDrain ?? 10,
-          audioFilename: hasAudio ? audioFilename : null,
-          audioUrl: hasAudio ? `/uploads/${audioFilename}` : null,
-        };
-      });
+      // Hide categories considered "rude" / off-brand from the admin auto-gen tab.
+      // The engine (engagementEngine.PROMPT_LIBRARY) still contains them in case
+      // we want to revisit later, but they will not be displayed, generated, or
+      // bulk-regenerated from the admin UI.
+      const HIDDEN_CATEGORIES = new Set(["picky", "flirty", "idle", "reengagement"]);
+      const enriched = PROMPT_LIBRARY
+        .filter(p => !HIDDEN_CATEGORIES.has(p.category))
+        .map(p => {
+          const audioFilename = `roger_${p.id}.mp3`;
+          const audioPath = path.join(UPLOADS_DIR, audioFilename);
+          const hasAudio = fs.existsSync(audioPath);
+          const v3Text = ROGER_V3_TEXTS[p.id] ?? null;
+          return {
+            id: p.id,
+            category: p.category,
+            tone: p.tone,
+            lineText: p.lineText,
+            v3Text,
+            usesV3: v3Text !== null,
+            followUpAction: p.followUpAction ?? null,
+            cooldownSeconds: p.cooldownSeconds,
+            requiredMoods: p.trigger.requiredMoods ?? [],
+            minAttentionDrain: p.trigger.minAttentionDrain ?? 0,
+            maxAttentionDrain: p.trigger.maxAttentionDrain ?? 10,
+            audioFilename: hasAudio ? audioFilename : null,
+            audioUrl: hasAudio ? `/uploads/${audioFilename}` : null,
+          };
+        });
       res.json(enriched);
     } catch (e) {
       res.status(500).json({ message: "Failed to load Roger prompt library" });
