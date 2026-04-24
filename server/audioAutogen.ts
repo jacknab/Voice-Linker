@@ -469,23 +469,27 @@ async function runAudioAutogen(): Promise<void> {
     }
   }
 
-  // ── Roger greeting variants — DISABLED: using MM voice only ──
-  // const rogerVoiceId = getVoiceIdForRoger();
-  // for (const prompt of ROGER_PROMPTS) {
-  //   const filePath = path.join(UPLOADS_DIR, prompt.filename);
-  //   if (!needsRegeneration(filePath, prompt.text)) { skipped++; continue; }
-  //   try {
-  //     await generateTTS(prompt.text.trim(), prompt.filename, undefined, rogerVoiceId, "eleven_v3");
-  //     writeSidecar(filePath, prompt.text);
-  //     console.log(`[audio-autogen] generated roger/${prompt.filename}`);
-  //     generated++;
-  //     await sleep(DELAY_MS);
-  //   } catch (err: any) {
-  //     console.error(`[audio-autogen] failed roger/${prompt.filename}: ${err?.message ?? err}`);
-  //     failed++;
-  //     await sleep(DELAY_MS);
-  //   }
-  // }
+  // ── Roger greeting variants ──────────────────────────────────────────────
+  // Files live in uploads/ root (not a category subfolder) and are spoken by
+  // the same MM voice as everything else (getVoiceIdForRoger() falls back to
+  // the MM voice ID). Generated with the eleven_v3 model so the inline
+  // emotion tags like [warmly], [chuckles], [playfully] are honored.
+  const rogerVoiceId = getVoiceIdForRoger();
+  for (const prompt of ROGER_PROMPTS) {
+    const filePath = path.join(UPLOADS_DIR, prompt.filename);
+    if (!needsRegeneration(filePath, prompt.text)) { skipped++; continue; }
+    try {
+      await generateTTS(prompt.text.trim(), prompt.filename, undefined, rogerVoiceId, "eleven_v3");
+      writeSidecar(filePath, prompt.text);
+      console.log(`[audio-autogen] generated roger/${prompt.filename}`);
+      generated++;
+      await sleep(DELAY_MS);
+    } catch (err: any) {
+      console.error(`[audio-autogen] failed roger/${prompt.filename}: ${err?.message ?? err}`);
+      failed++;
+      await sleep(DELAY_MS);
+    }
+  }
 
   if (generated > 0 || failed > 0) {
     console.log(`[audio-autogen] run complete — generated: ${generated}, failed: ${failed}, already existed: ${skipped}`);
