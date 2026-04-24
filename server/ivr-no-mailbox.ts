@@ -6094,7 +6094,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/payment-intro", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-payment-intro" });
-    gather.say(
+    playPrompt(gather, req, "payment_intro.mp3",
       "Your purchase, plus any applicable fees and taxes, will appear on your credit card statement as Toby Media. " +
       "When entering your card information: to correct an incorrect number, press star to delete the last digit entered. " +
       "To start over, press the star key twice. " +
@@ -6161,20 +6161,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         maxAttempts: 2,
       } as any) as any;
 
-      // Custom prompts for each payment field — tell callers to press pound when done
-      pay.prompt({ ["for"]: "cardNumber" })
-        .say("Please enter your 16-digit card number, then press pound.");
-
-      pay.prompt({ ["for"]: "expirationDate" })
-        .say(
-          "Enter your expiration date, then press pound. " +
-          "Enter the 2-digit month, followed by the year. " +
-          "If your card shows a 4-digit year, enter only the last 2 digits. " +
-          "For example, for February 2027 enter 0 2 2 7, then press pound."
-        );
-
-      pay.prompt({ ["for"]: "securityCode" })
-        .say("Enter your 3 or 4 digit security code, then press pound.");
+      // Custom prompts for each payment field — use pre-recorded audio files
+      // (with TTS fallback if the audio file doesn't exist yet).
+      playPrompt(pay.prompt({ ["for"]: "cardNumber" }), req, "collect_card_number.mp3",
+        "Please enter your 16-digit card number, then press pound.");
+      playPrompt(pay.prompt({ ["for"]: "expirationDate" }), req, "collect_card_expiry.mp3",
+        "Enter your expiration date, then press pound. Enter the 2-digit month followed by the last 2 digits of the year.");
+      playPrompt(pay.prompt({ ["for"]: "securityCode" }), req, "collect_security_code.mp3",
+        "Enter your 3 or 4 digit security code, then press pound.");
 
     } catch (err) {
       console.error("[voice] run-payment: unexpected error:", err);
