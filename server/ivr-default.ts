@@ -4095,12 +4095,25 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         action: "/voice/handle-recording-rejected-unclear",
         timeout: 15,
       });
-      gather.say(
-        `You need to re-record your ${typeLabel} because we can't understand it. ` +
-        `Please speak clearly into the phone so that everyone can hear what you have to say about yourself and what you're looking for. ` +
-        `Be sure to turn down loud music or the television before you record. ` +
-        `To re-record your ${typeLabel}, press 1.`
-      );
+      if (typeLabel === "greeting") {
+        // Greeting case has a pre-generated audio file managed by audioAutogen.ts.
+        // playPrompt() serves the mp3 when present and falls back to TTS otherwise,
+        // using the exact text registered for recording_rejected_unclear.mp3.
+        playPrompt(gather, req, "recording_rejected_unclear.mp3",
+          "We need you to re-record your greeting. We couldn't understand what you said. " +
+          "Please speak clearly into the phone so everyone can hear what you have to say about yourself and what you're looking for. " +
+          "Be sure to turn down any loud music or the television before you record. " +
+          "To re-record, press 1."
+        );
+      } else {
+        // Personal ad has no pre-generated audio — use dynamic TTS.
+        gather.say(
+          `You need to re-record your ${typeLabel} because we can't understand it. ` +
+          `Please speak clearly into the phone so that everyone can hear what you have to say about yourself and what you're looking for. ` +
+          `Be sure to turn down loud music or the television before you record. ` +
+          `To re-record your ${typeLabel}, press 1.`
+        );
+      }
       twiml.redirect("/voice/recording-rejected-unclear");
     } catch (err) {
       console.error("[voice] /voice/recording-rejected-unclear error:", err);
@@ -4160,11 +4173,23 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         action: "/voice/handle-recording-rejected-phone-number",
         timeout: 15,
       });
-      gather.say(
-        `You need to re-record your ${typeLabel}. ` +
-        `Please do not include your phone number in your ${typeLabel} or it will not be approved. ` +
-        `To re-record your ${typeLabel}, press 1.`
-      );
+      if (typeLabel === "greeting") {
+        // Greeting case has a pre-generated audio file managed by audioAutogen.ts.
+        // playPrompt() serves the mp3 when present and falls back to TTS otherwise,
+        // using the exact text registered for recording_rejected_phone_number.mp3.
+        playPrompt(gather, req, "recording_rejected_phone_number.mp3",
+          "We need you to re-record your greeting. " +
+          "Phone numbers are not allowed in your greeting and it will not be approved if it contains one. " +
+          "To re-record, press 1."
+        );
+      } else {
+        // Personal ad has no pre-generated audio — use dynamic TTS.
+        gather.say(
+          `You need to re-record your ${typeLabel}. ` +
+          `Please do not include your phone number in your ${typeLabel} or it will not be approved. ` +
+          `To re-record your ${typeLabel}, press 1.`
+        );
+      }
       twiml.redirect("/voice/recording-rejected-phone-number");
     } catch (err) {
       console.error("[voice] /voice/recording-rejected-phone-number error:", err);
