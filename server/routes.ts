@@ -13,7 +13,7 @@ import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
 import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger, getVoiceIdForGame, getElevenLabsApiKey } from "./elevenlabs";
-import { triggerLocationAudio, forceRegenAllSystemPrompts } from "./audioAutogen";
+import { triggerLocationAudio, forceRegenAllSystemPrompts, ROGER_PROMPTS } from "./audioAutogen";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 import { getRedisStatus, flushBrowseSessions } from "./redis";
@@ -1373,7 +1373,47 @@ export async function registerRoutes(
             audioUrl: hasAudio ? `/uploads/${audioFilename}` : null,
           };
         });
-      res.json(enriched);
+
+      // Also surface Roger's IVR welcome prompts (defined in audioAutogen.ts).
+      // These play at call-entry time before the engagement engine takes over,
+      // so they live in a separate library but should still be editable, playable,
+      // and regenerable from the same admin UI.
+      const WELCOME_LABELS: Record<string, string> = {
+        roger_welcome_new:      "First-time caller",
+        roger_welcome_sameday:  "Returning same day",
+        roger_welcome_recent:   "1–3 days since last call",
+        roger_welcome_fewdays:  "4–14 days since last call",
+        roger_welcome_weeks:    "15–30 days since last call",
+        roger_welcome_longtime: "30+ days since last call",
+      };
+      const welcomeEntries = ROGER_PROMPTS
+        .filter(p => p.filename.startsWith("roger_welcome_"))
+        .map(p => {
+          const baseId = p.filename.replace(/\.mp3$/i, "");      // e.g. "roger_welcome_new"
+          const id = baseId.replace(/^roger_/, "");              // e.g. "welcome_new" → file becomes roger_welcome_new.mp3
+          const audioFilename = `${baseId}.mp3`;
+          const audioPath = path.join(UPLOADS_DIR, audioFilename);
+          const hasAudio = fs.existsSync(audioPath);
+          // The text already contains [warmly] / [chuckles] / etc. emotion tags,
+          // so feed it directly to v3 when v3 is selected.
+          return {
+            id,
+            category: "welcome",
+            tone: "warm",
+            lineText: p.text,
+            v3Text: p.text,
+            usesV3: true,
+            followUpAction: WELCOME_LABELS[baseId] ?? null,
+            cooldownSeconds: 0,
+            requiredMoods: [] as string[],
+            minAttentionDrain: 0,
+            maxAttentionDrain: 0,
+            audioFilename: hasAudio ? audioFilename : null,
+            audioUrl: hasAudio ? `/uploads/${audioFilename}` : null,
+          };
+        });
+
+      res.json([...welcomeEntries, ...enriched]);
     } catch (e) {
       res.status(500).json({ message: "Failed to load Roger prompt library" });
     }
