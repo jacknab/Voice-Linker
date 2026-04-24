@@ -6814,7 +6814,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "Here is how membership works. " +
       "As a member, you get full access to the voice line community. " +
       "Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. " +
-      "We offer three membership options: a 24 hour pass, a 14 day membership, and a 30 day membership. " +
+      "We offer three membership options: a day pass, a 14 day membership, and a 30 day membership. " +
       "Your remaining time is tracked in hours. When you have less than 60 minutes left, the system will tell you in minutes. " +
       "Choose the option that works best for you."
     );
@@ -6828,7 +6828,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     playPrompt(twiml, req, "membership_pricing.mp3",
       "Here are our membership prices. " +
-      "A 24 hour pass is 3 dollars. " +
+      "A day pass is 3 dollars. " +
       "A 14 day membership is 10 dollars. " +
       "A 30 day membership is 25 dollars. " +
       "To purchase, press 3 from the membership menu."

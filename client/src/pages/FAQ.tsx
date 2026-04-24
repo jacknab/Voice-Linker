@@ -127,7 +127,7 @@ function buildFAQsMM(siteName: string, phone: string): FAQCategory[] {
         },
         {
           q: "What membership plans are available?",
-          a: "We offer several plans ranging from a short 24-hour pass to longer multi-day memberships. Current pricing and plan details are available from the main menu (press 4, then 1) or on our website at the Buy Time page.",
+          a: "We offer several plans ranging from a day pass to longer multi-day memberships. Current pricing and plan details are available from the main menu (press 4, then 1) or on our website at the Buy Time page.",
         },
         {
           q: "Can I call from any phone?",
@@ -261,7 +261,7 @@ function buildFAQsMW(siteName: string, phone: string): FAQCategory[] {
         },
         {
           q: "What plans are available?",
-          a: "We offer several plans ranging from a short 24-hour pass to longer multi-day memberships. You can hear pricing on the voice system from the main menu (press 4, then 1), or visit the Buy Time page on our website.",
+          a: "We offer several plans ranging from a day pass to longer multi-day memberships. You can hear pricing on the voice system from the main menu (press 4, then 1), or visit the Buy Time page on our website.",
         },
         {
           q: "Can I call from a different phone?",
