@@ -61,7 +61,7 @@ export default function Support() {
               </div>
               <h3 style={{ fontSize: "0.92rem", fontWeight: 700, color: "#fff", marginBottom: "0.35rem" }}>Call In</h3>
               <p style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.45)", lineHeight: 1.6, marginBottom: "1rem" }}>
-                Dial in to the system and press 0 from the main menu to reach customer service.
+                Dial in to the system and press 7 from the main menu to reach customer service.
               </p>
               <a href={"tel:" + phone.replace(/\D/g, "")}
                 style={{ fontSize: "0.9rem", fontWeight: 700, color: "#60a5fa", textDecoration: "none" }}

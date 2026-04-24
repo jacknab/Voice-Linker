@@ -1911,7 +1911,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       (MAILBOX_ENABLED ? "For mailboxes and personal ads press 3. " : "") +
       "For information on membership prices press 4. " +
       "To manage your membership press 8. " +
-      "For customer service press 0. " +
+      "For customer service press 7. " +
+      "To hear how much time you have remaining press 0. " +
       "To repeat these choices press 9."
     );
     twiml.redirect("/voice/main-menu");
@@ -1939,8 +1940,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else if (digit === "8") {
       // Manage membership
       twiml.redirect("/voice/manage-membership");
-    } else if (digit === "0") {
-      // Customer service
+    } else if (digit === "7") {
+      // Customer service (was 0; 0 is now reserved for "announce time remaining")
       twiml.redirect("/voice/customer-service");
     } else if (digit === "9") {
       // Repeat main menu
@@ -2024,7 +2025,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "To buy membership time press 2. " +
       "For the men seeking men line press 5. " +
       "To manage your membership press 8. " +
-      "For customer service press 0. " +
+      "For customer service press 7. " +
+      "To hear how much time you have remaining press 0. " +
       "To repeat these choices press 9."
     );
     twiml.redirect("/voice/mw-main-menu");
@@ -2052,8 +2054,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else if (digit === "8") {
       // Manage membership
       twiml.redirect("/voice/manage-membership");
-    } else if (digit === "0") {
-      // Customer service
+    } else if (digit === "7") {
+      // Customer service (was 0; 0 is now reserved for "announce time remaining")
       twiml.redirect("/voice/customer-service");
     } else if (digit === "9") {
       // Repeat — also clear MSM flag so repeating the menu resets state
@@ -2448,7 +2450,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "And don't get them confused with your membership number — we issue separate numbers for memberships. " +
       "If you're ready to write down your mailbox number and passcode press one. " +
       "To pause the system while you get a pen and paper press two. " +
-      "For customer service press zero. " +
+      "For customer service press seven. " +
       "To repeat these choices press nine. " +
       "To cancel setting up your mailbox press the pound key."
     );
@@ -2482,7 +2484,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // Pause — loop back with a short pause
         twiml.pause({ length: 5 });
         twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);
-      } else if (digit === "0") {
+      } else if (digit === "7") {
+        // Customer service (was 0; 0 is now reserved for "announce time remaining")
         twiml.redirect("/voice/customer-service");
       } else if (digit === "9") {
         twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);

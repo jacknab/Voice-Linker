@@ -2182,7 +2182,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "For information on membership prices press 4. " +
       "For your voicemail press 6. " +
       "To manage your membership press 8. " +
-      "For customer service press 0. " +
+      "For customer service press 7. " +
+      "To hear how much time you have remaining press 0. " +
       "To repeat these choices press 9."
     );
     twiml.redirect("/voice/main-menu");
@@ -2213,8 +2214,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else if (digit === "8") {
       // Manage membership
       twiml.redirect("/voice/manage-membership");
-    } else if (digit === "0") {
-      // Customer service
+    } else if (digit === "7") {
+      // Customer service (was 0; 0 is now reserved for "announce time remaining")
       twiml.redirect("/voice/customer-service");
     } else if (digit === "9") {
       // Repeat main menu
@@ -2332,7 +2333,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
       safePlayRecording(gather, message.recordingUrl, req, "Message audio is not available.");
       playPrompt(gather, req, "vm_new_options.mp3",
-        "To replay this message press 1. To save this message press 2. To delete this message press 3. To reply press 4. To hear this caller's profile press 5. For the next message press 9. To return to the voicemail menu press 0.");
+        "To replay this message press 1. To save this message press 2. To delete this message press 3. To reply press 4. To hear this caller's profile press 5. For the next message press 9. To return to the voicemail menu press 7. To hear how much time you have remaining press 0.");
 
       twiml.redirect("/voice/voicemail");
     } catch (err) {
@@ -2389,7 +2390,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else if (digit === "9") {
         await storage.markMessageRead(msgId);
         twiml.redirect("/voice/voicemail-inbox");
-      } else if (digit === "0") {
+      } else if (digit === "7") {
+        // Return to voicemail menu (was 0; 0 is now reserved for "announce time remaining")
         twiml.redirect("/voice/voicemail");
       } else {
         playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
@@ -2466,7 +2468,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
       safePlayRecording(gather, message.recordingUrl, req, "Message audio is not available.");
       playPrompt(gather, req, "vm_saved_options.mp3",
-        "To replay this message press 1. To delete this message press 3. To reply press 4. To hear this caller's profile press 5. For the next message press 9. To return to the voicemail menu press 0.");
+        "To replay this message press 1. To delete this message press 3. To reply press 4. To hear this caller's profile press 5. For the next message press 9. To return to the voicemail menu press 7. To hear how much time you have remaining press 0.");
 
       twiml.redirect("/voice/voicemail");
     } catch (err) {
@@ -2519,7 +2521,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else if (digit === "9") {
         // Advance past the current message
         twiml.redirect(`/voice/voicemail-saved?afterId=${msgId}`);
-      } else if (digit === "0") {
+      } else if (digit === "7") {
+        // Return to voicemail menu (was 0; 0 is now reserved for "announce time remaining")
         twiml.redirect("/voice/voicemail");
       } else {
         playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
@@ -2635,7 +2638,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "To buy membership time press 2. " +
       "For the men seeking men line press 5. " +
       "To manage your membership press 8. " +
-      "For customer service press 0. " +
+      "For customer service press 7. " +
+      "To hear how much time you have remaining press 0. " +
       "To repeat these choices press 9."
     );
     twiml.redirect("/voice/mw-main-menu");
@@ -2664,8 +2668,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else if (digit === "8") {
       // Manage membership
       twiml.redirect("/voice/manage-membership");
-    } else if (digit === "0") {
-      // Customer service
+    } else if (digit === "7") {
+      // Customer service (was 0; 0 is now reserved for "announce time remaining")
       twiml.redirect("/voice/customer-service");
     } else if (digit === "9") {
       // Repeat — also clear MSM flag so repeating the menu resets state
@@ -3060,7 +3064,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "And don't get them confused with your membership number — we issue separate numbers for memberships. " +
       "If you're ready to write down your mailbox number and passcode press one. " +
       "To pause the system while you get a pen and paper press two. " +
-      "For customer service press zero. " +
+      "For customer service press seven. " +
       "To repeat these choices press nine. " +
       "To cancel setting up your mailbox press the pound key."
     );
@@ -3094,7 +3098,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // Pause — loop back with a short pause
         twiml.pause({ length: 5 });
         twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);
-      } else if (digit === "0") {
+      } else if (digit === "7") {
+        // Customer service (was 0; 0 is now reserved for "announce time remaining")
         twiml.redirect("/voice/customer-service");
       } else if (digit === "9") {
         twiml.redirect(`/voice/setup-mailbox-ready?returnTo=${returnTo}`);

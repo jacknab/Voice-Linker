@@ -3552,7 +3552,7 @@ CUSTOMER SERVICE
 Customer service can be reached by:
 - Phone: ${csPhone}
 - Email: ${csEmail}
-- By phone (IVR): press 0 from the main menu for customer service information.
+- By phone (IVR): press 7 from the main menu for customer service information. Press 0 from any menu to hear how much time you have remaining.
 - Through the website: visit the /support page.
 
 TECHNICAL NOTES
