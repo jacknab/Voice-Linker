@@ -24,6 +24,8 @@ import { profiles } from "@shared/schema";
 import { eq, isNull, or, sql } from "drizzle-orm";
 import { PROMPT_LIBRARY, ROGER_V3_TEXTS, GAME_AI_GREETING_SCRIPTS, GAME_AI_GREETING_COUNT } from "./engagementEngine";
 import { writeRegionPage, deleteRegionPage, writeSitemap, writeRobotsTxt, writeRegionsIndexPage, generateHomePage } from "./seoPageGenerator";
+import { twilioWebhookAuth } from "./twilioWebhookAuth";
+import { timingSafeEqual } from "crypto";
 import OpenAI from "openai";
 
 // ─── City Audio Helper ────────────────────────────────────────────────────────
@@ -307,6 +309,13 @@ export async function registerRoutes(
   }
 
 
+  // ── Twilio Webhook Signature Validation ───────────────────────────────────
+  // Mounted BEFORE the IVR routes so every /voice/* handler is protected.
+  // - In production: requires a valid X-Twilio-Signature on every request.
+  // - In dev: bypasses unless TWILIO_WEBHOOK_VALIDATE=true (so the IVR tester
+  //   and local curl experiments still work).
+  app.use("/voice", twilioWebhookAuth);
+
   // ── IVR Voice Routes (dynamically loaded)
   {
     const { registerVoiceRoutes } = await import("./ivr-default.js");
@@ -552,16 +561,30 @@ export async function registerRoutes(
 
   // ── Admin API Key Middleware ────────────────────────────────────────────────
   // All /api/admin/* routes require X-Admin-Key header to match ADMIN_SECRET_KEY.
-  // Set ADMIN_SECRET_KEY in your environment. Without it the admin API is open
-  // (acceptable in dev; never ship to production without it).
+  // In production, ADMIN_SECRET_KEY MUST be set or the server refuses to start
+  // (enforced in server/index.ts). In development, if it's unset we log a loud
+  // warning and still require *some* header so accidental scripted access fails.
   app.use("/api/admin", (req: Request, res: Response, next: NextFunction) => {
     const requiredKey = process.env.ADMIN_SECRET_KEY;
+    const isProduction = process.env.NODE_ENV === "production";
+
     if (!requiredKey) {
-      console.warn("[admin] WARNING: ADMIN_SECRET_KEY not set — admin API unprotected.");
+      if (isProduction) {
+        console.error("[admin] BLOCKED: ADMIN_SECRET_KEY not set in production — refusing.");
+        return res.status(503).json({ error: "Admin API not configured" });
+      }
+      console.warn("[admin] ADMIN_SECRET_KEY not set — admin API unprotected (dev only).");
       return next();
     }
+
     const provided = req.headers["x-admin-key"];
-    if (provided !== requiredKey) {
+    if (typeof provided !== "string" || provided.length !== requiredKey.length) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    // Constant-time compare to defeat timing attacks against the admin key.
+    const a = Buffer.from(provided);
+    const b = Buffer.from(requiredKey);
+    if (!timingSafeEqual(a, b)) {
       return res.status(403).json({ error: "Forbidden" });
     }
     next();

@@ -80,6 +80,24 @@ if (process.env.NODE_ENV === "production" && !sessionSecret) {
   throw new Error("SESSION_SECRET must be set in production");
 }
 
+// ── Production security gate ─────────────────────────────────────────────────
+// Refuse to start in production if critical secrets are missing. This prevents
+// shipping with an open admin API or unsigned Twilio webhooks (which would let
+// anyone trigger Twilio API calls and rack up charges on your account).
+if (process.env.NODE_ENV === "production") {
+  const required: Array<[string, string]> = [
+    ["ADMIN_SECRET_KEY", "admin API would be unauthenticated"],
+    ["TWILIO_AUTH_TOKEN", "Twilio webhook signatures could not be validated"],
+  ];
+  const missing = required.filter(([k]) => !process.env[k]);
+  if (missing.length > 0) {
+    const summary = missing.map(([k, why]) => `  - ${k}: ${why}`).join("\n");
+    throw new Error(
+      `Refusing to start in production. The following env vars are required:\n${summary}`,
+    );
+  }
+}
+
 app.use(session({
   secret: sessionSecret || "dev-fallback-secret",
   resave: false,
