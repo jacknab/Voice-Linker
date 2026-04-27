@@ -483,12 +483,16 @@ function playPrompt(
     return;
   }
 
-  // MM / unset — fall back to shared uploads/ root, then TTS with the default voice.
+  // MM / unset — fall back to shared uploads/ root, then TTS.
+  // For TTS fallback, force Polly.Matthew (consistent male voice) so dynamic
+  // text never plays in Twilio's default voice. This keeps the system on at
+  // most two voices (ElevenLabs MM for static prompts + Polly.Matthew for
+  // dynamic fallbacks) instead of randomly switching among 3+ voices.
   const filePath = path.join(UPLOADS_DIR, filename);
   if (fs.existsSync(filePath)) {
     node.play(`${baseUrl(req)}/uploads/${filename}`);
-  } else {
-    node.say(fallbackText);
+  } else if (fallbackText) {
+    node.say({ voice: "Polly.Matthew" }, fallbackText);
   }
 }
 

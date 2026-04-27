@@ -40,11 +40,10 @@ export function getVoiceIdForRoger(): string {
 
 /**
  * Returns the voice ID used for Busted Game AI caller greetings.
- * Set ELEVENLABS_VOICE_ID_GAME in .env to use a dedicated male voice
- * that sounds like a real caller (not Roger's host voice).
+ * Locked to the MM voice so the entire IVR uses a single consistent voice.
  */
 export function getVoiceIdForGame(): string {
-  return process.env.ELEVENLABS_VOICE_ID_GAME || "wSqOdjeNqDrHcoK0zorF";
+  return process.env.ELEVENLABS_VOICE_ID_MM || "wSqOdjeNqDrHcoK0zorF";
 }
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));

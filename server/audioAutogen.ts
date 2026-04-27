@@ -17,7 +17,7 @@ const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 type Prompt = { filename: string; text: string };
 
 // ── MM prompts (uploads/mm/) ───────────────────────────────────────────────
-const MM_PROMPTS: Prompt[] = [
+export const MM_PROMPTS: Prompt[] = [
   { filename: "system_greeting.mp3",    text: "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect." },
   { filename: "disclaimer.mp3",         text: "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number." },
   { filename: "no_caller_id.mp3",       text: "We could not identify your call. Goodbye." },
@@ -281,6 +281,34 @@ const MM_PROMPTS: Prompt[] = [
 
   // ── Engagement / game ──────────────────────────────────────────────────────
   { filename: "cant_message_ai.mp3", text: "You can't message an AI. Nice try though. Back to browsing." },
+
+  // ── Static menu prompts referenced by the IVR but previously falling back to Twilio TTS ──
+  { filename: "gender_select.mp3",                text: "Guys, press one to talk to women. Women, press three to talk to guys." },
+  { filename: "mw_main_menu.mp3",                 text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. For the men seeking men line press 5. To manage your membership press 8. Press 0 for time remaining, or 9 to repeat these choices." },
+  { filename: "connector_idle_goodbye.mp3",       text: "You're apparently having issues right now, or have fallen asleep. Sweet dreams." },
+  { filename: "live_connect_admin_profile.mp3",   text: "This is a sample profile and cannot accept a live connection. Please choose another caller." },
+
+  // ── Mailbox lookup / browse ───────────────────────────────────────────────
+  { filename: "mailbox_lookup.mp3",               text: "Enter the five digit mailbox number you'd like to look up, followed by pound. Or press pound alone to return to the mailbox menu." },
+  { filename: "mailbox_menu.mp3",                 text: "To go to your mailbox press one. To record a new mailbox ad press two. To listen to ads from other guys press three. To repeat these choices press nine. To exit to the main menu press pound." },
+  { filename: "ad_category_menu.mp3",             text: "Please select a category. For Quick and Hot Talk press one. For Bicurious press two. For Kink press three. For Total Tops press four. For Strictly Bottoms press five. For Trans press six. To look up a specific mailbox press seven. For more categories press eight. For definitions press nine. To return to the mailbox menu press pound." },
+  { filename: "ad_category_menu_p2.mp3",          text: "More categories. For Cock Suckers press one. For Hung Cocks press two. For Uncut Cocks press three. For Twinks press four. For Bears press five. For Daddys press six. To look up a specific mailbox press seven. For definitions press nine. To go back to the previous categories press pound." },
+  { filename: "ad_category_definitions.mp3",      text: "Quick and Hot Talk: guys looking for fast, explicit, no-strings chat. Bicurious: men exploring attraction to other men for the first time or occasionally. Kink: callers into fetishes, role play, or specific kinks. Total Tops: guys who are exclusively tops and looking for a bottom. Strictly Bottoms: guys who are exclusively bottoms and looking for a top. Trans: trans men and women connecting with other callers. Cock Suckers: guys who love giving oral and want to connect with like-minded men. Hung Cocks: well-endowed guys and the men who want them. Uncut Cocks: uncircumcised guys and the men who seek them out. Twinks: younger slender guys and the men who are into them. Bears: bigger, hairier guys and those who are into the bear scene. Daddys: older, mature men and younger guys looking for that connection. Returning to the category menu." },
+  { filename: "mailbox_ad_recorded_pending.mp3",  text: "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. In the meantime you can browse other ads or visit the male box to check out who's on the line right now." },
+
+  // ── Mailbox setup flow ─────────────────────────────────────────────────────
+  { filename: "mailbox_setup_intro.mp3",          text: "You need to first set up your mailbox. To set up your mailbox we need to gather a couple of things from you which helps callers search for the perfect guy and help them find your ads. First we need to know your date of birth. Please enter your date of birth in this order: two digits for the month, two digits for the day, and four digits for the year. For example, for April 17 1976, enter zero four one seven one nine seven six." },
+  { filename: "mailbox_setup_dob_invalid.mp3",    text: "We did not receive a valid date of birth. Please try again." },
+  { filename: "mailbox_setup_underage.mp3",       text: "We are sorry, but you must be 18 years of age or older to use this service. Goodbye." },
+  { filename: "mailbox_setup_bodytype.mp3",       text: "Now please select your body type. For Slim press one. For Average press two. For Athletic press three. For Large press four. For Big and Tall press five. To repeat these choices press nine. To exit press pound." },
+  { filename: "mailbox_setup_cancelled.mp3",      text: "Mailbox setup cancelled." },
+  { filename: "mailbox_setup_ethnicity.mp3",      text: "Now please tell us your ethnicity. If you don't want to identify your ethnicity press one. If you're Caucasian press two. African-American press three. Asian press four. Latino press five. Middle Eastern press six. Aboriginal press seven. To repeat these choices press nine. To exit press pound." },
+  { filename: "mailbox_setup_ready.mp3",          text: "Please get something ready to write down your new mailbox number and passcode. This is the only chance you will have to write them down. And don't get them confused with your membership number — we issue separate numbers for memberships. If you're ready to write down your mailbox number and passcode press one. To pause the system while you get a pen and paper press two. To repeat these choices press nine. To cancel setting up your mailbox press the pound key." },
+  { filename: "mailbox_setup_existing_passcode.mp3", text: "Your mailbox passcode is the same as your membership passcode. If you do not remember your passcode and would like to create a new one, press pound." },
+  { filename: "mailbox_setup_create_passcode.mp3",text: "For security you need a passcode. Please enter a four digit passcode now. If you make a mistake press star to start over." },
+  { filename: "mailbox_setup_passcode_reenter.mp3",  text: "Please re-enter your four digit passcode." },
+  { filename: "mailbox_setup_passcode_mismatch.mp3", text: "Your passcode entries did not match. Please try again." },
+  { filename: "mailbox_setup_complete.mp3",       text: "Your mailbox is now set up. To begin recording a new ad press one. To listen to ads from other guys press two. To return to the main menu press pound." },
 ];
 
 // ── MW prompts (uploads/mw/) — DISABLED: using MM voice only ──────────────
