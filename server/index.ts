@@ -1,5 +1,6 @@
 import { config as loadEnv } from "dotenv";
-loadEnv();
+// override: false ensures Replit-managed secrets always take priority over .env
+loadEnv({ override: false });
 
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
