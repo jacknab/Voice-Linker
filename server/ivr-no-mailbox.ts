@@ -11,7 +11,7 @@ import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsC
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
-import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText } from "./audioAutogen";
+import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
 import type { CallerBrowseState } from "./ivr-browse-state";
 
@@ -20,24 +20,6 @@ const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
 
-function centsToLabel(cents: number): string {
-  const dollars = Math.floor(cents / 100);
-  const remaining = cents % 100;
-  if (remaining === 0) return `${dollars} dollar${dollars !== 1 ? "s" : ""}`;
-  return `${dollars} dollar${dollars !== 1 ? "s" : ""} and ${remaining} cent${remaining !== 1 ? "s" : ""}`;
-}
-
-function minutesToDurationLabel(minutes: number): string {
-  if (minutes >= 1440 && minutes % 1440 === 0) {
-    const days = minutes / 1440;
-    return `${days} day${days !== 1 ? "s" : ""}`;
-  }
-  if (minutes >= 60 && minutes % 60 === 0) {
-    const hours = minutes / 60;
-    return `${hours} hour${hours !== 1 ? "s" : ""}`;
-  }
-  return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
-}
 
 type MembershipPackage = { name: string; displayName: string; label: string; minutes: number; priceCents: number; priceLabel: string };
 
@@ -2091,12 +2073,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
-      gather.say(
+      const menuText =
         "If you have a promotional code press 1. " +
         planLines.join(" ") + " " +
         "To repeat these choices press 9. " +
-        "To cancel press pound."
-      );
+        "To cancel press pound.";
+      playPrompt(gather, req, "purchase_pre_menu.mp3", menuText);
     } catch (err) {
       console.error("[voice] /voice/purchase-pre-menu settings error:", err);
       const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-purchase-pre-menu" });
@@ -4046,10 +4028,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const user = await getOrCreateUser(fromNumber);
       const result = await storage.redeemPromoCode(digits, user.id);
       if ("error" in result) {
-        twiml.say(result.error + " Returning to the main menu.");
+        const PROMO_ERROR_FILES: Record<string, string> = {
+          "Invalid promo code.": "promo_code_invalid.mp3",
+          "This promo code is no longer active.": "promo_code_inactive.mp3",
+          "This promo code has expired.": "promo_code_expired.mp3",
+          "This promo code has reached its maximum number of uses.": "promo_code_max_uses.mp3",
+          "You have already redeemed this promo code.": "promo_code_already_used.mp3",
+        };
+        const errorFile = PROMO_ERROR_FILES[result.error] ?? "error_generic.mp3";
+        playPrompt(twiml, req, errorFile, result.error + " Returning to the main menu.");
       } else {
         const minutes = Math.floor(result.secondsAwarded / 60);
-        twiml.say(`Success! ${minutes} minute${minutes === 1 ? "" : "s"} have been added to your account. Enjoy your time on the line.`);
+        playPrompt(twiml, req, "promo_code_success.mp3",
+          `Success! ${minutes} minute${minutes === 1 ? "" : "s"} have been added to your account. Enjoy your time on the line.`);
       }
     } catch (err) {
       console.error("[voice] handle-promo-code error:", err);
@@ -6064,7 +6055,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else {
       playPrompt(gather, req, "package_confirm_prefix.mp3", "You selected");
     }
-    gather.say(dynamicPart);
+    playPrompt(gather, req, `package_label_${session.packageName}.mp3`, dynamicPart);
     playPrompt(gather, req, "package_confirm_suffix.mp3", "If this is correct press one. To select a different package press two.");
     twiml.redirect("/voice/confirm-package");
     res.type("text/xml");
@@ -6247,10 +6238,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         await storage.updateUserMembership(user.id, membershipUpdate);
         await storage.getOrCreateMailbox(user.id);
 
-        // Split payment success into static audio parts + inline TTS for dynamic values
-        // Static prefix → TTS (package + price) → optional bonus audio → static suffix
+        // Split payment success into static audio parts + plan-specific charged audio → optional bonus audio → static suffix
         playPrompt(twiml, req, "payment_success_prefix.mp3", "Payment successful! You now have");
-        twiml.say(`${session.packageLabel} of access. Your card has been charged ${session.priceLabel}.`);
+        playPrompt(twiml, req, `payment_charged_${session.packageName}.mp3`, `${session.packageLabel} of access. Your card has been charged ${session.priceLabel}.`);
         if (bonusMinutes > 0) {
           playPrompt(twiml, req, "payment_success_bonus.mp3",
             `Plus your first purchase bonus doubles your time — enjoy ${minutesToDurationLabel(totalMinutes)} total!`

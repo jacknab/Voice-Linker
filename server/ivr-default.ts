@@ -3352,13 +3352,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           action: "/voice/handle-my-mailbox-options",
           timeout: 10,
         });
-        gather.say(
-          `${mailboxLabel}Your mailbox has no new messages. ` +
-          (hasGreeting
-            ? "Press 1 to re-record your mailbox greeting. Press 2 to hear your current greeting. "
-            : "Press 1 to record your mailbox greeting. ") +
-          "Press 9 to return to the mailbox menu."
-        );
+        if (mailboxLabel) gather.say(mailboxLabel);
+        if (hasGreeting) {
+          playPrompt(gather, req, "mailbox_no_new_messages_with_greeting.mp3",
+            "Your mailbox has no new messages. Press 1 to re-record your mailbox greeting. Press 2 to hear your current greeting. Press 9 to return to the mailbox menu.");
+        } else {
+          playPrompt(gather, req, "mailbox_no_new_messages_no_greeting.mp3",
+            "Your mailbox has no new messages. Press 1 to record your mailbox greeting. Press 9 to return to the mailbox menu.");
+        }
         twiml.redirect("/voice/mailbox-menu");
       }
     } catch (err) {
@@ -4677,10 +4678,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const user = await getOrCreateUser(fromNumber);
       const result = await storage.redeemPromoCode(digits, user.id);
       if ("error" in result) {
-        twiml.say(result.error + " Returning to the main menu.");
+        const PROMO_ERROR_FILES: Record<string, string> = {
+          "Invalid promo code.": "promo_code_invalid.mp3",
+          "This promo code is no longer active.": "promo_code_inactive.mp3",
+          "This promo code has expired.": "promo_code_expired.mp3",
+          "This promo code has reached its maximum number of uses.": "promo_code_max_uses.mp3",
+          "You have already redeemed this promo code.": "promo_code_already_used.mp3",
+        };
+        const errorFile = PROMO_ERROR_FILES[result.error] ?? "error_generic.mp3";
+        playPrompt(twiml, req, errorFile, result.error + " Returning to the main menu.");
       } else {
         const minutes = Math.floor(result.secondsAwarded / 60);
-        twiml.say(`Success! ${minutes} minute${minutes === 1 ? "" : "s"} have been added to your account. Enjoy your time on the line.`);
+        playPrompt(twiml, req, "promo_code_success.mp3",
+          `Success! ${minutes} minute${minutes === 1 ? "" : "s"} have been added to your account. Enjoy your time on the line.`);
       }
     } catch (err) {
       console.error("[voice] handle-promo-code error:", err);

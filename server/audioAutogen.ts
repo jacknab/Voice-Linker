@@ -67,7 +67,15 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "membership_questions.mp3",        text: "Membership questions. Press 1 to learn how membership works. Press 2 to hear our pricing. Press 3 to purchase a membership with a credit card. Press 9 to return to the main menu." },
   { filename: "membership_how_it_works.mp3",     text: "Here is how membership works. As a member, you get full access to the voice line community. Members can browse unlimited caller profiles, send and receive voice messages, and enjoy priority access to new features. We offer three membership options: a day pass, a 14 day membership, and a 30 day membership. Your remaining time is tracked in hours. When you have less than 60 minutes left, the system will tell you in minutes. Choose the option that works best for you." },
   { filename: "membership_pricing.mp3",          text: "Here are our membership prices. A day pass is 3 dollars and expires 24 hours after purchase, regardless of how much you use the line. A 14 day membership is 10 dollars. A 30 day membership is 25 dollars. To purchase, press 3 from the membership menu." },
-  { filename: "purchase_pre_menu.mp3",           text: "If you have a promotional code press 1. To purchase 1 day of access for $3.99 press 2. To repeat these choices press 9. To cancel press pound." },
+  // purchase_pre_menu.mp3 is DB-driven — generated in generateDynamicPackagePrompts()
+
+  // ── Promo code results ────────────────────────────────────────────────────
+  { filename: "promo_code_invalid.mp3",        text: "Invalid promo code. Returning to the main menu." },
+  { filename: "promo_code_inactive.mp3",       text: "This promo code is no longer active. Returning to the main menu." },
+  { filename: "promo_code_expired.mp3",        text: "This promo code has expired. Returning to the main menu." },
+  { filename: "promo_code_max_uses.mp3",       text: "This promo code has reached its maximum number of uses. Returning to the main menu." },
+  { filename: "promo_code_already_used.mp3",   text: "You have already redeemed this promo code. Returning to the main menu." },
+  { filename: "promo_code_success.mp3",        text: "Your promo code has been accepted and your time has been added to your account. Enjoy your time on the line." },
   { filename: "payment_intro.mp3",               text: "Your purchase, plus any applicable fees and taxes, will appear on your credit card statement as Toby Media. When entering your card information: to correct an incorrect number, press star to delete the last digit entered. To start over, press the star key twice. If you're ready to enter your credit card information press 1." },
   { filename: "package_confirm_prefix.mp3",      text: "You selected" },
   { filename: "package_confirm_bonus_prefix.mp3",text: "Great choice! You selected" },
@@ -502,6 +510,35 @@ async function generateDynamicPackagePrompts(folder: string): Promise<{ generate
 
   const dir = path.join(UPLOADS_DIR, folder);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  // ── purchase_pre_menu.mp3 — full purchase menu, regenerates when plan settings change ──
+  {
+    const planLines = plans.map((plan, idx) => {
+      const digit = idx === 0 ? "2" : idx === 1 ? "3" : "4";
+      return `To purchase ${minutesToDurationLabel(plan.minutes)} of access for ${centsToLabel(plan.priceCents)} press ${digit}.`;
+    });
+    const menuText =
+      "If you have a promotional code press 1. " +
+      planLines.join(" ") + " " +
+      "To repeat these choices press 9. " +
+      "To cancel press pound.";
+    const menuFile = path.join(dir, "purchase_pre_menu.mp3");
+    if (needsRegenerationGlobal(menuFile, menuText)) {
+      try {
+        await generateTTS(menuText, "purchase_pre_menu.mp3", folder);
+        writeSidecarGlobal(menuFile, menuText);
+        console.log(`[audio-autogen] generated ${folder}/purchase_pre_menu.mp3`);
+        stats.generated++;
+        await sleep(DELAY_MS);
+      } catch (err: any) {
+        console.error(`[audio-autogen] failed ${folder}/purchase_pre_menu.mp3: ${err?.message}`);
+        stats.failed++;
+        await sleep(DELAY_MS);
+      }
+    } else {
+      stats.skipped++;
+    }
+  }
 
   for (const plan of plans) {
     const durationLabel = minutesToDurationLabel(plan.minutes);
