@@ -12,7 +12,7 @@ import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
-import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText, ROGER_PROMPTS, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
+import { locationToFilename, triggerLocationAudio, triggerCityWordAudio, minutesToAnnouncementText, ROGER_PROMPTS, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
 import type { BrowseQueueItem, CallerBrowseState } from "./ivr-browse-state";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
 
@@ -88,9 +88,16 @@ function playNumber(
   req: Request,
   n: number
 ): void {
-  if (n >= 1000) {
+  if (n >= 10000) {
     twiml.say(String(n));
     return;
+  }
+  if (n >= 1000) {
+    const thousands = Math.floor(n / 1000);
+    playPrompt(twiml, req, `num_${thousands}.mp3`, String(thousands));
+    playPrompt(twiml, req, "num_1000.mp3", "thousand");
+    n = n % 1000;
+    if (n === 0) return;
   }
   if (n >= 100) {
     const hundreds = Math.floor(n / 100) * 100;
@@ -108,6 +115,55 @@ function playNumber(
       playPrompt(twiml, req, `num_${ones}.mp3`, String(ones));
     }
   }
+}
+
+// Play individual digits of a string (e.g. a mailbox number or membership number)
+// using the pre-generated num_N.mp3 files for 0–9.
+// e.g. "12345" → num_1.mp3, num_2.mp3, num_3.mp3, num_4.mp3, num_5.mp3
+function playDigits(
+  twiml: { say: (text: string) => void; play: (url: string) => void },
+  req: Request,
+  numStr: string
+): void {
+  for (const ch of numStr) {
+    const d = parseInt(ch, 10);
+    if (!isNaN(d)) playPrompt(twiml, req, `num_${d}.mp3`, ch);
+  }
+}
+
+// Play "New caller from {region}." using the pre-generated city_{slug}.mp3
+// (full announcement at uploads/ root).  Falls back to phrase prefix +
+// city_word file and triggers background generation of both files.
+function playNewCallerFrom(
+  twiml: { say: (text: string) => void; play: (url: string) => void },
+  req: Request,
+  regionName: string,
+  slugOverride?: string
+): void {
+  const safe = (slugOverride ?? regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, ""))
+    .replace(/[^a-z0-9_\-]/g, "_");
+  const cityFile = `city_${safe}.mp3`;
+  const cityFilePath = path.join(UPLOADS_DIR, cityFile);
+  if (fs.existsSync(cityFilePath)) {
+    twiml.play(`${baseUrl(req)}/uploads/${cityFile}`);
+  } else {
+    playPrompt(twiml, req, "phrase_new_caller_from.mp3", "New caller from");
+    playPrompt(twiml, req, `city_word_${safe}.mp3`, regionName + ".");
+    triggerCityWordAudio(regionName);
+  }
+}
+
+// Play just the city/region name word for phrase composition
+// (e.g. after "Now playing callers from" or "This caller is from").
+// Triggers background generation if the file doesn't exist yet.
+function playRegionWord(
+  twiml: { say: (text: string) => void; play: (url: string) => void },
+  req: Request,
+  regionName: string
+): void {
+  const safe = regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  playPrompt(twiml, req, `city_word_${safe}.mp3`, regionName + ".");
+  triggerCityWordAudio(regionName);
 }
 
 // Play the time-remaining announcement.
@@ -1314,9 +1370,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           if (membershipNumber) {
             // Read the membership number digit-by-digit
             playPrompt(twiml, req, "link_phone_prefix.mp3", "Your phone number has been linked to your web account. Your membership number is:");
-            for (const digit of membershipNumber.replace(/\D/g, "")) {
-              twiml.say(digit);
-            }
+            playDigits(twiml, req, membershipNumber.replace(/\D/g, ""));
             playPrompt(twiml, req, "link_phone_portal.mp3", "You can now sign in to the web portal to manage your account.");
           } else {
             playPrompt(twiml, req, "link_phone_success.mp3", "Your phone number has been linked to your web account. You can now sign in to the web portal.");
@@ -2241,12 +2295,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(gather, req, "vm_no_new.mp3", "You have no new messages.");
       } else {
         if (newCount > 0) {
-          gather.say(`You have ${newCount} new ${newCount === 1 ? "message" : "messages"}.`);
+          playPrompt(gather, req, "phrase_you_have.mp3", "You have");
+          playNumber(gather, req, newCount);
+          playPrompt(gather, req, newCount === 1 ? "phrase_new_message.mp3" : "phrase_new_messages.mp3",
+            newCount === 1 ? "new message." : "new messages.");
         } else {
           playPrompt(gather, req, "vm_no_new.mp3", "You have no new messages.");
         }
         if (savedCount > 0) {
-          gather.say(`And ${savedCount} saved ${savedCount === 1 ? "message" : "messages"}.`);
+          playPrompt(gather, req, "phrase_and.mp3", "and");
+          playNumber(gather, req, savedCount);
+          playPrompt(gather, req, savedCount === 1 ? "phrase_saved_message.mp3" : "phrase_saved_messages.mp3",
+            savedCount === 1 ? "saved message." : "saved messages.");
         }
       }
       playPrompt(gather, req, "vm_options.mp3",
@@ -3114,8 +3174,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      const numSpoken = mailbox.mailboxNumber.split("").join(", ");
-      twiml.say(`Your mailbox number is ${numSpoken}. Again, your mailbox number is ${numSpoken}.`);
+      playPrompt(twiml, req, "phrase_your_mailbox_number_is.mp3", "Your mailbox number is");
+      playDigits(twiml, req, mailbox.mailboxNumber);
+      playPrompt(twiml, req, "phrase_again_your_mailbox_number_is.mp3", "Again, your mailbox number is");
+      playDigits(twiml, req, mailbox.mailboxNumber);
 
       if (user.membershipPin) {
         // Already has a passcode — tell them it's shared
@@ -3342,9 +3404,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.redirect("/voice/my-mailbox");
       } else {
         // No unread messages — show mailbox management menu
-        const mailboxLabel = mailbox
-          ? `Mailbox number ${mailbox.mailboxNumber.split("").join(", ")}. `
-          : "";
         const hasGreeting = !!mailbox?.adRecordingUrl;
         const gather = twiml.gather({
           numDigits: 1,
@@ -3352,7 +3411,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           action: "/voice/handle-my-mailbox-options",
           timeout: 10,
         });
-        if (mailboxLabel) gather.say(mailboxLabel);
+        if (mailbox) {
+          playPrompt(gather, req, "phrase_mailbox_number.mp3", "Mailbox number");
+          playDigits(gather, req, mailbox.mailboxNumber);
+        }
         if (hasGreeting) {
           playPrompt(gather, req, "mailbox_no_new_messages_with_greeting.mp3",
             "Your mailbox has no new messages. Press 1 to re-record your mailbox greeting. Press 2 to hear your current greeting. Press 9 to return to the mailbox menu.");
@@ -3747,7 +3809,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         action: `/voice/handle-category-ad-menu?toUserId=${ad.userId}&mailboxNumber=${ad.mailboxNumber}&category=${category}`,
         timeout: 10,
       });
-      adGather.say(`Mailbox ${ad.mailboxNumber.split("").join(", ")}.`);
+      playPrompt(adGather, req, "phrase_mailbox.mp3", "Mailbox");
+      playDigits(adGather, req, ad.mailboxNumber);
       safePlayRecording(adGather, ad.adRecordingUrl, req, "This ad is not available.");
       playPrompt(adGather, req, "category_ad_options.mp3",
         "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu.");
@@ -3847,13 +3910,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         action: `/voice/handle-mailbox-lookup-menu?toUserId=${mailbox.userId}&mailboxNumber=${digits}&mode=${mode}`,
         timeout: 10,
       });
-      adGather.say(`Mailbox ${digits.split("").join(", ")}.`);
+      playPrompt(adGather, req, "phrase_mailbox.mp3", "Mailbox");
+      playDigits(adGather, req, digits);
       safePlayRecording(adGather, mailbox.adRecordingUrl, req, "This ad is not available.");
-      adGather.say(
-        "Press 1 to send a message to this guy. " +
-        "Press 9 to look up another mailbox. " +
-        "Press pound to return to the mailbox menu."
-      );
+      playPrompt(adGather, req, "mailbox_lookup_options.mp3",
+        "Press 1 to send a message to this guy. Press 9 to look up another mailbox. Press pound to return to the mailbox menu.");
       twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
     } catch (err) {
       console.error("[voice] /voice/handle-mailbox-lookup error:", err);
@@ -5392,13 +5453,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               });
               const linkedRegionRecord = await storage.getRegionById(snapshot.regionId).catch(() => null);
               const linkedSlug = linkedRegionRecord?.slug ?? snapshot.regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-              const linkedCityFile = `city_${linkedSlug.replace(/[^a-z0-9_\-]/g, "_")}.mp3`;
-              const linkedCityFilePath = path.join(UPLOADS_DIR, linkedCityFile);
-              if (fs.existsSync(linkedCityFilePath)) {
-                alertGather.play(`${baseUrl(req)}/uploads/${linkedCityFile}`);
-              } else {
-                alertGather.say(`New caller from ${snapshot.regionName}.`);
-              }
+              playNewCallerFrom(alertGather, req, snapshot.regionName, linkedSlug);
               if (newLinkedCaller.nameRecordingUrl) {
                 safePlayRecording(alertGather, newLinkedCaller.nameRecordingUrl, req, "");
               }
@@ -5533,7 +5588,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             if (!profile.regionId || profile.regionId === state.callerRegionId) {
               playPrompt(profileGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
             } else if (profile.regionName) {
-              profileGather.say(`New caller from ${profile.regionName}.`);
+              playNewCallerFrom(profileGather, req, profile.regionName);
             }
             state.windowAnnouncementsUsed++;
           }
@@ -5600,12 +5655,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Static intro audio (can be overridden with ElevenLabs recording)
       playPrompt(gather, req, "nearby_callers_offer.mp3", "You have heard all the callers close to you.");
 
-      // Dynamic per-region options — use TTS so the menu always reads correctly.
-      // (City audio files now contain "new caller from {city}" for the live announcement.)
       for (const r of regions) {
-        gather.say(`Press ${r.digit} to hear callers from ${r.name}.`);
+        playPrompt(gather, req, "phrase_press.mp3", "Press");
+        playPrompt(gather, req, `num_${r.digit}.mp3`, r.digit);
+        playPrompt(gather, req, "phrase_to_hear_callers_from.mp3", "to hear callers from");
+        playRegionWord(gather, req, r.name);
       }
-      gather.say(`Press ${startOverDigit} to start over from the beginning.`);
+      playPrompt(gather, req, "phrase_press.mp3", "Press");
+      playPrompt(gather, req, `num_${startOverDigit}.mp3`, startOverDigit);
+      playPrompt(gather, req, "phrase_to_start_over.mp3", "to start over from the beginning.");
 
       // Timeout with no digit → fall through to handle-nearby-callers (treated as start-over)
       twiml.redirect(`/voice/handle-nearby-callers?linkedRegionIds=${encodedIds}&linkedRegionNames=${encodedNames}`);
@@ -5644,7 +5702,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
         if (linkedProfiles.length > 0) {
           console.log(`[voice] handle-nearby-callers: loaded ${linkedProfiles.length} profiles from "${chosenRegionName}" (regionId=${chosenRegionId})`);
-          twiml.say(`Now playing callers from ${chosenRegionName}.`);
+          playPrompt(twiml, req, "phrase_now_playing_callers_from.mp3", "Now playing callers from");
+          if (chosenRegionName) playRegionWord(twiml, req, chosenRegionName);
         } else {
           playPrompt(twiml, req, "nearby_callers_none.mp3",
             `There are no callers online in ${chosenRegionName ?? "that area"} right now. Starting your area over.`);
@@ -5815,7 +5874,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (senderActiveCall?.regionId) {
           const region = await storage.getRegionById(senderActiveCall.regionId);
           if (region) {
-            greetingGather.say(`This caller is from ${region.name}.`);
+            playPrompt(greetingGather, req, "phrase_this_caller_is_from.mp3", "This caller is from");
+            playRegionWord(greetingGather, req, region.name);
           } else {
             playPrompt(greetingGather, req, "location_not_available.mp3", "This caller's location is not available.");
           }
@@ -6126,12 +6186,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           const bonusLabel = bustSettings.billingMode === "per_day"
             ? "one hour of bonus time"
             : "fifteen bonus minutes";
-          const winHost = engagementEngine.getActivePersonalityName(callSid8);
-          twiml.say(`${winHost} here. You got it! That was our A I voice. ${bonusLabel} has been added to your account. Nice ear.`);
+          if (bustSettings.billingMode === "per_day") {
+            playPrompt(twiml, req, "bust_win_hours.mp3",
+              "Roger here. You got it! That was our A I voice. One hour of bonus time has been added to your account. Nice ear.");
+          } else {
+            playPrompt(twiml, req, "bust_win_minutes.mp3",
+              "Roger here. You got it! That was our A I voice. Fifteen bonus minutes have been added to your account. Nice ear.");
+          }
           twiml.redirect("/voice/browse-profiles");
         } else if (bustResult.result === "miss") {
-          const missHost = engagementEngine.getActivePersonalityName(callSid8);
-          twiml.say(`${missHost} here. Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing.`);
+          playPrompt(twiml, req, "bust_miss.mp3",
+            "Roger here. Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing.");
           twiml.redirect("/voice/browse-profiles");
         } else {
           // No active game — treat as invalid choice

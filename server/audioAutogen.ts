@@ -159,6 +159,20 @@ export const MM_PROMPTS: Prompt[] = [
 
   { filename: "phrase_you_have.mp3",             text: "You have" },
   { filename: "phrase_and.mp3",                  text: "and" },
+  { filename: "phrase_new_message.mp3",                  text: "new message." },
+  { filename: "phrase_new_messages.mp3",                 text: "new messages." },
+  { filename: "phrase_saved_message.mp3",                text: "saved message." },
+  { filename: "phrase_saved_messages.mp3",               text: "saved messages." },
+  { filename: "phrase_mailbox.mp3",                      text: "Mailbox" },
+  { filename: "phrase_mailbox_number.mp3",               text: "Mailbox number" },
+  { filename: "phrase_your_mailbox_number_is.mp3",       text: "Your mailbox number is" },
+  { filename: "phrase_again_your_mailbox_number_is.mp3", text: "Again, your mailbox number is" },
+  { filename: "phrase_new_caller_from.mp3",              text: "New caller from" },
+  { filename: "phrase_now_playing_callers_from.mp3",     text: "Now playing callers from" },
+  { filename: "phrase_this_caller_is_from.mp3",          text: "This caller is from" },
+  { filename: "phrase_press.mp3",                        text: "Press" },
+  { filename: "phrase_to_hear_callers_from.mp3",         text: "to hear callers from" },
+  { filename: "phrase_to_start_over.mp3",                text: "to start over from the beginning." },
   { filename: "phrase_minutes_of_pbtr.mp3",      text: "minutes remaining." },
   { filename: "phrase_minute_of_pbtr.mp3",       text: "minute remaining." },
   { filename: "phrase_hours_of_pbtr.mp3",        text: "hours remaining." },
@@ -183,6 +197,7 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "num_700.mp3", text: "seven hundred" },
   { filename: "num_800.mp3", text: "eight hundred" },
   { filename: "num_900.mp3", text: "nine hundred" },
+  { filename: "num_1000.mp3", text: "thousand" },
   // Composite time-remaining announcements — single-file replacements for stitched playback.
   // Covers every minute value callers can encounter (1–1440 min, i.e. up to 24 hours).
   ...Array.from({ length: 1440 }, (_, i) => {
@@ -290,6 +305,9 @@ export const MM_PROMPTS: Prompt[] = [
 
   // ── Engagement / game ──────────────────────────────────────────────────────
   { filename: "cant_message_ai.mp3", text: "You can't message an AI. Nice try though. Back to browsing." },
+  { filename: "bust_win_minutes.mp3", text: "Roger here. You got it! That was our A I voice. Fifteen bonus minutes have been added to your account. Nice ear." },
+  { filename: "bust_win_hours.mp3",   text: "Roger here. You got it! That was our A I voice. One hour of bonus time has been added to your account. Nice ear." },
+  { filename: "bust_miss.mp3",        text: "Roger here. Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing." },
 
   // ── Static menu prompts referenced by the IVR but previously falling back to Twilio TTS ──
   { filename: "gender_select.mp3",                text: "Guys, press one to talk to women. Women, press three to talk to guys." },
@@ -850,6 +868,113 @@ async function runLocationAutogen(): Promise<void> {
   }
 }
 
+/**
+ * Generate `city_word_{slug}.mp3` (just the region name, no punctuation)
+ * and `city_{slug}.mp3` (full "New caller from {region}." sentence) for
+ * every region in the DB.  Called from safeRun() each autogen cycle.
+ *
+ * - city_word files go in the MM category folder so playPrompt() can find them.
+ * - city files go in the uploads/ root so the existing browse-profiles
+ *   direct-play logic (`alertGather.play(…/uploads/city_{slug}.mp3)`) works.
+ */
+async function generateRegionWordAudio(): Promise<void> {
+  if (!process.env.ELEVENLABS_API_KEY) return;
+  let { storage } = await import("./storage").catch(() => ({ storage: null as any }));
+  if (!storage) return;
+  const regions = await storage.getAllRegions().catch(() => [] as { id: number; name: string; slug: string | null }[]);
+  if (!regions.length) return;
+
+  let voiceFolder = "mm";
+  try {
+    const settings = await storage.getSiteSettings();
+    const cat = settings?.siteCategory ?? "MM";
+    voiceFolder = cat === "MW" ? "mw" : "mm";
+  } catch { /* default to mm */ }
+
+  let generated = 0;
+  let skipped = 0;
+
+  for (const region of regions) {
+    const safe = (region.slug ?? region.name)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+    // 1. city_word_{slug}.mp3 — just the spoken region name, in the category folder
+    const wordFilename = `city_word_${safe}.mp3`;
+    const wordText     = region.name;
+    const wordPath     = path.join(UPLOADS_DIR, voiceFolder, wordFilename);
+    const voiceId      = getVoiceIdForFolder(voiceFolder);
+    if (needsRegenerationGlobal(wordPath, wordText)) {
+      try {
+        await generateTTS(wordText, wordFilename, voiceFolder);
+        writeSidecarGlobal(wordPath, wordText);
+        generated++;
+        await sleep(DELAY_MS);
+      } catch (err: any) {
+        console.error(`[audio-autogen] city_word ${wordFilename}: ${err?.message ?? err}`);
+        await sleep(DELAY_MS);
+      }
+    } else { skipped++; }
+
+    // 2. city_{slug}.mp3 — "New caller from {region}." in uploads/ root (no subfolder)
+    const cityFilename = `city_${safe}.mp3`;
+    const cityText     = `New caller from ${region.name}.`;
+    const cityPath     = path.join(UPLOADS_DIR, cityFilename);
+    if (needsRegenerationGlobal(cityPath, cityText)) {
+      try {
+        await generateTTS(cityText, cityFilename, undefined, voiceId);
+        writeSidecarGlobal(cityPath, cityText);
+        generated++;
+        await sleep(DELAY_MS);
+      } catch (err: any) {
+        console.error(`[audio-autogen] city ${cityFilename}: ${err?.message ?? err}`);
+        await sleep(DELAY_MS);
+      }
+    } else { skipped++; }
+  }
+
+  if (generated > 0) {
+    console.log(`[audio-autogen] region words: generated ${generated}, existed ${skipped}`);
+  }
+}
+
+/**
+ * On-demand trigger: call whenever a new region is first encountered in a
+ * live call so the city word and city announcement files are generated
+ * before the next time that region appears in the browse stream.
+ */
+export function triggerCityWordAudio(regionName: string): void {
+  if (!process.env.ELEVENLABS_API_KEY) return;
+  (async () => {
+    let voiceFolder = "mm";
+    try {
+      const { storage } = await import("./storage");
+      const settings = await storage.getSiteSettings();
+      const cat = settings?.siteCategory ?? "MM";
+      voiceFolder = cat === "MW" ? "mw" : "mm";
+    } catch { /* default */ }
+
+    const safe = regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    const voiceId = getVoiceIdForFolder(voiceFolder);
+
+    const wordFilename = `city_word_${safe}.mp3`;
+    const wordPath     = path.join(UPLOADS_DIR, voiceFolder, wordFilename);
+    if (needsRegenerationGlobal(wordPath, regionName)) {
+      await generateTTS(regionName, wordFilename, voiceFolder).catch(() => {});
+      writeSidecarGlobal(wordPath, regionName);
+    }
+
+    const cityFilename = `city_${safe}.mp3`;
+    const cityText     = `New caller from ${regionName}.`;
+    const cityPath     = path.join(UPLOADS_DIR, cityFilename);
+    if (needsRegenerationGlobal(cityPath, cityText)) {
+      await generateTTS(cityText, cityFilename, undefined, voiceId).catch(() => {});
+      writeSidecarGlobal(cityPath, cityText);
+    }
+  })().catch(err => console.error(`[audio-autogen] triggerCityWordAudio error for "${regionName}":`, err));
+}
+
 let running = false;
 
 async function safeRun() {
@@ -861,6 +986,7 @@ async function safeRun() {
   try {
     await runAudioAutogen();
     await runLocationAutogen();
+    await generateRegionWordAudio();
   } finally {
     running = false;
   }
