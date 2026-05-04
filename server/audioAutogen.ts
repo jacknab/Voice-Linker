@@ -248,6 +248,7 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "collect_card_number_retry.mp3", text: "That number doesn't look right. Please try again and enter your 16-digit card number." },
   { filename: "collect_card_expiry.mp3",       text: "Please enter your card's expiration date. Enter the 2-digit month followed by the 2-digit year." },
   { filename: "collect_security_code.mp3",     text: "Enter your 3 or 4 digit security code, then press pound." },
+  { filename: "collect_postal_code.mp3",       text: "Please enter your billing zip code, then press pound." },
   { filename: "card_number_invalid.mp3",       text: "We were unable to verify that card number. Please check your card and try again." },
 
   // ── Membership management ──────────────────────────────────────────────────
@@ -358,6 +359,27 @@ export const MM_PROMPTS: Prompt[] = [
 //   }),
 // ];
 
+// ── Shared label helpers (also used in ivr-default.ts) ──────────────────────
+
+export function centsToLabel(cents: number): string {
+  const dollars = Math.floor(cents / 100);
+  const remaining = cents % 100;
+  if (remaining === 0) return `${dollars} dollar${dollars !== 1 ? "s" : ""}`;
+  return `${dollars} dollar${dollars !== 1 ? "s" : ""} and ${remaining} cent${remaining !== 1 ? "s" : ""}`;
+}
+
+export function minutesToDurationLabel(minutes: number): string {
+  if (minutes >= 1440 && minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return `${days} day${days !== 1 ? "s" : ""}`;
+  }
+  if (minutes >= 60 && minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return `${hours} hour${hours !== 1 ? "s" : ""}`;
+  }
+  return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+}
+
 /**
  * Generate the full spoken text for a time-remaining announcement.
  * e.g. 90  → "You have 1 hour and 30 minutes remaining."
@@ -424,6 +446,117 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ── Helpers shared between runAudioAutogen and generateDynamicPackagePrompts ─
+
+function needsRegenerationGlobal(filePath: string, text: string): boolean {
+  if (!fs.existsSync(filePath)) return true;
+  const sidecar = filePath.replace(/\.mp3$/i, ".txt");
+  if (!fs.existsSync(sidecar)) {
+    fs.unlinkSync(filePath);
+    return true;
+  }
+  try {
+    const stored = fs.readFileSync(sidecar, "utf8").trim();
+    if (stored !== text.trim()) {
+      fs.unlinkSync(filePath);
+      fs.unlinkSync(sidecar);
+      return true;
+    }
+  } catch { /* unreadable sidecar — leave the mp3 in place */ }
+  return false;
+}
+
+function writeSidecarGlobal(filePath: string, text: string): void {
+  try {
+    fs.writeFileSync(filePath.replace(/\.mp3$/i, ".txt"), text.trim(), "utf8");
+  } catch { /* non-fatal */ }
+}
+
+/**
+ * Generate per-plan audio files whose text depends on current admin settings
+ * (plan name, minutes, price). Re-generates whenever the DB text changes.
+ *
+ * Produces for each active plan (minutes > 0 and priceCents > 0):
+ *   package_label_planN.mp3  — spoken in the confirm-package IVR step
+ *   payment_charged_planN.mp3 — spoken after a successful purchase
+ */
+async function generateDynamicPackagePrompts(folder: string): Promise<{ generated: number; failed: number; skipped: number }> {
+  const stats = { generated: 0, failed: 0, skipped: 0 };
+  let settings: any;
+  try {
+    const { storage } = await import("./storage");
+    settings = await storage.getMembershipSettings();
+  } catch (err) {
+    console.error("[audio-autogen] dynamic package prompts: could not load settings:", err);
+    return stats;
+  }
+
+  const billingMode: string = settings.billingMode ?? "per_minute";
+  const plans = [
+    { key: "plan1", displayName: settings.plan1Name, minutes: settings.plan1Minutes, priceCents: settings.plan1PriceCents },
+    { key: "plan2", displayName: settings.plan2Name, minutes: settings.plan2Minutes, priceCents: settings.plan2PriceCents },
+    { key: "plan3", displayName: settings.plan3Name, minutes: settings.plan3Minutes, priceCents: settings.plan3PriceCents },
+  ].filter(p => p.minutes > 0 && p.priceCents > 0);
+
+  if (plans.length === 0) return stats;
+
+  const dir = path.join(UPLOADS_DIR, folder);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  for (const plan of plans) {
+    const durationLabel = minutesToDurationLabel(plan.minutes);
+    const priceLabel = centsToLabel(plan.priceCents);
+
+    // ── package_label_planN.mp3 (confirm-package dynamic part) ──────────────
+    let labelText: string;
+    if (billingMode === "per_24h") {
+      labelText = `the ${plan.displayName} package for ${priceLabel}.`;
+    } else if (billingMode === "per_day") {
+      labelText = `${durationLabel} for ${priceLabel}.`;
+    } else {
+      labelText = `${plan.minutes.toLocaleString()} minutes for ${priceLabel}.`;
+    }
+
+    const labelFile = path.join(dir, `package_label_${plan.key}.mp3`);
+    if (needsRegenerationGlobal(labelFile, labelText)) {
+      try {
+        await generateTTS(labelText, `package_label_${plan.key}.mp3`, folder);
+        writeSidecarGlobal(labelFile, labelText);
+        console.log(`[audio-autogen] generated ${folder}/package_label_${plan.key}.mp3`);
+        stats.generated++;
+        await sleep(DELAY_MS);
+      } catch (err: any) {
+        console.error(`[audio-autogen] failed ${folder}/package_label_${plan.key}.mp3: ${err?.message}`);
+        stats.failed++;
+        await sleep(DELAY_MS);
+      }
+    } else {
+      stats.skipped++;
+    }
+
+    // ── payment_charged_planN.mp3 (payment success dynamic part) ────────────
+    const chargedText = `${durationLabel} of access. Your card has been charged ${priceLabel}.`;
+    const chargedFile = path.join(dir, `payment_charged_${plan.key}.mp3`);
+    if (needsRegenerationGlobal(chargedFile, chargedText)) {
+      try {
+        await generateTTS(chargedText, `payment_charged_${plan.key}.mp3`, folder);
+        writeSidecarGlobal(chargedFile, chargedText);
+        console.log(`[audio-autogen] generated ${folder}/payment_charged_${plan.key}.mp3`);
+        stats.generated++;
+        await sleep(DELAY_MS);
+      } catch (err: any) {
+        console.error(`[audio-autogen] failed ${folder}/payment_charged_${plan.key}.mp3: ${err?.message}`);
+        stats.failed++;
+        await sleep(DELAY_MS);
+      }
+    } else {
+      stats.skipped++;
+    }
+  }
+
+  return stats;
+}
+
 async function runAudioAutogen(): Promise<void> {
   if (!process.env.ELEVENLABS_API_KEY) {
     console.log("[audio-autogen] ELEVENLABS_API_KEY not set — skipping.");
@@ -452,41 +585,6 @@ async function runAudioAutogen(): Promise<void> {
   let skipped = 0;
   let failed = 0;
 
-  /**
-   * Returns true when the audio file needs to be (re)generated.
-   * A sidecar .txt file records the exact prompt text used for the last
-   * successful generation.  If the text has changed since then, the stale
-   * audio file is deleted so it will be regenerated on this run.
-   */
-  function needsRegeneration(filePath: string, text: string): boolean {
-    if (!fs.existsSync(filePath)) return true;
-    const sidecar = filePath.replace(/\.mp3$/i, ".txt");
-    if (!fs.existsSync(sidecar)) {
-      // No sidecar means the file predates the sidecar system — text may have
-      // changed since it was generated.  Delete it so it gets regenerated with
-      // the current text (and a fresh sidecar written afterward).
-      fs.unlinkSync(filePath);
-      return true;
-    }
-    try {
-      const stored = fs.readFileSync(sidecar, "utf8").trim();
-      if (stored !== text.trim()) {
-        // Text has changed — delete stale audio so it gets regenerated.
-        fs.unlinkSync(filePath);
-        fs.unlinkSync(sidecar);
-        return true;
-      }
-    } catch { /* unreadable sidecar — leave the mp3 in place */ }
-    return false;
-  }
-
-  /** Write the sidecar text file after a successful generation. */
-  function writeSidecar(filePath: string, text: string): void {
-    try {
-      fs.writeFileSync(filePath.replace(/\.mp3$/i, ".txt"), text.trim(), "utf8");
-    } catch { /* non-fatal */ }
-  }
-
   for (const { folder, prompts } of activeFolders) {
     const dir = path.join(UPLOADS_DIR, folder);
 
@@ -494,11 +592,11 @@ async function runAudioAutogen(): Promise<void> {
       if (!prompt.text.trim()) { skipped++; continue; }
 
       const filePath = path.join(dir, prompt.filename);
-      if (!needsRegeneration(filePath, prompt.text)) { skipped++; continue; }
+      if (!needsRegenerationGlobal(filePath, prompt.text)) { skipped++; continue; }
 
       try {
         await generateTTS(prompt.text.trim(), prompt.filename, folder);
-        writeSidecar(filePath, prompt.text);
+        writeSidecarGlobal(filePath, prompt.text);
         console.log(`[audio-autogen] generated ${folder}/${prompt.filename}`);
         generated++;
         await sleep(DELAY_MS);
@@ -518,10 +616,10 @@ async function runAudioAutogen(): Promise<void> {
   const rogerVoiceId = getVoiceIdForRoger();
   for (const prompt of ROGER_PROMPTS) {
     const filePath = path.join(UPLOADS_DIR, prompt.filename);
-    if (!needsRegeneration(filePath, prompt.text)) { skipped++; continue; }
+    if (!needsRegenerationGlobal(filePath, prompt.text)) { skipped++; continue; }
     try {
       await generateTTS(prompt.text.trim(), prompt.filename, undefined, rogerVoiceId, "eleven_v3");
-      writeSidecar(filePath, prompt.text);
+      writeSidecarGlobal(filePath, prompt.text);
       console.log(`[audio-autogen] generated roger/${prompt.filename}`);
       generated++;
       await sleep(DELAY_MS);
@@ -530,6 +628,14 @@ async function runAudioAutogen(): Promise<void> {
       failed++;
       await sleep(DELAY_MS);
     }
+  }
+
+  // ── Dynamic per-plan package prompts ────────────────────────────────────
+  for (const { folder } of activeFolders) {
+    const dynStats = await generateDynamicPackagePrompts(folder);
+    generated += dynStats.generated;
+    failed += dynStats.failed;
+    skipped += dynStats.skipped;
   }
 
   if (generated > 0 || failed > 0) {

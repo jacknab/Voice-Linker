@@ -12,7 +12,7 @@ import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
-import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText, ROGER_PROMPTS } from "./audioAutogen";
+import { locationToFilename, triggerLocationAudio, minutesToAnnouncementText, ROGER_PROMPTS, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
 import type { BrowseQueueItem, CallerBrowseState } from "./ivr-browse-state";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
 
@@ -55,24 +55,6 @@ function getRequestCallSid(req: Request): string | null {
 }
 
 
-function centsToLabel(cents: number): string {
-  const dollars = Math.floor(cents / 100);
-  const remaining = cents % 100;
-  if (remaining === 0) return `${dollars} dollar${dollars !== 1 ? "s" : ""}`;
-  return `${dollars} dollar${dollars !== 1 ? "s" : ""} and ${remaining} cent${remaining !== 1 ? "s" : ""}`;
-}
-
-function minutesToDurationLabel(minutes: number): string {
-  if (minutes >= 1440 && minutes % 1440 === 0) {
-    const days = minutes / 1440;
-    return `${days} day${days !== 1 ? "s" : ""}`;
-  }
-  if (minutes >= 60 && minutes % 60 === 0) {
-    const hours = minutes / 60;
-    return `${hours} hour${hours !== 1 ? "s" : ""}`;
-  }
-  return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
-}
 
 type MembershipPackage = { name: string; displayName: string; label: string; minutes: number; priceCents: number; priceLabel: string };
 
@@ -7067,7 +7049,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else {
       playPrompt(gather, req, "package_confirm_prefix.mp3", "You selected");
     }
-    gather.say(dynamicPart);
+    playPrompt(gather, req, `package_label_${session.packageName}.mp3`, dynamicPart);
     playPrompt(gather, req, "package_confirm_suffix.mp3", "If this is correct press one. To select a different package press two.");
     twiml.redirect("/voice/confirm-package");
     res.type("text/xml");
@@ -7175,6 +7157,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         "Enter your expiration date, then press pound. Enter the 2-digit month followed by the last 2 digits of the year.");
       playPrompt(pay.prompt({ ["for"]: "securityCode" }), req, "collect_security_code.mp3",
         "Enter your 3 or 4 digit security code, then press pound.");
+      playPrompt(pay.prompt({ ["for"]: "postalCode" }), req, "collect_postal_code.mp3",
+        "Please enter your billing zip code, then press pound.");
 
     } catch (err: any) {
       const errStatus = err.status ?? "?";
@@ -7253,6 +7237,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
         pendingPaymentResults.set(callSid, {
           success: true,
+          packageName: session.packageName,
           packageLabel: session.packageLabel,
           priceLabel: session.priceLabel,
           totalMinutes,
@@ -7292,7 +7277,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     if (result?.success) {
       playPrompt(twiml, req, "payment_success_prefix.mp3", "Payment successful! You now have");
-      twiml.say(`${result.packageLabel} of access. Your card has been charged ${result.priceLabel}.`);
+      playPrompt(twiml, req, `payment_charged_${result.packageName}.mp3`, `${result.packageLabel} of access. Your card has been charged ${result.priceLabel}.`);
       if (result.bonusMinutes && result.bonusMinutes > 0 && result.totalMinutes) {
         playPrompt(twiml, req, "payment_success_bonus.mp3",
           `Plus your first purchase bonus doubles your time — enjoy ${minutesToDurationLabel(result.totalMinutes)} total!`
@@ -7390,9 +7375,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         await storage.getOrCreateMailbox(user.id);
 
         // Split payment success into static audio parts + inline TTS for dynamic values
-        // Static prefix → TTS (package + price) → optional bonus audio → static suffix
+        // Static prefix → plan-specific charged audio → optional bonus audio → static suffix
         playPrompt(twiml, req, "payment_success_prefix.mp3", "Payment successful! You now have");
-        twiml.say(`${session.packageLabel} of access. Your card has been charged ${session.priceLabel}.`);
+        playPrompt(twiml, req, `payment_charged_${session.packageName}.mp3`, `${session.packageLabel} of access. Your card has been charged ${session.priceLabel}.`);
         if (bonusMinutes > 0) {
           playPrompt(twiml, req, "payment_success_bonus.mp3",
             `Plus your first purchase bonus doubles your time — enjoy ${minutesToDurationLabel(totalMinutes)} total!`
