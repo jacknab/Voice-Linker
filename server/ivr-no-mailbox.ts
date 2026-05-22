@@ -294,8 +294,20 @@ interface LiveBillingSession {
   storedBaseUrl: string;
   initiatorWarned: boolean;
   inviteeWarned: boolean;
+  startedAt: number;
 }
 const liveBillingSessions = new Map<string, LiveBillingSession>(); // room → session
+
+export function getLiveConnectionsState() {
+  return Array.from(liveBillingSessions.values()).map(s => ({
+    room: s.room,
+    initiatorUserId: s.initiatorUserId,
+    inviteeUserId: s.inviteeUserId,
+    initiatorCallSid: s.initiatorCallSid,
+    inviteeCallSid: s.inviteeCallSid,
+    startedAt: s.startedAt,
+  }));
+}
 
 const LIVE_TICK_MS = 5_000;             // deduct every 5 seconds
 const LIVE_LOW_BALANCE_SECONDS = 300;   // warn at < 5 minutes remaining
@@ -782,6 +794,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       initiatorUserId, inviteeUserId,
       room, storedBaseUrl,
       initiatorWarned: false, inviteeWarned: false,
+      startedAt: Date.now(),
     };
 
     session.intervalId = setInterval(async () => {

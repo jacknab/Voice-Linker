@@ -889,6 +889,47 @@ export async function registerRoutes(
     }
   });
 
+  // --- Admin: Active live conference connections ---
+  app.get("/api/admin/live-connections", async (_req, res) => {
+    try {
+      const ivrFile = process.env.IVR_FILE ?? "./ivr-default";
+      const ivrMod = await import(ivrFile.endsWith(".ts") || ivrFile.endsWith(".js") ? ivrFile : `${ivrFile}.js`).catch(() => null);
+      const sessions: Array<{
+        room: string; initiatorUserId: string; inviteeUserId: string;
+        initiatorCallSid: string; inviteeCallSid: string; startedAt: number;
+      }> = ivrMod?.getLiveConnectionsState ? ivrMod.getLiveConnectionsState() : [];
+
+      const enriched = await Promise.all(sessions.map(async s => {
+        const [initiator, invitee] = await Promise.all([
+          storage.getUserById(s.initiatorUserId).catch(() => null),
+          storage.getUserById(s.inviteeUserId).catch(() => null),
+        ]);
+        return {
+          room: s.room,
+          startedAt: s.startedAt,
+          durationSeconds: Math.floor((Date.now() - s.startedAt) / 1000),
+          initiator: {
+            userId: s.initiatorUserId,
+            callSid: s.initiatorCallSid,
+            phoneNumber: initiator?.phoneNumber ?? "Unknown",
+            remainingSeconds: initiator?.remainingSeconds ?? 0,
+          },
+          invitee: {
+            userId: s.inviteeUserId,
+            callSid: s.inviteeCallSid,
+            phoneNumber: invitee?.phoneNumber ?? "Unknown",
+            remainingSeconds: invitee?.remainingSeconds ?? 0,
+          },
+        };
+      }));
+
+      res.json({ sessions: enriched, count: enriched.length });
+    } catch (e) {
+      console.error("[admin] /api/admin/live-connections GET error:", e);
+      res.status(500).json({ message: "Failed to fetch live connections" });
+    }
+  });
+
   // --- Admin: Caller detail ---
   app.get("/api/admin/callers/:id", async (req, res) => {
     try {

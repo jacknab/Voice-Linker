@@ -3117,6 +3117,20 @@ function DashboardTab() {
     refetchInterval: 5000,
   });
 
+  const { data: liveConnectionsData } = useQuery<{
+    sessions: Array<{
+      room: string;
+      startedAt: number;
+      durationSeconds: number;
+      initiator: { userId: string; callSid: string; phoneNumber: string; remainingSeconds: number };
+      invitee: { userId: string; callSid: string; phoneNumber: string; remainingSeconds: number };
+    }>;
+    count: number;
+  }>({
+    queryKey: ["/api/admin/live-connections"],
+    refetchInterval: 5000,
+  });
+
   const liveCallers = liveCallersData?.callers ?? [];
   const lastLiveFeedUpdate = liveCallersUpdatedAt ? new Date(liveCallersUpdatedAt).toLocaleTimeString() : null;
 
@@ -3187,6 +3201,58 @@ function DashboardTab() {
                     </div>
                     <div className="font-mono text-[10px] text-gray-400 mt-1">{formatDuration(caller.durationSeconds)} on line</div>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Live Connections Panel ────────────────────────────────────────── */}
+      <div className="border border-gray-200 rounded-xl bg-white overflow-hidden" data-testid="card-live-connections">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <PhoneCall size={15} className="text-rose-500" />
+            <span className="font-mono font-bold text-sm tracking-widest uppercase text-gray-800">Live Conferences</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider ${
+              (liveConnectionsData?.count ?? 0) > 0
+                ? "bg-rose-100 text-rose-700"
+                : "bg-gray-100 text-gray-500"
+            }`}>
+              {liveConnectionsData?.count ?? 0} active
+            </span>
+          </div>
+          <span className="font-mono text-[10px] text-gray-400">Auto-refresh 5s</span>
+        </div>
+        <div className="p-5">
+          {!liveConnectionsData || liveConnectionsData.sessions.length === 0 ? (
+            <div className="text-gray-400 font-mono text-xs text-center py-5">No live conferences in progress.</div>
+          ) : (
+            <div className="space-y-3">
+              {liveConnectionsData.sessions.map(session => (
+                <div key={session.room} className="border border-rose-100 rounded-lg p-3 bg-rose-50/40">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                      <span className="font-mono text-[10px] font-bold text-rose-700 uppercase tracking-wider">Connected</span>
+                    </div>
+                    <span className="font-mono text-[10px] text-gray-500">{formatDuration(session.durationSeconds)} elapsed</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: "Caller A", p: session.initiator },
+                      { label: "Caller B", p: session.invitee },
+                    ].map(({ label, p }) => (
+                      <div key={p.userId} className="border border-gray-200 rounded-md p-2 bg-white">
+                        <div className="font-mono text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">{label}</div>
+                        <div className="font-mono text-xs font-bold text-gray-800">{maskPhone(p.phoneNumber)}</div>
+                        <div className="font-mono text-[10px] text-gray-400 mt-0.5">
+                          {Math.floor(p.remainingSeconds / 60)} min remaining
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="font-mono text-[10px] text-gray-300 mt-2 truncate">Room: {session.room}</div>
                 </div>
               ))}
             </div>
