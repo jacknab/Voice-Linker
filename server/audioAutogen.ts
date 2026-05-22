@@ -1022,6 +1022,35 @@ function wipePromptFolder(folder: string): number {
  * consolidated to the MM voice only.
  * Called by the admin Force Regenerate endpoint.
  */
+/**
+ * Generate (or force-regenerate) a single named system prompt file.
+ * Deletes the existing MP3 + sidecar so needsRegeneration returns true,
+ * then calls generateTTS immediately.  Works for any filename in MM_PROMPTS.
+ * Returns the folder path the file was written to, or throws on failure.
+ */
+export async function forceRegenSinglePrompt(filename: string): Promise<{ folder: string; file: string }> {
+  if (!process.env.ELEVENLABS_API_KEY) {
+    throw new Error("ELEVENLABS_API_KEY is not configured.");
+  }
+
+  const prompt = MM_PROMPTS.find(p => p.filename === filename);
+  if (!prompt) throw new Error(`Prompt "${filename}" not found in MM_PROMPTS.`);
+  if (!prompt.text.trim()) throw new Error(`Prompt "${filename}" has no text — cannot generate.`);
+
+  const folder = "mm";
+  const dir = path.join(UPLOADS_DIR, folder);
+  const filePath = path.join(dir, filename);
+  const sidecar = filePath.replace(/\.mp3$/i, ".txt");
+
+  try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch { /* ignore */ }
+  try { if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar); } catch { /* ignore */ }
+
+  await generateTTS(prompt.text.trim(), filename, folder);
+  writeSidecarGlobal(filePath, prompt.text);
+  console.log(`[audio-autogen] forceRegenSinglePrompt: generated ${folder}/${filename}`);
+  return { folder, file: filePath };
+}
+
 export async function forceRegenAllSystemPrompts(): Promise<{ queued: number }> {
   let deleted = 0;
 

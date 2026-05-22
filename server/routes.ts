@@ -13,7 +13,7 @@ import * as mm from "music-metadata";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks } from "./autoModeration";
 import { generateTTS, listVoices, getVoiceIdForFolder, getVoiceIdForRoger, getVoiceIdForGame, getElevenLabsApiKey } from "./elevenlabs";
-import { triggerLocationAudio, forceRegenAllSystemPrompts, ROGER_PROMPTS } from "./audioAutogen";
+import { triggerLocationAudio, forceRegenAllSystemPrompts, forceRegenSinglePrompt, ROGER_PROMPTS } from "./audioAutogen";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { getUncachableStripeClient } from "./stripeClient";
 import { getRedisStatus, flushBrowseSessions } from "./redis";
@@ -1400,6 +1400,22 @@ export async function registerRoutes(
     } catch (e: any) {
       console.error("[admin/tts/force-regen-system] failed:", e);
       res.status(500).json({ message: e?.message ?? "Force regen failed" });
+    }
+  });
+
+  // Generate (or force-regenerate) a single named system prompt file immediately.
+  // Body: { filename: "here_is_your_greeting.mp3" }
+  app.post("/api/admin/tts/regen-single", async (req, res) => {
+    const { filename } = req.body ?? {};
+    if (!filename || typeof filename !== "string") {
+      return res.status(400).json({ message: "filename is required" });
+    }
+    try {
+      const result = await forceRegenSinglePrompt(filename);
+      res.json({ ok: true, message: `Generated ${result.folder}/${filename} successfully.` });
+    } catch (e: any) {
+      console.error("[admin/tts/regen-single] failed:", e);
+      res.status(500).json({ message: e?.message ?? "Generation failed" });
     }
   });
 
