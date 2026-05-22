@@ -919,9 +919,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.log(`[live-billing] room=${room} initiator=${initiatorRemaining}s invitee=${inviteeRemaining}s`);
 
         const warningUrl = `${s.storedBaseUrl}/voice/live-low-balance-warning`;
+        const billingFree = isFreeModeActive(liveSettings) || liveSettings.billingMode === "per_day" || liveSettings.billingMode === "per_24h";
 
-        // Play low-balance warning to the specific participant only
-        if (!s.initiatorWarned && initiatorRemaining > 0 && initiatorRemaining < LIVE_LOW_BALANCE_SECONDS) {
+        // Play low-balance warning to the specific participant only (suppressed in free/flat-rate mode)
+        if (!billingFree && !s.initiatorWarned && initiatorRemaining > 0 && initiatorRemaining < LIVE_LOW_BALANCE_SECONDS) {
           s.initiatorWarned = true;
           const conferenceSid = await getConferenceSid(client, room);
           if (conferenceSid) {
@@ -932,7 +933,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             console.log(`[live-billing] Low-balance warning → initiator callSid=${s.initiatorCallSid}`);
           }
         }
-        if (!s.inviteeWarned && inviteeRemaining > 0 && inviteeRemaining < LIVE_LOW_BALANCE_SECONDS) {
+        if (!billingFree && !s.inviteeWarned && inviteeRemaining > 0 && inviteeRemaining < LIVE_LOW_BALANCE_SECONDS) {
           s.inviteeWarned = true;
           const conferenceSid = await getConferenceSid(client, room);
           if (conferenceSid) {
@@ -944,15 +945,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
         }
 
-        // Auto-disconnect whichever caller ran out of time
-        if (initiatorRemaining <= 0) {
+        // Auto-disconnect whichever caller ran out of time (skipped in free/flat-rate mode)
+        if (!billingFree && initiatorRemaining <= 0) {
           console.log(`[live-billing] Initiator userId=${s.initiatorUserId} out of time — ending call`);
           stopLiveBilling(room);
           client.calls(s.initiatorCallSid).update({ status: "completed" })
             .catch(e => console.error("[live-billing] End-call error (initiator):", e));
           return;
         }
-        if (inviteeRemaining <= 0) {
+        if (!billingFree && inviteeRemaining <= 0) {
           console.log(`[live-billing] Invitee userId=${s.inviteeUserId} out of time — ending call`);
           stopLiveBilling(room);
           client.calls(s.inviteeCallSid).update({ status: "completed" })
@@ -2204,8 +2205,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
+      const timeSettings = await getMembershipSettingsCached();
+      const inFreeMode = isFreeModeActive(timeSettings);
+
       // ── Under-5-minute warning at main menu (shown once per call) ──────
-      if (hasMembership && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
+      if (!inFreeMode && hasMembership && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
         callWarningShown.add(callSid);
         twiml.redirect("/voice/time-warning");
         res.type("text/xml");
@@ -2213,7 +2217,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       // ── First-visit balance announcement ────────────────────────────────
-      if (hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
+      if (!inFreeMode && hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
         callTimeAnnounced.add(callSid);
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
       }
@@ -2663,8 +2667,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
+      const mwTimeSettings = await getMembershipSettingsCached();
+      const mwInFreeMode = isFreeModeActive(mwTimeSettings);
+
       // Under-5-minute warning (once per call)
-      if (hasMembership && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
+      if (!mwInFreeMode && hasMembership && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
         callWarningShown.add(callSid);
         twiml.redirect("/voice/time-warning");
         res.type("text/xml");
@@ -2672,7 +2679,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       // First-visit balance announcement
-      if (hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
+      if (!mwInFreeMode && hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
         callTimeAnnounced.add(callSid);
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
       }

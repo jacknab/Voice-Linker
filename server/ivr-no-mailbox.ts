@@ -808,11 +808,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const client = twilio(accountSid, authToken);
 
         const tickSeconds = LIVE_TICK_MS / 1000;
-        // In per_day and per_24h modes, calls are free — read balance without deducting.
-        const { billingMode: liveBillingMode } = await getMembershipSettingsCached();
+        // In per_day, per_24h, or free mode, calls are free — read balance without deducting.
+        const liveSettings = await getMembershipSettingsCached();
         let initiatorUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
         let inviteeUser: Awaited<ReturnType<typeof storage.deductSeconds>>;
-        if (liveBillingMode === "per_day" || liveBillingMode === "per_24h") {
+        if (liveSettings.billingMode === "per_day" || liveSettings.billingMode === "per_24h" || isFreeModeActive(liveSettings)) {
           const [iu, vv] = await Promise.all([
             storage.getUserById(s.initiatorUserId),
             storage.getUserById(s.inviteeUserId),
@@ -832,9 +832,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.log(`[live-billing] room=${room} initiator=${initiatorRemaining}s invitee=${inviteeRemaining}s`);
 
         const warningUrl = `${s.storedBaseUrl}/voice/live-low-balance-warning`;
+        const billingFree = isFreeModeActive(liveSettings) || liveSettings.billingMode === "per_day" || liveSettings.billingMode === "per_24h";
 
-        // Play low-balance warning to the specific participant only
-        if (!s.initiatorWarned && initiatorRemaining > 0 && initiatorRemaining < LIVE_LOW_BALANCE_SECONDS) {
+        // Play low-balance warning to the specific participant only (suppressed in free/flat-rate mode)
+        if (!billingFree && !s.initiatorWarned && initiatorRemaining > 0 && initiatorRemaining < LIVE_LOW_BALANCE_SECONDS) {
           s.initiatorWarned = true;
           const conferenceSid = await getConferenceSid(client, room);
           if (conferenceSid) {
@@ -845,7 +846,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             console.log(`[live-billing] Low-balance warning → initiator callSid=${s.initiatorCallSid}`);
           }
         }
-        if (!s.inviteeWarned && inviteeRemaining > 0 && inviteeRemaining < LIVE_LOW_BALANCE_SECONDS) {
+        if (!billingFree && !s.inviteeWarned && inviteeRemaining > 0 && inviteeRemaining < LIVE_LOW_BALANCE_SECONDS) {
           s.inviteeWarned = true;
           const conferenceSid = await getConferenceSid(client, room);
           if (conferenceSid) {
@@ -857,15 +858,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
         }
 
-        // Auto-disconnect whichever caller ran out of time
-        if (initiatorRemaining <= 0) {
+        // Auto-disconnect whichever caller ran out of time (skipped in free/flat-rate mode)
+        if (!billingFree && initiatorRemaining <= 0) {
           console.log(`[live-billing] Initiator userId=${s.initiatorUserId} out of time — ending call`);
           stopLiveBilling(room);
           client.calls(s.initiatorCallSid).update({ status: "completed" })
             .catch(e => console.error("[live-billing] End-call error (initiator):", e));
           return;
         }
-        if (inviteeRemaining <= 0) {
+        if (!billingFree && inviteeRemaining <= 0) {
           console.log(`[live-billing] Invitee userId=${s.inviteeUserId} out of time — ending call`);
           stopLiveBilling(room);
           client.calls(s.inviteeCallSid).update({ status: "completed" })
@@ -1924,8 +1925,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
+      const timeSettings = await getMembershipSettingsCached();
+      const inFreeMode = isFreeModeActive(timeSettings);
+
       // ── Under-5-minute warning at main menu (shown once per call) ──────
-      if (hasMembership && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
+      if (!inFreeMode && hasMembership && remainingSeconds < 300 && remainingSeconds > 0 && !callWarningShown.has(callSid)) {
         callWarningShown.add(callSid);
         twiml.redirect("/voice/time-warning");
         res.type("text/xml");
@@ -1933,7 +1937,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       // ── First-visit balance announcement ────────────────────────────────
-      if (hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
+      if (!inFreeMode && hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
         callTimeAnnounced.add(callSid);
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
       }
