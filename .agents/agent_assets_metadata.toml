@@ -149,3 +149,9 @@ id = "jly9JuSeSfO9jZUkFlgZ-"
 uri = "file://codecanyon-listing.md"
 type = "text"
 title = "CodeCanyon Listing — Key Features as Tags"
+
+[[outputs]]
+id = "ayo7aGKqJnogGpkTTMQL2"
+uri = "file://docs/live-connector.md"
+type = "text"
+title = "Live Connector — Technical Reference"
