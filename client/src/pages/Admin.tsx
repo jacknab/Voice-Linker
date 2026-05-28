@@ -934,7 +934,8 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   // ── 8. LIVE 1-ON-1 CONNECT ────────────────────────────────────────────────
   { group: "live", filename: "live_connect_disclaimer.mp3", label: "Live Connect — Disclaimer (Initiator Hears First)", text: "Please be respectful and kind. You are about to request a live one on one connection." },
   { group: "live", filename: "live_connect_ringing.mp3",    label: "Live Connect — Ringing (Sound Effect)",             text: "" },
-  { group: "live", filename: "live_connect_connecting.mp3", label: "Live Connect — Connecting Now",                     text: "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!" },
+  { group: "live", filename: "live_connect_accepted.mp3",   label: "Live Connect — Invite Accepted (Initiator Only)",   text: "He liked what he heard and he's ready to connect with you." },
+  { group: "live", filename: "live_connect_connecting.mp3", label: "Live Connect — You're Connected (Both Callers)",    text: "You're connected. You can leave the connection at any time by pressing the pound key. Say hi!" },
   { group: "live", filename: "live_connect_chime.mp3",      label: "Live Connect — Incoming Chime (Sound Effect)",      text: "" },
   { group: "live", filename: "live_invite_options.mp3",     label: "Live Invite — Options (Invitee Hears)",             text: "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4." },
   { group: "live", filename: "live_connect_ended.mp3",      label: "Live Connect — Call Ended",                         text: "Your live connection has ended. Returning you to the male box." },

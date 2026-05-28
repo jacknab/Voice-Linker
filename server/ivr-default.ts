@@ -6509,8 +6509,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.redirect("/voice/browse-profiles");
       } else if (invite.status === "accepted") {
         // B accepted — bridge the conference
+        playPrompt(twiml, req, "live_connect_accepted.mp3",
+          "He liked what he heard and he's ready to connect with you.");
         playPrompt(twiml, req, "live_connect_connecting.mp3",
-          "He liked what he heard and he's ready to connect with you. You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
+          "You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
         const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}&room=${encodeURIComponent(invite.conferenceRoom)}` });
         (dial.conference as any)(invite.conferenceRoom, {
           startConferenceOnEnter: true,
@@ -6662,7 +6664,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
 
         playPrompt(twiml, req, "live_connect_connecting.mp3",
-          "He liked what he heard and he's ready to connect with you. You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
+          "You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
         const dial = twiml.dial({ action: `/voice/live-connect-complete?role=invitee&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}&room=${encodeURIComponent(room)}` });
         (dial.conference as any)(room, {
           startConferenceOnEnter: true,
@@ -6777,8 +6779,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const initiatorUserId = req.query.initiatorUserId as string;
 
     try {
+      playPrompt(twiml, req, "live_connect_accepted.mp3",
+        "He liked what he heard and he's ready to connect with you.");
       playPrompt(twiml, req, "live_connect_connecting.mp3",
-        "He liked what he heard and he's ready to connect with you. You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
+        "You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
       const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(initiatorUserId)}&room=${encodeURIComponent(room)}` });
       (dial.conference as any)(room, {
         startConferenceOnEnter: true,
