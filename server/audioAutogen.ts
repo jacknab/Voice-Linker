@@ -125,6 +125,8 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "live_connect_left_line.mp3",     text: "Sorry, that caller has left the line." },
   { filename: "live_connect_no_minutes.mp3",    text: "You need at least 5 minutes remaining on your membership to connect live. Please add more time and try again." },
   { filename: "live_invite_expired.mp3",        text: "That live connection invitation has expired. Returning to profiles." },
+  { filename: "live_connect_hold.mp3",          text: "Please hold while he listens to your connection request. You can cancel your request at any time by pressing the pound key." },
+  { filename: "live_connect_listening.mp3",     text: "They're listening to your request right now. Please hold a moment for their response." },
 
   { filename: "cs_menu_intro.mp3",          text: "Customer service." },
   { filename: "cs_menu_options.mp3",        text: "Press 1 for your full account details. Press 2 to add time to your account. Press 3 for billing information. Press 4 to leave a message for our billing team. Press pound to return to the main menu." },

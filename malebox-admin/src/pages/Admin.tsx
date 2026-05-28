@@ -945,6 +945,8 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "live", filename: "live_connect_left_line.mp3",  label: "Live Connect — Caller Left the Line",               text: "Sorry, that caller has left the line." },
   { group: "live", filename: "live_connect_no_minutes.mp3", label: "Live Connect — Not Enough Minutes",                 text: "You need at least 5 minutes remaining on your membership to connect live. Please add more time and try again." },
   { group: "live", filename: "live_invite_expired.mp3",     label: "Live Invite — Expired",                             text: "That live connection invitation has expired. Returning to profiles." },
+  { group: "live", filename: "live_connect_hold.mp3",       label: "Live Connect — Hold (Initiator Waits)",             text: "Please hold while he listens to your connection request. You can cancel your request at any time by pressing the pound key." },
+  { group: "live", filename: "live_connect_listening.mp3",  label: "Live Connect — They're Listening (Real-Time)",      text: "They're listening to your request right now. Please hold a moment for their response." },
 
   // ── 9. NUMBERS & PHRASES — chained-audio building blocks ────────────────
   { group: "phrases", filename: "phrase_you_have.mp3", label: "Phrase — «You have»", text: "You have" },
