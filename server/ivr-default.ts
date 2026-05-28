@@ -321,6 +321,7 @@ const DIGIT_TO_CATEGORY: Record<string, string> = { ...DIGIT_TO_CATEGORY_PAGE1 }
 // ─── Live 1-on-1 Connect State ─────────────────────────────────────────────
 // Invite stored by targetUserId so the invitee can find it when they next browse
 interface LiveConnectInvite {
+  listeningNotified?: boolean;
   initiatorCallSid: string;
   initiatorUserId: string;
   initiatorNameRecordingUrl?: string | null;
@@ -5103,6 +5104,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // ── Check for a pending live connect invite first (time-sensitive) ──────
       const pendingInvite = pendingLiveInvites.get(user.id);
       if (pendingInvite && pendingInvite.status === "pending" && Date.now() - pendingInvite.createdAt < LIVE_INVITE_TTL_MS) {
+        // Real-time signal to initiator: B is now listening — fire once only
+        if (!pendingInvite.listeningNotified) {
+          pendingInvite.listeningNotified = true;
+          const accountSid = process.env.TWILIO_ACCOUNT_SID;
+          const authToken  = process.env.TWILIO_AUTH_TOKEN;
+          if (accountSid && authToken) {
+            const notifyUrl = `${baseUrl(req)}/voice/live-connect-listening-notify?targetUserId=${encodeURIComponent(user.id)}`;
+            twilio(accountSid, authToken)
+              .calls(pendingInvite.initiatorCallSid)
+              .update({ url: notifyUrl, method: "POST" })
+              .catch(err => console.error("[live-connect] listening-notify redirect failed:", err.message));
+          }
+        }
+
         const inviteGather = twiml.gather({
           numDigits: 1,
           action: `/voice/handle-live-invite?initiatorUserId=${pendingInvite.initiatorUserId}&room=${encodeURIComponent(pendingInvite.conferenceRoom)}`,
@@ -6514,13 +6529,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           "The caller did not answer. Returning to profiles.");
         twiml.redirect("/voice/browse-profiles");
       } else {
-        // Still pending — play hold message on first loop, listening message at 30-second mark
+        // Still pending — hold message on first loop only (listening message fires in real-time via REST redirect)
         if (ringCount === 0) {
           playPrompt(twiml, req, "live_connect_hold.mp3",
             "Please hold while he listens to your connection request. You can cancel your request at any time by pressing the pound key.");
-        } else if (ringCount === 3) {
-          playPrompt(twiml, req, "live_connect_listening.mp3",
-            "They're listening to your request right now. Please hold a moment for their response.");
         }
 
         // Wrap the ringing clip in a Gather so pressing # immediately cancels
@@ -6546,6 +6558,34 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       console.error("[live-connect] live-connect-wait error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the male box.");
       twiml.redirect("/voice/browse-profiles");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 8a-notify. Live Connect: Real-Time Listening Notification ──────────
+  // Fired via Twilio REST API redirect the instant Caller B starts playing the
+  // invite audio. Plays the "they're listening" message to A then loops back
+  // into the standard wait loop so A can still cancel with #.
+  app.post("/voice/live-connect-listening-notify", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const targetUserId = req.query.targetUserId as string;
+
+    try {
+      const invite = pendingLiveInvites.get(targetUserId);
+
+      if (!invite || invite.status !== "pending") {
+        // Already resolved while we were redirecting — just loop back
+        twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}`);
+      } else {
+        playPrompt(twiml, req, "live_connect_listening.mp3",
+          "They're listening to your request right now. Please hold a moment for their response.");
+        twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}`);
+      }
+    } catch (error) {
+      console.error("[live-connect] listening-notify error:", error);
+      twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}`);
     }
 
     res.type("text/xml");
