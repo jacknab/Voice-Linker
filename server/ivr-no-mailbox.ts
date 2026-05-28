@@ -272,6 +272,7 @@ interface LiveConnectInvite {
   initiatorUserId: string;
   initiatorNameRecordingUrl?: string | null;
   initiatorGreetingUrl: string;
+  inviteMessageUrl?: string | null;
   conferenceRoom: string;
   createdAt: number;
   status: "pending" | "accepted" | "declined";
@@ -5250,26 +5251,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             return res.send(twiml.toString());
           }
 
-          console.log(`[live-connect] ALL CHECKS PASSED — creating invite from userId=${user.id} → targetUserId=${profileUserId}`);
+          console.log(`[live-connect] ALL CHECKS PASSED — prompting for invite recording: userId=${user.id} → targetUserId=${profileUserId}`);
 
-          // All checks passed — create the invite
-          const callerProfile = await storage.getProfile(user.id);
-          const conferenceRoom = `live-${callSid}`;
-          pendingLiveInvites.set(profileUserId, {
-            initiatorCallSid: callSid,
-            initiatorUserId: user.id,
-            initiatorNameRecordingUrl: callerProfile?.nameRecordingUrl ?? null,
-            initiatorGreetingUrl: callerProfile?.recordingUrl ?? "",
-            conferenceRoom,
-            createdAt: Date.now(),
-            status: "pending",
+          // Prompt the caller to record a brief invite message
+          playPrompt(twiml, req, "live_connect_record_invite.mp3",
+            "Please record your invitation for this caller to join you in a private conversation. Record after the tone, hit any key when you're done.");
+          twiml.record({
+            maxLength: 30,
+            playBeep: true,
+            finishOnKey: "0123456789*#",
+            action: `/voice/live-connect-record-invite-done?targetUserId=${encodeURIComponent(profileUserId)}`,
           });
-          console.log(`[live-connect] Invite created: userId=${user.id} → targetUserId=${profileUserId}, room=${conferenceRoom}`);
-
-          // Play brief disclaimer then start the wait loop
-          playPrompt(twiml, req, "live_connect_disclaimer.mp3",
-            "Please be respectful and kind. You are about to request a live one on one connection.");
-          twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(profileUserId)}`);
         }
       } else if (digit === "4") {
         // ── Block this caller ───────────────────────────────────────────────
@@ -5452,63 +5444,171 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
+  // ─── 8a-pre. Live Connect: Receive Invite Recording ─────────────────────
+  // Caller A lands here after Twilio records their brief invite message.
+  // Plays it back so they can hear how it sounds, then ask them to press 1 to send.
+  app.post("/voice/live-connect-record-invite-done", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const targetUserId = req.query.targetUserId as string;
+    const fromNumber   = req.body?.From    as string;
+    const callSid      = req.body?.CallSid as string;
+    const recordingUrl = req.body?.RecordingUrl as string | undefined;
+
+    try {
+      if (!targetUserId || !fromNumber || !callSid) {
+        playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to profiles.");
+        twiml.redirect("/voice/browse-profiles");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const confirmGather = twiml.gather({
+        numDigits: 1,
+        action: `/voice/live-connect-confirm-invite?targetUserId=${encodeURIComponent(targetUserId)}&callSid=${encodeURIComponent(callSid)}&recordingUrl=${encodeURIComponent(recordingUrl ?? "")}`,
+        timeout: 20,
+      });
+      if (recordingUrl) {
+        safePlayRecording(confirmGather, recordingUrl, req, "");
+      }
+      playPrompt(confirmGather, req, "live_connect_confirm_invite.mp3",
+        "Here's how it sounds. Press 1 to send your invitation to this caller at any time.");
+
+      twiml.redirect("/voice/browse-profiles");
+    } catch (error) {
+      console.error("[live-connect] record-invite-done error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to profiles.");
+      twiml.redirect("/voice/browse-profiles");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── 8a-pre2. Live Connect: Confirm Invite Before Sending ────────────────
+  // Caller A pressed 1 after hearing their recording played back. Create the
+  // invite now and enter the wait loop.
+  app.post("/voice/live-connect-confirm-invite", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const targetUserId     = req.query.targetUserId as string;
+    const initiatorCallSid = req.query.callSid as string;
+    const recordingUrl     = req.query.recordingUrl as string | undefined;
+    const fromNumber       = req.body?.From    as string;
+    const callSid          = req.body?.CallSid as string;
+    const digit            = req.body?.Digits  as string;
+
+    try {
+      if (!targetUserId || !fromNumber) {
+        playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to profiles.");
+        twiml.redirect("/voice/browse-profiles");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      if (digit !== "1") {
+        twiml.redirect("/voice/browse-profiles");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
+      const user = await getOrCreateUser(fromNumber);
+      const callerProfile  = await storage.getProfile(user.id);
+      const resolvedCallSid = initiatorCallSid || callSid;
+      const conferenceRoom  = `live-${resolvedCallSid}`;
+
+      pendingLiveInvites.set(targetUserId, {
+        initiatorCallSid:          resolvedCallSid,
+        initiatorUserId:           user.id,
+        initiatorNameRecordingUrl: callerProfile?.nameRecordingUrl ?? null,
+        initiatorGreetingUrl:      callerProfile?.recordingUrl ?? "",
+        inviteMessageUrl:          recordingUrl || null,
+        conferenceRoom,
+        createdAt: Date.now(),
+        status:    "pending",
+      });
+
+      console.log(`[live-connect] Invite confirmed & created: userId=${user.id} → targetUserId=${targetUserId}, room=${conferenceRoom}, hasMessage=${!!recordingUrl}`);
+      twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}`);
+    } catch (error) {
+      console.error("[live-connect] confirm-invite error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to profiles.");
+      twiml.redirect("/voice/browse-profiles");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
   // ─── 8a. Live Connect: Initiator Wait Loop ────────────────────────────────
-  // Caller A lands here after creating the invite. Plays "Calling [name] now…"
-  // and a 15-second ringing tone. If B accepts mid-ring the Twilio REST API
-  // redirects A's call to /voice/live-connect-join, interrupting the audio.
-  // If B hasn't accepted by the time the ring finishes, we declare timeout.
+  // Caller A lands here after confirming their invite. Loops a ringing clip
+  // for up to 60 seconds (6 iterations of ~10 s each).
+  // Pressing # at any time cancels the request.
+  // If B accepts mid-ring the Twilio REST API redirects A's call to
+  // /voice/live-connect-join, interrupting the audio.
   app.post("/voice/live-connect-wait", async (req, res) => {
     const twiml = new VoiceResponse();
     const targetUserId = req.query.targetUserId as string;
-    const MAX_RING_LOOPS = 3; // 3 × 10 s = 30 seconds maximum
+    const ringCount    = parseInt((req.query.ringCount as string) ?? "0", 10) || 0;
+    const digit        = req.body?.Digits as string | undefined;
+    const MAX_RING_LOOPS = 6; // 6 × ~10 s = ~60 seconds maximum
 
     try {
+      // # pressed — caller cancelled the request
+      if (digit === "#") {
+        const staleInvite = pendingLiveInvites.get(targetUserId);
+        if (staleInvite) pendingLiveInvites.delete(targetUserId);
+        playPrompt(twiml, req, "live_connect_cancelled.mp3",
+          "Your connection request has been cancelled. Returning to profiles.");
+        twiml.redirect("/voice/browse-profiles");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       const invite = pendingLiveInvites.get(targetUserId);
-      const ringCountTop = parseInt((req.query.ringCount as string) ?? "0", 10) || 0;
 
       if (!invite) {
-        // Invite was cleaned up (timed out or already handled)
         playPrompt(twiml, req, "live_connect_failed.mp3",
           "We were unable to connect your call. Returning you to the male box.");
         twiml.redirect("/voice/browse-profiles");
       } else if (invite.status === "accepted") {
-        // B accepted (possibly right as ringing finished — race condition handled here)
         playPrompt(twiml, req, "live_connect_connecting.mp3",
-          "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
+          "He liked what he heard and he's ready to connect with you. You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
         const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}&room=${encodeURIComponent(invite.conferenceRoom)}` });
         (dial.conference as any)(invite.conferenceRoom, {
           startConferenceOnEnter: true,
           endConferenceOnExit: true,
           beep: false,
+          exitKeys: "#",
         });
-      } else if (invite.status === "declined" || ringCountTop >= MAX_RING_LOOPS || Date.now() - invite.createdAt > LIVE_INVITE_TTL_MS) {
-        // Timed out or explicitly declined
+      } else if (invite.status === "declined" || ringCount >= MAX_RING_LOOPS || Date.now() - invite.createdAt > LIVE_INVITE_TTL_MS) {
         pendingLiveInvites.delete(targetUserId);
         playPrompt(twiml, req, "live_connect_failed.mp3",
           "We were unable to connect your call. Returning you to the male box.");
         twiml.redirect("/voice/browse-profiles");
       } else {
-        // Still pending — announce + ring, then loop back to check status
-        const ringCount = parseInt((req.query.ringCount as string) ?? "0", 10) || 0;
+        // Still pending — play hold message on first loop, listening message at 30-second mark
         if (ringCount === 0) {
-          const targetProfile = await storage.getProfile(targetUserId).catch(() => null);
-          playPrompt(twiml, req, "calling.mp3", "Calling");
-          if (targetProfile?.nameRecordingUrl) {
-            safePlayRecording(twiml, targetProfile.nameRecordingUrl, req, "");
-          }
-          playPrompt(twiml, req, "now.mp3", "now.");
+          playPrompt(twiml, req, "live_connect_hold.mp3",
+            "Please hold while he listens to your connection request. You can cancel your request at any time by pressing the pound key.");
+        } else if (ringCount === 3) {
+          playPrompt(twiml, req, "live_connect_listening.mp3",
+            "They're listening to your request right now. Please hold a moment for their response.");
         }
-        // Play ringing audio if it exists; guarantee a 10-second pause otherwise so the
-        // loop does not race through instantly when the audio file is missing.
+
+        // Wrap the ringing clip in a Gather so pressing # immediately cancels
+        const ringGather = twiml.gather({
+          action: `/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}&ringCount=${ringCount + 1}`,
+          finishOnKey: "#",
+          timeout: 1,
+        });
         const cat2 = getRawSiteSettingsCache()?.siteCategory?.toLowerCase() ?? "mm";
         const ringFileCat2  = path.join(UPLOADS_DIR, cat2, "live_connect_ringing.mp3");
         const ringFileRoot2 = path.join(UPLOADS_DIR, "live_connect_ringing.mp3");
         if (fs.existsSync(ringFileCat2)) {
-          twiml.play(`${baseUrl(req)}/uploads/${cat2}/live_connect_ringing.mp3`);
+          ringGather.play(`${baseUrl(req)}/uploads/${cat2}/live_connect_ringing.mp3`);
         } else if (fs.existsSync(ringFileRoot2)) {
-          twiml.play(`${baseUrl(req)}/uploads/live_connect_ringing.mp3`);
+          ringGather.play(`${baseUrl(req)}/uploads/live_connect_ringing.mp3`);
         } else {
-          twiml.pause({ length: 10 });
+          ringGather.pause({ length: 10 });
         }
         twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}&ringCount=${ringCount + 1}`);
       }
@@ -5593,7 +5693,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
         // B joins the conference (waits briefly for A to arrive)
         playPrompt(twiml, req, "live_connect_connecting.mp3",
-          "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
+          "He liked what he heard and he's ready to connect with you. You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
         const dial = twiml.dial({ action: `/voice/live-connect-complete?role=invitee&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}&room=${encodeURIComponent(room)}` });
         (dial.conference as any)(room, {
           startConferenceOnEnter: true,
@@ -5667,7 +5767,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       playPrompt(twiml, req, "live_connect_connecting.mp3",
-        "Connecting you now. You can exit the live connection at any time by pressing pound. Enjoy!");
+        "He liked what he heard and he's ready to connect with you. You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
       const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(initiatorUserId)}&room=${encodeURIComponent(room)}` });
       (dial.conference as any)(room, {
         startConferenceOnEnter: true,
@@ -5706,8 +5806,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     console.log(`[live-connect] Connection ended — targetUserId=${targetUserId}, initiatorUserId=${initiatorUserId}`);
 
-    playPrompt(twiml, req, "live_connect_ended.mp3",
-      "Your live connection has ended. Returning you to the male box.");
+    // Give the caller the option to continue browsing profiles by pressing 3
+    const endGather = twiml.gather({
+      numDigits: 1,
+      action: "/voice/browse-profiles",
+      timeout: 10,
+    });
+    playPrompt(endGather, req, "live_connect_ended.mp3",
+      "Your connection has ended. To continue press 3.");
+    // Fallback if no key pressed
     twiml.redirect("/voice/browse-profiles");
 
     res.type("text/xml");
