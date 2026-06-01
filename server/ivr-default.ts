@@ -5133,7 +5133,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(inviteGather, req, "live_invite_wants_to_connect.mp3", "wants to connect with you.");
         // 4. 1-second pause
         inviteGather.pause({ length: 1 });
-        // 5. Play the custom invite message if recorded, otherwise fall back to stored greeting
+        // 5. "Here's how it sounds, press 1 to accept at any time." then play the recording
+        playPrompt(inviteGather, req, "live_invite_preview.mp3", "Here's how it sounds, press 1 to accept at any time.");
         if (pendingInvite.inviteMessageUrl) {
           safePlayRecording(inviteGather, pendingInvite.inviteMessageUrl, req, "");
         } else if (pendingInvite.initiatorGreetingUrl) {
