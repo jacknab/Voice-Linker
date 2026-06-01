@@ -236,6 +236,132 @@ const CORE_PROMPTS: Prompt[] = [
   { filename: "now.mp3",                    text: "now." },
   { filename: "cant_message_ai.mp3",        text: "You can't message an AI. Nice try though. Back to browsing." },
   { filename: "welcome_new.mp3",            text: "Welcome to the Male Box." },
+
+  // ── MW / gender select ──────────────────────────────────────────────────
+  { filename: "gender_select.mp3",          text: "Guys, press one to talk to women. Women, press three to talk to guys." },
+  { filename: "mw_main_menu.mp3",           text: "Main menu. If you're ready to join the action press 1. To buy membership time press 2. For the men seeking men line press 5. To manage your membership press 8. Press 0 for time remaining, or 9 to repeat these choices." },
+
+  // ── Live connect ─────────────────────────────────────────────────────────
+  { filename: "live_connect_accepted.mp3",      text: "Your connection has been accepted. Connecting you now." },
+  { filename: "live_connect_hold.mp3",          text: "Please hold while he listens to your connection request. You can cancel your request at any time by pressing the pound key." },
+  { filename: "live_connect_listening.mp3",     text: "They're listening to your request right now. Please hold a moment for their response." },
+  { filename: "live_connect_confirm_invite.mp3",text: "Here's how it sounds. Press 1 to send your invitation to this caller at any time." },
+  { filename: "live_connect_cancelled.mp3",     text: "Your connection request has been cancelled. Returning to profiles." },
+  { filename: "live_connect_admin_profile.mp3", text: "This is a sample profile and cannot accept a live connection. Please choose another caller." },
+  { filename: "live_connect_chime.mp3",         text: "" },
+  { filename: "live_invite_intro.mp3",          text: "This caller" },
+  { filename: "live_invite_suffix.mp3",         text: "would like to connect live with you." },
+  { filename: "live_low_balance_warning.mp3",   text: "Warning: you have less than 5 minutes remaining. Please note your live connection will end when your time expires." },
+
+  // ── Mailbox browse / lookup ───────────────────────────────────────────────
+  { filename: "mailbox_menu.mp3",                          text: "To go to your mailbox press one. To record a new mailbox ad press two. To listen to ads from other guys press three. To repeat these choices press nine. To exit to the main menu press pound." },
+  { filename: "mailbox_no_greeting.mp3",                   text: "You have not recorded a mailbox greeting yet." },
+  { filename: "mailbox_record_greeting.mp3",               text: "Record your mailbox greeting after the tone. Press any key when done." },
+  { filename: "mailbox_greeting_saved.mp3",                text: "Your mailbox greeting has been saved. Callers who enter your mailbox number will now hear this greeting." },
+  { filename: "mailbox_already_recorded.mp3",              text: "You already have a mailbox greeting recorded. Press 1 to record a new greeting. Press 2 to hear your current greeting. Press 9 to return to your mailbox." },
+  { filename: "mailbox_send_or_return.mp3",                text: "Press 1 to send a message. Press 9 to return to your mailbox." },
+  { filename: "mailbox_no_new_messages_no_greeting.mp3",   text: "Your mailbox has no new messages. Press 1 to record your mailbox greeting. Press 9 to return to the mailbox menu." },
+  { filename: "mailbox_no_new_messages_with_greeting.mp3", text: "Your mailbox has no new messages. Press 1 to re-record your mailbox greeting. Press 2 to hear your current greeting. Press 9 to return to the mailbox menu." },
+  { filename: "mailbox_lookup.mp3",                        text: "Enter the five digit mailbox number you'd like to look up, followed by pound. Or press pound alone to return to the mailbox menu." },
+  { filename: "mailbox_lookup_options.mp3",                text: "Press 1 to send a message to this guy. Press 9 to look up another mailbox. Press pound to return to the mailbox menu." },
+  { filename: "mailbox_ad_browse_options.mp3",             text: "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu." },
+  { filename: "mailbox_ad_recorded_pending.mp3",           text: "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. In the meantime you can browse other ads or visit the male box to check out who's on the line right now." },
+  { filename: "mailbox_ad_existing.mp3",                   text: "You already have an ad in this category. Press 1 to record a new one. Press 9 to return to categories." },
+  { filename: "mailbox_ad_record.mp3",                     text: "Record your mailbox ad after the tone. Tell guys about yourself. Press any key when done." },
+  { filename: "mailbox_no_ad.mp3",                         text: "This mailbox has not recorded an ad yet." },
+  { filename: "mailbox_not_found.mp3",                     text: "That mailbox was not found." },
+
+  // ── Mailbox setup ─────────────────────────────────────────────────────────
+  { filename: "mailbox_setup_intro.mp3",                   text: "You need to first set up your mailbox. To set up your mailbox we need to gather a couple of things from you which helps callers search for the perfect guy and help them find your ads. First we need to know your date of birth. Please enter your date of birth in this order: two digits for the month, two digits for the day, and four digits for the year. For example, for April 17 1976, enter zero four one seven one nine seven six." },
+  { filename: "mailbox_setup_dob_invalid.mp3",             text: "We did not receive a valid date of birth. Please try again." },
+  { filename: "mailbox_setup_underage.mp3",                text: "We are sorry, but you must be 18 years of age or older to use this service. Goodbye." },
+  { filename: "mailbox_setup_bodytype.mp3",                text: "Now please select your body type. For Slim press one. For Average press two. For Athletic press three. For Large press four. For Big and Tall press five. To repeat these choices press nine. To exit press pound." },
+  { filename: "mailbox_setup_ethnicity.mp3",               text: "Now please tell us your ethnicity. If you don't want to identify your ethnicity press one. If you're Caucasian press two. African-American press three. Asian press four. Latino press five. Middle Eastern press six. Aboriginal press seven. To repeat these choices press nine. To exit press pound." },
+  { filename: "mailbox_setup_ethnicity_confirm.mp3",       text: "To confirm your selection press one. To go back and change your selection press two." },
+  { filename: "mailbox_setup_ready.mp3",                   text: "Please get something ready to write down your new mailbox number and passcode. This is the only chance you will have to write them down. And don't get them confused with your membership number — we issue separate numbers for memberships. If you're ready to write down your mailbox number and passcode press one. To pause the system while you get a pen and paper press two. To repeat these choices press nine. To cancel setting up your mailbox press the pound key." },
+  { filename: "mailbox_setup_existing_passcode.mp3",       text: "Your mailbox passcode is the same as your membership passcode. If you do not remember your passcode and would like to create a new one, press pound." },
+  { filename: "mailbox_setup_create_passcode.mp3",         text: "For security you need a passcode. Please enter a four digit passcode now. If you make a mistake press star to start over." },
+  { filename: "mailbox_setup_passcode_reenter.mp3",        text: "Please re-enter your four digit passcode." },
+  { filename: "mailbox_setup_passcode_mismatch.mp3",       text: "Your passcode entries did not match. Please try again." },
+  { filename: "mailbox_setup_complete.mp3",                text: "Your mailbox is now set up. To begin recording a new ad press one. To listen to ads from other guys press two. To return to the main menu press pound." },
+  { filename: "mailbox_setup_cancelled.mp3",               text: "Mailbox setup cancelled." },
+
+  // ── Ad categories ──────────────────────────────────────────────────────────
+  { filename: "ad_category_menu.mp3",      text: "Please select a category. For Quick and Hot Talk press one. For Bicurious press two. For Kink press three. For Total Tops press four. For Strictly Bottoms press five. For Trans press six. To look up a specific mailbox press seven. For more categories press eight. For definitions press nine. To return to the mailbox menu press pound." },
+  { filename: "ad_category_menu_p2.mp3",   text: "More categories. For Cock Suckers press one. For Hung Cocks press two. For Uncut Cocks press three. For Twinks press four. For Bears press five. For Daddys press six. To look up a specific mailbox press seven. For definitions press nine. To go back to the previous categories press pound." },
+  { filename: "ad_category_definitions.mp3",text: "Quick and Hot Talk: guys looking for fast, explicit, no-strings chat. Bicurious: men exploring attraction to other men for the first time or occasionally. Kink: callers into fetishes, role play, or specific kinks. Total Tops: guys who are exclusively tops and looking for a bottom. Strictly Bottoms: guys who are exclusively bottoms and looking for a top. Trans: trans men and women connecting with other callers. Cock Suckers: guys who love giving oral and want to connect with like-minded men. Hung Cocks: well-endowed guys and the men who want them. Uncut Cocks: uncircumcised guys and the men who seek them out. Twinks: younger slender guys and the men who are into them. Bears: bigger, hairier guys and those who are into the bear scene. Daddys: older, mature men and younger guys looking for that connection. Returning to the category menu." },
+  { filename: "category_ad_options.mp3",   text: "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu." },
+  { filename: "ads_end_of_list.mp3",       text: "You have heard all the ads in this category. Returning to categories." },
+  { filename: "no_ads_category.mp3",       text: "No ads available in this category yet. Try another category." },
+
+  // ── Promo codes ────────────────────────────────────────────────────────────
+  { filename: "promo_code_success.mp3",     text: "Your promo code has been accepted and your time has been added to your account. Enjoy your time on the line." },
+  { filename: "promo_code_invalid.mp3",     text: "That promo code is not valid. Please check the code and try again." },
+  { filename: "promo_code_expired.mp3",     text: "That promo code has expired. Please check with the issuer for a current code." },
+  { filename: "promo_code_already_used.mp3",text: "You have already used this promo code." },
+  { filename: "promo_code_inactive.mp3",    text: "That promo code is not currently active." },
+  { filename: "promo_code_max_uses.mp3",    text: "This promo code has reached its maximum number of uses." },
+  { filename: "collect_postal_code.mp3",    text: "Please enter your billing zip code, then press pound." },
+  { filename: "collect_security_code.mp3",  text: "Enter your 3 or 4 digit security code, then press pound." },
+
+  // ── Account / status ───────────────────────────────────────────────────────
+  { filename: "backdoor_expires_soon.mp3",  text: "Your backdoor access pass expires soon." },
+  { filename: "connector_idle_goodbye.mp3", text: "You're apparently having issues right now, or have fallen asleep. Sweet dreams." },
+  { filename: "caller_no_mailbox_ad.mp3",   text: "This caller no longer has a mailbox ad." },
+  { filename: "no_messages_yet.mp3",        text: "You have not sent this caller any messages." },
+  { filename: "last_message_sent.mp3",      text: "Last message you sent this caller." },
+  { filename: "has_sent_you_this_message.mp3",text: "has sent you this message." },
+
+  // ── Bust game ──────────────────────────────────────────────────────────────
+  { filename: "bust_win_minutes.mp3", text: "Roger here. You got it! That was our A I voice. Fifteen bonus minutes have been added to your account. Nice ear." },
+  { filename: "bust_win_hours.mp3",   text: "Roger here. You got it! That was our A I voice. One hour of bonus time has been added to your account. Nice ear." },
+  { filename: "bust_miss.mp3",        text: "Roger here. Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing." },
+
+  // ── Phrase building blocks ─────────────────────────────────────────────────
+  { filename: "phrase_mailbox.mp3",                    text: "Mailbox" },
+  { filename: "phrase_mailbox_number.mp3",             text: "Mailbox number" },
+  { filename: "phrase_your_mailbox_number_is.mp3",     text: "Your mailbox number is" },
+  { filename: "phrase_again_your_mailbox_number_is.mp3",text: "Again, your mailbox number is" },
+  { filename: "phrase_press.mp3",                      text: "Press" },
+  { filename: "phrase_this_caller_is_from.mp3",        text: "This caller is from" },
+  { filename: "phrase_new_caller_from.mp3",            text: "New caller from" },
+  { filename: "phrase_now_playing_callers_from.mp3",   text: "Now playing callers from" },
+  { filename: "phrase_to_hear_callers_from.mp3",       text: "to hear callers from" },
+  { filename: "phrase_to_start_over.mp3",              text: "to start over from the beginning." },
+  { filename: "phrase_new_message.mp3",                text: "new message." },
+  { filename: "phrase_new_messages.mp3",               text: "new messages." },
+  { filename: "phrase_saved_message.mp3",              text: "saved message." },
+  { filename: "phrase_saved_messages.mp3",             text: "saved messages." },
+
+  // ── Roger welcome variants ─────────────────────────────────────────────────
+  { filename: "roger_welcome_new.mp3",       text: "Welcome. I'm Roger, and I'll be your guide today. There are some great guys on the line. Let's find one for you." },
+  { filename: "roger_welcome_sameday.mp3",   text: "Hey, you're back. Roger here. Let's see who else has joined since you were last on." },
+  { filename: "roger_welcome_recent.mp3",    text: "Good to hear from you again. I'm Roger. A few new guys have joined since last time. Let me play them for you." },
+  { filename: "roger_welcome_fewdays.mp3",   text: "Hey, it's Roger. Been a few days. Good to have you back. There's some new blood on the line since your last visit." },
+  { filename: "roger_welcome_weeks.mp3",     text: "Roger here. It's been a while! Welcome back. A lot has changed since you were last on. Let me catch you up." },
+  { filename: "roger_welcome_longtime.mp3",  text: "Well well. Roger here. It's been a long time. Good to have you back. Let me show you around." },
+
+  // ── MOTD (admin-configured; empty = skip generation) ──────────────────────
+  { filename: "motd.mp3",               text: "" },
+  { filename: "motd_main_menu.mp3",     text: "" },
+  { filename: "motd_phone_booth.mp3",   text: "" },
+  { filename: "motd_post_purchase.mp3", text: "" },
+
+  // ── Number extensions ────────────────────────────────────────────────────
+  { filename: "num_100.mp3",  text: "one hundred" },
+  { filename: "num_200.mp3",  text: "two hundred" },
+  { filename: "num_300.mp3",  text: "three hundred" },
+  { filename: "num_400.mp3",  text: "four hundred" },
+  { filename: "num_500.mp3",  text: "five hundred" },
+  { filename: "num_600.mp3",  text: "six hundred" },
+  { filename: "num_700.mp3",  text: "seven hundred" },
+  { filename: "num_800.mp3",  text: "eight hundred" },
+  { filename: "num_900.mp3",  text: "nine hundred" },
+  { filename: "num_1000.mp3", text: "thousand" },
+
+  // ── System sound placeholders (must be custom uploaded — no TTS) ──────────
+  { filename: "chime.mp3",            text: "" },
+  { filename: "live_connect_chime.mp3",text: "" },
 ];
 
 async function generateOne(filename: string, text: string, apiKey: string): Promise<void> {

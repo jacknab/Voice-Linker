@@ -340,6 +340,30 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "mailbox_setup_passcode_reenter.mp3",  text: "Please re-enter your four digit passcode." },
   { filename: "mailbox_setup_passcode_mismatch.mp3", text: "Your passcode entries did not match. Please try again." },
   { filename: "mailbox_setup_complete.mp3",       text: "Your mailbox is now set up. To begin recording a new ad press one. To listen to ads from other guys press two. To return to the main menu press pound." },
+
+  // ── MOTD prompts (admin-configured text; autogen skips empty) ─────────────
+  { filename: "motd.mp3",               text: "" },
+  { filename: "motd_main_menu.mp3",     text: "" },
+  { filename: "motd_phone_booth.mp3",   text: "" },
+  { filename: "motd_post_purchase.mp3", text: "" },
+
+  // ── Ad / mailbox dynamic prompts ─────────────────────────────────────────
+  { filename: "ads_end_of_list.mp3",                 text: "You have heard all the ads in this category. Returning to categories." },
+  { filename: "no_ads_category.mp3",                 text: "No ads available in this category yet. Try another category." },
+  { filename: "mailbox_ad_existing.mp3",             text: "You already have an ad in this category. Press 1 to record a new one. Press 9 to return to categories." },
+  { filename: "mailbox_ad_record.mp3",               text: "Record your mailbox ad after the tone. Tell guys about yourself. Press any key when done." },
+  { filename: "mailbox_no_ad.mp3",                   text: "This mailbox has not recorded an ad yet." },
+  { filename: "mailbox_not_found.mp3",               text: "That mailbox was not found." },
+  { filename: "mailbox_setup_ethnicity_confirm.mp3", text: "To confirm your selection press one. To go back and change your selection press two." },
+
+  // ── Live connect extras ───────────────────────────────────────────────────
+  { filename: "live_connect_cancelled.mp3",     text: "Your connection request has been cancelled. Returning to profiles." },
+  { filename: "live_connect_confirm_invite.mp3",text: "Here's how it sounds. Press 1 to send your invitation to this caller at any time." },
+  { filename: "live_connect_chime.mp3",         text: "" },
+
+  // ── System sounds (no TTS — custom upload required) ──────────────────────
+  { filename: "chime.mp3",                      text: "" },
+  { filename: "backdoor_expires_soon.mp3",      text: "Your backdoor access pass expires soon." },
 ];
 
 // ── MW prompts (uploads/mw/) — DISABLED: using MM voice only ──────────────
