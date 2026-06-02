@@ -6898,11 +6898,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 8d. Live Connect: Post-Conference Cleanup ────────────────────────────
   // Called by <Dial action="..."> after the conference ends for either participant.
+  // role=remaining  → the OTHER party disconnected (fired by conference-events)
+  // role=initiator/invitee → this caller pressed # or their own call ended
   app.post("/voice/live-connect-complete", async (req, res) => {
     const twiml = new VoiceResponse();
     const targetUserId = req.query.targetUserId as string;
     const initiatorUserId = req.query.initiatorUserId as string;
     const room = req.query.room as string;
+    const role = req.query.role as string;
     const callSid = req.body?.CallSid as string;
 
     // Stop live billing interval (safe to call multiple times — only acts once)
@@ -6914,16 +6917,24 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     if (callSid) liveConnectionCallSidMap.delete(callSid);
     if (targetUserId) pendingLiveInvites.delete(targetUserId);
 
-    console.log(`[live-connect] Connection ended — targetUserId=${targetUserId}, initiatorUserId=${initiatorUserId}`);
+    console.log(`[live-connect] Connection ended — role=${role}, targetUserId=${targetUserId}, initiatorUserId=${initiatorUserId}`);
 
-    // Give the caller the option to continue browsing profiles by pressing 3
+    // Give the caller the option to continue browsing profiles by pressing 3.
+    // Play a distinct prompt when the OTHER party disconnected vs. when this
+    // caller ended the call themselves (pressed #).
     const endGather = twiml.gather({
       numDigits: 1,
       action: "/voice/browse-profiles",
       timeout: 10,
     });
-    playPrompt(endGather, req, "live_connect_ended.mp3",
-      "Your connection has ended. To continue press 3.");
+    if (role === "remaining") {
+      // The other party hung up — let this caller know explicitly
+      playPrompt(endGather, req, "live_connect_other_left.mp3",
+        "He left the connection. To continue browsing, press 3.");
+    } else {
+      playPrompt(endGather, req, "live_connect_ended.mp3",
+        "Your connection has ended. To continue press 3.");
+    }
     // Fallback if no key pressed
     twiml.redirect("/voice/browse-profiles");
 
