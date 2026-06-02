@@ -6596,16 +6596,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           "We were unable to connect your call. Returning you to the male box.");
         twiml.redirect("/voice/browse-profiles");
       } else if (invite.status === "accepted") {
-        // B accepted — bridge the conference
-        playPrompt(twiml, req, "live_connect_accepted.mp3",
-          "He liked what he heard and he's ready to connect with you.");
-        playPrompt(twiml, req, "live_connect_connecting.mp3",
-          "You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
+        // B accepted — drop A straight into the conference with no pre-conference audio
+        // so both parties enter at nearly the same time. The connection beep signals
+        // to both that the bridge is live.
         const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}&room=${encodeURIComponent(invite.conferenceRoom)}` });
         (dial.conference as any)(invite.conferenceRoom, {
           startConferenceOnEnter: true,
           endConferenceOnExit: true,
-          beep: false,
+          beep: true,
           exitKeys: "#",
           statusCallback: `${baseUrl(req)}/voice/conference-events`,
           statusCallbackEvent: "participant-leave",
@@ -6754,13 +6752,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
         }
 
-        playPrompt(twiml, req, "live_connect_connecting.mp3",
-          "You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
+        // B enters the conference immediately but does NOT start it — Twilio plays
+        // hold music until A joins (startConferenceOnEnter: false). The beep fires
+        // for both parties the instant A joins and the bridge goes live.
         const dial = twiml.dial({ action: `/voice/live-connect-complete?role=invitee&targetUserId=${encodeURIComponent(user.id)}&initiatorUserId=${encodeURIComponent(invite.initiatorUserId)}&room=${encodeURIComponent(room)}` });
         (dial.conference as any)(room, {
-          startConferenceOnEnter: true,
+          startConferenceOnEnter: false,
           endConferenceOnExit: true,
-          beep: false,
+          beep: true,
           exitKeys: "#",
           maxParticipants: 2,
           statusCallback: `${baseUrl(req)}/voice/conference-events`,
@@ -6873,15 +6872,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const initiatorUserId = req.query.initiatorUserId as string;
 
     try {
-      playPrompt(twiml, req, "live_connect_accepted.mp3",
-        "He liked what he heard and he's ready to connect with you.");
-      playPrompt(twiml, req, "live_connect_connecting.mp3",
-        "You're connected. You can leave the connection at any time by pressing the pound key. Say hi!");
+      // A enters the conference immediately with no pre-conference audio — B is
+      // already waiting with hold music. startConferenceOnEnter:true starts the
+      // bridge; both parties hear the beep at the same instant.
       const dial = twiml.dial({ action: `/voice/live-connect-complete?role=initiator&targetUserId=${encodeURIComponent(targetUserId)}&initiatorUserId=${encodeURIComponent(initiatorUserId)}&room=${encodeURIComponent(room)}` });
       (dial.conference as any)(room, {
         startConferenceOnEnter: true,
         endConferenceOnExit: true,
-        beep: false,
+        beep: true,
         exitKeys: "#",
         maxParticipants: 2,
         statusCallback: `${baseUrl(req)}/voice/conference-events`,
