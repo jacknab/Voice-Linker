@@ -422,9 +422,8 @@ export function getLiveConnectionsState() {
 const LIVE_TICK_MS = 5_000;             // deduct every 5 seconds
 const LIVE_LOW_BALANCE_SECONDS = 300;   // warn at < 5 minutes remaining
 
-// How long (ms) an invite stays valid.
-// Covers: recording prompt (~5s) + 30s max recording + "Calling now" (~3s) + up to 60s ringing + buffer
-const LIVE_INVITE_TTL_MS = 105_000;
+// How long (ms) an invite stays valid — max 60 seconds of ringing.
+const LIVE_INVITE_TTL_MS = 60_000;
 
 // Per-call flags — track whether time announcements have been made this session
 const callTimeAnnounced = new Set<string>(); // already heard the "you have X hours/minutes" announcement
@@ -5207,7 +5206,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const availableCount = await storage.getAvailableProfileCount(user.id, regionId, browseCallerGender, browseSiteCategory);
       console.log(`[voice] browse-profiles: userId=${user.id}, regionId=${regionId}, callerGender=${browseCallerGender}, availableProfiles=${availableCount}`);
 
-      if (availableCount === 0) {
+      // Pre-load browse state here so we can check whether the caller is returning
+      // (e.g. after a live-connect timeout). Returning callers with an existing session
+      // should never be kicked to main-menu by the zero-count guard — let the queue
+      // cycle-reset logic handle them instead.
+      const preloadedBrowseState = await getBrowseState(callSid);
+
+      if (availableCount === 0 && !preloadedBrowseState) {
         playPrompt(twiml, req, "no_profiles.mp3", "There are no profiles available right now. Please call back later.");
         twiml.redirect("/voice/main-menu");
         res.type("text/xml");
@@ -5300,7 +5305,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const targetUserId  = req.query?.targetUserId  as string | undefined;
         const retryCount    = parseInt((req.query?.browseRetry as string) ?? "0", 10);
 
-        let state = await getBrowseState(callSid);
+        let state = preloadedBrowseState ?? await getBrowseState(callSid);
 
         if (!state) {
           // ── First visit: build initial state ─────────────────────────────────
@@ -6654,7 +6659,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const targetUserId = req.query.targetUserId as string;
     const ringCount = parseInt((req.query.ringCount as string) ?? "0", 10) || 0;
     const digit = req.body?.Digits as string | undefined;
-    const MAX_RING_LOOPS = 6; // 6 × ~10 s = ~60 seconds maximum
+    const MAX_RING_LOOPS = 3; // hard cap — TTL is the primary control; this is a safety net
 
     try {
       // # pressed — caller cancelled the request
