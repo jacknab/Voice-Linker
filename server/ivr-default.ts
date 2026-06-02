@@ -841,7 +841,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const checkpoint = billingCheckpoints.get(callSid);
     if (!checkpoint) return;
     const now = Date.now();
-    const elapsedSeconds = Math.floor((now - checkpoint.lastCheck) / 1000);
+    const MAX_SINGLE_SYNC_SECONDS = 1800; // cap: never deduct more than 30 min in one syncBilling call
+    const rawElapsed = Math.floor((now - checkpoint.lastCheck) / 1000);
+    const elapsedSeconds = Math.min(rawElapsed, MAX_SINGLE_SYNC_SECONDS);
+    if (rawElapsed > MAX_SINGLE_SYNC_SECONDS) {
+      console.warn(`[billing] syncBilling: clamped elapsed ${rawElapsed}s → ${MAX_SINGLE_SYNC_SECONDS}s for callSid=${callSid}`);
+    }
     if (elapsedSeconds <= 0) return;
     checkpoint.lastCheck = now;
 
