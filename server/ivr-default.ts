@@ -350,6 +350,7 @@ const MAILBOX_CATEGORIES: Record<string, string> = {
   twinks: "Twinks",
   bears: "Bears",
   daddys: "Daddys",
+  local: "Local Ads",
 };
 
 // Digit → category slug (all 12 categories on one menu, using 1-9, 0, *, #)
@@ -2891,6 +2892,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "To go to your mailbox press one. " +
       "To record a new mailbox ad press two. " +
       "To listen to ads from other guys press three. " +
+      "To hear local ads in your area press four. " +
+      "To record a local ad for your area press five. " +
       "To repeat these choices press nine. " +
       "To exit to the main menu press pound."
     );
@@ -2919,6 +2922,33 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           twiml.redirect("/voice/ad-category-menu?mode=record");
         } else {
           twiml.redirect("/voice/ad-category-menu?mode=listen");
+        }
+      } else if (digit === "4" || digit === "5") {
+        // Local ads — scoped to the caller's region
+        const callSid = req.body?.CallSid as string;
+        const caller = await storage.getCallerByCallSid(callSid);
+        const regionId = caller?.regionId;
+
+        if (!regionId) {
+          playPrompt(twiml, req, "local_ads_unavailable.mp3",
+            "Local ads are not available from this number. Please call your local access number to hear and record local ads."
+          );
+          twiml.redirect("/voice/mailbox-menu");
+        } else {
+          // Ensure mailbox is set up before allowing local ad recording
+          const user = await getOrCreateUser(fromNumber);
+          const mailbox = await storage.getMailboxByUserId(user.id);
+          if (!mailbox || mailbox.setupComplete === false) {
+            twiml.redirect(`/voice/setup-mailbox?returnTo=${digit === "4" ? "listen" : "record"}`);
+          } else {
+            const region = await storage.getRegionById(regionId);
+            const regionLabel = encodeURIComponent(region?.name ?? "your area");
+            if (digit === "4") {
+              twiml.redirect(`/voice/browse-category-ads?category=local&regionId=${regionId}&regionLabel=${regionLabel}`);
+            } else {
+              twiml.redirect(`/voice/record-category-ad?category=local&regionId=${regionId}&regionLabel=${regionLabel}`);
+            }
+          }
         }
       } else if (digit === "9") {
         twiml.redirect("/voice/mailbox-menu");
@@ -3818,13 +3848,25 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const user = await getOrCreateUser(fromNumber);
       const categoryLabel = MAILBOX_CATEGORIES[category] || category;
 
+      // For local ads, scope to the caller's region
+      const regionId = category === "local"
+        ? ((req.query.regionId as string) || (await storage.getCallerByCallSid(callSid))?.regionId || undefined)
+        : undefined;
+      const regionLabel = category === "local"
+        ? decodeURIComponent((req.query.regionLabel as string) || "your area")
+        : undefined;
+      // Override the category label with region name for local ads
+      const effectiveCategoryLabel = category === "local"
+        ? `Local Ads${regionLabel && regionLabel !== "your area" ? " - " + regionLabel : " in your area"}`
+        : categoryLabel;
+
       // Build or reuse the queue for this call + category
       let state = categoryBrowseState.get(callSid);
       const isFirstVisit = !state || state.category !== category;
       if (isFirstVisit) {
         const [ads, stats] = await Promise.all([
-          storage.getMailboxesByCategory(category, user.id),
-          storage.getMailboxCategoryStats(category, user.id),
+          storage.getMailboxesByCategory(category, user.id, regionId),
+          storage.getMailboxCategoryStats(category, user.id, regionId),
         ]);
         // Shuffle for variety
         for (let i = ads.length - 1; i > 0; i--) {
@@ -3847,26 +3889,29 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             ? `There ${stats.newThisMonth === 1 ? "is" : "are"} ${stats.newThisMonth} new ${stats.newThisMonth === 1 ? "ad" : "ads"} this month and `
             : "";
           playPrompt(twiml, req, "category_ad_count.mp3",
-            `${newPart}${stats.total} ${stats.total === 1 ? "ad" : "ads"} total in ${categoryLabel}.`
+            `${newPart}${stats.total} ${stats.total === 1 ? "ad" : "ads"} total in ${effectiveCategoryLabel}.`
           );
         }
       }
 
+      // Build region passthrough param for local ads
+      const regionParam = regionId ? `&regionId=${regionId}&regionLabel=${encodeURIComponent(regionLabel ?? "your area")}` : "";
+
       if (state.queue.length === 0) {
         playPrompt(twiml, req, "no_ads_category.mp3",
-          `No ads available in the ${categoryLabel} category yet. Try another category.`
+          `No ads available in ${effectiveCategoryLabel} yet.${category === "local" ? "" : " Try another category."}`
         );
-        twiml.redirect("/voice/ad-category-menu?mode=listen");
+        twiml.redirect(category === "local" ? "/voice/mailbox-menu" : "/voice/ad-category-menu?mode=listen");
         res.type("text/xml");
         return res.send(twiml.toString());
       }
 
       if (state.index >= state.queue.length) {
         playPrompt(twiml, req, "ads_end_of_list.mp3",
-          `You have heard all the ads in ${categoryLabel}. Returning to categories.`
+          `You have heard all the ads in ${effectiveCategoryLabel}.${category === "local" ? " Returning to the mailbox menu." : " Returning to categories."}`
         );
         categoryBrowseState.delete(callSid);
-        twiml.redirect("/voice/ad-category-menu?mode=listen");
+        twiml.redirect(category === "local" ? "/voice/mailbox-menu" : "/voice/ad-category-menu?mode=listen");
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -3876,7 +3921,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       const adGather = twiml.gather({
         numDigits: 1,
-        action: `/voice/handle-category-ad-menu?toUserId=${ad.userId}&mailboxNumber=${ad.mailboxNumber}&category=${category}`,
+        action: `/voice/handle-category-ad-menu?toUserId=${ad.userId}&mailboxNumber=${ad.mailboxNumber}&category=${category}${regionParam}`,
         timeout: 10,
       });
       playPrompt(adGather, req, "phrase_mailbox.mp3", "Mailbox");
@@ -3884,7 +3929,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       safePlayRecording(adGather, ad.adRecordingUrl, req, "This ad is not available.");
       playPrompt(adGather, req, "category_ad_options.mp3",
         "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu.");
-      twiml.redirect(`/voice/browse-category-ads?category=${category}`);
+      twiml.redirect(`/voice/browse-category-ads?category=${category}${regionParam}`);
     } catch (err) {
       console.error("[voice] /voice/browse-category-ads error:", err);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Returning to the mailbox menu.");
@@ -3901,20 +3946,24 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const toUserId = req.query.toUserId as string;
     const mailboxNumber = req.query.mailboxNumber as string;
     const category = req.query.category as string;
+    const regionId = req.query.regionId as string | undefined;
+    const regionLabel = req.query.regionLabel as string | undefined;
+    const regionParam = regionId ? `&regionId=${regionId}${regionLabel ? `&regionLabel=${regionLabel}` : ""}` : "";
 
     try {
       if (digit === "1") {
         playPrompt(twiml, req, "record_message.mp3", "Record your message for this guy after the tone. Press any key when done.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${toUserId}&returnTo=category&category=${category}` });
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${toUserId}&returnTo=category&category=${category}${regionParam}` });
       } else if (digit === "2") {
-        twiml.redirect(`/voice/browse-category-ads?category=${category}`);
+        twiml.redirect(`/voice/browse-category-ads?category=${category}${regionParam}`);
       } else if (digit === "9") {
-        twiml.redirect("/voice/ad-category-menu?mode=listen");
+        // For local ads, "return to category menu" means back to mailbox menu
+        twiml.redirect(category === "local" ? "/voice/mailbox-menu" : "/voice/ad-category-menu?mode=listen");
       } else if (digit === "#") {
         twiml.redirect("/voice/mailbox-menu");
       } else {
         playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
-        twiml.redirect(`/voice/browse-category-ads?category=${category}`);
+        twiml.redirect(`/voice/browse-category-ads?category=${category}${regionParam}`);
       }
     } catch (err) {
       console.error("[voice] /voice/handle-category-ad-menu error:", err);
@@ -4051,7 +4100,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
     const category = req.query.category as string;
-    const categoryLabel = MAILBOX_CATEGORIES[category] || category;
+    const regionId = req.query.regionId as string | undefined;
+    const regionLabel = req.query.regionLabel ? decodeURIComponent(req.query.regionLabel as string) : undefined;
+    const regionParam = regionId ? `&regionId=${regionId}&regionLabel=${encodeURIComponent(regionLabel ?? "your area")}` : "";
+    const baseLabel = MAILBOX_CATEGORIES[category] || category;
+    const categoryLabel = category === "local"
+      ? `Local Ads${regionLabel && regionLabel !== "your area" ? " - " + regionLabel : " in your area"}`
+      : baseLabel;
 
     try {
       const user = await getOrCreateUser(fromNumber);
@@ -4059,19 +4114,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       if (mailbox?.adRecordingUrl && mailbox.category === category) {
         // Already has an ad in this category — offer to re-record or hear it
-        const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-record-category-ad?category=${category}` });
+        const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-record-category-ad?category=${category}${regionParam}` });
         playPrompt(gather, req, "mailbox_ad_existing.mp3",
-          `You already have an ad in the ${categoryLabel} category. ` +
+          `You already have a${category === "local" ? " local" : "n"} ad${category === "local" ? " for your area" : ` in the ${categoryLabel} category`}. ` +
           "Press 1 to record a new one. " +
           "Press 2 to hear your current ad. " +
-          "Press 9 to return to the category menu."
+          "Press 9 to return to the mailbox menu."
         );
-        twiml.redirect(`/voice/record-category-ad?category=${category}`);
+        twiml.redirect(`/voice/record-category-ad?category=${category}${regionParam}`);
       } else {
         playPrompt(twiml, req, "mailbox_ad_record.mp3",
-          `Record your ${categoryLabel} mailbox ad after the tone. Tell guys about yourself. Press any key when done.`
+          `Record your ${categoryLabel} ad after the tone. Tell guys about yourself. Press any key when done.`
         );
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}` } as any);
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}${regionParam}` } as any);
       }
     } catch (err) {
       console.error("[voice] /voice/record-category-ad error:", err);
@@ -4088,13 +4143,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const digit = req.body?.Digits as string;
     const fromNumber = req.body?.From as string;
     const category = req.query.category as string;
+    const regionId = req.query.regionId as string | undefined;
+    const regionLabel = req.query.regionLabel as string | undefined;
+    const regionParam = regionId ? `&regionId=${regionId}${regionLabel ? `&regionLabel=${regionLabel}` : ""}` : "";
 
     try {
       if (digit === "1") {
         playPrompt(twiml, req, "mailbox_ad_record.mp3",
           "Record your mailbox ad after the tone. Press any key when done."
         );
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}` } as any);
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}${regionParam}` } as any);
       } else if (digit === "2") {
         const user = await getOrCreateUser(fromNumber);
         const mailbox = await storage.getMailboxByUserId(user.id);
@@ -4103,12 +4161,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         } else {
           playPrompt(twiml, req, "no_greeting_found.mp3", "No ad found.");
         }
-        twiml.redirect(`/voice/record-category-ad?category=${category}`);
+        twiml.redirect(`/voice/record-category-ad?category=${category}${regionParam}`);
       } else if (digit === "9") {
-        twiml.redirect("/voice/ad-category-menu?mode=record");
+        twiml.redirect(category === "local" ? "/voice/mailbox-menu" : "/voice/ad-category-menu?mode=record");
       } else {
         playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
-        twiml.redirect(`/voice/record-category-ad?category=${category}`);
+        twiml.redirect(`/voice/record-category-ad?category=${category}${regionParam}`);
       }
     } catch (err) {
       console.error("[voice] /voice/handle-record-category-ad error:", err);
@@ -4128,11 +4186,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const rawRecordingUrl = req.body?.RecordingUrl as string;
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
       const category = req.query.category as string;
-      const categoryLabel = MAILBOX_CATEGORIES[category] || category;
+      const adRegionId = (req.query.regionId as string) || null;
+      const regionLabel = req.query.regionLabel ? decodeURIComponent(req.query.regionLabel as string) : undefined;
+      const regionParam = adRegionId ? `&regionId=${adRegionId}${regionLabel ? `&regionLabel=${encodeURIComponent(regionLabel)}` : ""}` : "";
+      const baseLabel = MAILBOX_CATEGORIES[category] || category;
+      const categoryLabel = category === "local"
+        ? `Local Ads${regionLabel && regionLabel !== "your area" ? " - " + regionLabel : " in your area"}`
+        : baseLabel;
 
       if (!rawRecordingUrl || recordingDuration < 3) {
         playPrompt(twiml, req, "greeting_error.mp3", "That recording was too short. Please try again after the tone. Press any key when done.");
-        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}` } as any);
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}${regionParam}` } as any);
         res.type("text/xml");
         return res.send(twiml.toString());
       }
@@ -4142,7 +4206,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Delete old local file if the caller is re-recording their category ad
       const existingMailbox = await storage.getMailboxByUserId(user.id);
       deleteLocalRecording(existingMailbox?.adRecordingUrl);
-      await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration);
+      await storage.updateMailboxAd(user.id, category, recordingUrl, recordingDuration, adRegionId);
       // Clear any previous recording rejection — this new recording will go through auto-mod again
       await storage.clearUserRecordingRejection(user.id);
       // Mark transcription as pending, then transcribe locally via Groq Whisper (async, non-blocking)

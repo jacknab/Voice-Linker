@@ -396,6 +396,7 @@ export const mailboxes = pgTable("mailboxes", {
   adTranscription: text("ad_transcription"), // auto-generated transcript of the mailbox ad audio
   adTranscriptionStatus: text("ad_transcription_status"), // null | 'pending' | 'completed' | 'failed'
   adUpdatedAt: timestamp("ad_updated_at"), // stamped every time the ad recording is saved/updated
+  adRegionId: uuid("ad_region_id").references(() => regions.id, { onDelete: "set null" }), // set for category="local" ads — scopes ad to one region
   lastCheckedAt: timestamp("last_checked_at"), // updated each time the member calls /voice/my-mailbox
   // Profile fields collected during mailbox setup
   dateOfBirth: text("date_of_birth"),   // MMDDYYYY format
