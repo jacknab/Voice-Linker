@@ -3820,8 +3820,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       // Build or reuse the queue for this call + category
       let state = categoryBrowseState.get(callSid);
-      if (!state || state.category !== category) {
-        const ads = await storage.getMailboxesByCategory(category, user.id);
+      const isFirstVisit = !state || state.category !== category;
+      if (isFirstVisit) {
+        const [ads, stats] = await Promise.all([
+          storage.getMailboxesByCategory(category, user.id),
+          storage.getMailboxCategoryStats(category, user.id),
+        ]);
         // Shuffle for variety
         for (let i = ads.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
@@ -3835,7 +3839,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           index: 0,
         };
         categoryBrowseState.set(callSid, state);
-        console.log(`[voice] browse-category-ads: category=${category}, ${state.queue.length} ads for callSid=${callSid}`);
+        console.log(`[voice] browse-category-ads: category=${category}, ${state.queue.length} ads (${stats.newThisMonth} new this month) for callSid=${callSid}`);
+
+        // Announce counts on first entry if there are any ads
+        if (stats.total > 0) {
+          const newPart = stats.newThisMonth > 0
+            ? `There ${stats.newThisMonth === 1 ? "is" : "are"} ${stats.newThisMonth} new ${stats.newThisMonth === 1 ? "ad" : "ads"} this month and `
+            : "";
+          playPrompt(twiml, req, "category_ad_count.mp3",
+            `${newPart}${stats.total} ${stats.total === 1 ? "ad" : "ads"} total in ${categoryLabel}.`
+          );
+        }
       }
 
       if (state.queue.length === 0) {

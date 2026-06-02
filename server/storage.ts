@@ -198,6 +198,7 @@ export interface IStorage {
   createMailboxForSetup(userId: string): Promise<Mailbox>;
   updateMailboxProfile(userId: string, data: { dateOfBirth?: string; bodyType?: string; ethnicity?: string; setupComplete?: boolean }): Promise<void>;
   getMailboxesByCategory(category: string, excludeUserId: string): Promise<Mailbox[]>;
+  getMailboxCategoryStats(category: string, excludeUserId: string): Promise<{ total: number; newThisMonth: number }>;
   updateMailboxAd(userId: string, category: string, adRecordingUrl: string, adRecordingDuration: number): Promise<Mailbox>;
 
   // Transcription
@@ -1562,11 +1563,33 @@ export class DatabaseStorage implements IStorage {
     const mailbox = await this.getOrCreateMailbox(userId);
     const [updated] = await db
       .update(mailboxes)
-      .set({ category, adRecordingUrl, adRecordingDuration })
+      .set({ category, adRecordingUrl, adRecordingDuration, adUpdatedAt: new Date() })
       .where(eq(mailboxes.userId, userId))
       .returning();
     console.log(`[mailbox] Updated ad for mailbox ${mailbox.mailboxNumber} — category=${category}`);
     return updated;
+  }
+
+  async getMailboxCategoryStats(category: string, excludeUserId: string): Promise<{ total: number; newThisMonth: number }> {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const rows = await db
+      .select({ adUpdatedAt: mailboxes.adUpdatedAt, createdAt: mailboxes.createdAt })
+      .from(mailboxes)
+      .where(
+        and(
+          eq(mailboxes.category, category),
+          not(eq(mailboxes.userId, excludeUserId)),
+          sql`${mailboxes.adRecordingUrl} IS NOT NULL`
+        )
+      );
+    const total = rows.length;
+    // "New this month" = ad recorded/updated this calendar month
+    const newThisMonth = rows.filter(r => {
+      const stamp = r.adUpdatedAt ?? r.createdAt;
+      return stamp && stamp >= startOfMonth;
+    }).length;
+    return { total, newThisMonth };
   }
 
   async updateProfileTranscription(recordingUrl: string, text: string | null, status: string): Promise<void> {

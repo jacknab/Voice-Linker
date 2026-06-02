@@ -395,6 +395,7 @@ export const mailboxes = pgTable("mailboxes", {
   adRecordingDuration: integer("ad_recording_duration"),
   adTranscription: text("ad_transcription"), // auto-generated transcript of the mailbox ad audio
   adTranscriptionStatus: text("ad_transcription_status"), // null | 'pending' | 'completed' | 'failed'
+  adUpdatedAt: timestamp("ad_updated_at"), // stamped every time the ad recording is saved/updated
   lastCheckedAt: timestamp("last_checked_at"), // updated each time the member calls /voice/my-mailbox
   // Profile fields collected during mailbox setup
   dateOfBirth: text("date_of_birth"),   // MMDDYYYY format
