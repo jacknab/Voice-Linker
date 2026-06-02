@@ -385,6 +385,7 @@ interface LiveConnectInvite {
   conferenceRoom: string;
   createdAt: number;
   status: "pending" | "accepted" | "declined";
+  isVirtualTarget?: boolean;          // true when target is a seeded/virtual caller — no real answer expected
 }
 const pendingLiveInvites = new Map<string, LiveConnectInvite>(); // targetUserId → invite
 
@@ -6200,16 +6201,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             res.type("text/xml");
             return res.send(twiml.toString());
           }
-          if (targetProfile.isAdminUploaded) {
-            console.warn(`[live-connect] REJECT (admin-uploaded-profile): profileUserId=${profileUserId}`);
-            playPrompt(twiml, req, "live_connect_admin_profile.mp3",
-              "This is a sample profile and cannot accept a live connection. Please choose another caller.");
-            twiml.redirect("/voice/browse-profiles");
-            res.type("text/xml");
-            return res.send(twiml.toString());
-          }
-
-          // 3. Check target is still on the line (non-virtual active call)
+          // 3. Check target is still on the line
           const targetActiveCall = await storage.getActiveCallByUserId(profileUserId);
           if (!targetActiveCall) {
             console.warn(`[live-connect] REJECT (target-not-on-line): profileUserId=${profileUserId}`);
@@ -6219,50 +6211,48 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             res.type("text/xml");
             return res.send(twiml.toString());
           }
-          if (targetActiveCall.callSid.startsWith("VIRTUAL-")) {
-            console.warn(`[live-connect] REJECT (target-is-virtual): profileUserId=${profileUserId} callSid=${targetActiveCall.callSid}`);
-            playPrompt(twiml, req, "live_connect_left_line.mp3",
-              "Sorry, that caller is not currently reachable for a live connection.");
-            twiml.redirect("/voice/browse-profiles");
-            res.type("text/xml");
-            return res.send(twiml.toString());
-          }
 
-          // 4. Check target has ≥ 5 minutes (300 seconds) remaining — skipped in free mode
-          const targetUser = await storage.getUserById(profileUserId);
-          if (!liveConnectFreeMode && (!targetUser || (targetUser.remainingSeconds ?? 0) < 300)) {
-            console.warn(`[live-connect] REJECT (target-low-time): profileUserId=${profileUserId} remainingSeconds=${targetUser?.remainingSeconds ?? 0}`);
-            playPrompt(twiml, req, "live_connect_unavailable.mp3",
-              "That caller does not have enough time remaining for a live connection.");
-            twiml.redirect("/voice/browse-profiles");
-            res.type("text/xml");
-            return res.send(twiml.toString());
-          }
+          // Seeded/virtual callers simulate activity — let the invite flow proceed
+          // normally; the wait loop will play "no answer" after one ring.
+          const isVirtualTarget = targetActiveCall.callSid.startsWith("VIRTUAL-");
 
-          // 5. Check target is not already in a live connection
-          if (liveConnectionUserIds.has(profileUserId)) {
-            console.warn(`[live-connect] REJECT (target-already-in-live): profileUserId=${profileUserId}`);
-            playPrompt(twiml, req, "live_connect_busy.mp3",
-              "That caller is already connected with someone else. Please try again later.");
-            twiml.redirect("/voice/browse-profiles");
-            res.type("text/xml");
-            return res.send(twiml.toString());
-          }
+          if (!isVirtualTarget) {
+            // 4. Check target has ≥ 5 minutes (300 seconds) remaining — skipped in free mode
+            const targetUser = await storage.getUserById(profileUserId);
+            if (!liveConnectFreeMode && (!targetUser || (targetUser.remainingSeconds ?? 0) < 300)) {
+              console.warn(`[live-connect] REJECT (target-low-time): profileUserId=${profileUserId} remainingSeconds=${targetUser?.remainingSeconds ?? 0}`);
+              playPrompt(twiml, req, "live_connect_unavailable.mp3",
+                "That caller does not have enough time remaining for a live connection.");
+              twiml.redirect("/voice/browse-profiles");
+              res.type("text/xml");
+              return res.send(twiml.toString());
+            }
 
-          // 6. Check target has not blocked initiator
-          const isBlocked = await storage.isUserBlocked(profileUserId, user.id);
-          if (isBlocked) {
-            console.warn(`[live-connect] REJECT (initiator-blocked): profileUserId=${profileUserId} initiatorUserId=${user.id}`);
-            playPrompt(twiml, req, "live_connect_unavailable.mp3",
-              "That caller is not available for a live connection.");
-            twiml.redirect("/voice/browse-profiles");
-            res.type("text/xml");
-            return res.send(twiml.toString());
+            // 5. Check target is not already in a live connection
+            if (liveConnectionUserIds.has(profileUserId)) {
+              console.warn(`[live-connect] REJECT (target-already-in-live): profileUserId=${profileUserId}`);
+              playPrompt(twiml, req, "live_connect_busy.mp3",
+                "That caller is already connected with someone else. Please try again later.");
+              twiml.redirect("/voice/browse-profiles");
+              res.type("text/xml");
+              return res.send(twiml.toString());
+            }
+
+            // 6. Check target has not blocked initiator
+            const isBlocked = await storage.isUserBlocked(profileUserId, user.id);
+            if (isBlocked) {
+              console.warn(`[live-connect] REJECT (initiator-blocked): profileUserId=${profileUserId} initiatorUserId=${user.id}`);
+              playPrompt(twiml, req, "live_connect_unavailable.mp3",
+                "That caller is not available for a live connection.");
+              twiml.redirect("/voice/browse-profiles");
+              res.type("text/xml");
+              return res.send(twiml.toString());
+            }
           }
 
           // All checks passed — prompt initiator to record a brief invite message.
           // The invite is created once the recording is complete.
-          console.log(`[live-connect] ALL CHECKS PASSED (default): userId=${user.id} → targetUserId=${profileUserId}. Prompting for invite message recording.`);
+          console.log(`[live-connect] ALL CHECKS PASSED (default): userId=${user.id} → targetUserId=${profileUserId} isVirtual=${isVirtualTarget}. Prompting for invite message recording.`);
           playPrompt(twiml, req, "live_connect_record_invite.mp3",
             "Please record your invitation for this caller to join you in a private conversation. Record after the tone, hit any key when you're done.");
           twiml.record({
@@ -6630,6 +6620,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const resolvedCallSid = initiatorCallSid || callSid;
       const conferenceRoom = `live-${resolvedCallSid}`;
 
+      // Check whether the target is still a virtual/seeded caller so the
+      // wait loop can play "no answer" instead of looping forever.
+      const targetActiveCallForInvite = await storage.getActiveCallByUserId(targetUserId);
+      const isVirtualTarget = !!targetActiveCallForInvite && targetActiveCallForInvite.callSid.startsWith("VIRTUAL-");
+
       pendingLiveInvites.set(targetUserId, {
         initiatorCallSid:          resolvedCallSid,
         initiatorUserId:           user.id,
@@ -6639,9 +6634,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         conferenceRoom,
         createdAt: Date.now(),
         status:    "pending",
+        isVirtualTarget,
       });
 
-      console.log(`[live-connect] Invite confirmed & created: userId=${user.id} → targetUserId=${targetUserId}, room=${conferenceRoom}, hasMessage=${!!recordingUrl}`);
+      console.log(`[live-connect] Invite confirmed & created: userId=${user.id} → targetUserId=${targetUserId}, room=${conferenceRoom}, hasMessage=${!!recordingUrl}, isVirtual=${isVirtualTarget}`);
       twiml.redirect(`/voice/live-connect-wait?targetUserId=${encodeURIComponent(targetUserId)}`);
     } catch (error) {
       console.error("[live-connect] confirm-invite error:", error);
@@ -6702,6 +6698,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         pendingLiveInvites.delete(targetUserId);
         playPrompt(twiml, req, "live_connect_declined.mp3",
           "The caller has declined your invitation. Returning to profiles.");
+        twiml.redirect("/voice/browse-profiles");
+      } else if (invite.isVirtualTarget && ringCount >= 1) {
+        // Virtual/seeded callers can never answer — simulate no-answer after one ring
+        pendingLiveInvites.delete(targetUserId);
+        playPrompt(twiml, req, "live_connect_no_answer.mp3",
+          "The caller did not answer. Returning to profiles.");
         twiml.redirect("/voice/browse-profiles");
       } else if (ringCount >= MAX_RING_LOOPS || Date.now() - invite.createdAt > LIVE_INVITE_TTL_MS) {
         pendingLiveInvites.delete(targetUserId);
