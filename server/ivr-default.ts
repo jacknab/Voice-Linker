@@ -1118,9 +1118,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       console.log(`[voice] registered caller ${callSid} from ${fromNumber}`);
 
       if (!caller?.greetingPlayed) {
-        playPrompt(twiml, req, "system_greeting.mp3",
+        // Wrap greeting + disclaimer in a Gather so pressing any key skips them.
+        // timeout:0 means the gather fires the action immediately after the
+        // audio finishes if no key was pressed (actionOnEmptyResult ensures this).
+        const skipGather = twiml.gather({
+          numDigits: 1,
+          action: "/voice/entry",
+          timeout: 0,
+          actionOnEmptyResult: true,
+        });
+        playPrompt(skipGather, req, "system_greeting.mp3",
           "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
-        playPrompt(twiml, req, "disclaimer.mp3",
+        playPrompt(skipGather, req, "disclaimer.mp3",
           "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
         await storage.markCallerGreetingPlayed(callSid);
       }
@@ -7840,9 +7849,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       console.log(`[voice] [${slug}] registered caller ${callSid} from ${fromNumber}`);
 
       if (!caller?.greetingPlayed) {
-        playPrompt(twiml, req, "system_greeting.mp3",
+        // Wrap greeting + disclaimer in a Gather so pressing any key skips them.
+        const skipGather = twiml.gather({
+          numDigits: 1,
+          action: "/voice/entry",
+          timeout: 0,
+          actionOnEmptyResult: true,
+        });
+        playPrompt(skipGather, req, "system_greeting.mp3",
           "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
-        playPrompt(twiml, req, "disclaimer.mp3",
+        playPrompt(skipGather, req, "disclaimer.mp3",
           "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
         await storage.markCallerGreetingPlayed(callSid);
       }
