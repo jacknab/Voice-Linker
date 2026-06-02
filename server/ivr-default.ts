@@ -5200,8 +5200,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           action: `/voice/handle-message-menu?msgId=${unreadMessage.id}&senderId=${unreadMessage.fromUserId}`,
           timeout: 10,
         });
+        // Always lead with the chime, then: name → "has sent you a message" → message
+        playPrompt(msgGather, req, "live_connect_chime.mp3", "");
         if (senderProfile?.nameRecordingUrl) {
-          playPrompt(msgGather, req, "vm_new_message.mp3", "New message.");
           safePlayRecording(msgGather, senderProfile.nameRecordingUrl, req, "");
           playPrompt(msgGather, req, "has_sent_you_a_message.mp3", "has sent you a message.");
         } else {
