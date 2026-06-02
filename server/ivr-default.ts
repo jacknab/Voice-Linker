@@ -177,9 +177,63 @@ function playTimeRemaining(
 ): void {
   const compositeFilename = `time_remaining_${totalMinutes}.mp3`;
   const fullSentence = minutesToAnnouncementText(totalMinutes);
-  // playPrompt checks the category folder (mm/mw/mw_m) for the composite file.
-  // If not found yet, the TTS fallback speaks the full sentence in one natural utterance.
-  playPrompt(twiml, req, compositeFilename, fullSentence);
+
+  // Try a pre-recorded composite file first (single natural utterance, if generated).
+  const category = getRawSiteSettingsCache()?.siteCategory?.toLowerCase();
+  const compositeExists = (() => {
+    const folders = category === "mw" ? ["mw_m", "mw"] : category ? [category] : ["mm", "mw", "mw_m"];
+    for (const cat of folders) {
+      if (fs.existsSync(path.join(UPLOADS_DIR, cat, compositeFilename))) return true;
+    }
+    return fs.existsSync(path.join(UPLOADS_DIR, compositeFilename));
+  })();
+
+  if (compositeExists) {
+    playPrompt(twiml, req, compositeFilename, fullSentence);
+    return;
+  }
+
+  // Build the announcement from component audio files so it plays as MP3, not TTS,
+  // even before a composite is generated.
+  // Pattern: phrase_you_have + num_N + phrase_(X)_of_pbtr  (e.g. "phrase_minutes_of_pbtr.mp3")
+  if (totalMinutes >= 1440) {
+    const days  = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
+    playNumber(twiml, req, days);
+    if (hours === 0) {
+      playPrompt(twiml, req, days === 1 ? "phrase_day_of_pbtr.mp3" : "phrase_days_of_pbtr.mp3",
+        days === 1 ? "day remaining." : "days remaining.");
+    } else {
+      playPrompt(twiml, req, days === 1 ? "phrase_day.mp3" : "phrase_days.mp3",
+        days === 1 ? "day" : "days");
+      playPrompt(twiml, req, "phrase_and.mp3", "and");
+      playNumber(twiml, req, hours);
+      playPrompt(twiml, req, hours === 1 ? "phrase_hour_of_pbtr.mp3" : "phrase_hours_of_pbtr.mp3",
+        hours === 1 ? "hour remaining." : "hours remaining.");
+    }
+  } else if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const mins  = totalMinutes % 60;
+    playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
+    playNumber(twiml, req, hours);
+    if (mins === 0) {
+      playPrompt(twiml, req, hours === 1 ? "phrase_hour_of_pbtr.mp3" : "phrase_hours_of_pbtr.mp3",
+        hours === 1 ? "hour remaining." : "hours remaining.");
+    } else {
+      playPrompt(twiml, req, hours === 1 ? "phrase_hour.mp3" : "phrase_hours.mp3",
+        hours === 1 ? "hour" : "hours");
+      playPrompt(twiml, req, "phrase_and.mp3", "and");
+      playNumber(twiml, req, mins);
+      playPrompt(twiml, req, mins === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
+        mins === 1 ? "minute remaining." : "minutes remaining.");
+    }
+  } else {
+    playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
+    playNumber(twiml, req, totalMinutes);
+    playPrompt(twiml, req, totalMinutes === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
+      totalMinutes === 1 ? "minute remaining." : "minutes remaining.");
+  }
 }
 
 // Play the 24-hour pass expiry announcement using pre-recorded hourly audio files.
