@@ -1305,8 +1305,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getStats(): Promise<{ users: number; profiles: number; messages: number; activeCalls: number }> {
-    const [userCount] = await db.select({ count: count() }).from(users);
-    const [profileCount] = await db.select({ count: count() }).from(profiles);
+    const [userCount] = await db.select({ count: count() }).from(users).where(
+      and(
+        notLike(users.phoneNumber, `${VIRTUAL_PREFIX}%`),
+        notLike(users.phoneNumber, "+1720111%")
+      )
+    );
+    const [profileCount] = await db.select({ count: count() }).from(profiles)
+      .innerJoin(users, eq(profiles.userId, users.id))
+      .where(
+        and(
+          notLike(users.phoneNumber, `${VIRTUAL_PREFIX}%`),
+          notLike(users.phoneNumber, "+1720111%")
+        )
+      );
     const [messageCount] = await db.select({ count: count() }).from(messages);
     const [activeCount] = await db.select({ count: count() }).from(callers).where(eq(callers.status, "active"));
 

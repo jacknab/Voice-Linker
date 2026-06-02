@@ -593,7 +593,7 @@ export async function registerRoutes(
   // --- Admin: List all profiles ---
   app.get("/api/admin/profiles", async (_req, res) => {
     try {
-      const data = await storage.getAdminUploadedProfilesWithUsers();
+      const data = await storage.getAllProfilesWithUsers();
       res.json(data);
     } catch (e) {
       console.error("[admin] Failed to list profiles:", e);
@@ -4258,7 +4258,7 @@ END OF KNOWLEDGE BASE
   // ── Live Callers Dashboard ────────────────────────────────────────────────
   app.get("/api/admin/live-callers", async (_req, res) => {
     try {
-      const VIRTUAL_PREFIX = "virtual_";
+      const VIRTUAL_PREFIX = "VIRTUAL-";
       const result = await db.execute(sql`
         SELECT
           c.call_sid        AS "callSid",
