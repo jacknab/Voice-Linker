@@ -5970,15 +5970,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const recordingUrl = await downloadRecording(rawRecordingUrl);
       pendingMessages.set(callSid, { recordingUrl, toUserId, returnTo, category });
 
+      // finishOnKey="" so pound (#) is captured as a digit (cancel option)
       const gather = twiml.gather({
         numDigits: 1,
+        finishOnKey: "",
         action: `/voice/handle-review-message`,
-        timeout: 10,
+        timeout: 12,
       });
-      playPrompt(gather, req, "review_your_message.mp3", "Here is your recorded message.");
-      gather.pause({ length: 2 });
+      playPrompt(gather, req, "message_review_header.mp3", "Here's how it sounds. Press 1 at any time to send.");
+      gather.pause({ length: 1 });
       safePlayRecording(gather, recordingUrl, req, "");
-      playPrompt(gather, req, "send_or_cancel.mp3", "Press 1 to send. Press 2 to cancel.");
+      gather.pause({ length: 1 });
+      playPrompt(gather, req, "message_review_options.mp3", "Re-record your message, press 2. To repeat your message, press 3. To cancel your message, press pound.");
       // No input → cancel
       twiml.redirect(cancelReturnPath(returnTo, category));
     } catch (err) {
@@ -6045,14 +6048,37 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           twiml.redirect("/voice/browse-profiles");
         }
       } else if (digit === "2") {
-        // Cancel — discard recording and return
+        // Re-record — discard current recording, prompt to record again
+        pendingMessages.delete(callSid);
+        playPrompt(twiml, req, "record_message.mp3", "Please record your message. Record after the tone. Hit any key when you're done.");
+        twiml.record({
+          maxLength: 60,
+          playBeep: true,
+          action: `/voice/review-message?toUserId=${encodeURIComponent(toUserId)}&returnTo=${encodeURIComponent(returnTo)}&category=${encodeURIComponent(category)}`,
+        });
+      } else if (digit === "3") {
+        // Repeat — replay the message and show options again (message stays in pending)
+        const repeatGather = twiml.gather({
+          numDigits: 1,
+          finishOnKey: "",
+          action: `/voice/handle-review-message`,
+          timeout: 12,
+        });
+        playPrompt(repeatGather, req, "message_review_header.mp3", "Here's how it sounds. Press 1 at any time to send.");
+        repeatGather.pause({ length: 1 });
+        safePlayRecording(repeatGather, recordingUrl, req, "");
+        repeatGather.pause({ length: 1 });
+        playPrompt(repeatGather, req, "message_review_options.mp3", "Re-record your message, press 2. To repeat your message, press 3. To cancel your message, press pound.");
+        twiml.redirect(cancelReturnPath(returnTo, category));
+      } else if (digit === "#") {
+        // Pound — cancel and return
         pendingMessages.delete(callSid);
         playPrompt(twiml, req, "message_cancelled.mp3", "Message cancelled.");
         twiml.redirect(cancelReturnPath(returnTo, category));
       } else {
-        // Invalid — re-prompt
-        const gather = twiml.gather({ numDigits: 1, action: "/voice/handle-review-message", timeout: 10 });
-        playPrompt(gather, req, "send_or_cancel.mp3", "Press 1 to send. Press 2 to cancel.");
+        // Invalid or no input — re-prompt
+        const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-review-message", timeout: 12 });
+        playPrompt(gather, req, "message_review_options.mp3", "Re-record your message, press 2. To repeat your message, press 3. To cancel your message, press pound.");
         twiml.redirect(cancelReturnPath(returnTo, category));
       }
     } catch (err) {
