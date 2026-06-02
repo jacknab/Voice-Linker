@@ -5198,19 +5198,28 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           // ── Load session-level block cache (separate from seen/buffer logic) ──
           const initialBlockedIds = await storage.getBlockedUserIdSet(user.id);
 
-          const initialBuffer: BrowseQueueItem[] = initialQueue
+          // Build full ordered queue: closest callers first, then by DB order.
+          const sortedInitialQueue = initialQueue
             .filter(p => !initialBlockedIds.has(p.userId))
-            .slice(0, 3)
-            .map(p => ({
-              userId: p.userId,
-              recordingUrl: p.recordingUrl,
-              nameRecordingUrl: p.nameRecordingUrl,
-              regionId: regionId ?? null,
-              regionName: callerRegionName,
-              isPreExisting: true,
-              lat: p.lat ?? null,
-              lon: p.lon ?? null,
-            }));
+            .sort((a, b) => {
+              if (callerLat == null || callerLon == null) return 0;
+              const dA = a.lat != null && a.lon != null
+                ? haversineDistanceMiles(callerLat, callerLon, a.lat, a.lon) : Infinity;
+              const dB = b.lat != null && b.lon != null
+                ? haversineDistanceMiles(callerLat, callerLon, b.lat, b.lon) : Infinity;
+              return dA - dB;
+            });
+
+          const initialBuffer: BrowseQueueItem[] = sortedInitialQueue.map(p => ({
+            userId: p.userId,
+            recordingUrl: p.recordingUrl,
+            nameRecordingUrl: p.nameRecordingUrl,
+            regionId: regionId ?? null,
+            regionName: callerRegionName,
+            isPreExisting: true,
+            lat: p.lat ?? null,
+            lon: p.lon ?? null,
+          }));
 
           state = {
             queue: initialBuffer,
@@ -5231,6 +5240,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             announcedLinkedCallerIds: [],
             greetingsPlayed: 0,
             windowAnnouncementsUsed: 0,
+            browsingLinked: false,
+            browsingLinkedRegionId: null,
+            browsingLinkedRegionName: null,
           };
 
           engagementEngine.initEngagementState(callSid, user.id);
@@ -5275,39 +5287,31 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
         }
 
-        // ── Refill buffer to max 3 from DB (excluding seen + current buffer) ──
+        // AI_ID reference used by reconciliation and bust-game injection below
         const AI_ID = engagementEngine.BUST_GAME_AI_USER_ID;
-        {
-          const bufferIds  = new Set(state.queue.map(p => p.userId));
-          const excluded   = new Set([...state.seenUserIds, ...bufferIds]);
 
-          const fillFrom = async (rid: string | undefined, rName: string | null, rId: string | null) => {
-            if (state!.queue.length >= 3) return;
-            const avail = await storage.getAllActiveProfilesWithGeo(user.id, rid, browseCallerGender, browseSiteCategory);
-            for (const p of avail) {
-              // Block cache is the top-level pre-filter — checked before seen/buffer exclusions
-              if (state!.blockedUserIds.has(p.userId)) continue;
-              if (excluded.has(p.userId) || p.userId === AI_ID) continue;
-              if (state!.queue.length >= 3) break;
-              state!.queue.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, regionId: rId, regionName: rName, isPreExisting: false, lat: p.lat ?? null, lon: p.lon ?? null });
-              excluded.add(p.userId);
-            }
-          };
-
-          if (!state.linkedRegionLoaded) {
-            await fillFrom(state.callerRegionId ?? undefined, state.callerRegionName, state.callerRegionId);
-          } else {
-            for (const snap of state.linkedRegionSnapshots) {
-              await fillFrom(snap.regionId, snap.regionName, snap.regionId);
-              if (state.queue.length >= 3) break;
-            }
-          }
+        // ── Rebuild queue when returning from linked-region browsing ──────────
+        // (browsingLinked was cleared by press-5 in handle-profile-menu, leaving an
+        //  empty local queue that needs to be reconstructed from the DB.)
+        if (!state.browsingLinked && state.queue.length === 0 && state.seenUserIds.length === 0) {
+          const rebuildProfiles = await storage.getAllActiveProfilesWithGeo(user.id, state.callerRegionId ?? undefined, browseCallerGender, browseSiteCategory);
+          state.queue = rebuildProfiles
+            .filter(p => !state!.blockedUserIds.has(p.userId))
+            .sort((a, b) => {
+              if (callerLat == null || callerLon == null) return 0;
+              const dA = a.lat != null && a.lon != null ? haversineDistanceMiles(callerLat, callerLon, a.lat, a.lon) : Infinity;
+              const dB = b.lat != null && b.lon != null ? haversineDistanceMiles(callerLat, callerLon, b.lat, b.lon) : Infinity;
+              return dA - dB;
+            })
+            .map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, regionId: state!.callerRegionId, regionName: state!.callerRegionName, isPreExisting: false, lat: p.lat ?? null, lon: p.lon ?? null }));
+          state.localUserIds = rebuildProfiles.map(p => p.userId);
+          console.log(`[voice] browse-profiles: rebuilt local queue for ${callSid} after returning from linked region — ${state.queue.length} profiles`);
         }
 
-        // ── Cycle-complete detection: buffer empty after fill ─────────────────
+        // ── Cycle-complete detection: local queue fully heard ─────────────────
         if (state.queue.length === 0) {
-          if (state.seenUserIds.length > 0 && !state.linkedRegionLoaded && state.callerRegionId) {
-            // Offer linked regions before resetting
+          if (!state.browsingLinked && state.callerRegionId) {
+            // Offer linked regions if available — always try on any empty-queue visit
             const linkedRegions2 = await storage.getLinkedRegions(state.callerRegionId).catch(() => [] as Awaited<ReturnType<typeof storage.getLinkedRegions>>);
             if (linkedRegions2.length > 0) {
               const ids   = linkedRegions2.map(r => r.id).join(",");
@@ -5319,18 +5323,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             }
           }
 
-          // Reset cycle: clear seenUserIds and refill (block cache is NOT reset)
-          if (state.seenUserIds.length > 0) {
-            console.log(`[voice] browse-profiles: cycle complete for ${callSid} — resetting seenUserIds`);
-            state.seenUserIds = [];
-            const resetAvail = await storage.getAllActiveProfilesWithGeo(user.id, state.callerRegionId ?? undefined, browseCallerGender, browseSiteCategory);
-            for (const p of resetAvail) {
-              if (state.queue.length >= 3) break;
-              // Block cache pre-filter: never re-introduce blocked users on cycle reset
-              if (state.blockedUserIds.has(p.userId)) continue;
-              state.queue.push({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, regionId: state.callerRegionId, regionName: state.callerRegionName, isPreExisting: false, lat: p.lat ?? null, lon: p.lon ?? null });
-            }
-          }
+          // No linked regions (or already browsingLinked) — reset local cycle
+          console.log(`[voice] browse-profiles: full cycle complete for ${callSid} — resetting queue`);
+          state.seenUserIds = [];
+          state.browsingLinked = false;
+          const resetAvail = await storage.getAllActiveProfilesWithGeo(user.id, state.callerRegionId ?? undefined, browseCallerGender, browseSiteCategory);
+          state.queue = resetAvail
+            .filter(p => !state!.blockedUserIds.has(p.userId))
+            .sort((a, b) => {
+              if (callerLat == null || callerLon == null) return 0;
+              const dA = a.lat != null && a.lon != null ? haversineDistanceMiles(callerLat, callerLon, a.lat, a.lon) : Infinity;
+              const dB = b.lat != null && b.lon != null ? haversineDistanceMiles(callerLat, callerLon, b.lat, b.lon) : Infinity;
+              return dA - dB;
+            })
+            .map(p => ({ userId: p.userId, recordingUrl: p.recordingUrl, nameRecordingUrl: p.nameRecordingUrl, regionId: state!.callerRegionId, regionName: state!.callerRegionName, isPreExisting: false, lat: p.lat ?? null, lon: p.lon ?? null }));
 
           // Still empty — wait and retry
           if (state.queue.length === 0) {
@@ -5608,7 +5614,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           safePlayRecording(profileGather, profile.nameRecordingUrl, req, "");
         }
         safePlayRecording(profileGather, profile.recordingUrl, req, "This profile's greeting is not available.");
-        playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+        if (state.browsingLinked) {
+          // Override press-5 meaning while in linked-region mode
+          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to return to your local guys. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+        } else {
+          playPrompt(profileGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
+        }
 
         console.log(`[voice] Playing profile userId=${profile.userId} (buffer=${state.queue.length}, seen=${state.seenUserIds.length})`);
 
@@ -5630,12 +5641,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 6a. Nearby Callers Offer ─────────────────────────────────────────────
   // Played when a caller exhausts their region's local queue.
-  // Builds a dynamic per-region menu (up to 3 linked regions + a start-over option).
+  // Press 1 → hear guys from the linked region. Press star → start local queue over.
   app.post("/voice/nearby-callers-offer", async (req, res) => {
     const twiml = new VoiceResponse();
     try {
       const linkedRegionIds = ((req.query.linkedRegionIds as string) || "").split(",").filter(Boolean);
-      // Names are || separated to avoid conflicts with commas in city names
       const linkedRegionNames = ((req.query.linkedRegionNames as string) || "").split("||").map(n => n.trim()).filter(Boolean);
 
       if (linkedRegionIds.length === 0) {
@@ -5644,36 +5654,28 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      // Cap at 3 linked regions (max supported)
-      const regions = linkedRegionIds.slice(0, 3).map((id, i) => ({
-        id,
-        name: linkedRegionNames[i] || `Area ${i + 1}`,
-        digit: String(i + 1),
-      }));
-      const startOverDigit = String(regions.length + 1);
+      // Use the first linked region as the primary offer (press 1).
+      // Additional linked regions are still passed through for admin/future use.
+      const primaryRegionId   = linkedRegionIds[0];
+      const primaryRegionName = linkedRegionNames[0] || "a nearby area";
 
-      const encodedIds = encodeURIComponent(regions.map(r => r.id).join(","));
-      const encodedNames = encodeURIComponent(regions.map(r => r.name).join("||"));
+      const encodedIds   = encodeURIComponent(linkedRegionIds.join(","));
+      const encodedNames = encodeURIComponent(linkedRegionNames.join("||"));
+
       const gather = twiml.gather({
         numDigits: 1,
+        finishOnKey: "",
         action: `/voice/handle-nearby-callers?linkedRegionIds=${encodedIds}&linkedRegionNames=${encodedNames}`,
-        timeout: 12,
+        timeout: 15,
       });
 
-      // Static intro audio (can be overridden with ElevenLabs recording)
-      playPrompt(gather, req, "nearby_callers_offer.mp3", "You have heard all the callers close to you.");
+      playPrompt(gather, req, "nearby_callers_offer.mp3",
+        "You have heard all the guys in your area. " +
+        "Press 1 to hear guys from " + primaryRegionName + ". " +
+        "Press star to start your local area over from the beginning."
+      );
 
-      for (const r of regions) {
-        playPrompt(gather, req, "phrase_press.mp3", "Press");
-        playPrompt(gather, req, `num_${r.digit}.mp3`, r.digit);
-        playPrompt(gather, req, "phrase_to_hear_callers_from.mp3", "to hear callers from");
-        playRegionWord(gather, req, r.name);
-      }
-      playPrompt(gather, req, "phrase_press.mp3", "Press");
-      playPrompt(gather, req, `num_${startOverDigit}.mp3`, startOverDigit);
-      playPrompt(gather, req, "phrase_to_start_over.mp3", "to start over from the beginning.");
-
-      // Timeout with no digit → fall through to handle-nearby-callers (treated as start-over)
+      // Timeout with no digit → start local queue over
       twiml.redirect(`/voice/handle-nearby-callers?linkedRegionIds=${encodedIds}&linkedRegionNames=${encodedNames}`);
     } catch (err) {
       console.error("[voice] /voice/nearby-callers-offer error:", err);
@@ -5684,40 +5686,73 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   });
 
   // ─── 6b. Handle Nearby Callers Choice ────────────────────────────────────
-  // digit 1–3 → load that specific linked region's profiles
-  // digit = regions.length + 1  (or no input / timeout) → start over from local queue
+  // digit 1 → load the linked region's full profile queue and set browsingLinked=true
+  // digit * or timeout → reset local queue and start over
   app.post("/voice/handle-nearby-callers", async (req, res) => {
     const twiml = new VoiceResponse();
     try {
       const digit = req.body?.Digits as string | undefined;
-      const linkedRegionIds = ((req.query.linkedRegionIds as string) || "").split(",").filter(Boolean);
+      const linkedRegionIds   = ((req.query.linkedRegionIds as string) || "").split(",").filter(Boolean);
       const linkedRegionNames = ((req.query.linkedRegionNames as string) || "").split("||").map(n => n.trim()).filter(Boolean);
       const fromNumber = req.body?.From as string;
+      const callSid    = req.body?.CallSid as string;
 
-      // Determine if caller chose a specific linked region (digit 1, 2, or 3)
-      // Any digit beyond the number of linked regions (or no digit) = start-over
-      const chosenIndex = digit ? parseInt(digit, 10) - 1 : -1;
-      const chosenRegionId = chosenIndex >= 0 && chosenIndex < linkedRegionIds.length
-        ? linkedRegionIds[chosenIndex]
-        : null;
-      const chosenRegionName = chosenIndex >= 0 && chosenIndex < linkedRegionNames.length
-        ? linkedRegionNames[chosenIndex]
-        : null;
+      const chosenRegionId   = linkedRegionIds[0]   ?? null;
+      const chosenRegionName = linkedRegionNames[0] ?? null;
 
-      if (chosenRegionId) {
+      if (digit === "1" && chosenRegionId) {
+        // ── Load the full linked-region queue and switch to linked browsing ──
         const user = await getOrCreateUser(fromNumber);
-        const linkedProfiles = await storage.getAllActiveProfiles(user.id, chosenRegionId);
+        const browseConf = await getSiteSettingsCached();
+        const linkedCallerGender: string | null = browseConf.siteCategory === "MW"
+          ? (femaleCallers.has(callSid) ? "female" : "male") : null;
+        const linkedSiteCategory = browseConf.siteCategory ?? "MM";
+
+        const linkedProfiles = await storage.getAllActiveProfilesWithGeo(user.id, chosenRegionId, linkedCallerGender, linkedSiteCategory);
 
         if (linkedProfiles.length > 0) {
-          console.log(`[voice] handle-nearby-callers: loaded ${linkedProfiles.length} profiles from "${chosenRegionName}" (regionId=${chosenRegionId})`);
+          const state = await getBrowseState(callSid);
+          if (state) {
+            // Build full ordered queue for the linked region
+            state.browsingLinked         = true;
+            state.browsingLinkedRegionId  = chosenRegionId;
+            state.browsingLinkedRegionName = chosenRegionName;
+            state.linkedRegionLoaded      = true;
+            state.seenUserIds             = [];   // fresh seen list for linked region
+            state.queue = linkedProfiles
+              .filter(p => !state.blockedUserIds.has(p.userId))
+              .map(p => ({
+                userId: p.userId,
+                recordingUrl: p.recordingUrl,
+                nameRecordingUrl: p.nameRecordingUrl,
+                regionId: chosenRegionId,
+                regionName: chosenRegionName,
+                isPreExisting: false,
+                lat: p.lat ?? null,
+                lon: p.lon ?? null,
+              }));
+            await setBrowseState(callSid, state);
+            console.log(`[voice] handle-nearby-callers: loaded ${state.queue.length} profiles from "${chosenRegionName}" into queue for ${callSid}`);
+          }
           playPrompt(twiml, req, "phrase_now_playing_callers_from.mp3", "Now playing callers from");
           if (chosenRegionName) playRegionWord(twiml, req, chosenRegionName);
         } else {
           playPrompt(twiml, req, "nearby_callers_none.mp3",
-            `There are no callers online in ${chosenRegionName ?? "that area"} right now. Starting your area over.`);
+            `There are no callers online in ${chosenRegionName ?? "that area"} right now. Starting your local area over.`);
         }
         twiml.redirect("/voice/browse-profiles");
       } else {
+        // ── Star or timeout → reset local queue and start over ────────────────
+        const state = await getBrowseState(callSid);
+        if (state) {
+          state.browsingLinked          = false;
+          state.browsingLinkedRegionId  = null;
+          state.browsingLinkedRegionName = null;
+          state.linkedRegionLoaded      = false;
+          state.seenUserIds             = [];
+          state.queue                   = [];   // will be rebuilt by browse-profiles
+          await setBrowseState(callSid, state);
+        }
         twiml.redirect("/voice/browse-profiles");
       }
     } catch (err) {
@@ -6097,19 +6132,35 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
         twiml.redirect("/voice/browse-profiles");
       } else if (digit === "5") {
-        // ── Play previous profile ───────────────────────────────────────────
-        const previousProfileUserId = req.query.previousProfileUserId as string | undefined;
-        const callSid = req.body?.CallSid as string | undefined;
-        const browseState = callSid ? await getBrowseState(callSid) : null;
-        const resolvedPreviousProfileUserId =
-          previousProfileUserId ||
-          browseState?.previousLastPlayedProfile?.userId ||
-          null;
-        if (resolvedPreviousProfileUserId) {
-          twiml.redirect(`/voice/browse-profiles?targetUserId=${encodeURIComponent(resolvedPreviousProfileUserId)}`);
-        } else {
-          playPrompt(twiml, req, "invalid_choice.mp3", "There is no previous greeting yet.");
+        const callSid5 = req.body?.CallSid as string | undefined;
+        const browseState5 = callSid5 ? await getBrowseState(callSid5) : null;
+
+        if (browseState5?.browsingLinked) {
+          // ── Return to local guys ──────────────────────────────────────────
+          // Clear linked-region state and let browse-profiles rebuild the local queue.
+          browseState5.browsingLinked          = false;
+          browseState5.browsingLinkedRegionId  = null;
+          browseState5.browsingLinkedRegionName = null;
+          browseState5.linkedRegionLoaded      = false;
+          browseState5.seenUserIds             = [];
+          browseState5.queue                   = [];
+          await setBrowseState(callSid5!, browseState5);
+          console.log(`[voice] handle-profile-menu: press-5 return-to-locals for ${callSid5}`);
+          playPrompt(twiml, req, "nearby_callers_offer.mp3", "Returning to your local guys.");
           twiml.redirect("/voice/browse-profiles");
+        } else {
+          // ── Play previous profile ───────────────────────────────────────────
+          const previousProfileUserId = req.query.previousProfileUserId as string | undefined;
+          const resolvedPreviousProfileUserId =
+            previousProfileUserId ||
+            browseState5?.previousLastPlayedProfile?.userId ||
+            null;
+          if (resolvedPreviousProfileUserId) {
+            twiml.redirect(`/voice/browse-profiles?targetUserId=${encodeURIComponent(resolvedPreviousProfileUserId)}`);
+          } else {
+            playPrompt(twiml, req, "invalid_choice.mp3", "There is no previous greeting yet.");
+            twiml.redirect("/voice/browse-profiles");
+          }
         }
       } else if (digit === "6") {
         // ── Hear this caller's location ─────────────────────────────────────

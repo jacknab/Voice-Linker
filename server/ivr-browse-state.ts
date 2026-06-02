@@ -31,4 +31,10 @@ export interface CallerBrowseState {
   announcedLinkedCallerIds: string[];
   greetingsPlayed: number;
   windowAnnouncementsUsed: number;
+  // ── linked-region browsing ──────────────────────────────────────────────────
+  // true while the caller is listening to a linked/nearby region's profiles
+  browsingLinked: boolean;
+  // The linked region currently being browsed (for prompts/logging)
+  browsingLinkedRegionId: string | null;
+  browsingLinkedRegionName: string | null;
 }
