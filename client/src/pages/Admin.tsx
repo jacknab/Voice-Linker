@@ -11,9 +11,10 @@ import {
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
   BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send, Headphones,
-  Voicemail, MailOpen, Bookmark, FileText, ExternalLink,
+  Voicemail, MailOpen, Bookmark, FileText, ExternalLink, Shuffle,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
+import QueueMonitor from "@/components/QueueMonitor";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
@@ -74,7 +75,7 @@ interface AudioHealth {
   };
 }
 
-type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "seo-pages" | "ai-seo-gen" | "live-callers" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
+type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "seo-pages" | "ai-seo-gen" | "live-callers" | "queue-monitor" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
 
 interface FlaggedItem {
   id: string;
@@ -9019,6 +9020,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "cards",          label: "Member Cards",      icon: <CreditCard size={15} /> },
   { id: "audio-gen",      label: "Audio Gen",         icon: <Volume2 size={15} /> },
   { id: "live-callers",   label: "Live Callers",      icon: <PhoneCall size={15} /> },
+  { id: "queue-monitor",  label: "Queue Monitor",     icon: <Shuffle size={15} /> },
   { id: "regions",        label: "Regions",           icon: <Globe size={15} /> },
   { id: "seo-pages",      label: "SEO Pages",         icon: <FileText size={15} /> },
   { id: "ai-seo-gen",     label: "AI SEO Generator",  icon: <Wand2 size={15} /> },
@@ -9414,6 +9416,22 @@ function SupportTicketsTab() {
   );
 }
 
+// ── Queue Monitor Tab ─────────────────────────────────────────────────────────
+function QueueMonitorTab({ adminKey }: { adminKey: string | null }) {
+  return (
+    <div className="flex flex-col gap-4 h-full">
+      <div>
+        <h2 className="text-base font-semibold">Queue Monitor</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Real-time view of every active caller's profile queue. Inject profiles to the front or remove
+          them — changes take effect the next time the caller presses Next.
+        </p>
+      </div>
+      <QueueMonitor adminKey={adminKey} />
+    </div>
+  );
+}
+
 // ── Section-level action buttons ──────────────────────────────────────────────
 function SectionActions({ activeTab, onAddProfile, onAddRegion, onSaveMembership, isSavingMembership }: {
   activeTab: Tab;
@@ -9680,6 +9698,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "transcriptions"  && <TranscriptionsTab />}
           {activeTab === "regions"         && <RegionsTab />}
           {activeTab === "live-callers"    && <LiveCallersTab />}
+          {activeTab === "queue-monitor"  && <QueueMonitorTab adminKey={adminKey} />}
           {activeTab === "seo-pages"      && <SeoPagesTab />}
           {activeTab === "ai-seo-gen"     && <AiSeoGenTab />}
           {activeTab === "memberships"    && <MembershipsTab />}

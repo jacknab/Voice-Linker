@@ -13,6 +13,7 @@ import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from ".
 import { transcribeLocalFile } from "./transcribeAudio";
 import { locationToFilename, triggerLocationAudio, triggerCityWordAudio, minutesToAnnouncementText, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
+import { registerCallerPhone, removeCallerQueue } from "./ws";
 import type { CallerBrowseState } from "./ivr-browse-state";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -970,6 +971,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
       // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, region mapping, membership override, and gender selection
       await deleteBrowseState(callSid);
+      removeCallerQueue(callSid);
       categoryBrowseState.delete(callSid);
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
@@ -1031,6 +1033,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       storage.removeActiveCallsByUser(user.id).catch(() => {});
       await storage.registerActiveCall(callSid, user.id);
       storage.logCall(callSid, fromNumber, req.body?.To || null, null).catch(() => {});
+      registerCallerPhone(callSid, fromNumber);
       console.log(`[voice] Registered active call ${callSid} for userId=${user.id}`);
       registerStatusCallback(callSid, req).catch(() => {});
 

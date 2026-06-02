@@ -74,6 +74,15 @@ function getClient(): Redis | null {
 // Initialize eagerly so connection is established before first request
 getClient();
 
+// ── State-change listeners (used by WebSocket queue broadcaster) ──────────────
+type BrowseStateListener = (callSid: string, state: CallerBrowseState) => void;
+const browseStateListeners: BrowseStateListener[] = [];
+
+/** Register a callback that fires every time setBrowseState writes a new state. */
+export function onBrowseStateChange(listener: BrowseStateListener): void {
+  browseStateListeners.push(listener);
+}
+
 export interface RedisStatus {
   configured: boolean;
   connected: boolean;
@@ -143,15 +152,19 @@ export async function setBrowseState(callSid: string, state: CallerBrowseState):
   const client = getClient();
   if (!client || !redisAvailable) {
     memoryFallback.set(callSid, state);
-    return;
+  } else {
+    try {
+      await client.set(`browse:${callSid}`, JSON.stringify(serialize(state)), "EX", BROWSE_STATE_TTL);
+      // Keep fallback in sync so a sudden Redis failure mid-session degrades gracefully
+      memoryFallback.set(callSid, state);
+    } catch (err) {
+      console.error("[redis] setBrowseState error — using fallback:", err);
+      memoryFallback.set(callSid, state);
+    }
   }
-  try {
-    await client.set(`browse:${callSid}`, JSON.stringify(serialize(state)), "EX", BROWSE_STATE_TTL);
-    // Keep fallback in sync so a sudden Redis failure mid-session degrades gracefully
-    memoryFallback.set(callSid, state);
-  } catch (err) {
-    console.error("[redis] setBrowseState error — using fallback:", err);
-    memoryFallback.set(callSid, state);
+  // Notify WebSocket queue broadcaster (and any other listeners) of the change
+  for (const listener of browseStateListeners) {
+    try { listener(callSid, state); } catch { /* ignore listener errors */ }
   }
 }
 

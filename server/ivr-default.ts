@@ -15,6 +15,7 @@ import { transcribeLocalFile } from "./transcribeAudio";
 import { locationToFilename, triggerLocationAudio, triggerCityWordAudio, minutesToAnnouncementText, ROGER_PROMPTS, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
 import type { BrowseQueueItem, CallerBrowseState } from "./ivr-browse-state";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
+import { registerCallerPhone, removeCallerQueue } from "./ws";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -1064,6 +1065,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       engagementEngine.cleanupEngagementState(callSid);
       categoryBrowseState.delete(callSid);
       await deleteBrowseState(callSid);
+      removeCallerQueue(callSid);
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
       pendingGreetingDrafts.delete(callSid);
@@ -1184,6 +1186,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // to redirecting entry-check (old behaviour), never "An error occurred".
         const entryFrom = req.body?.From as string;
         const entrySid  = req.body?.CallSid as string;
+        // Register the phone number so the queue monitor can label this caller
+        if (entryFrom && entrySid) registerCallerPhone(entrySid, entryFrom);
         let inlineHandled = false;
         if (entryFrom && entrySid) {
           try {

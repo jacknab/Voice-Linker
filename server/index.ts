@@ -5,6 +5,7 @@ loadEnv({ override: false });
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import { registerRoutes } from "./routes";
+import { initWebSocketServer } from "./ws";
 import { serveStatic } from "./static";
 import { startSimulator } from "./simulator";
 import { runStartupMigrations } from "./migrations";
@@ -153,6 +154,10 @@ app.use((req, res, next) => {
   // This catches any columns that were added to the schema after the initial
   // drizzle-kit push ran on the production server.
   await runStartupMigrations();
+
+  // Attach WebSocket queue server before registering routes so upgrade events
+  // are handled from the moment the HTTP server is ready.
+  initWebSocketServer(httpServer);
 
   await registerRoutes(httpServer, app);
 
