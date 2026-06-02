@@ -6598,6 +6598,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           endConferenceOnExit: true,
           beep: false,
           exitKeys: "#",
+          statusCallback: `${baseUrl(req)}/voice/conference-events`,
+          statusCallbackEvent: "participant-leave",
+          statusCallbackMethod: "POST",
         });
       } else if (invite.status === "declined") {
         pendingLiveInvites.delete(targetUserId);
@@ -6751,6 +6754,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           beep: false,
           exitKeys: "#",
           maxParticipants: 2,
+          statusCallback: `${baseUrl(req)}/voice/conference-events`,
+          statusCallbackEvent: "participant-leave",
+          statusCallbackMethod: "POST",
         });
 
       } else if (digit === "2") {
@@ -6869,6 +6875,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         beep: false,
         exitKeys: "#",
         maxParticipants: 2,
+        statusCallback: `${baseUrl(req)}/voice/conference-events`,
+        statusCallbackEvent: "participant-leave",
+        statusCallbackMethod: "POST",
       });
     } catch (error) {
       console.error("[live-connect] live-connect-join error:", error);
@@ -6915,7 +6924,56 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
-  // ─── 8e. Live Connect: Low Balance Warning (per-participant) ─────────────
+  // ─── 8e. Live Connect: Conference Status Callback ────────────────────────
+  // Twilio fires this when a conference participant joins or leaves.
+  // On participant-leave we immediately redirect the remaining caller to the
+  // live-connect-complete endpoint so they are never stuck in silent hold.
+  app.post("/voice/conference-events", async (req, res) => {
+    // Respond 204 immediately — Twilio does not use the response body for
+    // conference status callbacks and will retry on non-2xx.
+    res.sendStatus(204);
+
+    const event         = req.body?.StatusCallbackEvent as string;
+    const room          = (req.body?.FriendlyName ?? req.query.room) as string;
+    const leavingCallSid = req.body?.CallSid as string;
+
+    if (event !== "participant-leave" || !room || !leavingCallSid) return;
+
+    const session = liveBillingSessions.get(room);
+    if (!session) return;
+
+    // Determine which call is still in the conference
+    const remainingCallSid =
+      leavingCallSid === session.initiatorCallSid
+        ? session.inviteeCallSid
+        : session.initiatorCallSid;
+
+    const remainingUserId =
+      leavingCallSid === session.initiatorCallSid
+        ? session.inviteeUserId
+        : session.initiatorUserId;
+
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken  = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) return;
+
+    try {
+      const client = twilio(accountSid, authToken);
+      const completeUrl =
+        `${session.storedBaseUrl}/voice/live-connect-complete` +
+        `?role=remaining` +
+        `&targetUserId=${encodeURIComponent(remainingUserId)}` +
+        `&initiatorUserId=${encodeURIComponent(session.initiatorUserId)}` +
+        `&room=${encodeURIComponent(room)}`;
+      await client.calls(remainingCallSid).update({ url: completeUrl, method: "POST" });
+      console.log(`[live-connect] conference-events: ${leavingCallSid} left room=${room} — redirected remaining ${remainingCallSid} to complete`);
+    } catch (err: any) {
+      // Call may have already ended — log and move on
+      console.error("[live-connect] conference-events: could not redirect remaining caller:", err.message);
+    }
+  });
+
+  // ─── 8f. Live Connect: Low Balance Warning (per-participant) ─────────────
   // Twilio calls this via announceUrl on the specific participant's conference leg.
   // Only that participant hears it — the other caller is unaffected.
   app.post("/voice/live-low-balance-warning", (_req, res) => {
