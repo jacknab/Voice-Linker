@@ -245,7 +245,7 @@ const MAILBOX_CATEGORIES: Record<string, string> = {
   daddys: "Daddys",
 };
 
-// Digit → category slug (page 1 and page 2)
+// Digit → category slug (all 12 categories on one menu, using 1-9, 0, *, #)
 const DIGIT_TO_CATEGORY_PAGE1: Record<string, string> = {
   "1": "quick_hot_talk",
   "2": "bicurious",
@@ -253,15 +253,15 @@ const DIGIT_TO_CATEGORY_PAGE1: Record<string, string> = {
   "4": "total_tops",
   "5": "strictly_bottoms",
   "6": "trans",
+  "7": "cock_suckers",
+  "8": "hung_cocks",
+  "9": "uncut_cocks",
+  "0": "twinks",
+  "*": "bears",
+  "#": "daddys",
 };
-const DIGIT_TO_CATEGORY_PAGE2: Record<string, string> = {
-  "1": "cock_suckers",
-  "2": "hung_cocks",
-  "3": "uncut_cocks",
-  "4": "twinks",
-  "5": "bears",
-  "6": "daddys",
-};
+// Page 2 is no longer used — all categories are on page 1
+const DIGIT_TO_CATEGORY_PAGE2: Record<string, string> = {};
 // Legacy alias so any existing code referencing DIGIT_TO_CATEGORY keeps working
 const DIGIT_TO_CATEGORY: Record<string, string> = { ...DIGIT_TO_CATEGORY_PAGE1 };
 
@@ -3066,43 +3066,30 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 4a4. Ad Category Menu (shared for listen & record modes) ────────────
   // mode query param: "listen" | "record"
-  // page query param: "1" | "2"  (defaults to "1")
   app.post("/voice/ad-category-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const mode = (req.query.mode as string) || "listen";
-    const page = (req.query.page as string) || "1";
-    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-ad-category?mode=${mode}&page=${page}` });
+    const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: `/voice/handle-ad-category?mode=${mode}` });
 
-    if (page === "2") {
-      playPrompt(gather, req, "ad_category_menu_p2.mp3",
-        "More categories. " +
-        "For Cock Suckers press one. " +
-        "For Hung Cocks press two. " +
-        "For Uncut Cocks press three. " +
-        "For Twinks press four. " +
-        "For Bears press five. " +
-        "For Daddys press six. " +
-        "To look up a specific mailbox press seven. " +
-        "For definitions press nine. " +
-        "To go back to the previous categories press pound."
-      );
-    } else {
-      playPrompt(gather, req, "ad_category_menu.mp3",
-        "Please select a category. " +
-        "For Quick and Hot Talk press one. " +
-        "For Bicurious press two. " +
-        "For Kink press three. " +
-        "For Total Tops press four. " +
-        "For Strictly Bottoms press five. " +
-        "For Trans press six. " +
-        "To look up a specific mailbox press seven. " +
-        "For more categories press eight. " +
-        "For definitions press nine. " +
-        "To return to the mailbox menu press pound."
-      );
-    }
+    playPrompt(gather, req, "ad_category_menu.mp3",
+      "Please select a category. " +
+      "For Quick and Hot Talk press one. " +
+      "For Bicurious press two. " +
+      "For Kink press three. " +
+      "For Total Tops press four. " +
+      "For Strictly Bottoms press five. " +
+      "For Trans press six. " +
+      "For Cock Suckers press seven. " +
+      "For Hung Cocks press eight. " +
+      "For Uncut Cocks press nine. " +
+      "For Twinks press zero. " +
+      "For Bears press star. " +
+      "For Daddys press pound. " +
+      "To return to the mailbox menu, please hold."
+    );
 
-    twiml.redirect(`/voice/ad-category-menu?mode=${mode}&page=${page}`);
+    // Timeout with no input → return to mailbox menu
+    twiml.redirect("/voice/mailbox-menu");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -3111,10 +3098,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
     const mode = (req.query.mode as string) || "listen";
-    const page = (req.query.page as string) || "1";
 
-    const categoryMap = page === "2" ? DIGIT_TO_CATEGORY_PAGE2 : DIGIT_TO_CATEGORY_PAGE1;
-    const category = categoryMap[digit];
+    const category = DIGIT_TO_CATEGORY_PAGE1[digit];
 
     if (category) {
       if (mode === "record") {
@@ -3122,22 +3107,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else {
         twiml.redirect(`/voice/browse-category-ads?category=${category}`);
       }
-    } else if (digit === "7") {
-      twiml.redirect(`/voice/mailbox-lookup?mode=${mode}`);
-    } else if (digit === "8" && page === "1") {
-      // Page 2 of categories
-      twiml.redirect(`/voice/ad-category-menu?mode=${mode}&page=2`);
-    } else if (digit === "9") {
-      twiml.redirect(`/voice/ad-category-definitions?mode=${mode}`);
-    } else if (digit === "#") {
-      if (page === "2") {
-        twiml.redirect(`/voice/ad-category-menu?mode=${mode}&page=1`);
-      } else {
-        twiml.redirect("/voice/mailbox-menu");
-      }
     } else {
       playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
-      twiml.redirect(`/voice/ad-category-menu?mode=${mode}&page=${page}`);
+      twiml.redirect(`/voice/ad-category-menu?mode=${mode}`);
     }
 
     res.type("text/xml");
