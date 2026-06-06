@@ -98,8 +98,7 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "time_deduction_stop.mp3",         text: "Time is no longer being deducted from your membership." },
 
   { filename: "profile_options.mp3",           text: "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu." },
-  { filename: "new_caller_close_to_you.mp3",   text: "New caller close to you." },
-  { filename: "new_caller_closest_to_you.mp3", text: "New caller closest to you." },
+  { filename: "new_caller_close_to_you.mp3",   text: "Caller close to you." },
   { filename: "nearby_callers_offer.mp3",      text: "You've heard all the callers in your area. Press 1 to hear callers from nearby cities. Press 2 to start over from the beginning." },
   { filename: "nearby_callers_intro.mp3",      text: "Now playing callers from nearby cities. Enjoy!" },
   { filename: "nearby_callers_none.mp3",       text: "There are no callers online in nearby cities right now. Starting your area over." },

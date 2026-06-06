@@ -4868,7 +4868,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
 
           // ── New caller alerts: home region ("close to you") + linked regions ("from [city]") ──
-          // Reuse the profiles already fetched above — no extra DB calls needed.
+          // New callers that join after the queue was built are injected at slot 2 with
+          // isNewCallerAlert=true so the playback section plays "caller close to you" before
+          // their greeting. No TwiML interrupt is issued — the queue handles it naturally.
 
           // Check for new callers in the home region first
           if (regionId) {
@@ -4877,23 +4879,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
             if (newLocalCaller) {
               state.announcedNewLocalIds.push(newLocalCaller.userId);
-              console.log(`[voice] browse-profiles: announcing new home-region caller userId=${newLocalCaller.userId} to ${callSid}`);
-
-              const alertGather = twiml.gather({
-                numDigits: 1,
-                action: `/voice/handle-profile-menu?profileUserId=${newLocalCaller.userId}`,
-                timeout: 10,
+              // Dedup then inject at slot 2
+              state.queue = state.queue.filter(p => p.userId !== newLocalCaller.userId);
+              const insertAt = Math.min(2, state.queue.length);
+              state.queue.splice(insertAt, 0, {
+                userId: newLocalCaller.userId,
+                recordingUrl: newLocalCaller.recordingUrl,
+                nameRecordingUrl: newLocalCaller.nameRecordingUrl,
+                isPreExisting: false,
+                isNewCallerAlert: true,
+                isNearby: nearbySet.has(newLocalCaller.userId),
               });
-              playPrompt(alertGather, req, "new_caller_close_to_you.mp3", "New caller close to you.");
-              if (newLocalCaller.nameRecordingUrl) {
-                safePlayRecording(alertGather, newLocalCaller.nameRecordingUrl, req, "");
-              }
-              safePlayRecording(alertGather, newLocalCaller.recordingUrl, req, "This profile's greeting is not available.");
-              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-              await setBrowseState(callSid, state);
-              twiml.redirect("/voice/browse-profiles");
-              res.type("text/xml");
-              return res.send(twiml.toString());
+              console.log(`[voice] browse-profiles: injected new home-region caller userId=${newLocalCaller.userId} at slot 2 for ${callSid}`);
             }
           }
 
@@ -4906,25 +4903,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
             if (newLinkedCaller) {
               state.announcedLinkedCallerIds.push(newLinkedCaller.userId);
-              console.log(`[voice] browse-profiles: announcing new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} to ${callSid}`);
-
-              const alertGather = twiml.gather({
-                numDigits: 1,
-                action: `/voice/handle-profile-menu?profileUserId=${newLinkedCaller.userId}`,
-                timeout: 10,
+              // Dedup then inject at slot 2
+              state.queue = state.queue.filter(p => p.userId !== newLinkedCaller.userId);
+              const insertAt = Math.min(2, state.queue.length);
+              state.queue.splice(insertAt, 0, {
+                userId: newLinkedCaller.userId,
+                recordingUrl: newLinkedCaller.recordingUrl,
+                nameRecordingUrl: newLinkedCaller.nameRecordingUrl,
+                regionId: snapshot.regionId,
+                regionName: snapshot.regionName,
+                isPreExisting: false,
+                isNewCallerAlert: true,
               });
-              const linkedRegionRecord = await storage.getRegionById(snapshot.regionId).catch(() => null);
-              const linkedSlug = linkedRegionRecord?.slug ?? snapshot.regionName.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-              playNewCallerFrom(alertGather, req, snapshot.regionName, linkedSlug);
-              if (newLinkedCaller.nameRecordingUrl) {
-                safePlayRecording(alertGather, newLinkedCaller.nameRecordingUrl, req, "");
-              }
-              safePlayRecording(alertGather, newLinkedCaller.recordingUrl, req, "This profile's greeting is not available.");
-              playPrompt(alertGather, req, "profile_options.mp3", "Press 1 to send this caller a message. Press 2 to skip to the next profile. Press 3 to connect live with this caller. Press 4 to block this caller. Press 5 to hear the previous profile. Press 6 to hear this caller's location. Press 7 to flag this profile for review. Press 9 to return to main menu.");
-              await setBrowseState(callSid, state);
-              twiml.redirect("/voice/browse-profiles");
-              res.type("text/xml");
-              return res.send(twiml.toString());
+              console.log(`[voice] browse-profiles: injected new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} at slot 2 for ${callSid}`);
             }
           }
 
@@ -4962,25 +4953,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             timeout: 10,
           });
 
-          // Announce caller origin randomly: max 5 injections per 25-greeting window.
-          // Uses a shrinking probability so budget is consumed at unpredictable positions.
-          const WINDOW_SIZE = 25;
-          const MAX_PER_WINDOW = 5;
-          const posInWindow = state.greetingsPlayed % WINDOW_SIZE;
-          if (posInWindow === 0 && state.greetingsPlayed > 0) {
-            state.windowAnnouncementsUsed = 0; // start of a new window — reset budget
-          }
-          const remainingInWindow = WINDOW_SIZE - posInWindow;
-          const remainingBudget = MAX_PER_WINDOW - state.windowAnnouncementsUsed;
-          // Only announce for callers who joined AFTER the listener — pre-existing callers play silently
-          const announceProbability = !profile.isPreExisting && profile.isNearby && remainingBudget > 0
-            ? remainingBudget / remainingInWindow
-            : 0;
-          const shouldAnnounceOrigin = Math.random() < announceProbability;
-
-          if (shouldAnnounceOrigin) {
-            playPrompt(profileGather, req, "new_caller_closest_to_you.mp3", "New caller closest to you.");
-            state.windowAnnouncementsUsed++;
+          // ── Origin announcement: "caller close to you" or "from [city]" ──────────
+          // Only plays when the profile was explicitly injected as a new-caller alert
+          // (isNewCallerAlert=true). The flag is set exactly when a caller joins after
+          // queue init — no probabilistic budget or proximity math needed.
+          if (profile.isNewCallerAlert) {
+            if (!profile.regionId || profile.regionId === regionId) {
+              playPrompt(profileGather, req, "new_caller_close_to_you.mp3", "Caller close to you.");
+              console.log(`[voice] browse-profiles: playing "close to you" alert for profile userId=${profile.userId} to ${callSid}`);
+            } else if (profile.regionName) {
+              playNewCallerFrom(profileGather, req, profile.regionName);
+              console.log(`[voice] browse-profiles: playing "from ${profile.regionName}" alert for profile userId=${profile.userId} to ${callSid}`);
+            }
           }
 
           state.greetingsPlayed++;

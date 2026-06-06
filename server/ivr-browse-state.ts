@@ -7,6 +7,11 @@ export type BrowseQueueItem = {
   regionId?: string | null;
   regionName?: string | null;
   isPreExisting?: boolean;
+  /** When true, play "caller close to you" (or "from [city]" for linked regions)
+   *  before the profile greeting. Set on profiles injected at slot 2 in response
+   *  to a caller joining AFTER the browse queue was created. */
+  isNewCallerAlert?: boolean;
+  isNearby?: boolean;
   lat?: number | null;
   lon?: number | null;
   // Priority item metadata (slot 1 injections)

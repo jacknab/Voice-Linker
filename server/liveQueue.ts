@@ -22,7 +22,7 @@ import type { BrowseQueueItem } from "./ivr-browse-state";
 // ── Slot constants ─────────────────────────────────────────────────────────────
 export const SLOT_CURRENT    = 0;   // always playing
 export const SLOT_PRIORITY   = 1;   // messages / live-connect invitations
-export const SLOT_NEW_CALLER = 3;   // new callers entering the live connector
+export const SLOT_NEW_CALLER = 2;   // new callers entering the live connector (slot 2 so "close to you" plays soon)
 
 // ── Core helpers ───────────────────────────────────────────────────────────────
 
@@ -112,7 +112,7 @@ export async function injectNewCallerIntoAllQueues(
       if (state.queue.some(p => p.userId === profile.userId)) return;
 
       const insertAt = Math.min(SLOT_NEW_CALLER, state.queue.length);
-      state.queue.splice(insertAt, 0, { ...profile, isPreExisting: false });
+      state.queue.splice(insertAt, 0, { ...profile, isPreExisting: false, isNewCallerAlert: true });
       await setBrowseState(sid, state);
     }),
   );
