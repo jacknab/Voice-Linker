@@ -60,24 +60,74 @@ async function sleepWatched(durationMs: number, stopWhen: () => Promise<boolean>
 
 // ─── Region assignment helpers ────────────────────────────────────────────────
 
-async function pickRegionForSeed(): Promise<string | undefined> {
+// Builds an ordered list of region IDs for seed assignment. Regions are grouped
+// into linked clusters (connected components via region_links). The list is
+// interleaved across clusters so that consecutive assignments spread across the
+// full linked group — no two adjacent slots belong to the same cluster.
+// Within each cluster the order is randomised on every call.
+//
+// Example: clusters [{A,B}, {C}] → [A, C, B] or [B, C, A] etc.
+// Assigning seeds S1→A, S2→C, S3→B guarantees no linked pair shares a profile.
+async function buildBalancedRegionList(): Promise<string[]> {
   const allRegions = await storage.getAllRegions().catch(() => []);
   const activeRegions = allRegions.filter(r => r.isActive);
-  if (activeRegions.length === 0) return undefined;
+  if (activeRegions.length === 0) return [];
 
-  const assignable = activeRegions.filter(r => {
-    if (!r.linkedRegionId) return true;
-    return r.id < r.linkedRegionId;
-  });
+  // Build adjacency from the many-to-many region_links table
+  const adjacency = new Map<string, Set<string>>();
+  for (const r of activeRegions) adjacency.set(r.id, new Set());
+  for (const r of activeRegions) {
+    const linked = await storage.getLinkedRegions(r.id).catch(() => []);
+    for (const lr of linked) {
+      adjacency.get(r.id)?.add(lr.id);
+      if (adjacency.has(lr.id)) adjacency.get(lr.id)!.add(r.id);
+    }
+  }
 
-  const pool = assignable.length > 0 ? assignable : activeRegions;
-  return pool[Math.floor(Math.random() * pool.length)].id;
+  // Find connected components (each is a cluster of mutually-linked regions)
+  const visited = new Set<string>();
+  const clusters: string[][] = [];
+  for (const r of activeRegions) {
+    if (visited.has(r.id)) continue;
+    const cluster: string[] = [];
+    const stack = [r.id];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      cluster.push(id);
+      for (const nId of adjacency.get(id) ?? []) {
+        if (!visited.has(nId)) stack.push(nId);
+      }
+    }
+    // Shuffle within the cluster for even distribution
+    clusters.push(cluster.sort(() => Math.random() - 0.5));
+  }
+
+  // Interleave across clusters: pick one region per cluster per round
+  const result: string[] = [];
+  const maxLen = clusters.reduce((m, c) => Math.max(m, c.length), 0);
+  for (let i = 0; i < maxLen; i++) {
+    for (const cluster of clusters) {
+      if (i < cluster.length) result.push(cluster[i]);
+    }
+  }
+  return result;
+}
+
+// Picks a single random region for a seed, using region_links for link awareness.
+async function pickRegionForSeed(): Promise<string | undefined> {
+  const list = await buildBalancedRegionList();
+  if (list.length === 0) return undefined;
+  return list[Math.floor(Math.random() * list.length)];
 }
 
 // ─── Admin seed session: goes online immediately, stays for 30 minutes ────────
 // No on/off cycling. Start time and end time are recorded via startSeedSession /
 // endSeedSession so the admin panel can see the exact window each seed was live.
-async function runAdminSeedSession(userId: string): Promise<void> {
+// regionId pins this seed to a specific region so linked regions see different
+// profiles rather than the same seed appearing in every region simultaneously.
+async function runAdminSeedSession(userId: string, regionId?: string): Promise<void> {
   const callSid = `${VIRTUAL_PREFIX}${userId}`;
   const sessionEnd = new Date(Date.now() + ADMIN_SEED_ONLINE_MS);
 
@@ -93,9 +143,11 @@ async function runAdminSeedSession(userId: string): Promise<void> {
   }
 
   // Go online immediately — no gate on real callers being present.
-  await storage.registerActiveCall(callSid, userId, undefined);
+  // regionId ensures this seed only appears in its assigned region; linked
+  // regions receive their own distinct seeds from the maintenance loop.
+  await storage.registerActiveCall(callSid, userId, regionId);
   const onlineAt = new Date().toISOString();
-  log(`admin seed ONLINE userId=${userId} from=${onlineAt} for=30min`, "simulator");
+  log(`admin seed ONLINE userId=${userId} regionId=${regionId ?? "global"} from=${onlineAt} for=30min`, "simulator");
 
   // Stay online for the full 30 minutes, then cleanly end the session.
   await sleep(ADMIN_SEED_ONLINE_MS);
@@ -214,15 +266,24 @@ async function maintainAdminSeeds(): Promise<void> {
       const slots        = Math.max(0, target - activeCount);
 
       if (slots > 0) {
-        // Prefer profiles not already in a session; shuffle to distribute evenly
+        // Build a balanced region list so seeds are spread across linked clusters.
+        // Each idle seed gets the next region in the interleaved order, ensuring
+        // no two seeds assigned in this batch share a linked-region pair.
+        const regionList = await buildBalancedRegionList();
+        let regionIdx = 0;
+
         const idle = adminProfiles.filter(({ userId }) => !activeSessions.has(userId));
         const shuffled = [...idle].sort(() => Math.random() - 0.5);
         let started = 0;
         for (const { userId } of shuffled) {
           if (started >= slots) break;
           if (!activeSessions.has(userId)) {
+            const assignedRegion = regionList.length > 0
+              ? regionList[regionIdx % regionList.length]
+              : undefined;
+            regionIdx++;
             activeSessions.add(userId);
-            runAdminSeedSession(userId).catch(err =>
+            runAdminSeedSession(userId, assignedRegion).catch(err =>
               log(`admin seed session error userId=${userId}: ${err}`, "simulator"),
             );
             started++;
@@ -258,14 +319,21 @@ export async function triggerSeedActivity(): Promise<void> {
     const slots       = Math.max(0, target - activeCount);
     if (slots <= 0) return;
 
+    const regionList = await buildBalancedRegionList();
+    let regionIdx = 0;
+
     const idle      = adminProfiles.filter(({ userId }) => !activeSessions.has(userId));
     const shuffled  = [...idle].sort(() => Math.random() - 0.5);
     let started = 0;
     for (const { userId } of shuffled) {
       if (started >= slots) break;
       if (!activeSessions.has(userId)) {
+        const assignedRegion = regionList.length > 0
+          ? regionList[regionIdx % regionList.length]
+          : undefined;
+        regionIdx++;
         activeSessions.add(userId);
-        runAdminSeedSession(userId).catch(err =>
+        runAdminSeedSession(userId, assignedRegion).catch(err =>
           log(`admin seed session error userId=${userId}: ${err}`, "simulator"),
         );
         started++;
@@ -372,13 +440,18 @@ export async function startSimulator(): Promise<void> {
 // The maintenance loop will pick it up within SEED_MAINTENANCE_INTERVAL_MS.
 export async function addVirtualCaller(userId: string, _regionId?: string): Promise<void> {
   log(`admin seed registered userId=${userId} — will activate on next maintenance cycle`, "simulator");
-  // Eagerly start a session so it goes online immediately (no need to wait for next cycle)
+  // Eagerly start a session so it goes online immediately (no need to wait for next cycle).
+  // Assign a region from the balanced list so this seed doesn't appear in all linked regions.
   if (!activeSessions.has(userId)) {
+    const regionList = await buildBalancedRegionList().catch(() => [] as string[]);
+    const assignedRegion = regionList.length > 0
+      ? regionList[Math.floor(Math.random() * regionList.length)]
+      : undefined;
     activeSessions.add(userId);
-    runAdminSeedSession(userId).catch(err =>
+    runAdminSeedSession(userId, assignedRegion).catch(err =>
       log(`admin seed session error userId=${userId}: ${err}`, "simulator"),
     );
-    log(`admin seed STARTED immediately on upload userId=${userId}`, "simulator");
+    log(`admin seed STARTED immediately on upload userId=${userId} regionId=${assignedRegion ?? "global"}`, "simulator");
   }
 }
 
