@@ -723,6 +723,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     "/handle-setup-mailbox-confirm-passcode",
     "/handle-mailbox-lookup",
     "/handle-membership-center",
+    // Anonymous caller routes — # and * have route-specific meanings here
+    // (e.g. # = "enter as guest" at handle-anon-entry) and these routes
+    // collect multi-digit input, so the global interceptor must not fire.
+    "/handle-anon-entry",
+    "/handle-anon-auth-number",
+    "/handle-anon-auth-pin",
+    "/handle-anon-card-pin",
+    "/handle-anon-pay-gate",
+    "/handle-anon-pay-gate-pin",
   ]);
 
   // Press-0 menu handlers whose "menu URL" cannot be derived by simply stripping "handle-"
