@@ -10,16 +10,13 @@ export const VIRTUAL_PREFIX = "VIRTUAL-";
 // Tracks ALL active virtual caller sessions (admin-uploaded + real-caller)
 const activeSessions = new Set<string>();
 
-// Minimum admin seeds to keep online at all times
-const MIN_ADMIN_SEEDS = 8;
-
 // Concurrency cap for real-caller seed sessions
 const MAX_REAL_CALLER_SEEDS = 10;
 
 // How long each admin seed stays continuously online (30 minutes)
 const ADMIN_SEED_ONLINE_MS = 30 * 60 * 1000;
 
-// How often to check and top-up admin seeds to MIN_ADMIN_SEEDS
+// How often to check and top-up admin seeds to the dynamic target
 const SEED_MAINTENANCE_INTERVAL_MS = 60 * 1000;
 
 // How many minutes between real-caller background scheduler checks
@@ -28,6 +25,40 @@ const SCHEDULER_INTERVAL_MS = 15 * 60 * 1000;
 
 function randomBetween(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * Returns the target number of active admin seed profiles for the current
+ * time window, based on Eastern Time.
+ *
+ *  5 am – 5 pm  (any day)              →  0 – 3   quiet / daytime
+ *  Mon – Thu evenings / nights          →  2 – 5   moderate
+ *  Fri – Sun prime time (5 pm → 4 am)  →  5 – 8   busy weekend nights
+ *
+ * Hours 0 – 3 are treated as belonging to the previous calendar day's night
+ * so that e.g. 2 am Saturday still counts as Friday-night busy time.
+ * Active seeds that exceed the new target are not force-stopped; they simply
+ * run out their 30-minute sessions and are not replaced.
+ */
+function getTargetSeedCount(): number {
+  const now = new Date();
+  // Interpret current time in Eastern (covers both ET/ET-DST automatically)
+  const et   = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const hour = et.getHours();  // 0-23
+  const day  = et.getDay();    // 0=Sun … 6=Sat
+
+  // Quiet daytime window (5 am through 5 pm): 0–3 seeds
+  if (hour >= 5 && hour < 17) return randomBetween(0, 3);
+
+  // For hours 0–3 credit the night to the previous calendar day so that
+  // "2 am Saturday" still belongs to Friday night, etc.
+  const effectiveDay = hour < 4 ? (day + 6) % 7 : day;
+
+  // Weekend prime time: Friday (5), Saturday (6), Sunday (0) evenings + nights
+  if ([5, 6, 0].includes(effectiveDay)) return randomBetween(5, 8);
+
+  // Mon–Thu evenings / late nights
+  return randomBetween(2, 5);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -282,9 +313,9 @@ async function runSeedSession(
   log(`seed session END userId=${userId}`, "simulator");
 }
 
-// ─── Admin seed maintenance: keeps at least MIN_ADMIN_SEEDS online ────────────
-// Runs every minute. Launches new 30-minute sessions for any admin seeds that
-// are not currently in a session, until MIN_ADMIN_SEEDS are running.
+// ─── Admin seed maintenance: tops up to the dynamic time-based target ─────────
+// Runs every minute. Launches new 30-minute sessions for any idle admin seeds
+// until the current getTargetSeedCount() value is reached.
 async function maintainAdminSeeds(): Promise<void> {
   while (true) {
     try {
@@ -299,7 +330,7 @@ async function maintainAdminSeeds(): Promise<void> {
       }
 
       const activeCount  = adminProfiles.filter(({ userId }) => activeSessions.has(userId)).length;
-      const target       = Math.min(MIN_ADMIN_SEEDS, adminProfiles.length);
+      const target       = Math.min(getTargetSeedCount(), adminProfiles.length);
       const slots        = Math.max(0, target - activeCount);
 
       if (slots > 0) {
@@ -352,7 +383,7 @@ export async function triggerSeedActivity(): Promise<void> {
       .where(eq(profiles.isAdminUploaded, true));
 
     const activeCount = adminProfiles.filter(({ userId }) => activeSessions.has(userId)).length;
-    const target      = Math.min(MIN_ADMIN_SEEDS, adminProfiles.length);
+    const target      = Math.min(getTargetSeedCount(), adminProfiles.length);
     const slots       = Math.max(0, target - activeCount);
     if (slots <= 0) return;
 
@@ -454,11 +485,11 @@ export async function startSimulator(): Promise<void> {
     .where(eq(profiles.isAdminUploaded, true));
 
   log(
-    `${adminProfiles.length} admin seed(s) loaded — maintaining minimum of ${MIN_ADMIN_SEEDS} online at all times`,
+    `${adminProfiles.length} admin seed(s) loaded — dynamic target (0–3 day / 2–5 weeknight / 5–8 weekend prime time)`,
     "simulator",
   );
 
-  // Start continuous admin seed maintenance (tops up to MIN_ADMIN_SEEDS every minute)
+  // Start continuous admin seed maintenance (re-evaluates target every minute)
   maintainAdminSeeds().catch(err =>
     log(`seed maintenance fatal: ${err}`, "simulator"),
   );
