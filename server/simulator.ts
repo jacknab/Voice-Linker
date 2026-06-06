@@ -3,6 +3,7 @@ import { db } from "./db";
 import { profiles, callers } from "@shared/schema";
 import { and, eq, like, not } from "drizzle-orm";
 import { log } from "./index";
+import { injectNewCallerIntoAllQueues } from "./liveQueue";
 
 export const VIRTUAL_PREFIX = "VIRTUAL-";
 
@@ -149,6 +150,24 @@ async function runAdminSeedSession(userId: string, regionId?: string): Promise<v
   const onlineAt = new Date().toISOString();
   log(`admin seed ONLINE userId=${userId} regionId=${regionId ?? "global"} from=${onlineAt} for=30min`, "simulator");
 
+  // Inject this seed's profile at slot 2 in every active browse session for
+  // the same region so callers already on the line hear "caller close to you".
+  if (profile.recordingUrl) {
+    const region = regionId ? await storage.getRegionById(regionId).catch(() => null) : null;
+    injectNewCallerIntoAllQueues({
+      userId,
+      recordingUrl: profile.recordingUrl,
+      nameRecordingUrl: profile.nameRecordingUrl ?? null,
+      regionId: regionId ?? null,
+      regionName: region?.name ?? null,
+      isPreExisting: false,
+      lat: null,
+      lon: null,
+    }, callSid).catch(err =>
+      log(`admin seed inject error userId=${userId}: ${err}`, "simulator"),
+    );
+  }
+
   // Stay online for the full 30 minutes, then cleanly end the session.
   await sleep(ADMIN_SEED_ONLINE_MS);
 
@@ -211,6 +230,24 @@ async function runSeedSession(
 
     await storage.registerActiveCall(callSid, userId, regionId);
     log(`virtual caller ON  userId=${userId} regionId=${regionId ?? "all"}`, "simulator");
+
+    // Inject this seed's profile at slot 2 in every active browse session for
+    // the same region so callers already on the line hear "caller close to you".
+    if (profile.recordingUrl) {
+      const region = regionId ? await storage.getRegionById(regionId).catch(() => null) : null;
+      injectNewCallerIntoAllQueues({
+        userId,
+        recordingUrl: profile.recordingUrl,
+        nameRecordingUrl: profile.nameRecordingUrl ?? null,
+        regionId: regionId ?? null,
+        regionName: region?.name ?? null,
+        isPreExisting: false,
+        lat: null,
+        lon: null,
+      }, callSid).catch(err =>
+        log(`virtual caller inject error userId=${userId}: ${err}`, "simulator"),
+      );
+    }
 
     // Stay online for up to activeDuration, but drop off immediately if real callers leave
     const activeDuration = Math.min(randomBetween(60, 300) * 1000, remainingMs);
