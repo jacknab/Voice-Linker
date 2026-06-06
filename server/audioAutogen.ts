@@ -220,9 +220,11 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "account_restricted_live.mp3",text: "We're sorry, your account has been restricted and you are not able to go live at this time. You may still listen to profiles and use other features. Please contact customer support if you have questions." },
 
   // ── Anonymous caller authentication ────────────────────────────────────────
-  { filename: "anon_caller_greeting.mp3",       text: "Welcome. Your caller ID is not visible. To protect our members, you must verify your membership before entering the system." },
-  { filename: "anon_auth_enter_membership.mp3", text: "Please enter your 10-digit membership number now." },
-  { filename: "membership_not_found.mp3",        text: "That membership number was not found or does not have an access code set up. Please call from your registered phone number to set up an access code, then try again. Goodbye." },
+  { filename: "anon_caller_greeting.mp3",           text: "Welcome. Your caller ID is not visible. To protect our members, you must verify your membership before entering the system." },
+  { filename: "anon_auth_enter_membership.mp3",     text: "Please enter your 10-digit membership number now." },
+  { filename: "anon_membership_or_pound.mp3",       text: "If you have a membership enter it now, otherwise press the pound." },
+  { filename: "membership_required_purchase.mp3",   text: "To continue, you will need a membership. Connecting you to our membership options now." },
+  { filename: "membership_not_found.mp3",           text: "That membership number was not found. Please try again." },
 
   // ── Web-link flow ──────────────────────────────────────────────────────────
   { filename: "link_phone_prefix.mp3",  text: "Your phone number has been linked to your web account. Your membership number is:" },
