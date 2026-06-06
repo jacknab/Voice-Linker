@@ -106,3 +106,12 @@
 2026-04-10 17:02:33 +00:00: (node:2634678) ExperimentalWarning: CommonJS module /apps/chatline/dist/index.cjs is loading ES Module /apps/chatline/node_modules/music-metadata/lib/index.js using require().
 2026-04-10 17:02:33 +00:00: Support for loading ES Module in require() is an experimental feature and might change at any time
 2026-04-10 17:02:33 +00:00: (Use `node --trace-warnings ...` to show where the warning was created)
+2026-06-02 14:13:20 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-02 14:13:20 +00:00: designed for a production environment, as it will leak
+2026-06-02 14:13:20 +00:00: memory, and will not scale past a single process.
+2026-06-02 15:09:51 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-02 15:09:51 +00:00: designed for a production environment, as it will leak
+2026-06-02 15:09:51 +00:00: memory, and will not scale past a single process.
+2026-06-02 15:11:40 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-02 15:11:40 +00:00: designed for a production environment, as it will leak
+2026-06-02 15:11:40 +00:00: memory, and will not scale past a single process.

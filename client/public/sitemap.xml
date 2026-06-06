@@ -1,15 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
   <url>
-    <loc>https://bb9a69bf-6e1a-4a2c-945c-6281a6b57a53-00-3k1gvtdbb4fd4.picard.replit.dev/</loc>
+    <loc>https://example.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <lastmod>2026-06-02</lastmod>
   </url>
   <url>
-    <loc>https://bb9a69bf-6e1a-4a2c-945c-6281a6b57a53-00-3k1gvtdbb4fd4.picard.replit.dev/regions/</loc>
+    <loc>https://example.com/regions/</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
+    <lastmod>2026-06-02</lastmod>
+  </url>
+  <url>
+    <loc>https://example.com/regions/denver.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <lastmod>2026-06-02</lastmod>
+  </url>
+  <url>
+    <loc>https://example.com/regions/san-francisco.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <lastmod>2026-06-02</lastmod>
+  </url>
+  <url>
+    <loc>https://example.com/regions/los-angeles.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <lastmod>2026-06-02</lastmod>
+  </url>
+  <url>
+    <loc>https://example.com/regions/san-diego.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
     <lastmod>2026-06-02</lastmod>
   </url>
 </urlset>
