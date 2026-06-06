@@ -2327,7 +2327,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       "Main menu. " +
       "To enter the male box press 1. " +
       "To add time or purchase a membership press 2. " +
-      (MAILBOX_ENABLED ? "For mailboxes and personal ads press 3. " : "") +
+      "For mailboxes and personal ads press 3. " +
       "For information on membership prices press 4. " +
       "For your voicemail press 6. " +
       "To manage your membership press 8. " +

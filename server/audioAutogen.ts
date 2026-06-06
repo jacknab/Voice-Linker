@@ -14,6 +14,11 @@ import { reverseGeocodeNeighborhood } from "./zipLookup";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
+// Mirrors the MAILBOX_ENABLED flag in ivr-default.ts so that the ElevenLabs-generated
+// main_menu.mp3 always matches the TTS fallback text.  When this flag changes the
+// sidecar fingerprint changes → needsRegenerationGlobal triggers a fresh generation.
+const MAILBOX_ENABLED_AUTOGEN = process.env.ENABLE_MAILBOX !== "false";
+
 type Prompt = { filename: string; text: string };
 
 // ── MM prompts (uploads/mm/) ───────────────────────────────────────────────
@@ -57,7 +62,7 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "zip_code_prompt.mp3",             text: "Optional: enter your 5-digit zip code and we'll play callers closest to you first. Press pound to skip." },
   { filename: "zip_code_saved.mp3",              text: "Got it. We'll use your zip code to show you nearby callers." },
 
-  { filename: "main_menu.mp3",      text: "Main menu. To enter the male box press 1. To add time or purchase a membership press 2. For mailboxes and personal ads press 3. For information on membership prices press 4. For your voicemail press 6. To manage your membership press 8. Press 0 for time remaining, or 9 to repeat these choices." },
+  { filename: "main_menu.mp3",      text: "Main menu. To enter the male box press 1. To add time or purchase a membership press 2. " + (MAILBOX_ENABLED_AUTOGEN ? "For mailboxes and personal ads press 3. " : "") + "For information on membership prices press 4. For your voicemail press 6. To manage your membership press 8. Press 0 for time remaining, or 9 to repeat these choices." },
   { filename: "trial_warning.mp3",  text: "You have less than 5 minutes remaining in your free trial. Stay connected by joining now. You won't be interrupted by ads. Access member only features like off-line messaging, connect live for one on one chat. To join right now press 1. To continue press pound." },
   { filename: "member_warning.mp3", text: "You have less than 5 minutes remaining in your membership. To renew now press 1. To continue press pound." },
   { filename: "no_profiles.mp3",    text: "There are no profiles available right now. Please call back later." },
