@@ -32,8 +32,8 @@ function randomBetween(min: number, max: number): number {
  * time window, based on Eastern Time.
  *
  *  5 am – 5 pm  (any day)              →  0 – 3   quiet / daytime
- *  Mon – Thu evenings / nights          →  2 – 5   moderate
- *  Fri – Sun prime time (5 pm → 4 am)  →  5 – 8   busy weekend nights
+ *  Mon – Thu evenings / nights          →  3 – 5   semi-busy weeknights
+ *  Fri – Sun prime time (5 pm → 4 am)  →  6 – 10  busy weekend nights
  *
  * Hours 0 – 3 are treated as belonging to the previous calendar day's night
  * so that e.g. 2 am Saturday still counts as Friday-night busy time.
@@ -55,10 +55,10 @@ function getTargetSeedCount(): number {
   const effectiveDay = hour < 4 ? (day + 6) % 7 : day;
 
   // Weekend prime time: Friday (5), Saturday (6), Sunday (0) evenings + nights
-  if ([5, 6, 0].includes(effectiveDay)) return randomBetween(5, 8);
+  if ([5, 6, 0].includes(effectiveDay)) return randomBetween(6, 10);
 
-  // Mon–Thu evenings / late nights
-  return randomBetween(2, 5);
+  // Mon–Thu evenings / late nights — semi-busy, clearly below weekend levels
+  return randomBetween(3, 5);
 }
 
 function sleep(ms: number): Promise<void> {
