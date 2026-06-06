@@ -2209,6 +2209,20 @@ function TTSTab() {
   // Prompt list switches with the active tab — MW gets gender-aware texts + MW-exclusive prompts
   const activePrompts = audioGenTab === "mw" ? MW_SYSTEM_PROMPTS : audioGenTab === "mw_m" ? MW_MALE_SYSTEM_PROMPTS : SYSTEM_PROMPTS;
   const { data: existingFiles } = useQuery<{ filename: string; url: string; size: number; folder: string }[]>({ queryKey: ["/api/admin/tts/prompts"] });
+  const { data: dynamicPkgPrompts = [] } = useQuery<{ filename: string; label: string; text: string; group: string }[]>({ queryKey: ["/api/admin/tts/dynamic-package-prompts"] });
+  // Merge dynamic package prompts (package_label_planN, payment_charged_planN, purchase_pre_menu)
+  // into the billing group. Dynamic texts override the static placeholder text for the same filename.
+  const allActivePrompts = (() => {
+    if (dynamicPkgPrompts.length === 0) return activePrompts;
+    const dynMap = new Map(dynamicPkgPrompts.map(p => [p.filename, p]));
+    const merged = activePrompts.map(p => {
+      const dyn = dynMap.get(p.filename);
+      return dyn ? { ...p, text: dyn.text, label: dyn.label } : p;
+    });
+    const staticFilenames = new Set(activePrompts.map(p => p.filename));
+    const extras = dynamicPkgPrompts.filter(p => !staticFilenames.has(p.filename));
+    return [...merged, ...extras];
+  })();
   const { data: audioHealth, isLoading: audioHealthLoading, isFetching: audioHealthFetching, refetch: refetchAudioHealth } = useQuery<AudioHealth>({ queryKey: ["/api/admin/tts/health"] });
   const { data: zipEntries = [] } = useQuery<ZipEntry[]>({ queryKey: ["/api/admin/zip-codes"] });
   const neighborhoodEntries = zipEntries.filter(e => e.audioFile && e.neighborhood);
@@ -2337,7 +2351,7 @@ function TTSTab() {
       return;
     }
     generateAllAbortRef.current = false;
-    const prompts = activePrompts;
+    const prompts = allActivePrompts;
     setGenerateAllProgress({ done: 0, total: prompts.length, currentLabel: prompts[0]?.label ?? "" });
     let successCount = 0;
     let failure: { label: string; message: string } | null = null;
@@ -2425,7 +2439,7 @@ function TTSTab() {
       return;
     }
     generateAllAbortRef.current = false;
-    const missing = activePrompts.filter(p => !promptExists(p.filename));
+    const missing = allActivePrompts.filter(p => !promptExists(p.filename));
     if (missing.length === 0) {
       toast({ title: "Nothing to generate", description: "All prompts already have audio files." });
       return;
@@ -2517,14 +2531,14 @@ function TTSTab() {
     }
   }
 
-  const groupFiltered = groupFilter === "all" ? activePrompts : activePrompts.filter(p => p.group === groupFilter);
+  const groupFiltered = groupFilter === "all" ? allActivePrompts : allActivePrompts.filter(p => p.group === groupFilter);
   const filtered = groupFiltered.filter(p =>
     !searchText ||
     p.label.toLowerCase().includes(searchText.toLowerCase()) ||
     p.filename.toLowerCase().includes(searchText.toLowerCase())
   );
-  const generatedCount = activePrompts.filter(p => promptExists(p.filename)).length;
-  const missingCount = activePrompts.length - generatedCount;
+  const generatedCount = allActivePrompts.filter(p => promptExists(p.filename)).length;
+  const missingCount = allActivePrompts.length - generatedCount;
   const activeFolderHealth = audioHealth?.uploadFolders.find(f => f.folder === categoryFolder);
   const allUploadFoldersOk = audioHealth?.uploadFolders.every(f => f.exists && f.writable) ?? false;
   const elevenLabsOk = !!audioHealth?.elevenLabs.apiKeyConfigured && audioHealth.elevenLabs.connectionOk !== false;
@@ -2548,7 +2562,7 @@ function TTSTab() {
 
   async function handlePushAllPromptsToVps() {
     if (!getVpsUrl()) { toast({ title: "VPS URL not set", description: "Enter your VPS URL in the config bar above.", variant: "destructive" }); return; }
-    const withAudio = activePrompts.filter(p => promptExists(p.filename));
+    const withAudio = allActivePrompts.filter(p => promptExists(p.filename));
     if (withAudio.length === 0) { toast({ title: "No generated audio to push" }); return; }
     setPushingAllPrompts(true);
     let ok = 0;

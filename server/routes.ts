@@ -1518,6 +1518,70 @@ export async function registerRoutes(
     });
   });
 
+  // Returns the live-computed texts for plan-dependent IVR prompts (package_label_planN,
+  // payment_charged_planN, purchase_pre_menu). These depend on membership settings so they
+  // can't have static texts in the admin SYSTEM_PROMPTS list — this endpoint bridges the gap.
+  app.get("/api/admin/tts/dynamic-package-prompts", async (_req, res) => {
+    try {
+      const settings = await storage.getMembershipSettings();
+      const billingMode: string = settings.billingMode ?? "per_minute";
+
+      const plans = [
+        { key: "plan1", displayName: settings.plan1Name, minutes: settings.plan1Minutes, priceCents: settings.plan1PriceCents },
+        { key: "plan2", displayName: settings.plan2Name, minutes: settings.plan2Minutes, priceCents: settings.plan2PriceCents },
+        { key: "plan3", displayName: settings.plan3Name, minutes: settings.plan3Minutes, priceCents: settings.plan3PriceCents },
+      ].filter(p => p.minutes > 0 && p.priceCents > 0);
+
+      const prompts: { filename: string; label: string; text: string; group: string }[] = [];
+
+      if (plans.length > 0) {
+        const planLines = plans.map((plan, idx) => {
+          const digit = idx === 0 ? "2" : idx === 1 ? "3" : "4";
+          return `To purchase ${minutesToDurationLabel(plan.minutes)} of access for ${centsToLabel(plan.priceCents)} press ${digit}.`;
+        });
+        const menuText =
+          "If you have a promotional code press 1. " +
+          planLines.join(" ") + " " +
+          "To repeat these choices press 9. " +
+          "To cancel press pound.";
+        prompts.push({ filename: "purchase_pre_menu.mp3", label: "Purchase Menu — Package Selection (live)", text: menuText, group: "billing" });
+      }
+
+      for (const plan of plans) {
+        const durationLabel = minutesToDurationLabel(plan.minutes);
+        const priceLabel = centsToLabel(plan.priceCents);
+
+        let labelText: string;
+        if (billingMode === "per_24h") {
+          labelText = `the ${plan.displayName} package for ${priceLabel}.`;
+        } else if (billingMode === "per_day") {
+          labelText = `${durationLabel} for ${priceLabel}.`;
+        } else {
+          labelText = `${plan.minutes.toLocaleString()} minutes for ${priceLabel}.`;
+        }
+
+        prompts.push({
+          filename: `package_label_${plan.key}.mp3`,
+          label: `Package Label — ${plan.displayName} (confirm step)`,
+          text: labelText,
+          group: "billing",
+        });
+
+        const chargedText = `${durationLabel} of access. Your card has been charged ${priceLabel}.`;
+        prompts.push({
+          filename: `payment_charged_${plan.key}.mp3`,
+          label: `Payment Charged — ${plan.displayName} (success message)`,
+          text: chargedText,
+          group: "billing",
+        });
+      }
+
+      res.json(prompts);
+    } catch (err: any) {
+      res.status(500).json({ message: err?.message ?? "Failed to compute dynamic package prompts" });
+    }
+  });
+
   app.get("/api/admin/tts/health", async (_req, res) => {
     const folders: ("shared" | "mm" | "mw" | "mw_m")[] = ["shared", "mm", "mw", "mw_m"];
     const uploadFolders = folders.map(checkUploadFolder);
