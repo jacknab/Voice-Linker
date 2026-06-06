@@ -26,6 +26,9 @@ function describeIvrState(pathname: string): string {
   const path = pathname.toLowerCase();
   if (path === "/" || path === "/entry" || path.includes("entry-check")) return "Entering system";
   if (path.includes("gender-select")) return "Selecting caller type";
+  if (path.includes("anon-pay-gate")) return "Membership required — entering credentials";
+  if (path.includes("anon-card-pin") || path.includes("anon-auth-pin")) return "Entering membership PIN";
+  if (path.includes("anon-entry") || path.includes("anon-auth")) return "Anonymous caller — membership gate";
   if (path.includes("membership-card") || path.includes("membership-pin") || path.includes("membership-entry") || path.includes("membership-sign-in")) return "Entering membership credentials";
   if (path.includes("membership-purchase") || path.includes("purchase") || path.includes("payment") || path.includes("stripe")) return "Buying membership";
   if (path.includes("membership-center") || path.includes("manage-membership") || path.includes("set-pin")) return "Managing membership";
@@ -463,6 +466,13 @@ const pendingNewPinSetup = new Map<string, string>(); // callSid → first PIN e
 
 // Anonymous caller authentication: callSid → resolved member phone number (after membership lookup, before PIN)
 const anonCallPending = new Map<string, string>(); // callSid → resolved member phone
+
+// Anonymous / no-caller-ID guest mode: callers who pressed # to enter without a membership.
+// These callers see the main menu but hit a gate when they try to access any pay area.
+const anonGuestCallSids = new Set<string>(); // callSids currently in anonymous-guest mode
+
+// Anonymous card pending: callSid → 5-digit card number entered at the anon gate
+const anonCardPending = new Map<string, string>(); // callSid → card number
 
 // Mailbox setup state — tracks multi-step setup progress per call
 const mailboxSetupState = new Map<string, {
@@ -1093,6 +1103,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       pendingCardFirstUse.delete(callSid);
       femaleCallers.delete(callSid);
       anonCallPending.delete(callSid);
+      anonGuestCallSids.delete(callSid);
+      anonCardPending.delete(callSid);
 
       // Clean up any live connect invite that this caller initiated
       for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
@@ -1130,16 +1142,27 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     // ── Anonymous / blocked caller ─────────────────────────────────────────────
     // Twilio sends From="anonymous" when a caller has blocked their caller ID.
-    // These callers must authenticate with their membership number + PIN before
-    // reaching any part of the system — free mode does not bypass this gate.
+    // These callers hear the standard greeting/disclaimer, then must either enter
+    // their 5-digit membership number + PIN, or press # to browse as a guest.
+    // Guests reach the main menu but hit a membership gate on any pay area.
     const isAnonymous = fromNumber.toLowerCase() === "anonymous" || !/^\+?[0-9]+$/.test(fromNumber);
     if (isAnonymous) {
       await getSiteSettingsCached().catch(() => {});
       storage.logCall(callSid, "anonymous", calledTo, null).catch(() => {});
       registerStatusCallback(callSid, req).catch(() => {});
-      playPrompt(twiml, req, "anon_caller_greeting.mp3",
-        "Welcome. Your caller ID is not visible. To protect our members, you must verify your membership before entering the system.");
-      twiml.redirect("/voice/anon-auth");
+
+      // Play greeting + disclaimer (skippable), then hand off to anon-entry gate
+      const skipGather = twiml.gather({
+        numDigits: 1,
+        action: "/voice/anon-entry",
+        timeout: 0,
+        actionOnEmptyResult: true,
+      });
+      playPrompt(skipGather, req, "system_greeting.mp3",
+        "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
+      playPrompt(skipGather, req, "disclaimer.mp3",
+        "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
+      twiml.redirect("/voice/anon-entry");
       res.type("text/xml");
       return res.send(twiml.toString());
     }
@@ -1726,6 +1749,264 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } catch (err) {
       console.error("[voice] anon-auth PIN error:", err);
       anonCallPending.delete(callSid);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Anonymous Guest Entry Gate ────────────────────────────────────────────
+  // After the disclaimer, anonymous callers (no caller ID) land here.
+  // They can enter a 5-digit membership card number OR press # to browse as a guest.
+  // Guests reach the main menu but are gated when they try any pay area.
+
+  app.post("/voice/anon-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 5,
+      finishOnKey: "#",
+      action: "/voice/handle-anon-entry",
+      timeout: 30,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "anon_membership_or_pound.mp3",
+      "If you have a membership enter it now, otherwise press the pound.");
+    // Timeout with no input — re-prompt once
+    twiml.redirect("/voice/anon-entry");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-anon-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string ?? "").replace(/#/g, "").trim();
+    const callSid = req.body?.CallSid as string;
+
+    if (!digits) {
+      // Caller pressed # (or sent empty) — enter as anonymous guest
+      anonGuestCallSids.add(callSid);
+      console.log(`[voice] anon-entry: caller pressed # — entering as anonymous guest (callSid=${callSid})`);
+      twiml.redirect("/voice/main-menu");
+    } else if (digits.length === 5) {
+      // 5-digit membership card number entered
+      try {
+        const card = await storage.getMembershipCardByNumber(digits);
+        if (!card) {
+          playPrompt(twiml, req, "membership_not_found.mp3",
+            "That membership number was not found. Please try again.");
+          twiml.redirect("/voice/anon-entry");
+        } else if (card.valueSeconds <= 0) {
+          playPrompt(twiml, req, "access_expired.mp3",
+            "That membership has no time remaining. Please purchase a new membership.");
+          twiml.redirect("/voice/anon-entry");
+        } else {
+          // Valid card — store and ask for PIN
+          anonCardPending.set(callSid, digits);
+          twiml.redirect("/voice/anon-card-pin-entry");
+        }
+      } catch (err) {
+        console.error("[voice] anon-entry card lookup error:", err);
+        playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again.");
+        twiml.redirect("/voice/anon-entry");
+      }
+    } else {
+      // Invalid input length — re-prompt
+      playPrompt(twiml, req, "anon_membership_or_pound.mp3",
+        "If you have a membership enter it now, otherwise press the pound.");
+      twiml.redirect("/voice/anon-entry");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/anon-card-pin-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    if (!anonCardPending.has(callSid)) {
+      twiml.redirect("/voice/anon-entry");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-anon-card-pin",
+      timeout: 30,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "membership_pin_prompt.mp3", "Please enter your 4-digit PIN.");
+    playPrompt(twiml, req, "goodbye.mp3", "No input received. Goodbye.");
+    twiml.hangup();
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-anon-card-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string ?? "").trim();
+    const callSid = req.body?.CallSid as string;
+
+    const cardNumber = anonCardPending.get(callSid);
+    if (!cardNumber) {
+      twiml.redirect("/voice/anon-entry");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const card = await storage.getMembershipCardByNumber(cardNumber);
+      if (card && card.pin && card.pin === digits) {
+        anonCardPending.delete(callSid);
+        anonGuestCallSids.delete(callSid); // no longer a guest — full card access
+        callCardOverride.set(callSid, card.id);
+        const minutes = Math.floor(card.valueSeconds / 60);
+        console.log(`[voice] anon-card-pin: accepted for callSid=${callSid} cardNumber=${cardNumber} — ${minutes} min`);
+        playPrompt(twiml, req, "pin_accepted.mp3", "Access code accepted. Welcome.");
+        playTimeRemaining(twiml, req, minutes);
+        callTimeAnnounced.add(callSid);
+        twiml.redirect("/voice/entry-check-card");
+      } else {
+        anonCardPending.delete(callSid);
+        console.log(`[voice] anon-card-pin: rejected for callSid=${callSid}`);
+        playPrompt(twiml, req, "pin_incorrect.mp3", "Incorrect PIN. Please try again.");
+        twiml.redirect("/voice/anon-entry");
+      }
+    } catch (err) {
+      console.error("[voice] anon-card-pin error:", err);
+      anonCardPending.delete(callSid);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Anonymous Pay Gate ────────────────────────────────────────────────────
+  // Anonymous guests who try to access a pay area land here.
+  // First visit: offer membership entry or # to skip.
+  // If they press # again: direct them to purchase a membership.
+
+  app.post("/voice/anon-pay-gate", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 5,
+      finishOnKey: "#",
+      action: "/voice/handle-anon-pay-gate",
+      timeout: 30,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "anon_membership_or_pound.mp3",
+      "If you have a membership enter it now, otherwise press the pound.");
+    twiml.redirect("/voice/anon-pay-gate");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-anon-pay-gate", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string ?? "").replace(/#/g, "").trim();
+    const callSid = req.body?.CallSid as string;
+
+    if (!digits) {
+      // Caller pressed # again — tell them to purchase a membership
+      console.log(`[voice] anon-pay-gate: caller pressed # — redirecting to purchase (callSid=${callSid})`);
+      playPrompt(twiml, req, "membership_required_purchase.mp3",
+        "To continue, you will need a membership. Connecting you to our membership options now.");
+      twiml.redirect("/voice/membership-purchase");
+    } else if (digits.length === 5) {
+      try {
+        const card = await storage.getMembershipCardByNumber(digits);
+        if (!card) {
+          playPrompt(twiml, req, "membership_not_found.mp3",
+            "That membership number was not found. Please try again.");
+          twiml.redirect("/voice/anon-pay-gate");
+        } else if (card.valueSeconds <= 0) {
+          playPrompt(twiml, req, "access_expired.mp3",
+            "That membership has no time remaining. Please purchase a new membership.");
+          twiml.redirect("/voice/membership-purchase");
+        } else {
+          // Valid card — store and ask for PIN
+          anonCardPending.set(callSid, digits);
+          twiml.redirect("/voice/anon-pay-gate-pin-entry");
+        }
+      } catch (err) {
+        console.error("[voice] anon-pay-gate card lookup error:", err);
+        playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again.");
+        twiml.redirect("/voice/anon-pay-gate");
+      }
+    } else {
+      playPrompt(twiml, req, "anon_membership_or_pound.mp3",
+        "If you have a membership enter it now, otherwise press the pound.");
+      twiml.redirect("/voice/anon-pay-gate");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/anon-pay-gate-pin-entry", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    if (!anonCardPending.has(callSid)) {
+      twiml.redirect("/voice/anon-pay-gate");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-anon-pay-gate-pin",
+      timeout: 30,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "membership_pin_prompt.mp3", "Please enter your 4-digit PIN.");
+    playPrompt(twiml, req, "goodbye.mp3", "No input received. Goodbye.");
+    twiml.hangup();
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-anon-pay-gate-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string ?? "").trim();
+    const callSid = req.body?.CallSid as string;
+
+    const cardNumber = anonCardPending.get(callSid);
+    if (!cardNumber) {
+      twiml.redirect("/voice/anon-pay-gate");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const card = await storage.getMembershipCardByNumber(cardNumber);
+      if (card && card.pin && card.pin === digits) {
+        anonCardPending.delete(callSid);
+        anonGuestCallSids.delete(callSid); // fully authenticated — remove guest flag
+        callCardOverride.set(callSid, card.id);
+        const minutes = Math.floor(card.valueSeconds / 60);
+        console.log(`[voice] anon-pay-gate-pin: accepted callSid=${callSid} cardNumber=${cardNumber} — ${minutes} min`);
+        playPrompt(twiml, req, "pin_accepted.mp3", "Access code accepted. Welcome.");
+        playTimeRemaining(twiml, req, minutes);
+        callTimeAnnounced.add(callSid);
+        twiml.redirect("/voice/main-menu");
+      } else {
+        anonCardPending.delete(callSid);
+        console.log(`[voice] anon-pay-gate-pin: rejected callSid=${callSid}`);
+        playPrompt(twiml, req, "pin_incorrect.mp3", "Incorrect PIN. Please try again.");
+        twiml.redirect("/voice/anon-pay-gate");
+      }
+    } catch (err) {
+      console.error("[voice] anon-pay-gate-pin error:", err);
+      anonCardPending.delete(callSid);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
       twiml.hangup();
     }
@@ -2475,6 +2756,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/handle-main-menu", async (req, res) => {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits;
+    const callSid = req.body?.CallSid as string;
+
+    // Anonymous guest gate: callers with no caller ID who pressed # at the entry
+    // prompt may browse the main menu but are blocked from all pay areas.
+    // Pay areas: male box (1), mailboxes (3), voicemail (6), manage membership (8).
+    const isAnonGuest = anonGuestCallSids.has(callSid);
+    const PAY_AREA_DIGITS = ["1", "3", "6", "8"];
+    if (isAnonGuest && PAY_AREA_DIGITS.includes(digit)) {
+      twiml.redirect("/voice/anon-pay-gate");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
 
     if (digit === "1") {
       // Enter the male box (live connector)
