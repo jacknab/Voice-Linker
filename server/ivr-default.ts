@@ -16,6 +16,7 @@ import { locationToFilename, triggerLocationAudio, triggerCityWordAudio, minutes
 import type { BrowseQueueItem, CallerBrowseState } from "./ivr-browse-state";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
 import { registerCallerPhone, removeCallerQueue } from "./ws";
+import { injectNewCallerIntoAllQueues, removeProfileFromAllQueues, SLOT_PRIORITY } from "./liveQueue";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 
@@ -1055,6 +1056,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         await storage.finalizeCallLog(callSid, callDuration).catch(() => {});
       }
 
+      // Look up userId BEFORE removing the active call record so we can
+      // remove this caller's profile from all other active browse queues.
+      const departedCallerRecord = await storage.getCallerByCallSid(callSid).catch(() => null);
+
       try {
         await storage.removeActiveCall(callSid);
         console.log(`[status] Removed ${callSid} from active calls`);
@@ -1066,6 +1071,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       categoryBrowseState.delete(callSid);
       await deleteBrowseState(callSid);
       removeCallerQueue(callSid);
+
+      // Real-time live-queue update: remove departed caller's profile from every
+      // other active session so the queue reflects who is actually on the line.
+      if (departedCallerRecord?.userId) {
+        removeProfileFromAllQueues(departedCallerRecord.userId).catch(err =>
+          console.error("[live-queue] removeProfileFromAllQueues error:", err),
+        );
+      }
       paymentSessions.delete(callSid);
       pendingNameRecordings.delete(callSid);
       pendingGreetingDrafts.delete(callSid);
@@ -5230,10 +5243,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
 
-      // ── Check for a pending live connect invite first (time-sensitive) ──────
+      // ── Pending live invite: fire listeningNotified side-effect only ────────
+      // The invite is injected at slot 1 of the live queue below — no interrupt.
       const pendingInvite = pendingLiveInvites.get(user.id);
       if (pendingInvite && pendingInvite.status === "pending" && Date.now() - pendingInvite.createdAt < LIVE_INVITE_TTL_MS) {
-        // Real-time signal to initiator: B is now listening — fire once only
         if (!pendingInvite.listeningNotified) {
           pendingInvite.listeningNotified = true;
           const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -5246,70 +5259,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               .catch(err => console.error("[live-connect] listening-notify redirect failed:", err.message));
           }
         }
-
-        const inviteGather = twiml.gather({
-          numDigits: 1,
-          action: `/voice/handle-live-invite?initiatorUserId=${pendingInvite.initiatorUserId}&room=${encodeURIComponent(pendingInvite.conferenceRoom)}`,
-          timeout: 20,
-        });
-        // 1. Chime
-        playPrompt(inviteGather, req, "live_connect_chime.mp3", "");
-        // 2. Caller's name recording
-        if (pendingInvite.initiatorNameRecordingUrl) {
-          safePlayRecording(inviteGather, pendingInvite.initiatorNameRecordingUrl, req, "");
-        }
-        // 3. "wants to connect with you."
-        playPrompt(inviteGather, req, "live_invite_wants_to_connect.mp3", "wants to connect with you.");
-        // 4. 1-second pause
-        inviteGather.pause({ length: 1 });
-        // 5. "Here's how it sounds, press 1 to accept at any time." then play the recording
-        playPrompt(inviteGather, req, "live_invite_preview.mp3", "Here's how it sounds, press 1 to accept at any time.");
-        if (pendingInvite.inviteMessageUrl) {
-          safePlayRecording(inviteGather, pendingInvite.inviteMessageUrl, req, "");
-        } else if (pendingInvite.initiatorGreetingUrl) {
-          safePlayRecording(inviteGather, pendingInvite.initiatorGreetingUrl, req, "");
-        }
-        // 6. Menu
-        playPrompt(inviteGather, req, "live_invite_options.mp3",
-          "To connect live with this caller press 1. To reply with a message press 2. " +
-          "To skip press 3. To hear the last message you sent them press 4. " +
-          "To block this caller press 7. To hear this caller's location press 8. " +
-          "To repeat these choices press 9.");
-        twiml.redirect("/voice/browse-profiles");
-        res.type("text/xml");
-        return res.send(twiml.toString());
+        // Invite surfaces at slot 1 in the queue — handled below
       }
 
-      // Check for unread messages first
+      // Check for unread messages — sender injected at slot 1 of the live queue below.
       const unreadMessage = await storage.getUnreadMessage(user.id);
 
-      if (unreadMessage) {
-        // Fetch sender's profile to get their name recording
-        const senderProfile = await storage.getProfile(unreadMessage.fromUserId);
-
-        // Nest <Play> + name announcement inside <Gather>
-        const msgGather = twiml.gather({
-          numDigits: 1,
-          action: `/voice/handle-message-menu?msgId=${unreadMessage.id}&senderId=${unreadMessage.fromUserId}`,
-          timeout: 10,
-        });
-        // Always lead with the chime, then: name → "has sent you a message" → message
-        playPrompt(msgGather, req, "live_connect_chime.mp3", "");
-        if (senderProfile?.nameRecordingUrl) {
-          safePlayRecording(msgGather, senderProfile.nameRecordingUrl, req, "");
-          playPrompt(msgGather, req, "has_sent_you_a_message.mp3", "has sent you a message.");
-        } else {
-          playPrompt(msgGather, req, "you_have_new_message.mp3", "You have a new message.");
-        }
-        safePlayRecording(msgGather, unreadMessage.recordingUrl, req, "Message audio is not available for playback.");
-        playPrompt(msgGather, req, "message_options.mp3", "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound.");
-        twiml.redirect("/voice/main-menu");
-      } else {
-        // ── Rolling buffer browsing ───────────────────────────────────────────
-        // State persists across HTTP calls in Redis (keyed by callSid), with in-memory
-        // fallback when Redis is unavailable. The buffer holds at most 3 profiles at a time;
-        // seenUserIds tracks what this caller has already heard this cycle. When the buffer
-        // drains after a fill, the cycle is complete and linked regions are offered (or reset).
+      // ── Slot-based live queue browsing ────────────────────────────────────────
+      // Slot 0 = currently hearing. Slot 1 = priority (messages / live invites).
+      // Slot 3 = new callers entering the system. After any action (message / skip /
+      // connect live / block) the slot-0 item is marked heard and shifted off.
+      // State persists in Redis keyed by callSid, with in-memory fallback.
 
         const afterUserId   = req.query?.afterUserId   as string | undefined;
         const targetUserId  = req.query?.targetUserId  as string | undefined;
@@ -5381,6 +5341,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           state = {
             queue: initialBuffer,
             seenUserIds: [],
+            heardProfileIds: [],
             blockedUserIds: initialBlockedIds,
             lastPlayedProfile: null,
             previousLastPlayedProfile: null,
@@ -5404,6 +5365,23 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
           engagementEngine.initEngagementState(callSid, user.id);
           console.log(`[voice] browse-profiles: new session for ${callSid} — buffer=${state.queue.length} (region=${callerRegionName ?? "none"}, linkedRegions=${linkedRegions.length})`);
+
+          // ── Inject this new caller's profile into every other active session ──
+          const ownProfile = await storage.getProfile(user.id).catch(() => null);
+          if (ownProfile?.recordingUrl) {
+            injectNewCallerIntoAllQueues({
+              userId: user.id,
+              recordingUrl: ownProfile.recordingUrl,
+              nameRecordingUrl: ownProfile.nameRecordingUrl ?? null,
+              regionId: regionId ?? null,
+              regionName: callerRegionName,
+              isPreExisting: false,
+              lat: callerLat,
+              lon: callerLon,
+            }, callSid).catch(err =>
+              console.error("[live-queue] injectNewCallerIntoAllQueues error:", err),
+            );
+          }
         } else {
           // ── Returning visit ───────────────────────────────────────────────────
 
@@ -5441,6 +5419,41 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               state.seenUserIds.push(afterUserId);
             }
             state.queue = state.queue.filter(p => p.userId !== afterUserId);
+          }
+        }
+
+        // ── Priority injections: live invite and unread message at slot 1 ──────
+        // Runs on every visit so the queue stays current even after round-trips.
+        if (!state.heardProfileIds) state.heardProfileIds = [];
+
+        if (pendingInvite && pendingInvite.status === "pending" && Date.now() - pendingInvite.createdAt < LIVE_INVITE_TTL_MS) {
+          const inviterInQueue = state.queue.some(p => p.userId === pendingInvite!.initiatorUserId);
+          if (!inviterInQueue) {
+            const inviteInsertAt = Math.min(SLOT_PRIORITY, state.queue.length);
+            state.queue.splice(inviteInsertAt, 0, {
+              userId: pendingInvite.initiatorUserId,
+              recordingUrl: pendingInvite.initiatorGreetingUrl ?? "",
+              nameRecordingUrl: pendingInvite.initiatorNameRecordingUrl ?? null,
+              itemType: "invite" as const,
+            });
+            console.log(`[live-queue] Injected invite from userId=${pendingInvite.initiatorUserId} at slot ${inviteInsertAt} for ${callSid}`);
+          }
+        }
+
+        if (unreadMessage) {
+          const msgSenderInQueue = state.queue.some(p => p.userId === unreadMessage.fromUserId);
+          if (!msgSenderInQueue) {
+            const msgSenderProfile = await storage.getProfile(unreadMessage.fromUserId);
+            const msgInsertAt = Math.min(SLOT_PRIORITY, state.queue.length);
+            state.queue.splice(msgInsertAt, 0, {
+              userId: unreadMessage.fromUserId,
+              recordingUrl: msgSenderProfile?.recordingUrl ?? "",
+              nameRecordingUrl: msgSenderProfile?.nameRecordingUrl ?? null,
+              itemType: "message" as const,
+              messageId: unreadMessage.id,
+              messageRecordingUrl: unreadMessage.recordingUrl,
+            });
+            console.log(`[live-queue] Injected message from userId=${unreadMessage.fromUserId} at slot ${msgInsertAt} for ${callSid}`);
           }
         }
 
@@ -5706,6 +5719,70 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           return res.send(twiml.toString());
         }
 
+        // ── Priority item rendering: messages and live invites at slot 0 ───────
+        if (profile.itemType === "message") {
+          const msgGather = twiml.gather({
+            numDigits: 1,
+            action: `/voice/handle-message-menu?msgId=${encodeURIComponent(profile.messageId ?? "")}&senderId=${encodeURIComponent(profile.userId)}`,
+            timeout: 10,
+          });
+          playPrompt(msgGather, req, "live_connect_chime.mp3", "");
+          if (profile.nameRecordingUrl) {
+            safePlayRecording(msgGather, profile.nameRecordingUrl, req, "");
+            playPrompt(msgGather, req, "has_sent_you_a_message.mp3", "has sent you a message.");
+          } else {
+            playPrompt(msgGather, req, "you_have_new_message.mp3", "You have a new message.");
+          }
+          if (profile.messageRecordingUrl) {
+            safePlayRecording(msgGather, profile.messageRecordingUrl, req, "Message audio is not available for playback.");
+          }
+          playPrompt(msgGather, req, "message_options.mp3", "To connect live with this caller, press 1. To reply with a message, press 2. To skip this message, press 3. To hear the last message you sent them, press 4. To save this message, press 5. To block this caller, press 7. To hear this caller's greeting and location, press 8. To repeat this message and menu choices, press 9. To exit or change your greeting, press pound.");
+          twiml.redirect("/voice/browse-profiles");
+          console.log(`[live-queue] Slot 0 message from userId=${profile.userId} for ${callSid}`);
+          await setBrowseState(callSid, state);
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        }
+
+        if (profile.itemType === "invite") {
+          const liveInvite = pendingLiveInvites.get(user.id);
+          if (!liveInvite || liveInvite.status !== "pending" || Date.now() - liveInvite.createdAt >= LIVE_INVITE_TTL_MS) {
+            // Invite expired — drop from queue and advance to the next profile
+            state.queue.shift();
+            await setBrowseState(callSid, state);
+            twiml.redirect("/voice/browse-profiles");
+            res.type("text/xml");
+            return res.send(twiml.toString());
+          }
+          const inviteGather = twiml.gather({
+            numDigits: 1,
+            action: `/voice/handle-live-invite?initiatorUserId=${encodeURIComponent(liveInvite.initiatorUserId)}&room=${encodeURIComponent(liveInvite.conferenceRoom)}`,
+            timeout: 20,
+          });
+          playPrompt(inviteGather, req, "live_connect_chime.mp3", "");
+          if (liveInvite.initiatorNameRecordingUrl) {
+            safePlayRecording(inviteGather, liveInvite.initiatorNameRecordingUrl, req, "");
+          }
+          playPrompt(inviteGather, req, "live_invite_wants_to_connect.mp3", "wants to connect with you.");
+          inviteGather.pause({ length: 1 });
+          playPrompt(inviteGather, req, "live_invite_preview.mp3", "Here's how it sounds, press 1 to accept at any time.");
+          if (liveInvite.inviteMessageUrl) {
+            safePlayRecording(inviteGather, liveInvite.inviteMessageUrl, req, "");
+          } else if (liveInvite.initiatorGreetingUrl) {
+            safePlayRecording(inviteGather, liveInvite.initiatorGreetingUrl, req, "");
+          }
+          playPrompt(inviteGather, req, "live_invite_options.mp3",
+            "To connect live with this caller press 1. To reply with a message press 2. " +
+            "To skip press 3. To hear the last message you sent them press 4. " +
+            "To block this caller press 7. To hear this caller's location press 8. " +
+            "To repeat these choices press 9.");
+          twiml.redirect("/voice/browse-profiles");
+          console.log(`[live-queue] Slot 0 invite from userId=${liveInvite.initiatorUserId} for ${callSid}`);
+          await setBrowseState(callSid, state);
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        }
+
         // Capture previous profile for press-5 go-back BEFORE updating lastPlayedProfile.
         const prevLastProfile = state.lastPlayedProfile;
         state.previousLastPlayedProfile = state.lastPlayedProfile;
@@ -5783,7 +5860,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // Persist state before redirecting
         await setBrowseState(callSid, state);
         twiml.redirect(`/voice/connector-timeout?profileUserId=${encodeURIComponent(profile.userId)}&previousProfileUserId=${encodeURIComponent(prevLastProfile?.userId ?? "")}&attempt=1`);
-      }
     } catch (error) {
       console.error("[voice] /voice/browse-profiles error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred while browsing. Returning to the main menu.");
@@ -6015,7 +6091,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else if (digit === "3") {
         // ── Skip this message ─────────────────────────────────────────────────
         await storage.markMessageRead(msgId);
-        twiml.redirect("/voice/browse-profiles");
+        twiml.redirect(`/voice/browse-profiles?afterUserId=${encodeURIComponent(senderId)}`);
       } else if (digit === "4") {
         // ── Hear the last message you sent them ───────────────────────────────
         if (fromNumber && senderId) {
@@ -6041,7 +6117,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // ── Save this message (mark read, stays in mailbox) ───────────────────
         await storage.markMessageRead(msgId);
         playPrompt(twiml, req, "message_saved.mp3", "Message saved.");
-        twiml.redirect("/voice/browse-profiles");
+        twiml.redirect(`/voice/browse-profiles?afterUserId=${encodeURIComponent(senderId)}`);
       } else if (digit === "7") {
         // ── Block the message sender ──────────────────────────────────────────
         if (fromNumber && senderId) {
@@ -6053,7 +6129,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           runBlockAutoChecks(senderId).catch(console.error);
         }
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
-        twiml.redirect("/voice/browse-profiles");
+        twiml.redirect(`/voice/browse-profiles?afterUserId=${encodeURIComponent(senderId)}`);
       } else if (digit === "8") {
         // ── Hear this caller's greeting and location ──────────────────────────
         const senderProfile = await storage.getProfile(senderId);
@@ -6875,7 +6951,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         invite.status = "declined";
         pendingLiveInvites.delete(user.id);
         console.log(`[live-connect] Invite skipped by userId=${user.id}`);
-        twiml.redirect("/voice/browse-profiles");
+        twiml.redirect(`/voice/browse-profiles?afterUserId=${encodeURIComponent(initiatorUserId)}`);
 
       } else if (digit === "4") {
         // ── Hear last message you sent them ──────────────────────────────────
@@ -6908,7 +6984,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.log(`[live-connect] handle-live-invite: userId=${user.id} blocked initiatorUserId=${initiatorUserId}`);
         runBlockAutoChecks(initiatorUserId).catch(console.error);
         playPrompt(twiml, req, "caller_blocked.mp3", "Caller blocked. You will no longer hear this caller's profile.");
-        twiml.redirect("/voice/browse-profiles");
+        twiml.redirect(`/voice/browse-profiles?afterUserId=${encodeURIComponent(initiatorUserId)}`);
 
       } else if (digit === "8") {
         // ── Hear this caller's location ──────────────────────────────────────

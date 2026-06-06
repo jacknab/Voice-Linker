@@ -4600,6 +4600,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             })),
             // ivr-default fields (unused in no-mailbox but required by shared interface)
             seenUserIds: [],
+            heardProfileIds: [],
             blockedUserIds: new Set(),
             lastPlayedProfile: null,
             previousLastPlayedProfile: null,

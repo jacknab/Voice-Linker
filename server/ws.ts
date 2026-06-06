@@ -42,6 +42,14 @@ export function registerCallerPhone(callSid: string, phoneNumber: string): void 
 }
 
 /**
+ * Returns the CallSids of all callers currently active in the live queue.
+ * Used by liveQueue.ts to broadcast new-caller injections and departures.
+ */
+export function getActiveCallSids(): string[] {
+  return Array.from(activeQueues.keys());
+}
+
+/**
  * Called by the Redis setBrowseState wrapper so every queue write is reflected
  * in real-time on connected admin clients.
  */

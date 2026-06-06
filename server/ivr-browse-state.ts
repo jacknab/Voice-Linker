@@ -1,3 +1,5 @@
+export type BrowseQueueItemType = "profile" | "message" | "invite";
+
 export type BrowseQueueItem = {
   userId: string;
   recordingUrl: string;
@@ -7,12 +9,17 @@ export type BrowseQueueItem = {
   isPreExisting?: boolean;
   lat?: number | null;
   lon?: number | null;
+  // Priority item metadata (slot 1 injections)
+  itemType?: BrowseQueueItemType;
+  messageId?: string;            // for 'message' items — DB message ID
+  messageRecordingUrl?: string;  // for 'message' items — audio URL of the message
 };
 
 export interface CallerBrowseState {
   queue: BrowseQueueItem[];
   // ── ivr-default fields ─────────────────────────────────────────────────────
   seenUserIds: string[];
+  heardProfileIds: string[];       // profiles marked heard after slot-0 action
   blockedUserIds: Set<string>;
   lastPlayedProfile: BrowseQueueItem | null;
   previousLastPlayedProfile: BrowseQueueItem | null;
@@ -32,9 +39,7 @@ export interface CallerBrowseState {
   greetingsPlayed: number;
   windowAnnouncementsUsed: number;
   // ── linked-region browsing ──────────────────────────────────────────────────
-  // true while the caller is listening to a linked/nearby region's profiles
   browsingLinked: boolean;
-  // The linked region currently being browsed (for prompts/logging)
   browsingLinkedRegionId: string | null;
   browsingLinkedRegionName: string | null;
 }
