@@ -463,6 +463,9 @@ const callCardOverride = new Map<string, string>(); // callSid → cardId
 // Pending new PIN setup: the caller is confirming a newly entered PIN
 const pendingNewPinSetup = new Map<string, string>(); // callSid → first PIN entry (4 digits)
 
+// Anonymous caller authentication: callSid → resolved member phone number (after membership lookup, before PIN)
+const anonCallPending = new Map<string, string>(); // callSid → resolved member phone
+
 // Mailbox setup state — tracks multi-step setup progress per call
 const mailboxSetupState = new Map<string, {
   dob?: string;
@@ -1091,6 +1094,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       pendingNewPinSetup.delete(callSid);
       pendingCardFirstUse.delete(callSid);
       femaleCallers.delete(callSid);
+      anonCallPending.delete(callSid);
 
       // Clean up any live connect invite that this caller initiated
       for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
@@ -1122,6 +1126,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     if (!fromNumber || !callSid) {
       playPrompt(twiml, req, "no_caller_id.mp3", "We could not identify your call. Goodbye.");
       twiml.hangup();
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    // ── Anonymous / blocked caller ─────────────────────────────────────────────
+    // Twilio sends From="anonymous" when a caller has blocked their caller ID.
+    // These callers must authenticate with their membership number + PIN before
+    // reaching any part of the system — free mode does not bypass this gate.
+    const isAnonymous = fromNumber.toLowerCase() === "anonymous" || !/^\+?[0-9]+$/.test(fromNumber);
+    if (isAnonymous) {
+      await getSiteSettingsCached().catch(() => {});
+      storage.logCall(callSid, "anonymous", calledTo, null).catch(() => {});
+      registerStatusCallback(callSid, req).catch(() => {});
+      playPrompt(twiml, req, "anon_caller_greeting.mp3",
+        "Welcome. Your caller ID is not visible. To protect our members, you must verify your membership before entering the system.");
+      twiml.redirect("/voice/anon-auth");
       res.type("text/xml");
       return res.send(twiml.toString());
     }
@@ -1593,6 +1613,121 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
     } catch (error) {
       console.error("[voice] /voice/entry-check-override error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Anonymous Caller Authentication ──────────────────────────────────────
+  // Callers with blocked/private numbers (Twilio From="anonymous") must verify
+  // their membership number + PIN before entering any part of the system.
+  // Free mode does NOT bypass this gate — anonymous callers always authenticate.
+
+  app.post("/voice/anon-auth", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 10,
+      finishOnKey: "",
+      action: "/voice/handle-anon-auth-number",
+      timeout: 30,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "anon_auth_enter_membership.mp3",
+      "Please enter your 10-digit membership number now.");
+    playPrompt(twiml, req, "goodbye.mp3", "No input received. Goodbye.");
+    twiml.hangup();
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-anon-auth-number", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) ?? "";
+    const callSid = req.body?.CallSid as string;
+
+    if (!digits) {
+      playPrompt(twiml, req, "goodbye.mp3", "No input received. Goodbye.");
+      twiml.hangup();
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const memberUser = await storage.getUserByMembershipNumber(digits);
+      if (!memberUser || !memberUser.membershipPin) {
+        playPrompt(twiml, req, "membership_not_found.mp3",
+          "That membership number was not found or does not have an access code set up. Please call from your registered phone number to set up an access code, then try again. Goodbye.");
+        twiml.hangup();
+      } else {
+        anonCallPending.set(callSid, memberUser.phoneNumber);
+        twiml.redirect("/voice/anon-auth-pin");
+      }
+    } catch (err) {
+      console.error("[voice] anon-auth lookup error:", err);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/anon-auth-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    if (!anonCallPending.has(callSid)) {
+      twiml.redirect("/voice/anon-auth");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-anon-auth-pin",
+      timeout: 30,
+    });
+    playPrompt(gather, req, "membership_pin_prompt.mp3", "Please enter your 4-digit access code.");
+    playPrompt(twiml, req, "goodbye.mp3", "No input received. Goodbye.");
+    twiml.hangup();
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-anon-auth-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string) ?? "";
+    const callSid = req.body?.CallSid as string;
+
+    const memberPhone = anonCallPending.get(callSid);
+    if (!memberPhone) {
+      twiml.redirect("/voice/anon-auth");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const memberUser = await storage.getUserByPhone(memberPhone);
+      if (memberUser && memberUser.membershipPin && memberUser.membershipPin === digits) {
+        anonCallPending.delete(callSid);
+        callMembershipOverride.set(callSid, memberPhone);
+        console.log(`[voice] anon-auth: PIN accepted for callSid=${callSid} → phone=${memberPhone}`);
+        playPrompt(twiml, req, "pin_accepted.mp3", "Access code accepted. Welcome.");
+        twiml.redirect("/voice/entry-check-override");
+      } else {
+        anonCallPending.delete(callSid);
+        console.log(`[voice] anon-auth: PIN rejected for callSid=${callSid}`);
+        playPrompt(twiml, req, "pin_incorrect.mp3",
+          "Incorrect access code. Please try again.");
+        twiml.redirect("/voice/anon-auth");
+      }
+    } catch (err) {
+      console.error("[voice] anon-auth PIN error:", err);
+      anonCallPending.delete(callSid);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
       twiml.hangup();
     }
