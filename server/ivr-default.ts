@@ -1115,7 +1115,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       await getSiteSettingsCached();
-      storage.removeStaleActiveCalls(20).catch(() => {});
+      storage.removeStaleActiveCalls(3).catch(() => {});
       storage.logCall(callSid, fromNumber, calledTo, null).catch(() => {});
       registerStatusCallback(callSid, req).catch(() => {});
 
@@ -7941,7 +7941,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      storage.removeStaleActiveCalls(20).catch(() => {});
+      storage.removeStaleActiveCalls(3).catch(() => {});
       storage.logCall(callSid, fromNumber, region.phoneNumber, region.id).catch(() => {});
       registerStatusCallback(callSid, req).catch(() => {});
 

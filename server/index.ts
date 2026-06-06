@@ -199,12 +199,12 @@ app.use((req, res, next) => {
   storage.seedDefaultPersonalities().catch(err => console.error("[personality] seed error:", err));
   setInterval(async () => {
     try {
-      await storage.removeStaleActiveCalls(20);
+      await storage.removeStaleActiveCalls(3);
       await storage.finalizeOrphanedCallLogs(5);
     } catch (err) {
       console.error("[cleanup] stale active-call purge failed:", err);
     }
-  }, 60 * 1000); // every 1 minute
+  }, 30 * 1000); // every 30 seconds
 
   // Auto-expire stale recording-rejection flags. If a caller is auto-flagged
   // by the moderator and then hangs up before they ever call back to hear the
