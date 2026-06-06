@@ -833,11 +833,14 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "entry", filename: "error_generic.mp3",      label: "Generic Error",             text: "An error occurred. Please try again later." },
   { group: "entry", filename: "invalid_choice.mp3",     label: "Invalid Choice",            text: "Invalid choice." },
   { group: "entry", filename: "goodbye.mp3",            label: "Goodbye",                   text: "Thank you for calling. Goodbye." },
+  { group: "entry", filename: "anon_caller_greeting.mp3",       label: "Anonymous Caller — Blocked Entry Greeting",  text: "Welcome. Your caller ID is not visible. To protect our members, you must verify your membership before entering the system." },
+  { group: "entry", filename: "anon_auth_enter_membership.mp3", label: "Anonymous Caller — Enter Membership Number", text: "Please enter your 10-digit membership number now." },
 
   // ── 2. MEMBERSHIP GATEWAY — card entry & verification ─────────────────────
   { group: "membership", filename: "membership_entry_prompt.mp3", label: "Card Entry Prompt",          text: "If you have a membership card, enter your card number now. Otherwise press the pound key." },
   { group: "membership", filename: "link_code_invalid.mp3",       label: "Link Code Invalid",          text: "That code is invalid or has expired. Please generate a new code from your web account and try again." },
   { group: "membership", filename: "membership_invalid.mp3",      label: "Card / Membership Invalid",  text: "We could not find a card with that number. Please check your card and try again." },
+  { group: "membership", filename: "membership_not_found.mp3",   label: "Anon Auth — Membership Not Found / No PIN", text: "That membership number was not found or does not have an access code set up. Please call from your registered phone number to set up an access code, then try again. Goodbye." },
   { group: "membership", filename: "membership_linked.mp3",       label: "Card Accepted / Verified",   text: "Card accepted." },
   { group: "membership", filename: "access_expired.mp3",          label: "Access / Time Expired",      text: "Your access has expired." },
   { group: "membership", filename: "free_mode_announcement.mp3",  label: "Free Mode Announcement",     text: "Great news! All calls are completely free right now. No membership required. Enjoy unlimited time on the system. Connecting you now." },
@@ -941,6 +944,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "live", filename: "live_invite_preview.mp3",      label: "Live Invite — Here's How It Sounds (Invitee Hears)",     text: "Here's how it sounds, press 1 to accept at any time." },
   { group: "live", filename: "live_invite_options.mp3",      label: "Live Invite — Options (Invitee Hears)",                  text: "To accept, press 1. To decline and hear the next caller's greeting, press 2. To hear this caller's greeting, press 3. To block this caller, press 4." },
   { group: "live", filename: "live_connect_ended.mp3",       label: "Live Connect — Call Ended",                              text: "Your connection has ended. To continue press 3." },
+  { group: "live", filename: "live_connect_other_left.mp3",  label: "Live Connect — Other Person Left",                       text: "He left the connection. To continue browsing, press 3." },
   { group: "live", filename: "live_connect_failed.mp3",     label: "Live Connect — Failed to Connect",                  text: "We were unable to connect your call. Returning you to the male box." },
   { group: "live", filename: "live_connect_busy.mp3",       label: "Live Connect — Caller Already Connected",           text: "That caller is already connected with someone else. Please try again later." },
   { group: "live", filename: "live_connect_unavailable.mp3",label: "Live Connect — Caller Unavailable",                 text: "This caller is not available for a live connection." },
@@ -1068,6 +1072,7 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "ad_categories", filename: "category_ad_options.mp3",   label: "Ad Categories — Options After Hearing Ad", text: "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu." },
   { group: "ad_categories", filename: "ads_end_of_list.mp3",       label: "Ad Categories — End of Ads",         text: "You have heard all the ads in this category. Returning to categories." },
   { group: "ad_categories", filename: "no_ads_category.mp3",       label: "Ad Categories — No Ads in Category", text: "No ads available in this category yet. Try another category." },
+  { group: "ad_categories", filename: "local_ads_unavailable.mp3", label: "Ad Categories — Local Ads Unavailable (Wrong Region)", text: "Local ads are not available from this number. Please call your local access number to hear and record local ads." },
 
   // ── 9d. BILLING EXTRAS ────────────────────────────────────────────────────
   { group: "billing", filename: "collect_card_number.mp3",    label: "Billing — Enter Card Number",          text: "Please enter your 16-digit card number now." },

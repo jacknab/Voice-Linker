@@ -219,6 +219,11 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "caller_banned.mp3",          text: "We're sorry, your access to this service has been suspended. If you believe this is an error, please contact customer support. Goodbye." },
   { filename: "account_restricted_live.mp3",text: "We're sorry, your account has been restricted and you are not able to go live at this time. You may still listen to profiles and use other features. Please contact customer support if you have questions." },
 
+  // ── Anonymous caller authentication ────────────────────────────────────────
+  { filename: "anon_caller_greeting.mp3",       text: "Welcome. Your caller ID is not visible. To protect our members, you must verify your membership before entering the system." },
+  { filename: "anon_auth_enter_membership.mp3", text: "Please enter your 10-digit membership number now." },
+  { filename: "membership_not_found.mp3",        text: "That membership number was not found or does not have an access code set up. Please call from your registered phone number to set up an access code, then try again. Goodbye." },
+
   // ── Web-link flow ──────────────────────────────────────────────────────────
   { filename: "link_phone_prefix.mp3",  text: "Your phone number has been linked to your web account. Your membership number is:" },
   { filename: "link_phone_portal.mp3",  text: "You can now sign in to the web portal to manage your account." },
@@ -356,6 +361,7 @@ export const MM_PROMPTS: Prompt[] = [
   // ── Ad / mailbox dynamic prompts ─────────────────────────────────────────
   { filename: "ads_end_of_list.mp3",                 text: "You have heard all the ads in this category. Returning to categories." },
   { filename: "no_ads_category.mp3",                 text: "No ads available in this category yet. Try another category." },
+  { filename: "local_ads_unavailable.mp3",            text: "Local ads are not available from this number. Please call your local access number to hear and record local ads." },
   { filename: "mailbox_ad_existing.mp3",             text: "You already have an ad in this category. Press 1 to record a new one. Press 9 to return to categories." },
   { filename: "mailbox_ad_record.mp3",               text: "Record your mailbox ad after the tone. Tell guys about yourself. Press any key when done." },
   { filename: "mailbox_no_ad.mp3",                   text: "This mailbox has not recorded an ad yet." },
@@ -365,10 +371,12 @@ export const MM_PROMPTS: Prompt[] = [
   // ── Live connect extras ───────────────────────────────────────────────────
   { filename: "live_connect_cancelled.mp3",     text: "Your connection request has been cancelled. Returning to profiles." },
   { filename: "live_connect_confirm_invite.mp3",text: "Here's how it sounds. Press 1 to send your invitation to this caller at any time." },
+  { filename: "live_connect_other_left.mp3",    text: "He left the connection. To continue browsing, press 3." },
   { filename: "live_connect_chime.mp3",         text: "" },
 
   // ── System sounds (no TTS — custom upload required) ──────────────────────
   { filename: "chime.mp3",                      text: "" },
+  { filename: "live_connect_ringing.mp3",        text: "" },
   { filename: "backdoor_expires_soon.mp3",      text: "Your backdoor access pass expires soon." },
 ];
 

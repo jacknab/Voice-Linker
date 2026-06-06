@@ -246,8 +246,10 @@ const CORE_PROMPTS: Prompt[] = [
   { filename: "live_connect_listening.mp3",     text: "They're listening to your request right now. Please hold a moment for their response." },
   { filename: "live_connect_confirm_invite.mp3",text: "Here's how it sounds. Press 1 to send your invitation to this caller at any time." },
   { filename: "live_connect_cancelled.mp3",     text: "Your connection request has been cancelled. Returning to profiles." },
+  { filename: "live_connect_other_left.mp3",    text: "He left the connection. To continue browsing, press 3." },
   { filename: "live_connect_admin_profile.mp3", text: "This is a sample profile and cannot accept a live connection. Please choose another caller." },
   { filename: "live_connect_chime.mp3",         text: "" },
+  { filename: "live_connect_ringing.mp3",       text: "" },
   { filename: "live_invite_intro.mp3",          text: "This caller" },
   { filename: "live_invite_suffix.mp3",         text: "would like to connect live with you." },
   { filename: "live_low_balance_warning.mp3",   text: "Warning: you have less than 5 minutes remaining. Please note your live connection will end when your time expires." },
@@ -292,6 +294,7 @@ const CORE_PROMPTS: Prompt[] = [
   { filename: "category_ad_options.mp3",   text: "Press 1 to send a message to this guy. Press 2 to hear the next ad. Press 9 to return to the category menu. Press pound to return to the mailbox menu." },
   { filename: "ads_end_of_list.mp3",       text: "You have heard all the ads in this category. Returning to categories." },
   { filename: "no_ads_category.mp3",       text: "No ads available in this category yet. Try another category." },
+  { filename: "local_ads_unavailable.mp3", text: "Local ads are not available from this number. Please call your local access number to hear and record local ads." },
 
   // ── Promo codes ────────────────────────────────────────────────────────────
   { filename: "promo_code_success.mp3",     text: "Your promo code has been accepted and your time has been added to your account. Enjoy your time on the line." },
@@ -302,6 +305,11 @@ const CORE_PROMPTS: Prompt[] = [
   { filename: "promo_code_max_uses.mp3",    text: "This promo code has reached its maximum number of uses." },
   { filename: "collect_postal_code.mp3",    text: "Please enter your billing zip code, then press pound." },
   { filename: "collect_security_code.mp3",  text: "Enter your 3 or 4 digit security code, then press pound." },
+
+  // ── Anonymous caller authentication ────────────────────────────────────────
+  { filename: "anon_caller_greeting.mp3",       text: "Welcome. Your caller ID is not visible. To protect our members, you must verify your membership before entering the system." },
+  { filename: "anon_auth_enter_membership.mp3", text: "Please enter your 10-digit membership number now." },
+  { filename: "membership_not_found.mp3",        text: "That membership number was not found or does not have an access code set up. Please call from your registered phone number to set up an access code, then try again. Goodbye." },
 
   // ── Account / status ───────────────────────────────────────────────────────
   { filename: "backdoor_expires_soon.mp3",  text: "Your backdoor access pass expires soon." },
