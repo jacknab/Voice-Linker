@@ -1,0 +1,63 @@
+// Build the announcement from component audio files so it plays as MP3, not TTS,
+  // even before a composite is generated.
+  // Pattern: phrase_you_have + num_N + phrase_(X)_of_pbtr  (e.g. "phrase_minutes_of_pbtr.mp3")
+  if (totalMinutes >= 1440) {
+    const days  = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
+    playNumber(twiml, req, days);
+    if (hours === 0) {
+      playPrompt(twiml, req, days === 1 ? "phrase_day_of_pbtr.mp3" : "phrase_days_of_pbtr.mp3",
+        days === 1 ? "day remaining." : "days remaining.");
+    } else {
+      playPrompt(twiml, req, days === 1 ? "phrase_day.mp3" : "phrase_days.mp3",
+        days === 1 ? "day" : "days");
+      playPrompt(twiml, req, "phrase_and.mp3", "and");
+      playNumber(twiml, req, hours);
+      playPrompt(twiml, req, hours === 1 ? "phrase_hour_of_pbtr.mp3" : "phrase_hours_of_pbtr.mp3",
+        hours === 1 ? "hour remaining." : "hours remaining.");
+    }
+  } else if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const mins  = totalMinutes % 60;
+    playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
+    playNumber(twiml, req, hours);
+    if (mins === 0) {
+      playPrompt(twiml, req, hours === 1 ? "phrase_hour_of_pbtr.mp3" : "phrase_hours_of_pbtr.mp3",
+        hours === 1 ? "hour remaining." : "hours remaining.");
+    } else {
+      playPrompt(twiml, req, hours === 1 ? "phrase_hour.mp3" : "phrase_hours.mp3",
+        hours === 1 ? "hour" : "hours");
+      playPrompt(twiml, req, "phrase_and.mp3", "and");
+      playNumber(twiml, req, mins);
+      playPrompt(twiml, req, mins === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
+        mins === 1 ? "minute remaining." : "minutes remaining.");
+    }
+  } else {
+    playPrompt(twiml, req, "phrase_you_have.mp3", "You have");
+    playNumber(twiml, req, totalMinutes);
+    playPrompt(twiml, req, totalMinutes === 1 ? "phrase_minute_of_pbtr.mp3" : "phrase_minutes_of_pbtr.mp3",
+      totalMinutes === 1 ? "minute remaining." : "minutes remaining.");
+  }
+}
+
+// Play the 24-hour pass expiry announcement using pre-recorded hourly audio files.
+// Files are named backdoor_expires_22hr.mp3, backdoor_expires_1hr.mp3, etc.
+// When less than 1 hour remains, switches to a minutes announcement.
+// Falls back to TTS if the specific file hasn't been uploaded yet.
+function playBackdoorHoursRemaining(
+  twiml: { say: (text: string) => void; play: (url: string) => void },
+  req: Request,
+  hoursLeft: number  // raw (non-floored) hours remaining
+): void {
+  if (hoursLeft < 1) {
+    // Less than 1 hour — announce in minutes instead
+    const minutesLeft = Math.max(Math.ceil(hoursLeft * 60), 1);
+    playPrompt(twiml, req, "backdoor_expires_soon.mp3",
+      `Your backdoor access pass expires in ${minutesLeft} minute${minutesLeft === 1 ? "" : "s"}.`);
+  } else {
+    const safeHours = Math.min(Math.floor(hoursLeft), 24);
+    playPrompt(twiml, req, `backdoor_expires_${safeHours}hr.mp3`,
+      `Your backdoor access pass expires in ${safeHours} hour${safeHours === 1 ? "" : "s"}.`);
+  }
+}

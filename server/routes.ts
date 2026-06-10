@@ -2517,6 +2517,91 @@ export async function registerRoutes(
     }
   });
 
+  // ── Admin: Twilio number management ──────────────────────────────────────────
+
+  // Check if Twilio credentials are configured and valid
+  app.get("/api/admin/twilio/status", async (_req, res) => {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken  = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) return res.json({ configured: false });
+    try {
+      const client = twilio(accountSid, authToken);
+      const account = await client.api.v2010.accounts(accountSid).fetch();
+      res.json({ configured: true, accountName: account.friendlyName });
+    } catch (e: any) {
+      console.error("[twilio] status check error:", e.message);
+      res.json({ configured: false, error: e.message });
+    }
+  });
+
+  // Search available local phone numbers by area code
+  app.get("/api/admin/twilio/available-numbers", async (req, res) => {
+    const { areaCode } = req.query as { areaCode?: string };
+    if (!areaCode) return res.status(400).json({ message: "areaCode is required" });
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken  = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) return res.status(503).json({ message: "Twilio credentials not configured." });
+    try {
+      const client = twilio(accountSid, authToken);
+      const numbers = await client.availablePhoneNumbers("US").local.list({ areaCode: String(areaCode), limit: 20 });
+      res.json({
+        numbers: numbers.map(n => ({
+          phoneNumber: n.phoneNumber,
+          friendlyName: n.friendlyName,
+          locality: n.locality,
+          region: n.region,
+        })),
+      });
+    } catch (e: any) {
+      console.error("[twilio] available-numbers error:", e.message);
+      res.status(500).json({ message: e.message ?? "Failed to search numbers" });
+    }
+  });
+
+  // Purchase a phone number from Twilio
+  app.post("/api/admin/twilio/purchase-number", async (req, res) => {
+    const { phoneNumber } = req.body;
+    if (!phoneNumber) return res.status(400).json({ message: "phoneNumber is required" });
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken  = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) return res.status(503).json({ message: "Twilio credentials not configured." });
+    try {
+      const client = twilio(accountSid, authToken);
+      const purchased = await client.incomingPhoneNumbers.create({ phoneNumber });
+      logAudit("twilio_number_purchased", { targetType: "region", targetLabel: purchased.phoneNumber });
+      console.log(`[twilio] Purchased number ${purchased.phoneNumber} (SID: ${purchased.sid})`);
+      res.json({ sid: purchased.sid, phoneNumber: purchased.phoneNumber, friendlyName: purchased.friendlyName });
+    } catch (e: any) {
+      console.error("[twilio] purchase-number error:", e.message);
+      res.status(500).json({ message: e.message ?? "Failed to purchase number" });
+    }
+  });
+
+  // Configure the voice webhook and status callback on a purchased Twilio number
+  app.post("/api/admin/twilio/configure-webhook", async (req, res) => {
+    const { sid, webhookBaseUrl } = req.body;
+    if (!sid || !webhookBaseUrl) return res.status(400).json({ message: "sid and webhookBaseUrl are required" });
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken  = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) return res.status(503).json({ message: "Twilio credentials not configured." });
+    try {
+      const client = twilio(accountSid, authToken);
+      const base = webhookBaseUrl.replace(/\/+$/, "");
+      await client.incomingPhoneNumbers(sid).update({
+        voiceUrl: `${base}/voice`,
+        voiceMethod: "POST",
+        statusCallback: `${base}/voice/status`,
+        statusCallbackMethod: "POST",
+      });
+      logAudit("twilio_webhook_configured", { targetType: "region", targetLabel: sid });
+      console.log(`[twilio] Configured webhook for SID ${sid} → ${base}/voice`);
+      res.json({ ok: true, voiceUrl: `${base}/voice`, statusCallback: `${base}/voice/status` });
+    } catch (e: any) {
+      console.error("[twilio] configure-webhook error:", e.message);
+      res.status(500).json({ message: e.message ?? "Failed to configure webhook" });
+    }
+  });
+
   // ── Admin logout (clears any server-side session state) ─────────────────────
   app.post("/api/admin/logout", (_req, res) => {
     res.json({ ok: true });

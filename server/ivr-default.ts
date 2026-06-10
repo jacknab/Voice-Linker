@@ -939,6 +939,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     clearInterval(session.intervalId);
     resetLiveBillingCheckpoints(session.initiatorCallSid, session.inviteeCallSid);
     liveBillingSessions.delete(room);
+    broadcastCallersChanged();
     console.log(`[live-billing] Stopped for room=${room}`);
   }
 
@@ -1056,6 +1057,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }, LIVE_TICK_MS);
 
     liveBillingSessions.set(room, session);
+    broadcastCallersChanged();
     console.log(`[live-billing] Started for room=${room}, tick every ${LIVE_TICK_MS / 1000}s`);
   }
 

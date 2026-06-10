@@ -457,6 +457,449 @@ function RegionDialog({ region, onClose }: { region?: Region; onClose: () => voi
   );
 }
 
+// ── NewRegionWizard ────────────────────────────────────────────────────────────
+
+interface AvailableNumber {
+  phoneNumber: string;
+  friendlyName: string;
+  locality: string;
+  region: string;
+}
+
+interface TwilioStatusData {
+  configured: boolean;
+  accountName?: string;
+  error?: string;
+}
+
+function NewRegionWizard({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+
+  // Step 1
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [stateAbbreviation, setStateAbbreviation] = useState("");
+  const [timezone, setTimezone] = useState("America/New_York");
+  const [defaultZipCode, setDefaultZipCode] = useState("");
+  const [description, setDescription] = useState("");
+  const [linkedRegionIds, setLinkedRegionIds] = useState<string[]>([]);
+
+  // Step 2
+  const [areaCode, setAreaCode] = useState("");
+  const [availableNumbers, setAvailableNumbers] = useState<AvailableNumber[]>([]);
+  const [selectedNumber, setSelectedNumber] = useState("");
+  const [manualEntry, setManualEntry] = useState(false);
+  const [manualNumber, setManualNumber] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // Step 3
+  const [webhookBaseUrl, setWebhookBaseUrl] = useState(typeof window !== "undefined" ? window.location.origin : "");
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [createResult, setCreateResult] = useState<{ regionName: string; phoneNumber: string; purchased: boolean; webhookConfigured: boolean } | null>(null);
+
+  const { data: twilioStatus } = useQuery<TwilioStatusData>({ queryKey: ["/api/admin/twilio/status"] });
+  const { data: allRegions } = useQuery<Region[]>({ queryKey: ["/api/regions"] });
+
+  const twilioReady = twilioStatus?.configured === true;
+  const chosenNumber = (manualEntry || !twilioReady) ? manualNumber.trim() : selectedNumber;
+
+  function handleNameChange(v: string) {
+    setName(v);
+    setSlug(v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""));
+  }
+
+  async function searchNumbers() {
+    if (areaCode.length < 3) return;
+    setIsSearching(true);
+    setSearchError("");
+    setAvailableNumbers([]);
+    setSelectedNumber("");
+    setHasSearched(true);
+    try {
+      const res = await fetch(`/api/admin/twilio/available-numbers?areaCode=${encodeURIComponent(areaCode)}`, { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Search failed");
+      const nums: AvailableNumber[] = data.numbers ?? [];
+      setAvailableNumbers(nums);
+      if (nums.length > 0) setSelectedNumber(nums[0].phoneNumber);
+    } catch (e: any) {
+      setSearchError(e.message);
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
+  async function create() {
+    setIsCreating(true);
+    setCreateError("");
+    let purchased = false;
+    let webhookConfigured = false;
+    try {
+      const regionRes = await fetch("/api/regions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: name.trim(), slug: slug.trim(),
+          stateAbbreviation: stateAbbreviation.trim() || null,
+          phoneNumber: chosenNumber, timezone,
+          description: description.trim() || null,
+          defaultZipCode: defaultZipCode.trim() || null,
+          linkedRegionIds, isActive: true,
+        }),
+      });
+      const regionData = await regionRes.json();
+      if (!regionRes.ok) throw new Error(regionData.message ?? "Failed to create region");
+
+      let purchasedSid: string | null = null;
+      if (twilioReady && !manualEntry && selectedNumber) {
+        const purchaseRes = await fetch("/api/admin/twilio/purchase-number", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ phoneNumber: chosenNumber }),
+        });
+        const purchaseData = await purchaseRes.json();
+        if (!purchaseRes.ok) throw new Error(`Purchase failed: ${purchaseData.message}`);
+        purchasedSid = purchaseData.sid;
+        purchased = true;
+      }
+
+      if (purchasedSid && webhookBaseUrl.trim()) {
+        const webhookRes = await fetch("/api/admin/twilio/configure-webhook", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ sid: purchasedSid, webhookBaseUrl: webhookBaseUrl.trim() }),
+        });
+        const webhookData = await webhookRes.json();
+        if (!webhookRes.ok) throw new Error(`Webhook config failed: ${webhookData.message}`);
+        webhookConfigured = true;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/regions"] });
+      setCreateResult({ regionName: name.trim(), phoneNumber: chosenNumber, purchased, webhookConfigured });
+    } catch (e: any) {
+      setCreateError(e.message);
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  const step1Valid = name.trim().length > 0 && slug.trim().length > 0;
+  const step2Valid = chosenNumber.length >= 10;
+
+  if (createResult) {
+    return (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl w-full max-w-md p-8 text-center shadow-xl">
+          <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 size={28} className="text-emerald-500" />
+          </div>
+          <h2 className="font-mono font-bold text-xl mb-1">Region Created!</h2>
+          <p className="text-gray-500 text-sm mb-4 font-mono">{createResult.regionName}</p>
+          <div className="bg-gray-50 rounded-xl p-4 text-left space-y-2 mb-6 text-sm font-mono">
+            <div className="flex items-center gap-2">
+              <Phone size={13} className="text-gray-400 flex-shrink-0" />
+              <span className="text-gray-700">{createResult.phoneNumber}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle size={13} className={createResult.purchased ? "text-emerald-500" : "text-gray-300"} />
+              <span className={createResult.purchased ? "text-gray-700" : "text-gray-400"}>
+                {createResult.purchased ? "Number purchased from Twilio" : "Number saved (not auto-purchased)"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Globe size={13} className={createResult.webhookConfigured ? "text-emerald-500" : "text-gray-300"} />
+              <span className={createResult.webhookConfigured ? "text-gray-700" : "text-gray-400"}>
+                {createResult.webhookConfigured ? "Webhook auto-configured" : "Webhook not configured (manual setup needed)"}
+              </span>
+            </div>
+          </div>
+          <button onClick={onClose} className={C.btnPrimary + " px-8 py-2.5 mx-auto"}>Done</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg flex flex-col max-h-[90vh] shadow-xl overflow-hidden">
+
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-mono font-bold text-lg tracking-tight">New Region</h2>
+            <button data-testid="btn-close-new-region-wizard" onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors"><X size={18} /></button>
+          </div>
+          <div className="flex items-center gap-1">
+            {([["1", "Details"], ["2", "Phone Number"], ["3", "Confirm"]] as [string, string][]).map(([n, label], i) => {
+              const s = parseInt(n);
+              const done = step > s;
+              const active = step === s;
+              return (
+                <div key={n} className="flex items-center gap-1">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${done ? "bg-emerald-500 text-white" : active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-400"}`}>
+                    {done ? "✓" : n}
+                  </div>
+                  <span className={`text-[11px] font-mono transition-colors ${active ? "text-gray-800 font-bold" : done ? "text-emerald-600" : "text-gray-400"}`}>{label}</span>
+                  {i < 2 && <div className="w-5 h-px bg-gray-200 mx-1" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+
+          {/* Step 1 — Region Details */}
+          {step === 1 && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className={C.label}>City / Market Name *</label>
+                  <input data-testid="input-wizard-name" type="text" value={name} onChange={e => handleNameChange(e.target.value)} placeholder="Denver" className={C.input} />
+                </div>
+                <div>
+                  <label className={C.label}>Slug *</label>
+                  <input data-testid="input-wizard-slug" type="text" value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder="denver" className={C.input} />
+                </div>
+                <div>
+                  <label className={C.label}>State</label>
+                  <input data-testid="input-wizard-state" type="text" value={stateAbbreviation} onChange={e => setStateAbbreviation(e.target.value.toUpperCase())} placeholder="CO" maxLength={3} className={C.input + " uppercase"} />
+                </div>
+                <div>
+                  <label className={C.label}>Default Zip Code</label>
+                  <input data-testid="input-wizard-zip" type="text" inputMode="numeric" maxLength={5} value={defaultZipCode} onChange={e => setDefaultZipCode(e.target.value.replace(/\D/g, "").slice(0, 5))} placeholder="80202" className={C.input} />
+                </div>
+                <div>
+                  <label className={C.label}>Timezone</label>
+                  <input data-testid="input-wizard-timezone" type="text" value={timezone} onChange={e => setTimezone(e.target.value)} placeholder="America/Denver" className={C.input} />
+                </div>
+                <div className="col-span-2">
+                  <label className={C.label}>Description</label>
+                  <input data-testid="input-wizard-description" type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="Colorado Rocky Mountains region" className={C.input} />
+                </div>
+              </div>
+              {(allRegions ?? []).length > 0 && (
+                <div>
+                  <label className={C.label}>Linked Nearby Regions</label>
+                  <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-36 overflow-y-auto">
+                    {(allRegions ?? []).map(r => {
+                      const checked = linkedRegionIds.includes(r.id);
+                      return (
+                        <label key={r.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                          <input type="checkbox" checked={checked} onChange={() => setLinkedRegionIds(prev => checked ? prev.filter(id => id !== r.id) : [...prev, r.id])} className="rounded border-gray-300 text-emerald-600" />
+                          <span className="font-mono text-xs text-gray-700">{r.name}</span>
+                          <span className="font-mono text-[10px] text-gray-400">{r.stateAbbreviation}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-gray-400 font-mono mt-1">Callers overflow into linked regions when local profiles are exhausted.</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Step 2 — Phone Number */}
+          {step === 2 && (
+            <>
+              <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-mono border ${twilioReady ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                {twilioReady ? <CheckCircle size={13} /> : <AlertTriangle size={13} />}
+                {twilioReady
+                  ? `Twilio connected${twilioStatus?.accountName ? ` · ${twilioStatus.accountName}` : ""}`
+                  : "Twilio not configured — enter a number manually"}
+              </div>
+
+              {twilioReady && !manualEntry && (
+                <>
+                  <div>
+                    <label className={C.label}>Search by Area Code</label>
+                    <div className="flex gap-2">
+                      <input
+                        data-testid="input-wizard-area-code"
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={3}
+                        value={areaCode}
+                        onChange={e => setAreaCode(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                        onKeyDown={e => e.key === "Enter" && areaCode.length === 3 && searchNumbers()}
+                        placeholder="303"
+                        className={C.input + " w-28 font-mono"}
+                      />
+                      <button
+                        data-testid="btn-wizard-search-numbers"
+                        onClick={searchNumbers}
+                        disabled={areaCode.length < 3 || isSearching}
+                        className={C.btnPrimary + " px-4 flex items-center gap-2"}
+                      >
+                        {isSearching ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
+                        {isSearching ? "Searching…" : "Search"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {searchError && (
+                    <div className="flex items-center gap-2 text-xs text-red-600 font-mono bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      <AlertCircle size={13} />
+                      {searchError}
+                    </div>
+                  )}
+
+                  {hasSearched && !isSearching && availableNumbers.length === 0 && !searchError && (
+                    <p className="text-xs text-gray-500 font-mono text-center py-4 bg-gray-50 rounded-lg">
+                      No numbers found for area code {areaCode}. Try a different code or enter manually below.
+                    </p>
+                  )}
+
+                  {availableNumbers.length > 0 && (
+                    <div>
+                      <label className={C.label}>{availableNumbers.length} number{availableNumbers.length !== 1 ? "s" : ""} available</label>
+                      <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-56 overflow-y-auto">
+                        {availableNumbers.map(n => (
+                          <label key={n.phoneNumber} className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-gray-50 transition-colors ${selectedNumber === n.phoneNumber ? "bg-emerald-50" : ""}`}>
+                            <input type="radio" name="phone-number" value={n.phoneNumber} checked={selectedNumber === n.phoneNumber} onChange={() => setSelectedNumber(n.phoneNumber)} className="text-emerald-600" />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-mono text-sm font-bold text-gray-800">{n.friendlyName}</div>
+                              <div className="font-mono text-[10px] text-gray-400">{[n.locality, n.region].filter(Boolean).join(", ")}</div>
+                            </div>
+                            {selectedNumber === n.phoneNumber && <CheckCircle size={14} className="text-emerald-500 flex-shrink-0" />}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div className={`border rounded-lg p-3.5 space-y-2.5 ${(manualEntry || !twilioReady) ? "border-gray-300 bg-white" : "border-gray-100 bg-gray-50"}`}>
+                {twilioReady && (
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input type="checkbox" checked={manualEntry} onChange={e => setManualEntry(e.target.checked)} className="rounded border-gray-300 text-emerald-600" />
+                    <span className="text-xs font-mono text-gray-700 font-semibold">Enter phone number manually (skip Twilio purchase)</span>
+                  </label>
+                )}
+                {(manualEntry || !twilioReady) && (
+                  <>
+                    <input
+                      data-testid="input-wizard-manual-number"
+                      type="tel"
+                      value={manualNumber}
+                      onChange={e => setManualNumber(e.target.value)}
+                      placeholder="+1 303 555 0123"
+                      className={C.input}
+                    />
+                    <p className="text-[10px] text-gray-400 font-mono">
+                      {twilioReady
+                        ? "The number is saved to the region but not purchased through Twilio."
+                        : "Enter the number you have already provisioned in Twilio."}
+                    </p>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Step 3 — Confirm & Create */}
+          {step === 3 && (
+            <>
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
+                <p className="text-[10px] font-mono uppercase tracking-widest text-gray-400 font-bold mb-3">Summary</p>
+                {[["Name", name], ["Slug", `/${slug}`], stateAbbreviation ? ["State", stateAbbreviation] : null, ["Phone", chosenNumber]].filter(Boolean).map(([label, val]) => (
+                  <div key={label} className="flex items-baseline gap-2 font-mono text-sm">
+                    <span className="text-gray-400 w-14 flex-shrink-0 text-xs">{label}</span>
+                    <span className="text-gray-800 font-bold">{val}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <label className={C.label}>Webhook Base URL</label>
+                <input
+                  data-testid="input-wizard-webhook-base-url"
+                  type="url"
+                  value={webhookBaseUrl}
+                  onChange={e => setWebhookBaseUrl(e.target.value)}
+                  placeholder="https://yourdomain.com"
+                  className={C.input + " font-mono text-xs"}
+                />
+                <p className="text-[10px] text-gray-400 font-mono mt-1">
+                  Twilio will POST to <span className="text-gray-600 font-bold">{webhookBaseUrl.replace(/\/+$/, "")}/voice</span> for incoming calls.
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-2">
+                <p className="text-[10px] font-mono uppercase tracking-widest text-blue-500 font-bold">What will happen</p>
+                {[
+                  { label: "Create region in database", active: true },
+                  { label: `Purchase ${chosenNumber} from Twilio`, active: twilioReady && !manualEntry },
+                  { label: "Auto-configure voice webhook + status callback", active: twilioReady && !manualEntry && !!webhookBaseUrl.trim() },
+                  { label: "Generate SEO landing page", active: true },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 text-[9px] font-bold ${item.active ? "bg-emerald-500 text-white" : "bg-gray-200 text-gray-400"}`}>
+                      {item.active ? "✓" : "–"}
+                    </div>
+                    <span className={`text-xs font-mono ${item.active ? "text-gray-700" : "text-gray-400"}`}>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {!twilioReady && (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 text-xs font-mono text-amber-700">
+                  <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+                  <span>Set <code className="bg-amber-100 px-0.5 rounded">TWILIO_ACCOUNT_SID</code> and <code className="bg-amber-100 px-0.5 rounded">TWILIO_AUTH_TOKEN</code> to enable auto-provisioning. The region will still be created in the database.</span>
+                </div>
+              )}
+
+              {createError && (
+                <div className="flex items-center gap-2 text-xs text-red-600 font-mono bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                  <AlertCircle size={13} className="flex-shrink-0" />
+                  {createError}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex gap-3 flex-shrink-0">
+          {step > 1 && (
+            <button onClick={() => setStep((step - 1) as 1 | 2)} disabled={isCreating} className={C.btnSecondary + " flex-1 justify-center py-2.5"}>
+              <ChevronLeft size={14} className="mr-1" /> Back
+            </button>
+          )}
+          {step < 3 && (
+            <button
+              data-testid={`btn-wizard-next-step-${step}`}
+              onClick={() => setStep((step + 1) as 2 | 3)}
+              disabled={step === 1 ? !step1Valid : !step2Valid}
+              className={C.btnPrimary + " flex-1 justify-center py-2.5"}
+            >
+              Continue <ChevronRight size={14} className="ml-1" />
+            </button>
+          )}
+          {step === 3 && (
+            <button
+              data-testid="btn-wizard-create-region"
+              onClick={create}
+              disabled={isCreating || !chosenNumber}
+              className={C.btnPrimary + " flex-1 justify-center py-2.5"}
+            >
+              {isCreating ? <><Loader2 size={14} className="mr-2 animate-spin" />Creating…</> : "Create Region"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── RegionsTab ────────────────────────────────────────────────────────────────
 const REGIONS_PAGE_SIZE = 50;
 
@@ -510,7 +953,7 @@ function RegionsTab() {
 
   return (
     <div className="space-y-4">
-      {dialog === "add" && <RegionDialog onClose={() => setDialog(null)} />}
+      {dialog === "add" && <NewRegionWizard onClose={() => setDialog(null)} />}
       {dialog && dialog !== "add" && <RegionDialog region={dialog as Region} onClose={() => setDialog(null)} />}
 
       {/* Search bar */}
