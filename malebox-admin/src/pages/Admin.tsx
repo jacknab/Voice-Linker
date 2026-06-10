@@ -2193,6 +2193,27 @@ const GROUP_TABS = [
   { id: "phrases",        label: "Numbers & Phrases" },
 ] as const;
 
+// Client-side mirror of server/audioAutogen.ts minutesToAnnouncementText().
+// Kept in sync manually — if the server function changes, update this too.
+function clientMinutesToText(n: number): string {
+  if (n >= 1440) {
+    const days = Math.floor(n / 1440);
+    const hrs  = Math.floor((n % 1440) / 60);
+    if (hrs === 0) return `You have ${days} ${days === 1 ? "day" : "days"} remaining.`;
+    return `You have ${days} ${days === 1 ? "day" : "days"} and ${hrs} ${hrs === 1 ? "hour" : "hours"} remaining.`;
+  }
+  if (n >= 60) {
+    const hrs  = Math.floor(n / 60);
+    const mins = n % 60;
+    if (mins === 0) return `You have ${hrs} ${hrs === 1 ? "hour" : "hours"} remaining.`;
+    return `You have ${hrs} ${hrs === 1 ? "hour" : "hours"} and ${mins} ${mins === 1 ? "minute" : "minutes"} remaining.`;
+  }
+  return `You have ${n} ${n === 1 ? "minute" : "minutes"} remaining.`;
+}
+
+const TR_TOTAL = 1440;
+const TR_SPOT_CHECKS = [1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 45, 60, 75, 90, 120, 150, 180, 240, 300, 360, 480, 600, 720, 1080, 1440];
+
 function TTSTab() {
   const { toast } = useToast();
   const [audioGenTab, setAudioGenTab] = useState<"mm" | "mw" | "mw_m" | "roger">("mm");
@@ -2210,6 +2231,14 @@ function TTSTab() {
   const generateAllAbortRef = useRef(false);
   const [playingPromptKey, setPlayingPromptKey] = useState<string | null>(null);
   const promptAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // ── Time Remaining state ────────────────────────────────────────────────────
+  const [trProgress, setTrProgress] = useState<{ done: number; total: number; current: number } | null>(null);
+  const trAbortRef = useRef(false);
+  const [trSingleInput, setTrSingleInput] = useState("");
+  const [trSingleGenerating, setTrSingleGenerating] = useState(false);
+  const [trPlayingKey, setTrPlayingKey] = useState<string | null>(null);
+  const trAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load saved prompt texts from server on mount
   const { data: savedPromptTexts } = useQuery<Record<string, string>>({
@@ -2509,6 +2538,78 @@ function TTSTab() {
     } else if (!wasCancelled) {
       toast({ title: "Generate Missing complete", description: `${successCount} of ${missing.length} missing prompts generated.` });
     }
+  }
+
+  // ── Time Remaining handlers ─────────────────────────────────────────────────
+  async function handleTrGenerateMissing() {
+    if (trProgress) { trAbortRef.current = true; return; }
+    trAbortRef.current = false;
+    const missing: number[] = [];
+    for (let n = 1; n <= TR_TOTAL; n++) {
+      if (!existingMap.has(`mm:time_remaining_${n}.mp3`)) missing.push(n);
+    }
+    if (missing.length === 0) {
+      toast({ title: "All 1,440 time-remaining files already exist in mm/" });
+      return;
+    }
+    setTrProgress({ done: 0, total: missing.length, current: missing[0] });
+    let successCount = 0;
+    for (const n of missing) {
+      if (trAbortRef.current) break;
+      const filename = `time_remaining_${n}.mp3`;
+      const text = clientMinutesToText(n);
+      setTrProgress({ done: successCount, total: missing.length, current: n });
+      try {
+        const res = await fetch("/api/admin/tts/generate", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, filename, folder: "mm" }),
+        });
+        if (!res.ok) break;
+        addGeneratedFileToCache(await res.json());
+        successCount++;
+      } catch { break; }
+      if (!trAbortRef.current) await new Promise(r => setTimeout(r, 4000));
+    }
+    const wasCancelled = trAbortRef.current;
+    setTrProgress(null);
+    trAbortRef.current = false;
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/tts/prompts"] });
+    if (!wasCancelled) toast({ title: `Time Remaining: ${successCount} file(s) generated` });
+  }
+
+  async function handleTrGenerateSingle(n: number) {
+    const filename = `time_remaining_${n}.mp3`;
+    setTrSingleGenerating(true);
+    try {
+      const res = await fetch("/api/admin/tts/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: clientMinutesToText(n), filename, folder: "mm" }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({ message: "Failed" })); throw new Error(e.message); }
+      addGeneratedFileToCache(await res.json());
+      toast({ title: `Generated ${filename}` });
+    } catch (e: any) {
+      toast({ title: "Generation failed", description: e.message, variant: "destructive" });
+    } finally {
+      setTrSingleGenerating(false);
+    }
+  }
+
+  function handleTrPlaySpot(n: number, url: string) {
+    const key = `tr:${n}`;
+    if (trPlayingKey === key) {
+      trAudioRef.current?.pause();
+      trAudioRef.current = null;
+      setTrPlayingKey(null);
+      return;
+    }
+    trAudioRef.current?.pause();
+    const audio = new Audio(resolveUrl(url));
+    trAudioRef.current = audio;
+    setTrPlayingKey(key);
+    audio.onended = () => { setTrPlayingKey(null); trAudioRef.current = null; };
+    audio.onerror = () => { setTrPlayingKey(null); trAudioRef.current = null; };
+    audio.play();
   }
 
   const groupFiltered = groupFilter === "all" ? activePrompts : activePrompts.filter(p => p.group === groupFilter);
@@ -3094,6 +3195,195 @@ function TTSTab() {
           </table>
         </div>
       </div>
+
+      {/* ── Time Remaining Announcements (MM tab only) ────────────────────── */}
+      {audioGenTab === "mm" && (() => {
+        const trGenerated = TR_SPOT_CHECKS.reduce((acc, n) => acc + (existingMap.has(`mm:time_remaining_${n}.mp3`) ? 1 : 0), 0);
+        const trTotalGenerated = Array.from({ length: TR_TOTAL }, (_, i) => i + 1).filter(n => existingMap.has(`mm:time_remaining_${n}.mp3`)).length;
+        const trMissing = TR_TOTAL - trTotalGenerated;
+        const trPct = Math.round((trTotalGenerated / TR_TOTAL) * 100);
+        const singleN = parseInt(trSingleInput.trim(), 10);
+        const singleValid = !isNaN(singleN) && singleN >= 1 && singleN <= TR_TOTAL;
+
+        return (
+          <div data-testid="card-time-remaining" className={C.card}>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h3 className="text-gray-800 font-mono text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+                  <Clock size={14} className="text-[#f5a623]" /> Time Remaining Announcements
+                </h3>
+                <p className="text-gray-400 font-mono text-xs -mt-1">
+                  Pre-generated single-file announcements for every possible minute value (1–1440).
+                  Without these, the IVR falls back to TTS for every time-remaining announcement.
+                  Files go into <span className="text-[#f5a623] font-bold">uploads/mm/</span>.
+                </p>
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[72px]"}>
+                <div className="font-mono text-xl font-bold text-emerald-600">{trTotalGenerated}</div>
+                <div className={C.label}>Generated</div>
+              </div>
+              <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[72px]"}>
+                <div className="font-mono text-xl font-bold text-amber-600">{trMissing}</div>
+                <div className={C.label}>Missing</div>
+              </div>
+              <div className={C.cardAlt + " py-2 px-3 flex flex-col items-center min-w-[72px]"}>
+                <div className="font-mono text-xl font-bold text-gray-800">{TR_TOTAL}</div>
+                <div className={C.label}>Total</div>
+              </div>
+              <div className="flex-1 min-w-[120px]">
+                <div className="flex justify-between text-[10px] font-mono text-gray-500 mb-1">
+                  <span>Coverage</span>
+                  <span className="text-[#f5a623] font-bold">{trPct}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                  <div className="bg-[#f5a623] h-2 rounded-full transition-all duration-500" style={{ width: `${trPct}%` }} />
+                </div>
+              </div>
+            </div>
+
+            {/* Generate missing + note */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                data-testid="btn-tr-generate-missing"
+                onClick={handleTrGenerateMissing}
+                disabled={!!generating}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-bold border transition-colors ${
+                  trProgress
+                    ? "bg-red-50 border-red-300 text-red-600 hover:bg-red-100"
+                    : "bg-[#f5a623] border-[#f5a623] text-white hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                }`}
+              >
+                {trProgress
+                  ? <><X size={12} /> Cancel</>
+                  : <><Wand2 size={12} /> Generate Missing ({trMissing})</>}
+              </button>
+              {!trProgress && trMissing > 0 && (
+                <span className="text-gray-400 font-mono text-xs">
+                  ~{Math.ceil(trMissing * 4 / 60)} min at 4 s/file
+                </span>
+              )}
+            </div>
+
+            {/* Progress bar */}
+            {trProgress && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-mono text-gray-500">
+                  <span>Generating <span className="text-[#f5a623] font-bold">time_remaining_{trProgress.current}.mp3</span></span>
+                  <span className="flex-shrink-0 ml-2 text-[#f5a623] font-bold">{trProgress.done} / {trProgress.total}</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-[#f5a623] h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${(trProgress.done / trProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Spot-check table */}
+            <div>
+              <div className={C.label + " mb-2"}>Spot-check — key values</div>
+              <div className="overflow-x-auto rounded border border-gray-200">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-20">Minutes</th>
+                      <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider">Text</th>
+                      <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-20">Status</th>
+                      <th className="text-left px-3 py-2 font-mono font-semibold text-gray-500 text-[10px] uppercase tracking-wider w-24">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {TR_SPOT_CHECKS.map(n => {
+                      const filename = `time_remaining_${n}.mp3`;
+                      const file = existingMap.get(`mm:${filename}`);
+                      const exists = !!file;
+                      const isPlaying = trPlayingKey === `tr:${n}`;
+                      return (
+                        <tr key={n} data-testid={`row-tr-spot-${n}`} className={C.row}>
+                          <td className={C.td}>
+                            <span className="font-mono font-bold text-gray-800">{n}</span>
+                            <span className="text-gray-400 text-[10px] ml-1">min</span>
+                          </td>
+                          <td className={C.td}>
+                            <span className="text-gray-600 font-mono text-[11px]">{clientMinutesToText(n)}</span>
+                          </td>
+                          <td className={C.td}>
+                            {exists
+                              ? <span className="text-emerald-600 font-mono text-[10px] font-bold flex items-center gap-1"><CheckCircle size={10} /> Ready</span>
+                              : <span className="text-amber-600 font-mono text-[10px] font-bold flex items-center gap-1"><AlertCircle size={10} /> Missing</span>}
+                          </td>
+                          <td className={C.td}>
+                            <div className="flex items-center gap-1">
+                              <button
+                                data-testid={`btn-tr-gen-${n}`}
+                                onClick={() => handleTrGenerateSingle(n)}
+                                disabled={trSingleGenerating || !!trProgress}
+                                title={exists ? "Regenerate" : "Generate"}
+                                className={C.btnGhost + " text-[10px]"}
+                              >
+                                {trSingleGenerating && parseInt(trSingleInput) === n
+                                  ? <Loader2 size={10} className="animate-spin" />
+                                  : <Wand2 size={10} />}
+                              </button>
+                              {exists && file && (
+                                <button
+                                  data-testid={`btn-tr-play-${n}`}
+                                  onClick={() => handleTrPlaySpot(n, file.url)}
+                                  title={isPlaying ? "Stop" : "Play"}
+                                  className={C.btnGhost + " text-[10px]"}
+                                >
+                                  {isPlaying ? <Pause size={10} /> : <Play size={10} />}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Single-value generator */}
+            <div>
+              <div className={C.label + " mb-2"}>Generate a specific minute value</div>
+              <div className="flex items-center gap-2">
+                <input
+                  data-testid="input-tr-single"
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={trSingleInput}
+                  onChange={e => setTrSingleInput(e.target.value)}
+                  placeholder="e.g. 90"
+                  className={C.input + " w-28"}
+                />
+                <button
+                  data-testid="btn-tr-single-generate"
+                  onClick={() => { if (singleValid) handleTrGenerateSingle(singleN); }}
+                  disabled={!singleValid || trSingleGenerating || !!trProgress}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono font-bold border bg-[#f5a623] border-[#f5a623] text-white hover:bg-amber-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {trSingleGenerating && singleValid ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+                  Generate
+                </button>
+                {singleValid && (
+                  <span className="text-gray-500 font-mono text-xs truncate max-w-xs">{clientMinutesToText(singleN)}</span>
+                )}
+                {existingMap.has(`mm:time_remaining_${singleN}.mp3`) && singleValid && (
+                  <span className="text-emerald-600 font-mono text-[10px] flex items-center gap-1"><CheckCircle size={10} /> exists</span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
