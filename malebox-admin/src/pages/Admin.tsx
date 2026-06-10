@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { resolveUrl } from "../config";
+import { resolveUrl, getConfig } from "../config";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -3254,9 +3254,58 @@ function maskPhone(phone: string): string {
 }
 
 function DashboardTab() {
+  // ── Real-time WebSocket updates ─────────────────────────────────────────────
+  // The server broadcasts "callers:changed" the moment a call connects or
+  // disconnects. We listen here and immediately invalidate the relevant queries
+  // so the dashboard reflects the change with zero polling delay.
+  useEffect(() => {
+    const config = getConfig();
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const key = config?.secretKey ?? "";
+    const wsUrl = `${proto}://${window.location.host}/ws/queues${key ? `?key=${encodeURIComponent(key)}` : ""}`;
+
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let destroyed = false;
+
+    function connect() {
+      if (destroyed) return;
+      ws = new WebSocket(wsUrl);
+
+      ws.addEventListener("message", (ev) => {
+        try {
+          const msg = JSON.parse(ev.data as string) as { type: string };
+          if (msg.type === "callers:changed" || msg.type === "caller:removed") {
+            queryClient.invalidateQueries({ queryKey: ["/api/admin/live-callers"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/admin/live-connections"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+          }
+        } catch { /* ignore malformed frames */ }
+      });
+
+      ws.addEventListener("close", () => {
+        if (!destroyed) {
+          reconnectTimer = setTimeout(connect, 3000);
+        }
+      });
+
+      ws.addEventListener("error", () => {
+        ws?.close();
+      });
+    }
+
+    connect();
+
+    return () => {
+      destroyed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  }, []);
+
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
-    refetchInterval: 5000,
+    refetchInterval: 30000,
   });
 
   const { data: siteData } = useQuery<{ siteCategory: string }>({
@@ -3274,7 +3323,7 @@ function DashboardTab() {
 
   const { data: liveCallersData, dataUpdatedAt: liveCallersUpdatedAt } = useQuery<LiveCallersResponse>({
     queryKey: ["/api/admin/live-callers"],
-    refetchInterval: 5000,
+    refetchInterval: 30000,
   });
 
   const { data: liveConnectionsData } = useQuery<{
@@ -3288,7 +3337,7 @@ function DashboardTab() {
     count: number;
   }>({
     queryKey: ["/api/admin/live-connections"],
-    refetchInterval: 5000,
+    refetchInterval: 30000,
   });
 
   const liveCallers = liveCallersData?.callers ?? [];

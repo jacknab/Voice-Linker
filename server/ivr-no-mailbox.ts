@@ -13,7 +13,7 @@ import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from ".
 import { transcribeLocalFile } from "./transcribeAudio";
 import { locationToFilename, triggerLocationAudio, triggerCityWordAudio, minutesToAnnouncementText, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
-import { registerCallerPhone, removeCallerQueue } from "./ws";
+import { registerCallerPhone, removeCallerQueue, broadcastCallersChanged } from "./ws";
 import type { CallerBrowseState } from "./ivr-browse-state";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -1113,6 +1113,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Fire-and-forget — removes lingering rows from a previous missed status callback.
       storage.removeActiveCallsByUser(user.id).catch(() => {});
       await storage.registerActiveCall(callSid, user.id);
+      broadcastCallersChanged();
       storage.logCall(callSid, fromNumber, req.body?.To || null, null).catch(() => {});
       registerCallerPhone(callSid, fromNumber);
       console.log(`[voice] Registered active call ${callSid} for userId=${user.id}`);
@@ -6813,6 +6814,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       // Register call as active — scoped to this region
       await storage.registerActiveCall(callSid, user.id, region.id);
+      broadcastCallersChanged();
       storage.logCall(callSid, fromNumber, region.phoneNumber, region.id).catch(() => {});
       console.log(`[voice] [${region.slug}] Registered active call ${callSid} for userId=${user.id}`);
 

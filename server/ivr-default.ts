@@ -15,7 +15,7 @@ import { transcribeLocalFile } from "./transcribeAudio";
 import { locationToFilename, triggerLocationAudio, triggerCityWordAudio, minutesToAnnouncementText, ROGER_PROMPTS, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
 import type { BrowseQueueItem, CallerBrowseState } from "./ivr-browse-state";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
-import { registerCallerPhone, removeCallerQueue } from "./ws";
+import { registerCallerPhone, removeCallerQueue, broadcastCallersChanged } from "./ws";
 import { injectNewCallerIntoAllQueues, removeProfileFromAllQueues, SLOT_PRIORITY } from "./liveQueue";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -1251,6 +1251,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const user = await getOrCreateUser(fromNumber);
       await storage.removeActiveCallsByUser(user.id);
       await storage.registerActiveCall(callSid, user.id);
+      broadcastCallersChanged();
       const caller = await storage.getCallerByCallSid(callSid);
       console.log(`[voice] registered caller ${callSid} from ${fromNumber}`);
 
@@ -8449,6 +8450,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const user = await getOrCreateUser(fromNumber);
       await storage.removeActiveCallsByUser(user.id);
       await storage.registerActiveCall(callSid, user.id, regionId);
+      broadcastCallersChanged();
       const caller = await storage.getCallerByCallSid(callSid);
       console.log(`[voice] [${slug}] registered caller ${callSid} from ${fromNumber}`);
 

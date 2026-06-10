@@ -71,6 +71,16 @@ export function removeCallerQueue(callSid: string): void {
   activeQueues.delete(callSid);
   callerPhones.delete(callSid);
   broadcast({ type: "caller:removed", callSid });
+  broadcast({ type: "callers:changed" });
+}
+
+/**
+ * Broadcast a generic "callers list changed" event so the admin dashboard
+ * can immediately re-fetch active-caller data without waiting for a poll cycle.
+ * Call this whenever a real call is added or removed.
+ */
+export function broadcastCallersChanged(): void {
+  broadcast({ type: "callers:changed" });
 }
 
 // ── Server init ───────────────────────────────────────────────────────────────
