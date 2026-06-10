@@ -115,3 +115,27 @@
 2026-06-02 15:11:40 +00:00: Warning: connect.session() MemoryStore is not
 2026-06-02 15:11:40 +00:00: designed for a production environment, as it will leak
 2026-06-02 15:11:40 +00:00: memory, and will not scale past a single process.
+2026-06-10 13:59:45 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-10 13:59:45 +00:00: designed for a production environment, as it will leak
+2026-06-10 13:59:45 +00:00: memory, and will not scale past a single process.
+2026-06-10 14:52:31 +00:00: Error: ENOENT: no such file or directory, stat '/opt/Voice-Linker/dist/admin/index.html'
+2026-06-10 14:52:34 +00:00: Error: ENOENT: no such file or directory, stat '/opt/Voice-Linker/dist/admin/index.html'
+2026-06-10 14:52:35 +00:00: Error: ENOENT: no such file or directory, stat '/opt/Voice-Linker/dist/admin/index.html'
+2026-06-10 14:53:10 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-10 14:53:10 +00:00: designed for a production environment, as it will leak
+2026-06-10 14:53:10 +00:00: memory, and will not scale past a single process.
+2026-06-10 16:22:33 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-10 16:22:33 +00:00: designed for a production environment, as it will leak
+2026-06-10 16:22:33 +00:00: memory, and will not scale past a single process.
+2026-06-10 16:26:59 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-10 16:26:59 +00:00: designed for a production environment, as it will leak
+2026-06-10 16:26:59 +00:00: memory, and will not scale past a single process.
+2026-06-10 16:32:09 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-10 16:32:09 +00:00: designed for a production environment, as it will leak
+2026-06-10 16:32:09 +00:00: memory, and will not scale past a single process.
+2026-06-10 16:35:13 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-10 16:35:13 +00:00: designed for a production environment, as it will leak
+2026-06-10 16:35:13 +00:00: memory, and will not scale past a single process.
+2026-06-10 16:40:34 +00:00: Warning: connect.session() MemoryStore is not
+2026-06-10 16:40:34 +00:00: designed for a production environment, as it will leak
+2026-06-10 16:40:34 +00:00: memory, and will not scale past a single process.

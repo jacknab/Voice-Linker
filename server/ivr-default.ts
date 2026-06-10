@@ -292,6 +292,7 @@ const paymentSessions = new Map<string, PaymentSession>();
 // Results from completed payment sessions — consumed by /voice/payment-done
 interface PaymentResult {
   success: boolean;
+  packageName?: string;
   packageLabel?: string;
   priceLabel?: string;
   totalMinutes?: number;
@@ -690,8 +691,8 @@ async function registerStatusCallback(callSid: string, req: Request): Promise<vo
     await client.calls(callSid).update({
       statusCallback: statusCallbackUrl,
       statusCallbackMethod: "POST",
-      statusCallbackEvent: ["completed", "failed", "busy", "no-answer", "canceled"] as any,
-    });
+      statusCallbackEvent: ["completed", "failed", "busy", "no-answer", "canceled"],
+    } as any);
     console.log(`[status] Registered status callback for ${callSid} → ${statusCallbackUrl}`);
   } catch (err) {
     // Non-fatal — the Twilio polling job inside registerVoiceRoutes will detect hangups
@@ -1134,6 +1135,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       liveConnectionCallSidMap.delete(callSid);
       console.log(`[live-connect] Removed userId=${liveUserId} from live connections (call ended)`);
     }
+
+    // Notify admin dashboard that caller list has changed
+    broadcastCallersChanged();
   }
 
   // ─── Call Status Callback ──────────────────────────────────────────────────
@@ -4423,7 +4427,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Build region passthrough param for local ads
       const regionParam = regionId ? `&regionId=${regionId}&regionLabel=${encodeURIComponent(regionLabel ?? "your area")}` : "";
 
-      if (state.queue.length === 0) {
+      if (!state || state.queue.length === 0) {
         playPrompt(twiml, req, "no_ads_category.mp3",
           `No ads available in ${effectiveCategoryLabel} yet.${category === "local" ? "" : " Try another category."}`
         );

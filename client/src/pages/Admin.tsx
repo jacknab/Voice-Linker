@@ -149,6 +149,7 @@ const C = {
   btnSecondary: "flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-800 font-mono text-xs tracking-widest uppercase rounded transition-colors",
   btnDanger: "flex items-center gap-1.5 px-3 py-1.5 border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 font-mono text-xs rounded transition-colors disabled:opacity-50",
   btnGhost: "flex items-center gap-1.5 px-3 py-1.5 border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 font-mono text-xs rounded transition-colors",
+  btnAmber: "flex items-center gap-2 px-4 py-2 bg-[#f5a623] hover:bg-amber-500 text-black font-mono text-xs font-bold tracking-widest uppercase rounded transition-colors",
   th: "text-left px-4 py-3 text-gray-500 font-mono text-xs tracking-widest uppercase bg-gray-50 border-b border-gray-200",
   td: "px-4 py-3 text-gray-800 font-mono text-sm border-b border-gray-100",
   row: "hover:bg-amber-50/40 transition-colors",
@@ -3759,6 +3760,9 @@ interface VoicemailSummary {
 }
 
 function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
+  const queryClient = useQueryClient();
+  const adminKey = getAdminKey();
+
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
     refetchInterval: 5000,
@@ -3784,8 +3788,56 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
 
   const { data: liveCallersData, dataUpdatedAt: liveCallersUpdatedAt } = useQuery<LiveCallersResponse>({
     queryKey: ["/api/admin/live-callers"],
-    refetchInterval: 5000,
   });
+
+  // WebSocket connection for real-time live caller updates
+  useEffect(() => {
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const keyParam = adminKey ? `?key=${encodeURIComponent(adminKey)}` : "";
+    const url = `${proto}://${window.location.host}/ws/queues${keyParam}`;
+
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const connect = () => {
+      if (ws?.readyState === WebSocket.OPEN) return;
+
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        console.log("[Dashboard] WebSocket connected for live caller updates");
+      };
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data as string);
+          console.log("[Dashboard] WebSocket message received:", msg.type);
+          if (msg.type === "callers:changed") {
+            // Refetch live callers when the caller list changes
+            queryClient.invalidateQueries({ queryKey: ["/api/admin/live-callers"] });
+          }
+        } catch (err) {
+          console.error("[Dashboard] WebSocket message error:", err);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log("[Dashboard] WebSocket disconnected, reconnecting in 3s...");
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+
+      ws.onerror = (err) => {
+        console.error("[Dashboard] WebSocket error:", err);
+      };
+    };
+
+    connect();
+
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  }, [adminKey, queryClient]);
 
   const liveCallers = liveCallersData?.callers ?? [];
   const lastLiveFeedUpdate = liveCallersUpdatedAt ? new Date(liveCallersUpdatedAt).toLocaleTimeString() : null;
@@ -3822,7 +3874,7 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="font-mono text-[10px] text-gray-400">
-              Auto-refresh 5s{lastLiveFeedUpdate ? ` · ${lastLiveFeedUpdate}` : ""}
+              Real-time{lastLiveFeedUpdate ? ` · ${lastLiveFeedUpdate}` : ""}
             </span>
             <button
               data-testid="btn-open-live-callers"
@@ -8699,7 +8751,8 @@ function AiSeoGenTab() {
   const generateMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/ai-seo-generate", { topic, keyword, extraContext });
-      return res as { ok: boolean; html: string; slug: string; url: string };
+      const data = await res.json();
+      return data as { ok: boolean; html: string; slug: string; url: string };
     },
     onSuccess: (data) => {
       toast({ title: "Page generated!", description: `Saved as /ai-seo/${data.slug}.html` });

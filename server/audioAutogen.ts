@@ -892,7 +892,7 @@ async function runLocationAutogen(): Promise<void> {
   let failed = 0;
   let skipped = 0;
 
-  for (const location of uniqueLocations) {
+  for (const location of Array.from(uniqueLocations)) {
     const filename = locationToFilename(location);
     const text = locationText(location);
 
