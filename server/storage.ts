@@ -110,6 +110,7 @@ export interface IStorage {
   removeActiveCall(callSid: string): Promise<void>;
   removeActiveCallsByUser(userId: string): Promise<void>;
   removeStaleActiveCalls(olderThanMinutes: number): Promise<void>;
+  getActiveRealCallSids(): Promise<string[]>;
   finalizeOrphanedCallLogs(olderThanMinutes: number): Promise<void>;
   getActiveCallerCount(excludeUserId: string, regionId?: string, callerGender?: string | null, seeking?: string | null): Promise<number>;
   getAvailableProfileCount(excludeUserId: string, regionId?: string, callerGender?: string | null, currentSiteCategory?: string | null, seeking?: string | null): Promise<number>;
@@ -796,6 +797,17 @@ export class DatabaseStorage implements IStorage {
         AND call_sid NOT IN (SELECT call_sid FROM callers WHERE status = 'active')
         AND call_sid NOT LIKE '${sql.raw(VIRTUAL_PREFIX)}%'
     `);
+  }
+
+  async getActiveRealCallSids(): Promise<string[]> {
+    const rows = await db
+      .select({ callSid: callers.callSid })
+      .from(callers)
+      .where(and(
+        eq(callers.status, "active"),
+        notLike(callers.callSid, `${VIRTUAL_PREFIX}%`)
+      ));
+    return rows.map(r => r.callSid);
   }
 
   async removeStaleActiveCalls(olderThanMinutes: number): Promise<void> {

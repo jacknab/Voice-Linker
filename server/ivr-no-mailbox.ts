@@ -458,6 +458,11 @@ function generateCardPin(): string {
 
 // Build the base URL of this server from an incoming Twilio request
 function baseUrl(req: Request): string {
+  // Allow an explicit override for VPS/reverse-proxy deployments where the
+  // forwarded headers may not be set correctly. Set WEBHOOK_BASE_URL in your
+  // environment to the public-facing HTTPS root, e.g. https://yourdomain.com
+  const override = process.env.WEBHOOK_BASE_URL;
+  if (override) return override.replace(/\/+$/, "");
   const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol || "https";
   const host = (req.headers["x-forwarded-host"] as string) || req.headers.host || "";
   return `${proto}://${host}`;
@@ -588,11 +593,12 @@ function audioProxyUrl(recordingUrl: string, req: Request): string {
 
 // Register Twilio status callback so we know when this call ends.
 // Called once when a call first arrives so Twilio will POST to /voice/status on hangup.
+// The Twilio polling job (inside registerVoiceRoutes) acts as a safety net if this fails.
 async function registerStatusCallback(callSid: string, req: Request): Promise<void> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!accountSid || !authToken) {
-    console.warn("[status] Twilio credentials missing — cannot register status callback");
+    console.warn("[status] Twilio credentials missing — status callbacks will not be registered. The polling fallback will handle disconnection detection.");
     return;
   }
   const client = twilio(accountSid, authToken);
@@ -601,11 +607,12 @@ async function registerStatusCallback(callSid: string, req: Request): Promise<vo
     await client.calls(callSid).update({
       statusCallback: statusCallbackUrl,
       statusCallbackMethod: "POST",
+      statusCallbackEvent: ["completed", "failed", "busy", "no-answer", "canceled"] as any,
     });
     console.log(`[status] Registered status callback for ${callSid} → ${statusCallbackUrl}`);
   } catch (err) {
-    // Non-fatal — the call still works; we just might miss the hangup event
-    console.error(`[status] Failed to register status callback for ${callSid}:`, err);
+    // Non-fatal — the Twilio polling job inside registerVoiceRoutes will detect hangups
+    console.error(`[status] Failed to register status callback for ${callSid} (polling fallback active):`, err);
   }
 }
 
@@ -942,6 +949,66 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     console.log(`[live-billing] Started for room=${room}, tick every ${LIVE_TICK_MS / 1000}s`);
   }
 
+  // ─── Shared call-end cleanup ──────────────────────────────────────────────
+  // Called from both the /voice/status webhook AND the Twilio polling job so
+  // that disconnection is detected whether the webhook fires or not.
+  async function cleanupEndedCall(callSid: string, callDuration?: number): Promise<void> {
+    // Final billing sync — deducts any remaining elapsed seconds
+    if (billingCheckpoints.has(callSid)) {
+      await finalizeCallBilling(callSid);
+    }
+
+    // Stop live billing if this call was in an active conference
+    stopLiveBillingByCallSid(callSid);
+
+    // Finalize call log with the reported duration if available
+    if (callDuration !== undefined && !isNaN(callDuration)) {
+      await storage.finalizeCallLog(callSid, callDuration).catch(() => {});
+    }
+
+    try {
+      await storage.removeActiveCall(callSid);
+      console.log(`[status] Removed ${callSid} from active calls`);
+    } catch (err) {
+      console.error(`[status] Error removing active call ${callSid}:`, err);
+    }
+
+    // Clean up per-call in-memory state
+    await deleteBrowseState(callSid);
+    removeCallerQueue(callSid);
+    categoryBrowseState.delete(callSid);
+    paymentSessions.delete(callSid);
+    pendingNameRecordings.delete(callSid);
+    pendingGreetingDrafts.delete(callSid);
+    callTimeAnnounced.delete(callSid);
+    callWarningShown.delete(callSid);
+    callRegion.delete(callSid);
+    callMembershipOverride.delete(callSid);
+    callCardOverride.delete(callSid);
+    pendingMembershipEntries.delete(callSid);
+    pendingPinAuth.delete(callSid);
+    pendingNewPinSetup.delete(callSid);
+    pendingCardFirstUse.delete(callSid);
+    femaleCallers.delete(callSid);
+    anonCallPending.delete(callSid);
+
+    // Clean up any live connect invite that this caller initiated
+    for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
+      if (invite.initiatorCallSid === callSid) {
+        pendingLiveInvites.delete(targetUserId);
+        console.log(`[live-connect] Cleaned up dangling invite for targetUserId=${targetUserId} (initiator hung up)`);
+      }
+    }
+
+    // Clean up live connection tracking for this callSid
+    const liveUserId = liveConnectionCallSidMap.get(callSid);
+    if (liveUserId) {
+      liveConnectionUserIds.delete(liveUserId);
+      liveConnectionCallSidMap.delete(callSid);
+      console.log(`[live-connect] Removed userId=${liveUserId} from live connections (call ended)`);
+    }
+  }
+
   // ─── Call Status Callback ──────────────────────────────────────────────────
   // Twilio POSTs here when a call ends (completed/failed/canceled/etc.)
   // This is how we remove callers from the active party line in real time.
@@ -952,64 +1019,58 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     const terminalStatuses = ["completed", "failed", "busy", "no-answer", "canceled"];
     if (callSid && terminalStatuses.includes(callStatus)) {
-      // Final billing sync — deducts any remaining elapsed seconds and clears the checkpoint
-      if (billingCheckpoints.has(callSid)) {
-        await finalizeCallBilling(callSid);
-      }
-
-      // Stop live billing if this call was in an active conference (handles unexpected hangups)
-      stopLiveBillingByCallSid(callSid);
-
-      // Finalize call log with Twilio-reported duration (must complete before removeActiveCall)
       const callDuration = parseInt(req.body?.CallDuration ?? "0", 10);
-      if (!isNaN(callDuration)) {
-        await storage.finalizeCallLog(callSid, callDuration).catch(() => {});
-      }
-
-      try {
-        await storage.removeActiveCall(callSid);
-        console.log(`[status] Removed ${callSid} from active calls`);
-      } catch (err) {
-        console.error(`[status] Error removing active call ${callSid}:`, err);
-      }
-      // Clean up per-caller browse queue, payment session, name recording, greeting draft, time flags, region mapping, membership override, and gender selection
-      await deleteBrowseState(callSid);
-      removeCallerQueue(callSid);
-      categoryBrowseState.delete(callSid);
-      paymentSessions.delete(callSid);
-      pendingNameRecordings.delete(callSid);
-      pendingGreetingDrafts.delete(callSid);
-      callTimeAnnounced.delete(callSid);
-      callWarningShown.delete(callSid);
-      callRegion.delete(callSid);
-      callMembershipOverride.delete(callSid);
-      callCardOverride.delete(callSid);
-      pendingMembershipEntries.delete(callSid);
-      pendingPinAuth.delete(callSid);
-      pendingNewPinSetup.delete(callSid);
-      pendingCardFirstUse.delete(callSid);
-      femaleCallers.delete(callSid);
-      anonCallPending.delete(callSid);
-
-      // Clean up any live connect invite that this caller initiated
-      for (const [targetUserId, invite] of Array.from(pendingLiveInvites.entries())) {
-        if (invite.initiatorCallSid === callSid) {
-          pendingLiveInvites.delete(targetUserId);
-          console.log(`[live-connect] Cleaned up dangling invite for targetUserId=${targetUserId} (initiator hung up)`);
-        }
-      }
-      // Clean up live connection tracking for this callSid
-      const liveUserId = liveConnectionCallSidMap.get(callSid);
-      if (liveUserId) {
-        liveConnectionUserIds.delete(liveUserId);
-        liveConnectionCallSidMap.delete(callSid);
-        console.log(`[live-connect] Removed userId=${liveUserId} from live connections (call ended)`);
-      }
+      await cleanupEndedCall(callSid, callDuration);
     }
 
     // Twilio expects a 2xx response; no TwiML needed for status callbacks
     res.status(204).send();
   });
+
+  // ─── Twilio call-status polling fallback ───────────────────────────────────
+  // When the status callback webhook fails (wrong URL, missing credentials,
+  // network issues on a VPS, etc.) calls would stay "active" in the DB forever.
+  // Every 30 seconds we cross-check all active real calls against the Twilio
+  // REST API and immediately clean up any that have already ended.
+  (function startCallStatusPolling() {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) {
+      console.warn("[status-poll] Twilio credentials not set — call-status polling disabled. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN for reliable disconnection detection.");
+      return;
+    }
+
+    const twilioClient = twilio(accountSid, authToken);
+    const TERMINAL = new Set(["completed", "failed", "busy", "no-answer", "canceled"]);
+    const POLL_INTERVAL_MS = 30_000;
+
+    setInterval(async () => {
+      let activeSids: string[];
+      try {
+        activeSids = await storage.getActiveRealCallSids();
+      } catch {
+        return;
+      }
+      if (activeSids.length === 0) return;
+
+      for (const callSid of activeSids) {
+        try {
+          const call = await twilioClient.calls(callSid).fetch();
+          if (TERMINAL.has(call.status)) {
+            console.log(`[status-poll] Call ${callSid} is "${call.status}" in Twilio but still active in DB — running cleanup`);
+            await cleanupEndedCall(callSid, call.duration ? parseInt(call.duration, 10) : undefined);
+          }
+        } catch (err: any) {
+          if (err?.status === 404 || err?.code === 20404) {
+            console.log(`[status-poll] Call ${callSid} not found in Twilio (404) — running cleanup`);
+            await cleanupEndedCall(callSid);
+          }
+        }
+      }
+    }, POLL_INTERVAL_MS);
+
+    console.log(`[status-poll] Twilio call-status polling started (every ${POLL_INTERVAL_MS / 1000}s)`);
+  })();
 
   // ─── 1. Initial Webhook: POST /voice ──────────────────────────────────────
   app.post("/voice", async (req, res) => {
