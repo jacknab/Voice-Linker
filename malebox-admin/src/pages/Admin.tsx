@@ -3258,6 +3258,8 @@ function DashboardTab() {
   // The server broadcasts "callers:changed" the moment a call connects or
   // disconnects. We listen here and immediately invalidate the relevant queries
   // so the dashboard reflects the change with zero polling delay.
+  const [wsStatus, setWsStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
+
   useEffect(() => {
     const config = getConfig();
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -3270,7 +3272,12 @@ function DashboardTab() {
 
     function connect() {
       if (destroyed) return;
+      setWsStatus("connecting");
       ws = new WebSocket(wsUrl);
+
+      ws.addEventListener("open", () => {
+        setWsStatus("connected");
+      });
 
       ws.addEventListener("message", (ev) => {
         try {
@@ -3284,12 +3291,14 @@ function DashboardTab() {
       });
 
       ws.addEventListener("close", () => {
+        setWsStatus("disconnected");
         if (!destroyed) {
           reconnectTimer = setTimeout(connect, 3000);
         }
       });
 
       ws.addEventListener("error", () => {
+        setWsStatus("disconnected");
         ws?.close();
       });
     }
@@ -3388,9 +3397,35 @@ function DashboardTab() {
               {liveCallersData?.realCount ?? 0} real / {liveCallersData?.total ?? 0} total
             </span>
           </div>
-          <span className="font-mono text-[10px] text-gray-400">
-            Auto-refresh 5s{lastLiveFeedUpdate ? ` · ${lastLiveFeedUpdate}` : ""}
-          </span>
+          <div className="flex items-center gap-2">
+            {wsStatus === "connected" ? (
+              <span className="flex items-center gap-1.5 font-mono text-[10px] text-emerald-600" data-testid="status-ws-connected">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                Real-time
+              </span>
+            ) : wsStatus === "connecting" ? (
+              <span className="flex items-center gap-1.5 font-mono text-[10px] text-amber-500" data-testid="status-ws-connecting">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                </span>
+                Connecting…
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 font-mono text-[10px] text-gray-400" data-testid="status-ws-disconnected">
+                <span className="relative flex h-2 w-2">
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-400" />
+                </span>
+                Reconnecting…
+              </span>
+            )}
+            {lastLiveFeedUpdate && (
+              <span className="font-mono text-[10px] text-gray-400">· {lastLiveFeedUpdate}</span>
+            )}
+          </div>
         </div>
         <div className="p-5">
           {liveCallers.length === 0 ? (
