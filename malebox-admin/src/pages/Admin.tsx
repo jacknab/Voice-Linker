@@ -1448,6 +1448,16 @@ const SYSTEM_PROMPTS: { filename: string; label: string; text: string; group: st
   { group: "browsing", filename: "cant_message_ai.mp3",           label: "Browsing — Can't Message AI Caller",         text: "You can't message an AI. Nice try though. Back to browsing." },
   { group: "browsing", filename: "caller_banned.mp3",             label: "Browsing — Caller Banned",                   text: "We're sorry, your access to this service has been suspended. If you believe this is an error, please contact customer support. Goodbye." },
   { group: "browsing", filename: "connector_idle_goodbye.mp3",    label: "Browsing — Connector Idle Goodbye",          text: "You're apparently having issues right now, or have fallen asleep. Sweet dreams." },
+  // Backdoor hourly pass expiry announcements — 1 hr through 24 hr
+  ...Array.from({ length: 24 }, (_, i) => {
+    const h = i + 1;
+    return {
+      group: "browsing" as const,
+      filename: `backdoor_expires_${h}hr.mp3`,
+      label: `Browsing — Backdoor Pass Expires in ${h} Hour${h === 1 ? "" : "s"}`,
+      text: `Your backdoor access pass expires in ${h} hour${h === 1 ? "" : "s"}.`,
+    };
+  }),
   { group: "browsing", filename: "backdoor_expires_soon.mp3",     label: "Browsing — Backdoor Pass Expiring Soon",     text: "Your backdoor access pass expires soon." },
 
   // ── 8e. MESSAGING EXTRAS ──────────────────────────────────────────────────

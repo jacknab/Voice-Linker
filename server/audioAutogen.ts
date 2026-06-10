@@ -376,10 +376,18 @@ export const MM_PROMPTS: Prompt[] = [
   { filename: "live_connect_other_left.mp3",    text: "He left the connection. To continue browsing, press 3." },
   { filename: "live_connect_chime.mp3",         text: "" },
 
+  // ── Backdoor hourly pass expiry announcements (1–24 hr) ───────────────────
+  // Used by playBackdoorHoursRemaining() in ivr-default.ts and ivr-no-mailbox.ts.
+  // Files must exist here so the IVR doesn't fall back to TTS.
+  ...Array.from({ length: 24 }, (_, i) => {
+    const h = i + 1;
+    return { filename: `backdoor_expires_${h}hr.mp3`, text: `Your backdoor access pass expires in ${h} hour${h === 1 ? "" : "s"}.` };
+  }),
+  { filename: "backdoor_expires_soon.mp3",      text: "Your backdoor access pass expires soon." },
+
   // ── System sounds (no TTS — custom upload required) ──────────────────────
   { filename: "chime.mp3",                      text: "" },
   { filename: "live_connect_ringing.mp3",        text: "" },
-  { filename: "backdoor_expires_soon.mp3",      text: "Your backdoor access pass expires soon." },
 ];
 
 // ── MW prompts (uploads/mw/) — DISABLED: using MM voice only ──────────────
