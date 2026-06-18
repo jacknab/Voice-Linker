@@ -1221,12 +1221,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       return res.send(twiml.toString());
     }
 
-    // ── Anonymous / blocked caller ─────────────────────────────────────────────
+    // ── Anonymous / blocked / private caller ───────────────────────────────────
     // Twilio sends From="anonymous" when a caller has blocked their caller ID.
-    // These callers hear the standard greeting/disclaimer, then must either enter
-    // their 5-digit membership number + PIN, or press # to browse as a guest.
-    // Guests reach the main menu but hit a membership gate on any pay area.
-    const isAnonymous = fromNumber.toLowerCase() === "anonymous" || !/^\+?[0-9]+$/.test(fromNumber);
+    // We also treat any number with fewer than 10 digits as private/unidentifiable.
+    // These callers are NEVER offered a free trial. They must enter their membership
+    // number + PIN to access paid areas, or press # to browse the main menu only.
+    const callerDigits = fromNumber.replace(/\D/g, "");
+    const isAnonymous =
+      fromNumber.toLowerCase() === "anonymous" ||
+      !/^\+?[0-9]+$/.test(fromNumber) ||
+      callerDigits.length < 10;
     if (isAnonymous) {
       await getSiteSettingsCached().catch(() => {});
       storage.logCall(callSid, "anonymous", calledTo, null).catch(() => {});
@@ -1854,7 +1858,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       actionOnEmptyResult: true,
     });
     playPrompt(gather, req, "anon_membership_or_pound.mp3",
-      "If you have a membership enter it now, otherwise press the pound.");
+      "If you have a membership, please enter it now, otherwise press pound.");
     // Timeout with no input — re-prompt once
     twiml.redirect("/voice/anon-entry");
     res.type("text/xml");
@@ -1896,7 +1900,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else {
       // Invalid input length — re-prompt
       playPrompt(twiml, req, "anon_membership_or_pound.mp3",
-        "If you have a membership enter it now, otherwise press the pound.");
+        "If you have a membership, please enter it now, otherwise press pound.");
       twiml.redirect("/voice/anon-entry");
     }
 
@@ -1984,7 +1988,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       actionOnEmptyResult: true,
     });
     playPrompt(gather, req, "anon_membership_or_pound.mp3",
-      "If you have a membership enter it now, otherwise press the pound.");
+      "If you have a membership, please enter it now, otherwise press pound.");
     twiml.redirect("/voice/anon-pay-gate");
     res.type("text/xml");
     res.send(twiml.toString());
@@ -2024,7 +2028,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
     } else {
       playPrompt(twiml, req, "anon_membership_or_pound.mp3",
-        "If you have a membership enter it now, otherwise press the pound.");
+        "If you have a membership, please enter it now, otherwise press pound.");
       twiml.redirect("/voice/anon-pay-gate");
     }
 

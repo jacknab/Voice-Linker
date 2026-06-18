@@ -222,7 +222,7 @@ export const MM_PROMPTS: Prompt[] = [
   // ── Anonymous caller authentication ────────────────────────────────────────
   { filename: "anon_caller_greeting.mp3",           text: "Welcome. Your caller ID is not visible. To protect our members, you must verify your membership before entering the system." },
   { filename: "anon_auth_enter_membership.mp3",     text: "Please enter your 10-digit membership number now." },
-  { filename: "anon_membership_or_pound.mp3",       text: "If you have a membership enter it now, otherwise press the pound." },
+  { filename: "anon_membership_or_pound.mp3",       text: "If you have a membership, please enter it now, otherwise press pound." },
   { filename: "membership_required_purchase.mp3",   text: "To continue, you will need a membership. Connecting you to our membership options now." },
   { filename: "membership_not_found.mp3",           text: "That membership number was not found. Please try again." },
 
