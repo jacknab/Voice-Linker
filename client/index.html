@@ -71,6 +71,10 @@
     }
     </script>
 
+    <!-- Hero image preload — boosts LCP by fetching the above-the-fold image
+         before the browser discovers it inside the JS bundle -->
+    <link rel="preload" as="image" href="/hero_mm.png" fetchpriority="high" />
+
     <!-- Favicons -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" href="/favicon.png" />

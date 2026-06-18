@@ -205,6 +205,7 @@ export default function Landing() {
         <img
           src={heroImg}
           alt={heroAlt}
+          fetchpriority="high"
           style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "right center", filter: "saturate(0.9) brightness(0.95)", border: "none", outline: "none" }}
         />
         {/* Dark overlay — uniform for centered text readability */}
