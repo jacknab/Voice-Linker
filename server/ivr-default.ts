@@ -1175,7 +1175,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     const twilioClient = twilio(accountSid, authToken);
     const TERMINAL = new Set(["completed", "failed", "busy", "no-answer", "canceled"]);
-    const POLL_INTERVAL_MS = 30_000;
+    // Poll every 10 seconds so dashboard reflects disconnections within ~10s
+    const POLL_INTERVAL_MS = 10_000;
 
     setInterval(async () => {
       let activeSids: string[];

@@ -3788,6 +3788,7 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
 
   const { data: liveCallersData, dataUpdatedAt: liveCallersUpdatedAt } = useQuery<LiveCallersResponse>({
     queryKey: ["/api/admin/live-callers"],
+    refetchInterval: 10_000,
   });
 
   // WebSocket connection for real-time live caller updates

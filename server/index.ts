@@ -5,7 +5,7 @@ loadEnv({ override: false });
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import { registerRoutes } from "./routes";
-import { initWebSocketServer } from "./ws";
+import { initWebSocketServer, broadcastCallersChanged } from "./ws";
 import { serveStatic } from "./static";
 import { startSimulator } from "./simulator";
 import { runStartupMigrations } from "./migrations";
@@ -197,14 +197,28 @@ app.use((req, res, next) => {
 
   // Seed default personality profiles (Roger, Dom, Chill, Spicy) on first run
   storage.seedDefaultPersonalities().catch(err => console.error("[personality] seed error:", err));
+  // ── Stale call cleanup ────────────────────────────────────────────────────
+  // Runs every 10 seconds. If Twilio's status callback fails to fire (network
+  // hiccup, wrong URL, missing credentials), this catches calls whose last IVR
+  // ping is older than 2 minutes and removes them from the active list.
+  // After any cleanup, we broadcast "callers:changed" via WebSocket so the
+  // dashboard updates instantly instead of waiting for the next poll cycle.
   setInterval(async () => {
     try {
-      await storage.removeStaleActiveCalls(3);
+      const before = await storage.getActiveRealCallSids();
+      await storage.removeStaleActiveCalls(2);
       await storage.finalizeOrphanedCallLogs(5);
+      if (before.length > 0) {
+        const after = await storage.getActiveRealCallSids();
+        if (after.length < before.length) {
+          console.log(`[cleanup] Removed ${before.length - after.length} stale call(s) — broadcasting callers:changed`);
+          broadcastCallersChanged();
+        }
+      }
     } catch (err) {
       console.error("[cleanup] stale active-call purge failed:", err);
     }
-  }, 30 * 1000); // every 30 seconds
+  }, 10 * 1000); // every 10 seconds
 
   // Auto-expire stale recording-rejection flags. If a caller is auto-flagged
   // by the moderator and then hangs up before they ever call back to hear the
