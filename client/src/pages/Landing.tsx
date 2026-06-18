@@ -90,8 +90,10 @@ export default function Landing() {
       ? `Gay Chat Line & Gay Party Line | ${siteName} | Free Trial`
       : `Free Chat Line for Singles | ${siteName} | Free Trial`,
     description: isMM
-      ? `${siteName} is the #1 free gay chat line and gay party line for men in the US. Talk live to real local guys 24/7 — no app, no credit card required. Interactive male phone chat line with free trial minutes for every new caller.`
-      : `${siteName} is the free chat line for singles across the US. Talk live to real local men and women 24/7 — no app, no credit card required. Free trial minutes for every new caller on our phone chat line.`,
+      ? `${siteName} is the #1 free gay chat line and gay party line for men in the US. Talk live to real local guys 24/7 — no app, no credit card required. Free trial minutes for every new caller.`
+      : `${siteName} is the free chat line for singles across the US. Talk live to real local men and women 24/7 — no app, no credit card required. Free trial minutes for every new caller.`,
+    canonical: "/",
+    ogImage: isMM ? "/hero_mm.png" : "/hero_mw.png",
   });
 
   const heroImg = isMM ? heroImgMM : heroImgMW;

@@ -156,6 +156,50 @@ export async function registerRoutes(
 ): Promise<Server> {
   app.use(express.urlencoded({ extended: true }));
 
+  // ── Dynamic robots.txt ───────────────────────────────────────────────────
+  // Served via Express so the Sitemap URL always reflects the live hostname
+  // rather than whatever dev domain was in use when the file was last written.
+  app.get("/robots.txt", (req, res) => {
+    const proto = req.headers["x-forwarded-proto"] || req.protocol;
+    const host = req.headers["x-forwarded-host"] || req.get("host") || "";
+    const siteUrl = process.env.SITE_URL?.replace(/\/$/, "") || `${proto}://${host}`;
+    res.type("text/plain").send(
+      [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /api/",
+        "Disallow: /backstage",
+        "",
+        "# Crawl-delay for well-behaved bots",
+        "Crawl-delay: 1",
+        "",
+        `Sitemap: ${siteUrl}/sitemap.xml`,
+        "",
+      ].join("\n")
+    );
+  });
+
+  // ── Dynamic sitemap.xml ─────────────────────────────────────────────────
+  // Read the generated file and replace any stale dev domain with the live
+  // hostname so Googlebot always gets correct absolute URLs.
+  app.get("/sitemap.xml", (req, res) => {
+    const proto = req.headers["x-forwarded-proto"] || req.protocol;
+    const host = req.headers["x-forwarded-host"] || req.get("host") || "";
+    const siteUrl = process.env.SITE_URL?.replace(/\/$/, "") || `${proto}://${host}`;
+    const filePath = path.join(process.cwd(), "client/public/sitemap.xml");
+    let xml: string;
+    try {
+      xml = fs.readFileSync(filePath, "utf-8");
+      // Replace any baked-in domain (dev or old production) with the live one
+      xml = xml.replace(/https?:\/\/[^/\s<>]+(?=\/)/g, siteUrl);
+    } catch {
+      // Fallback: minimal sitemap with just the homepage
+      const today = new Date().toISOString().split("T")[0];
+      xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${siteUrl}/</loc><changefreq>weekly</changefreq><priority>1.0</priority><lastmod>${today}</lastmod></url>\n</urlset>`;
+    }
+    res.type("application/xml").send(xml);
+  });
+
   // Prime the site settings cache so playPrompt can use category-specific audio on first call
   getSiteSettingsCached().catch(() => {});
 
