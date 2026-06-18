@@ -10,6 +10,7 @@ set -euo pipefail
 GREEN='\033[0;32m'; CYAN='\033[0;36m'; RED='\033[0;31m'; RESET='\033[0m'
 info()    { echo -e "${CYAN}[INFO]${RESET}  $*"; }
 success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
+warn()    { echo -e "${RED}[WARN]${RESET}  $*"; }
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 info "App directory: $APP_DIR"
@@ -31,7 +32,15 @@ if [ -f "$ENV_FILE" ]; then
   info "Protected local .env from git pull changes."
 fi
 
-# ── 1. Discard local changes to server-generated files ───────────────────────
+# ── 1. Stop PM2 before touching files ────────────────────────────────────────
+# The running server writes SEO/sitemap files into client/public/ on startup.
+# Stopping it now prevents any race condition between the live process and the
+# git reset + build steps that follow.
+info "Stopping PM2 before update..."
+pm2 stop malebox 2>/dev/null || true
+success "PM2 stopped (or was not running)."
+
+# ── 2. Discard local changes to server-generated files ───────────────────────
 # These files are auto-generated at runtime (SEO pages, sitemap, robots.txt).
 # They change on every server restart so they always conflict with git pull.
 info "Resetting auto-generated files before pull..."
@@ -47,7 +56,7 @@ for f in "${GENERATED_FILES[@]}"; do
 done
 success "Generated files reset."
 
-# ── 2. Pull latest code ───────────────────────────────────────────────────────
+# ── 3. Pull latest code ───────────────────────────────────────────────────────
 info "Pulling latest code from GitHub..."
 cd "$APP_DIR"
 git fetch origin main
@@ -61,22 +70,33 @@ if [ -n "${ENV_BACKUP:-}" ] && [ -f "$ENV_BACKUP" ]; then
 fi
 success "Code updated."
 
-# ── 3. Install dependencies ───────────────────────────────────────────────────
+# ── 4. Guard: ensure client/index.html is a file, not a directory ────────────
+# git reset --hard cannot replace a non-empty directory with a file.
+# If something (a crashed build, a previous bad state) left a directory here,
+# remove it and restore the file from git explicitly.
+if [ -d "$APP_DIR/client/index.html" ]; then
+  warn "client/index.html is a directory — removing and restoring from git..."
+  rm -rf "$APP_DIR/client/index.html"
+  git checkout HEAD -- "$APP_DIR/client/index.html"
+  success "client/index.html restored as a file."
+fi
+
+# ── 5. Install dependencies ───────────────────────────────────────────────────
 info "Installing dependencies..."
 npm install --legacy-peer-deps
 success "Dependencies installed."
 
-# ── 4. Run database migrations ────────────────────────────────────────────────
+# ── 6. Run database migrations ────────────────────────────────────────────────
 info "Applying database migrations..."
 npm run db:push
 success "Migrations applied."
 
-# ── 5. Build ──────────────────────────────────────────────────────────────────
+# ── 7. Build ──────────────────────────────────────────────────────────────────
 info "Building production bundle..."
 npm run build
 success "Build complete."
 
-# ── 6. Force-reload PM2 with fresh config ────────────────────────────────────
+# ── 8. Force-reload PM2 with fresh config ────────────────────────────────────
 # ecosystem.config.cjs now uses __dirname so paths are always correct.
 # We delete + re-start so PM2 picks up the config fresh every time.
 info "Restarting PM2..."

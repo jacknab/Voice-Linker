@@ -1,0 +1,76 @@
+root@vultr:/opt/Voice-Linker# rm -rf /opt/Voice-Linker/client/index.html
+root@vultr:/opt/Voice-Linker# bash update.sh
+[INFO]  App directory: /opt/Voice-Linker
+[INFO]  Protected local .env from git pull changes.
+[INFO]  Resetting auto-generated files before pull...
+[INFO]    Reset: client/public/sitemap.xml
+[INFO]    Reset: client/public/robots.txt
+[INFO]    Reset: client/public/regions/index.html
+[OK]    Generated files reset.
+[INFO]  Pulling latest code from GitHub...
+remote: Enumerating objects: 17, done.
+remote: Counting objects: 100% (17/17), done.
+remote: Compressing objects: 100% (1/1), done.
+remote: Total 9 (delta 7), reused 9 (delta 7), pack-reused 0 (from 0)
+Unpacking objects: 100% (9/9), 1.13 KiB | 290.00 KiB/s, done.
+From https://github.com/jacknab/Voice-Linker
+ * branch            main       -> FETCH_HEAD
+   70d7921..62f0933  main       -> origin/main
+HEAD is now at 62f0933 Update website links to new deployment address
+[OK]    Code updated.
+[INFO]  Installing dependencies...
+
+up to date, audited 575 packages in 3s
+
+95 packages are looking for funding
+  run `npm fund` for details
+
+19 vulnerabilities (2 low, 5 moderate, 12 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+[OK]    Dependencies installed.
+[INFO]  Applying database migrations...
+
+> rest-express@1.0.0 db:push
+> drizzle-kit push
+
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/opt/Voice-Linker/drizzle.config.ts'
+Using 'pg' driver for database querying
+[✓] Pulling schema from database...
+[✓] Changes applied
+[OK]    Migrations applied.
+[INFO]  Building production bundle...
+
+> rest-express@1.0.0 build
+> npx tsx script/build.ts
+
+building client...
+vite v7.3.0 building client environment for production...
+✓ 0 modules transformed.
+✗ Build failed in 658ms
+[vite:build-html] EISDIR: illegal operation on a directory, read
+file: /opt/Voice-Linker/client/index.html
+    at async readFileHandle (node:internal/fs/promises:556:24)
+    at async fileToBuiltUrl (/opt/Voice-Linker/node_modules/vite/dist/node/chunks/config.js:8777:18)
+    at async processAssetUrl (/opt/Voice-Linker/node_modules/vite/dist/node/chunks/config.js:23897:14)
+    at async <anonymous> (/opt/Voice-Linker/node_modules/vite/dist/node/chunks/config.js:23973:30)
+    at async Promise.all (index 0)
+    at async Object.handler (/opt/Voice-Linker/node_modules/vite/dist/node/chunks/config.js:24000:5)
+    at async transform (/opt/Voice-Linker/node_modules/rollup/dist/es/shared/node-entry.js:21206:16)
+    at async ModuleLoader.addModuleSource (/opt/Voice-Linker/node_modules/rollup/dist/es/shared/node-entry.js:21420:36) {
+  errno: -21,
+  code: 'PLUGIN_ERROR',
+  syscall: 'read',
+  pluginCode: 'EISDIR',
+  plugin: 'vite:build-html',
+  hook: 'transform',
+  id: '/opt/Voice-Linker/client/index.html',
+  watchFiles: [ '/opt/Voice-Linker/client/index.html' ]
+}
