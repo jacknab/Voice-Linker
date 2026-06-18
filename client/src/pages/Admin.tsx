@@ -4229,6 +4229,7 @@ interface SiteSettingsData {
   customerServiceEmail: string | null;
   customerServicePhone: string | null;
   siteCategory: string;
+  blockAnonymousCallers: boolean;
 }
 
 function SiteLabelRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -4256,6 +4257,7 @@ function WebsiteSettingsTab() {
   const [csEmail, setCsEmail] = useState("");
   const [csPhone, setCsPhone] = useState("");
   const [siteCategory, setSiteCategory] = useState("MM");
+  const [blockAnonymous, setBlockAnonymous] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   if (!initialized && data) {
@@ -4264,6 +4266,7 @@ function WebsiteSettingsTab() {
     setCsEmail(data.customerServiceEmail ?? "");
     setCsPhone(data.customerServicePhone ?? "");
     setSiteCategory(data.siteCategory ?? "MM");
+    setBlockAnonymous(data.blockAnonymousCallers ?? false);
     setInitialized(true);
   }
 
@@ -4275,6 +4278,7 @@ function WebsiteSettingsTab() {
         customerServiceEmail: csEmail || null,
         customerServicePhone: csPhone || null,
         siteCategory,
+        blockAnonymousCallers: blockAnonymous,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/site-settings"] });
@@ -4358,6 +4362,27 @@ function WebsiteSettingsTab() {
               <option value="MM">MM — Men seeking Men (gay / bi)</option>
               <option value="MW">MW — Men seeking Women (straight)</option>
             </select>
+          </SiteLabelRow>
+
+          <SiteLabelRow
+            label="Block Anonymous Callers"
+            hint="When ON, callers with private or blocked numbers are immediately rejected with a hangup. When OFF, they are offered the membership gate as usual."
+          >
+            <button
+              type="button"
+              role="switch"
+              aria-checked={blockAnonymous}
+              data-testid="toggle-block-anonymous"
+              onClick={() => setBlockAnonymous(v => !v)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${blockAnonymous ? "bg-red-600" : "bg-gray-200"}`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${blockAnonymous ? "translate-x-5" : "translate-x-0"}`}
+              />
+            </button>
+            <p className={`mt-2 text-xs font-semibold ${blockAnonymous ? "text-red-600" : "text-gray-400"}`}>
+              {blockAnonymous ? "Anonymous callers will be REJECTED immediately" : "Anonymous callers are allowed through the membership gate"}
+            </p>
           </SiteLabelRow>
         </div>
       </div>

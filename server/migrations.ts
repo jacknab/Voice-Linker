@@ -265,6 +265,9 @@ const MIGRATIONS: string[] = [
     linked_region_id UUID NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
     PRIMARY KEY (region_id, linked_region_id)
   )`,
+
+  // ── site_settings: anonymous caller block toggle ──────────────────────────
+  `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS block_anonymous_callers BOOLEAN NOT NULL DEFAULT false`,
 ];
 
 export async function runStartupMigrations(): Promise<void> {

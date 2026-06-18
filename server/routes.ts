@@ -2197,14 +2197,15 @@ export async function registerRoutes(
 
   app.put("/api/admin/site-settings", async (req, res) => {
     try {
-      const { siteName, fallbackPhoneNumber, customerServiceEmail, customerServicePhone, siteCategory, personalityMode } = req.body;
-      const data: Record<string, string | null> = {};
+      const { siteName, fallbackPhoneNumber, customerServiceEmail, customerServicePhone, siteCategory, personalityMode, blockAnonymousCallers } = req.body;
+      const data: Record<string, unknown> = {};
       if (siteName !== undefined) data.siteName = String(siteName).trim() || "Male Box";
       if (fallbackPhoneNumber !== undefined) data.fallbackPhoneNumber = String(fallbackPhoneNumber).trim() || "800-730-2508";
       if (customerServiceEmail !== undefined) data.customerServiceEmail = customerServiceEmail ? String(customerServiceEmail).trim() : null;
       if (customerServicePhone !== undefined) data.customerServicePhone = customerServicePhone ? String(customerServicePhone).trim() : null;
       if (siteCategory !== undefined) data.siteCategory = siteCategory === "MW" ? "MW" : "MM";
       if (personalityMode !== undefined) data.personalityMode = ["rotate", "lock_first", "escalate"].includes(personalityMode) ? personalityMode : "rotate";
+      if (blockAnonymousCallers !== undefined) data.blockAnonymousCallers = blockAnonymousCallers === true || blockAnonymousCallers === "true";
       const updated = await storage.updateSiteSettings(data);
       invalidateSiteSettingsCache();
       logAudit("site_settings_updated", { targetType: "settings", detail: data as Record<string, unknown> });

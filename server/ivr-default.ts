@@ -1233,7 +1233,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       !/^\+?[0-9]+$/.test(fromNumber) ||
       callerDigits.length < 10;
     if (isAnonymous) {
-      await getSiteSettingsCached().catch(() => {});
+      const anonSiteConf = await getSiteSettingsCached().catch(() => null);
+
+      // ── Hard block: admin toggled "Block anonymous callers" ─────────────────
+      if (anonSiteConf?.blockAnonymousCallers) {
+        console.log(`[voice] anonymous caller blocked by admin setting (callSid=${callSid})`);
+        storage.logCall(callSid, "blocked_anonymous", calledTo, null).catch(() => {});
+        const blockTwiml = new (require("twilio").twiml.VoiceResponse)();
+        blockTwiml.say({ voice: "alice" },
+          "We're sorry, but this service requires a visible caller ID. Please disable call blocking and try again. Goodbye.");
+        blockTwiml.hangup();
+        res.type("text/xml");
+        return res.send(blockTwiml.toString());
+      }
+
       storage.logCall(callSid, "anonymous", calledTo, null).catch(() => {});
       registerStatusCallback(callSid, req).catch(() => {});
 

@@ -243,6 +243,9 @@ export const siteSettings = pgTable("site_settings", {
   siteCategory: text("site_category").notNull().default("MM"),
   // Personality Engine session mode: rotate | lock_first | escalate
   personalityMode: text("personality_mode").notNull().default("rotate"),
+  // When true, anonymous/private-number callers are rejected immediately with a hangup
+  // instead of being offered the membership-gate bypass path.
+  blockAnonymousCallers: boolean("block_anonymous_callers").notNull().default(false),
 });
 
 export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({ id: true });
