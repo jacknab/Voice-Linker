@@ -1,0 +1,57 @@
+}
+root@vultr:/opt/Voice-Linker# # 1. Stop everything
+root@vultr:/opt/Voice-Linker# pm2 stop all 2>/dev/null || true
+[PM2] Applying action stopProcessId on app [all](ids: [ 0, 1, 2, 3 ])
+[PM2] [framevault-api](0) ✓
+[PM2] [pos-backend](1) ✓
+[PM2] [dogeblast](2) ✓
+[PM2] [malebox](3) ✓
+┌────┬────────────────────┬──────────┬──────┬───────────┬──────────┬──────────┐
+│ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
+├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤
+│ 2  │ dogeblast          │ fork     │ 122  │ stopped   │ 0%       │ 0b       │
+│ 0  │ framevault-api     │ fork     │ 0    │ stopped   │ 0%       │ 0b       │
+│ 3  │ malebox            │ fork     │ 0    │ stopped   │ 0%       │ 0b       │
+│ 1  │ pos-backend        │ fork     │ 0    │ stopped   │ 0%       │ 0b       │
+└────┴────────────────────┴──────────┴──────┴───────────┴──────────┴──────────┘
+root@vultr:/opt/Voice-Linker#
+root@vultr:/opt/Voice-Linker# # 2. Remove the rogue directory
+root@vultr:/opt/Voice-Linker# rm -rf /opt/Voice-Linker/client/index.html
+root@vultr:/opt/Voice-Linker#
+root@vultr:/opt/Voice-Linker# # 3. Write the file directly from git's stored blob — bypasses any index issues
+root@vultr:/opt/Voice-Linker# git cat-file blob HEAD:client/index.html > /tmp/index_html_restore.html
+root@vultr:/opt/Voice-Linker# mv /tmp/index_html_restore.html /opt/Voice-Linker/client/index.html
+root@vultr:/opt/Voice-Linker#
+root@vultr:/opt/Voice-Linker# # 4. Verify it is now a file (should show -rw-r--r--, NOT drwx)
+root@vultr:/opt/Voice-Linker# ls -la /opt/Voice-Linker/client/index.html
+-rw-r--r-- 1 root root 4386 Jun 18 23:50 /opt/Voice-Linker/client/index.html
+root@vultr:/opt/Voice-Linker#
+root@vultr:/opt/Voice-Linker# # 5. Build
+root@vultr:/opt/Voice-Linker# npm run build
+
+> rest-express@1.0.0 build
+> npx tsx script/build.ts
+
+building client...
+vite v7.3.0 building client environment for production...
+✓ 0 modules transformed.
+✗ Build failed in 500ms
+[vite:build-html] EISDIR: illegal operation on a directory, read
+file: /opt/Voice-Linker/client/index.html
+    at async readFileHandle (node:internal/fs/promises:556:24)
+    at async fileToBuiltUrl (/opt/Voice-Linker/node_modules/vite/dist/node/chunks/config.js:8777:18)
+    at async processAssetUrl (/opt/Voice-Linker/node_modules/vite/dist/node/chunks/config.js:23897:14)
+    at async <anonymous> (/opt/Voice-Linker/node_modules/vite/dist/node/chunks/config.js:23973:30)
+    at async Promise.all (index 0)
+    at async Object.handler (/opt/Voice-Linker/node_modules/vite/dist/node/chunks/config.js:24000:5)
+    at async transform (/opt/Voice-Linker/node_modules/rollup/dist/es/shared/node-entry.js:21206:16)
+    at async ModuleLoader.addModuleSource (/opt/Voice-Linker/node_modules/rollup/dist/es/shared/node-entry.js:21420:36) {
+  errno: -21,
+  code: 'PLUGIN_ERROR',
+  syscall: 'read',
+  pluginCode: 'EISDIR',
+  plugin: 'vite:build-html',
+  hook: 'transform',
+  id: '/opt/Voice-Linker/client/index.html',
+  watchFiles: [ '/opt/Voice-Linker/client/index.html' ]
+}
