@@ -3,8 +3,27 @@ import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ── Temporary EISDIR debugger ─────────────────────────────────────────────────
+// Wraps fs.promises.readFile so every file read is logged. When EISDIR hits we
+// can see exactly which path triggered it.  Remove after the issue is resolved.
+const _origRead = fs.promises.readFile.bind(fs.promises);
+(fs.promises as any).readFile = async function debugRead(p: any, ...args: any[]) {
+  const label = typeof p === "string" ? p : String(p);
+  try {
+    const result = await _origRead(p, ...args);
+    return result;
+  } catch (err: any) {
+    if (err.code === "EISDIR") {
+      console.error(`\n[EISDIR DEBUG] readFile was called on a DIRECTORY:\n  → ${label}\n`);
+    }
+    throw err;
+  }
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
