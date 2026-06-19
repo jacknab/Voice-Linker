@@ -1,6 +1,11 @@
+import { config as loadEnv } from "dotenv";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
+
+// Ensure DATABASE_URL is available even when this module is imported
+// before server/index.ts has a chance to load dotenv.
+loadEnv({ override: false });
 
 const { Pool } = pg;
 
