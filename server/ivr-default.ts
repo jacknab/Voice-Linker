@@ -15,7 +15,7 @@ import { transcribeLocalFile } from "./transcribeAudio";
 import { locationToFilename, triggerLocationAudio, triggerCityWordAudio, minutesToAnnouncementText, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
 import type { BrowseQueueItem, CallerBrowseState } from "./ivr-browse-state";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
-import { registerCallerPhone, removeCallerQueue, broadcastCallersChanged } from "./ws";
+import { registerCallerPhone, removeCallerQueue, broadcastCallersChanged, broadcastBalanceUpdate } from "./ws";
 import { injectNewCallerIntoAllQueues, removeProfileFromAllQueues, SLOT_PRIORITY } from "./liveQueue";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
@@ -1223,6 +1223,108 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     console.log(`[status-poll] Twilio call-status polling started (every ${POLL_INTERVAL_MS / 1000}s)`);
   })();
+
+  // ─── Periodic IVR Billing Ticker ──────────────────────────────────────────
+  // Fires every 30 seconds for every call that has a billing checkpoint (i.e.
+  // callers on the IVR — NOT in a live conference, which has its own 5s ticker).
+  //
+  // This ensures:
+  //  1. Balances drain in near-real-time even if a caller sits in a single IVR
+  //     state for a long time (e.g. listening to a long greeting recording).
+  //  2. The admin dashboard receives a WebSocket "balance:update" event every
+  //     tick so it can display live balance drain without polling.
+  //  3. A caller whose balance hits zero is immediately force-redirected out of
+  //     the system via the Twilio Calls API — they cannot coast through the
+  //     remainder of the audio they are currently hearing for free.
+  (function startIvrBillingTicker() {
+    const IVR_TICK_MS = 30_000; // sync every 30 seconds
+
+    setInterval(async () => {
+      if (billingCheckpoints.size === 0) return;
+
+      const settings = await getMembershipSettingsCached().catch(() => null);
+      // Skip all deductions in per_day / per_24h / free modes
+      if (!settings) return;
+      const isFree = isFreeModeActive(settings);
+      if (isFree || settings.billingMode === "per_day" || settings.billingMode === "per_24h") return;
+
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken  = process.env.TWILIO_AUTH_TOKEN;
+
+      for (const [callSid] of Array.from(billingCheckpoints.entries())) {
+        // Skip callers that are currently in a live conference — startLiveBilling
+        // already handles them at 5-second resolution with its own interval.
+        const inLiveSession = Array.from(liveBillingSessions.values()).some(
+          s => s.initiatorCallSid === callSid || s.inviteeCallSid === callSid,
+        );
+        if (inLiveSession) continue;
+
+        try {
+          // Sync billing and get updated balance
+          await syncBilling(callSid);
+
+          // Determine remaining balance for this call
+          const checkpoint = billingCheckpoints.get(callSid);
+          if (!checkpoint) continue;
+
+          const cardId = callCardOverride.get(callSid);
+          let remainingSeconds = 0;
+          let userId: string | null = null;
+
+          if (cardId) {
+            const card = await storage.getMembershipCardById(cardId).catch(() => null);
+            remainingSeconds = card?.valueSeconds ?? 0;
+          } else {
+            const overridePhone = callMembershipOverride.get(callSid);
+            const phone = overridePhone ?? checkpoint.fromNumber;
+            const user = await storage.getUserByPhone(phone).catch(() => null);
+            remainingSeconds = user?.remainingSeconds ?? 0;
+            userId = user?.id ?? null;
+          }
+
+          // Broadcast balance update to admin WebSocket clients
+          broadcastBalanceUpdate(callSid, userId, remainingSeconds);
+
+          // Zero-balance enforcement: force-redirect the caller out
+          if (remainingSeconds <= 0 && accountSid && authToken) {
+            console.log(`[ivr-billing-tick] callSid=${callSid} balance hit zero — force-redirecting to /voice/time-expired`);
+            const baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN ?? process.env.SITE_URL ?? "localhost:5000"}`;
+            const client = twilio(accountSid, authToken);
+            client.calls(callSid)
+              .update({ url: `${baseUrl}/voice/time-expired`, method: "POST" })
+              .catch(err => console.error(`[ivr-billing-tick] force-redirect error for ${callSid}:`, err.message));
+          }
+        } catch (err: any) {
+          // Don't let one failed sync crash the whole ticker
+          console.error(`[ivr-billing-tick] sync error for callSid=${callSid}:`, err.message);
+        }
+      }
+    }, IVR_TICK_MS);
+
+    console.log(`[ivr-billing-tick] Periodic IVR billing ticker started (every ${IVR_TICK_MS / 1000}s)`);
+  })();
+
+  // ─── Time Expired Route ────────────────────────────────────────────────────
+  // The periodic IVR billing ticker force-redirects callers here when their
+  // balance hits zero mid-call. Plays a short "time expired" message then
+  // finalizes billing and hangs up cleanly.
+  app.post("/voice/time-expired", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string | undefined;
+
+    if (callSid && billingCheckpoints.has(callSid)) {
+      await finalizeCallBilling(callSid).catch(err =>
+        console.error(`[time-expired] finalizeCallBilling error for ${callSid}:`, err)
+      );
+    }
+
+    playPrompt(twiml, req, "free_trial_expired.mp3",
+      "Your time has expired. Thank you for calling. To purchase more time, please call back. Goodbye.");
+    twiml.hangup();
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
 
   // ─── 1. Initial Webhook: POST /voice ──────────────────────────────────────
   app.post("/voice", async (req, res) => {

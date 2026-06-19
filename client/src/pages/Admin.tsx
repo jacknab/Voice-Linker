@@ -3812,11 +3812,11 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
       ws.onmessage = (evt) => {
         try {
           const msg = JSON.parse(evt.data as string);
-          console.log("[Dashboard] WebSocket message received:", msg.type);
           if (msg.type === "callers:changed") {
             // Refetch live callers when the caller list changes
             queryClient.invalidateQueries({ queryKey: ["/api/admin/live-callers"] });
           }
+          // balance:update is handled inside LiveCallersTab directly
         } catch (err) {
           console.error("[Dashboard] WebSocket message error:", err);
         }
@@ -8588,7 +8588,48 @@ function LiveCallersTab() {
   const callers = data?.callers ?? [];
   const [showVirtual, setShowVirtual] = useState(true);
 
-  const filtered = showVirtual ? callers : callers.filter(c => !c.isVirtual);
+  // Real-time balance overlay: keyed by callSid, updated every 30s via WebSocket
+  // This lets us show balances draining live without waiting for the API poll.
+  const [liveBalances, setLiveBalances] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const adminKey = getAdminKey();
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const keyParam = adminKey ? `?key=${encodeURIComponent(adminKey)}` : "";
+    const url = `${proto}://${window.location.host}/ws/queues${keyParam}`;
+
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const connect = () => {
+      if (ws?.readyState === WebSocket.OPEN) return;
+      ws = new WebSocket(url);
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data as string);
+          if (msg.type === "balance:update" && msg.callSid != null && msg.remainingSeconds != null) {
+            setLiveBalances(prev => ({ ...prev, [msg.callSid]: msg.remainingSeconds }));
+          }
+        } catch { /* ignore */ }
+      };
+      ws.onclose = () => { reconnectTimer = setTimeout(connect, 3000); };
+    };
+
+    connect();
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  }, []);
+
+  // Merge live WebSocket balance overrides into the API data
+  const callersWithLiveBalance = callers.map(c =>
+    liveBalances[c.callSid] != null
+      ? { ...c, remainingSeconds: liveBalances[c.callSid] }
+      : c
+  );
+
+  const filtered = showVirtual ? callersWithLiveBalance : callersWithLiveBalance.filter(c => !c.isVirtual);
   const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : null;
 
   return (
@@ -8720,7 +8761,16 @@ function LiveCallersTab() {
                           {caller.membershipTier}
                         </span>
                         {caller.remainingSeconds !== null && (
-                          <div className="text-[10px] text-gray-400 mt-0.5">{formatDuration(caller.remainingSeconds)} left</div>
+                          <div className={`flex items-center gap-1 mt-0.5 text-[10px] font-mono font-semibold ${
+                            caller.remainingSeconds <= 0 ? "text-red-600" :
+                            caller.remainingSeconds < 300 ? "text-amber-500" :
+                            "text-gray-400"
+                          }`}>
+                            {liveBalances[caller.callSid] != null && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" title="Live balance" />
+                            )}
+                            {caller.remainingSeconds <= 0 ? "EXPIRED" : `${formatDuration(caller.remainingSeconds)} left`}
+                          </div>
                         )}
                       </div>
                     ) : (

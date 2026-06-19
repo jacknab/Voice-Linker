@@ -83,6 +83,19 @@ export function broadcastCallersChanged(): void {
   broadcast({ type: "callers:changed" });
 }
 
+/**
+ * Broadcast a real-time balance update for a caller that is currently on the
+ * IVR (not in a live conference). Called by the periodic IVR billing ticker
+ * every 30 seconds so the admin dashboard shows balances draining live.
+ */
+export function broadcastBalanceUpdate(
+  callSid: string,
+  userId: string | null,
+  remainingSeconds: number,
+): void {
+  broadcast({ type: "balance:update", callSid, userId, remainingSeconds });
+}
+
 // ── Server init ───────────────────────────────────────────────────────────────
 
 export function initWebSocketServer(httpServer: Server): void {
