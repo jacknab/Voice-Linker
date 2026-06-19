@@ -827,18 +827,36 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // --- Twilio Voice Webhooks ---
 
+  /**
+   * Returns true only for real, dialable E.164 phone numbers.
+   * Rejects anything Twilio may send instead of a real number:
+   *   "anonymous" / "private" / "blocked" / "restricted" / "unknown"
+   *   SIP URIs:      sip:name@domain.com
+   *   Twilio clients: client:name
+   *   SIP trunk IDs:  anything containing ":" or "@"
+   *   Short strings / non-digit noise (< 10 digits)
+   */
+  function isRealPhoneNumber(from: string): boolean {
+    if (!from) return false;
+    const lower = from.toLowerCase().trim();
+    // Reject well-known privacy/placeholder strings
+    if (["anonymous", "private", "blocked", "restricted", "unknown"].includes(lower)) return false;
+    // Reject SIP URIs (sip:...), Twilio client handles (client:...), conference legs, etc.
+    if (lower.includes(":") || lower.includes("@")) return false;
+    // Must be digits-only after stripping leading + and spaces
+    const cleaned = from.replace(/^\+/, "").replace(/\s/g, "");
+    if (!/^[0-9]+$/.test(cleaned)) return false;
+    // Require at least 10 digits (shortest valid NANP / international number)
+    if (cleaned.length < 10) return false;
+    return true;
+  }
+
   async function getOrCreateUser(phoneNumber: string) {
-    // Hard guard: never create (or return) an account for a blocked/private caller.
-    // Twilio sends From="anonymous" for callers with hidden caller ID.
-    // We also reject any string with fewer than 10 digits — those are not real
-    // E.164 numbers and should never have been routed here.
-    const digits = (phoneNumber ?? "").replace(/\D/g, "");
-    if (
-      !phoneNumber ||
-      phoneNumber.toLowerCase() === "anonymous" ||
-      !/^\+?[0-9]+$/.test(phoneNumber) ||
-      digits.length < 10
-    ) {
+    // Hard guard: never create (or return) an account for any caller without
+    // a real, dialable phone number. Catches "anonymous", "private", SIP trunk
+    // names, client handles (client:xxx), SIP URIs (sip:xxx@domain), and any
+    // other non-E.164 string Twilio may forward as the From field.
+    if (!isRealPhoneNumber(phoneNumber)) {
       throw new Error(
         `[getOrCreateUser] Refusing to create account for non-identifiable caller: "${phoneNumber}"`
       );
@@ -1339,16 +1357,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       return res.send(twiml.toString());
     }
 
-    // ── Anonymous / blocked / private caller ───────────────────────────────────
-    // Twilio sends From="anonymous" when a caller has blocked their caller ID.
-    // We also treat any number with fewer than 10 digits as private/unidentifiable.
-    // These callers are NEVER offered a free trial. They must enter their membership
-    // number + PIN to access paid areas, or press # to browse the main menu only.
-    const callerDigits = fromNumber.replace(/\D/g, "");
-    const isAnonymous =
-      fromNumber.toLowerCase() === "anonymous" ||
-      !/^\+?[0-9]+$/.test(fromNumber) ||
-      callerDigits.length < 10;
+    // ── Non-identifiable caller (anonymous, private, SIP trunk, client handle) ──
+    // Uses the shared isRealPhoneNumber() guard — the single source of truth for
+    // what counts as a real dialable number. Any From value that isn't a genuine
+    // E.164 number lands here: "anonymous", "private", "blocked", "restricted",
+    // "unknown", sip:name@domain, client:name, SIP trunk labels, etc.
+    const isAnonymous = !isRealPhoneNumber(fromNumber);
     if (isAnonymous) {
       const anonSiteConf = await getSiteSettingsCached().catch(() => null);
 
