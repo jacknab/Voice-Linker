@@ -8,7 +8,7 @@ import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
 import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, scheduleAutoModCheck } from "./autoModeration";
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
-import * as engagementEngine from "./engagementEngine";
+
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
@@ -38,7 +38,7 @@ function describeIvrState(pathname: string): string {
   if (path.includes("recording-rejected")) return "Fixing rejected recording";
   if (path.includes("main-menu") || path.includes("mw-main-menu")) return "At main menu";
   if (path.includes("browse-profiles") || path.includes("browse-category-ads") || path.includes("nearby-callers") || path.includes("category-ad-menu")) return "Browsing callers";
-  if (path.includes("engagement-interrupt") || path.includes("roger")) return "Listening to host prompt";
+  if (path.includes("engagement-interrupt")) return "Browsing callers";
   if (path.includes("voicemail-inbox") || path.includes("voicemail-saved")) return "Listening to voicemail";
   if (path.includes("voicemail") || path.includes("message")) return "Using voicemail";
   if (path.includes("mailbox-lookup")) return "Looking up mailbox";
@@ -1107,7 +1107,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
 
     // Clean up per-call in-memory state
-    engagementEngine.cleanupEngagementState(callSid);
     categoryBrowseState.delete(callSid);
     await deleteBrowseState(callSid);
     removeCallerQueue(callSid);
@@ -2448,22 +2447,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // ─── 1c. Entry Check ──────────────────────────────────────────────────────
   // Checks the caller's own account state and branches accordingly.
 
-  async function playRogerGreetingAudio(
-    twiml: InstanceType<typeof VoiceResponse>,
-    req: Request,
-    user: Awaited<ReturnType<typeof getOrCreateUser>>,
-    fromNumber: string,
-    callSid: string,
-  ): Promise<void> {
-    // Host prompts removed per product decision.
-    // Keep function as a no-op so existing call flow remains stable.
-    void twiml;
-    void req;
-    void user;
-    void fromNumber;
-    void callSid;
-  }
-
   /**
    * Inline entry handler — applies time announcement logic to twiml
    * and adds the main-menu redirect. Reuses the already-fetched user and
@@ -2477,8 +2460,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     callSid: string,
     membershipConf: Awaited<ReturnType<typeof getMembershipSettingsCached>>,
   ): Promise<void> {
+    void fromNumber;
     const isNewCaller = !user.membershipTier;
-    await playRogerGreetingAudio(twiml, req, user, fromNumber, callSid);
 
     const freeMode = isFreeModeActive(membershipConf);
 
@@ -5982,7 +5965,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             browsingLinkedRegionName: null,
           };
 
-          engagementEngine.initEngagementState(callSid, user.id);
           console.log(`[voice] browse-profiles: new session for ${callSid} — buffer=${state.queue.length} (region=${callerRegionName ?? "none"}, linkedRegions=${linkedRegions.length})`);
 
           // ── Inject this new caller's profile into every other active session ──
@@ -6076,9 +6058,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
         }
 
-        // AI_ID reference used by reconciliation and bust-game injection below
-        const AI_ID = engagementEngine.BUST_GAME_AI_USER_ID;
-
         // ── Rebuild queue when returning from linked-region browsing ──────────
         // (browsingLinked was cleared by press-5 in handle-profile-menu, leaving an
         //  empty local queue that needs to be reconstructed from the DB.)
@@ -6163,7 +6142,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
         {
           const queueBefore = state.queue.length;
-          state.queue = state.queue.filter(p => reconActiveIds.has(p.userId) || p.userId === AI_ID);
+          state.queue = state.queue.filter(p => reconActiveIds.has(p.userId));
           if (state.queue.length < queueBefore) {
             console.log(`[voice] browse-profiles: reconciled — pruned ${queueBefore - state.queue.length} offline/blocked from buffer, remaining=${state.queue.length} for ${callSid}`);
           }
@@ -6221,36 +6200,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               lon: null,
             });
             console.log(`[voice] browse-profiles: injected new linked-region caller from ${snapshot.regionName} userId=${newLinkedCaller.userId} at slot 2 for ${callSid}`);
-          }
-        }
-
-        // ── Engagement Engine interrupt check (Roger interjections) ───────────
-        // Disabled per product decision: no Roger prompts inside the live connector.
-        // The Roger welcome greeting (entry-check) is unaffected — only the in-browse
-        // interruptions are suppressed here. The /voice/engagement-interrupt route
-        // is kept for backward compatibility but is no longer triggered from browse.
-
-        // ── Bust Game: inject AI imposter into buffer ─────────────────────────
-        const engState = engagementEngine.getEngagementState(callSid);
-        if (engState?.gameStarted && engState.gameBustTargetUserId === AI_ID && !engState.gameBustTargetInjected) {
-          const greetingIndex = 1 + Math.floor(Math.random() * engagementEngine.GAME_AI_GREETING_COUNT);
-          const greetingFile  = `game_greeting_${greetingIndex}.mp3`;
-          const greetingPath  = path.join(UPLOADS_DIR, greetingFile);
-          if (fs.existsSync(greetingPath)) {
-            const offset   = 1 + Math.floor(Math.random() * Math.max(1, Math.min(state.queue.length, 2)));
-            const insertAt = Math.min(offset, state.queue.length);
-            state.queue.splice(insertAt, 0, {
-              userId: AI_ID,
-              recordingUrl: `/uploads/${greetingFile}`,
-              nameRecordingUrl: null,
-              regionId: state.callerRegionId,
-              regionName: null,
-            });
-            if (state.queue.length > 3) state.queue.pop();
-            engagementEngine.markGameTargetInjected(callSid);
-            console.log(`[engagement] Injected AI imposter (${greetingFile}) at buffer[${insertAt}]`);
-          } else {
-            console.warn(`[engagement] Game greeting file not found: ${greetingFile} — re-trying on next browse cycle`);
           }
         }
 
@@ -6765,27 +6714,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const profileUserId = req.query.profileUserId as string;
 
       if (digit === "1") {
-        const callSid1 = req.body?.CallSid as string;
-        if (profileUserId === engagementEngine.BUST_GAME_AI_USER_ID) {
-          // Caller tried to message the AI imposter — not possible, game over
-          engagementEngine.markGameTargetPassed(callSid1);
-          playPrompt(twiml, req, "cant_message_ai.mp3", "You can't message an AI. Nice try though. Back to browsing.");
-          twiml.redirect("/voice/browse-profiles");
-        } else {
-          // If the game target was played and caller chose to message instead of bust, end the game
-          if (profileUserId && engagementEngine.isGameTarget(callSid1, profileUserId)) {
-            engagementEngine.markGameTargetPassed(callSid1);
-          }
-          playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
-          twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
-        }
+        playPrompt(twiml, req, "record_message.mp3", "Record your message after the tone. Press any key when done.");
+        twiml.record({ maxLength: 60, playBeep: true, action: `/voice/review-message?toUserId=${profileUserId}` });
       } else if (digit === "2") {
-        const callSid2 = req.body?.CallSid as string;
-        engagementEngine.trackSkip(callSid2);
-        // If the caller skipped the game target without pressing 8, the game is over
-        if (profileUserId && engagementEngine.isGameTarget(callSid2, profileUserId)) {
-          engagementEngine.markGameTargetPassed(callSid2);
-        }
         twiml.redirect(`/voice/browse-profiles?afterUserId=${encodeURIComponent(profileUserId)}`);
       } else if (digit === "3") {
         // ── Live 1-on-1 Connect ─────────────────────────────────────────────
@@ -6992,40 +6923,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         playPrompt(twiml, req, "profile_flagged.mp3", "This profile has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
-      } else if (digit === "8") {
-        // ── Busted Game bust attempt (one chance only) ───────────────────────
-        const callSid8 = req.body?.CallSid as string;
-        const bustResult = engagementEngine.processBust(callSid8, profileUserId ?? "");
-        if (bustResult.result === "win") {
-          // Award bonus time — amount depends on billing mode
-          const bustSettings = await getMembershipSettingsCached();
-          const bonusSeconds = bustSettings.billingMode === "per_day" ? 3600 : 900;
-          const fromNumber8 = req.body?.From as string;
-          if (fromNumber8) {
-            const winUser = await getOrCreateUser(fromNumber8);
-            await storage.adjustUserCredits(winUser.id, bonusSeconds);
-            console.log(`[engagement] Bust WIN: userId=${winUser.id} +${bonusSeconds}s (billingMode=${bustSettings.billingMode})`);
-          }
-          const bonusLabel = bustSettings.billingMode === "per_day"
-            ? "one hour of bonus time"
-            : "fifteen bonus minutes";
-          if (bustSettings.billingMode === "per_day") {
-            playPrompt(twiml, req, "bust_win_hours.mp3",
-              "You got it! That was our A I voice. One hour of bonus time has been added to your account. Nice ear.");
-          } else {
-            playPrompt(twiml, req, "bust_win_minutes.mp3",
-              "You got it! That was our A I voice. Fifteen bonus minutes have been added to your account. Nice ear.");
-          }
-          twiml.redirect("/voice/browse-profiles");
-        } else if (bustResult.result === "miss") {
-          playPrompt(twiml, req, "bust_miss.mp3",
-            "Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing.");
-          twiml.redirect("/voice/browse-profiles");
-        } else {
-          // No active game — treat as invalid choice
-          playPrompt(twiml, req, "invalid_choice.mp3", "Invalid choice.");
-          twiml.redirect("/voice/browse-profiles");
-        }
       } else if (digit === "9") {
         // Exiting the male box — in per-minute billing notify caller deductions have stopped.
         // In per-day, per_24h billing or free mode, time is not deducted per-call, so skip the announcement.
@@ -7093,39 +6990,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
-  // ─── Engagement Engine Interrupt ─────────────────────────────────────────
-  // Plays a personality-driven voice line between profile plays, then optionally
-  // starts the Busted game before redirecting back to browse-profiles.
-  app.post("/voice/engagement-interrupt", async (req, res) => {
+  // ─── Engagement Interrupt (legacy passthrough) ───────────────────────────
+  app.post("/voice/engagement-interrupt", (_req, res) => {
     const twiml = new VoiceResponse();
-    try {
-      const callSid = req.body?.CallSid as string;
-      const rawText = req.query.text as string;
-      const followUp = (req.query.followUp as string) ?? "";
-      const promptId = req.query.pid as string ?? "";
-      const promptText = rawText ? decodeURIComponent(rawText) : "";
-
-      if (promptText) {
-        // Host persona prompts removed: play plain text only.
-        twiml.say({ voice: "alice" }, promptText);
-      }
-
-      if (followUp === "start_game" && callSid) {
-        try {
-          const targetUserId = engagementEngine.startBustedGame(callSid);
-          if (targetUserId) {
-            console.log(`[engagement] Busted game started for callSid=${callSid}, AI imposter will be injected at a random queue position`);
-          }
-        } catch (err) {
-          console.error("[engagement] engagement-interrupt: failed to start game:", err);
-        }
-      }
-
-      twiml.redirect("/voice/browse-profiles");
-    } catch (error) {
-      console.error("[voice] /voice/engagement-interrupt error:", error);
-      twiml.redirect("/voice/browse-profiles");
-    }
+    twiml.redirect("/voice/browse-profiles");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -7799,7 +7667,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (recipientBlockedSender) {
           console.log(`[voice] handle-review-message: message discarded — toUserId=${toUserId} has blocked userId=${user.id}`);
           await advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
-          engagementEngine.trackMessageSent(callSid);
           // Play neutral "message sent" so the blocked caller doesn't know they're blocked
           playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to profiles.");
           twiml.redirect(cancelReturnPath(returnTo, category));
@@ -7808,7 +7675,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         const sentMessage = await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
         await advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
-        engagementEngine.trackMessageSent(callSid);
         // Queue sent message for human admin review
         storage.createFlaggedItem({
           contentType: "message",
@@ -7904,7 +7770,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       await storage.createMessage({ fromUserId: user.id, toUserId, recordingUrl });
       await advanceBrowseQueueAfterMessage(callSid, toUserId, returnTo);
-      engagementEngine.trackMessageSent(callSid);
       if (returnTo === "mailbox") {
         playPrompt(twiml, req, "message_sent.mp3", "Your message has been sent. Returning to your mailbox.");
         twiml.redirect("/voice/my-mailbox");
@@ -8570,7 +8435,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
         await storage.markCallerGreetingPlayed(callSid);
       }
-      // Hand off to the shared entry flow (account state detection + Roger greeting)
+      // Hand off to the shared entry flow (account state detection)
       twiml.redirect("/voice/entry");
     } catch (error) {
       console.error(`[voice] /voice/${slug} error:`, error);
