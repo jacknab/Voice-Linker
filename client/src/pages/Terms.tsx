@@ -92,12 +92,11 @@ export default function Terms() {
       ],
     },
     {
-      title: "8. Free Trial",
+      title: "8. Free Access Service",
       body: [
-        `New callers may be offered a complimentary free trial of up to 90 minutes upon first calling from a new phone number, subject to availability. The free trial is limited to one per unique phone number.`,
-        "Free trial time is valid for 7 days from the date of first use and will expire automatically if not used within that period.",
-        "The free trial is intended for genuine new callers only. Attempts to obtain multiple free trials through different phone numbers or by any other means constitutes abuse of the system and may result in account restrictions.",
-        "We reserve the right to modify, limit, or discontinue the free trial offer at any time without notice.",
+        `${siteName} is offered as a completely free service for callers. No credit card is required to call in and use the core chatline features.`,
+        "We may update service features, limits, or availability from time to time to protect platform stability, caller safety, and legal compliance.",
+        "Any optional paid features (if introduced) will be clearly identified before purchase and will never be charged without your explicit action.",
       ],
     },
     {
@@ -140,7 +139,7 @@ export default function Terms() {
     {
       title: "14. Termination",
       body: [
-        "We reserve the right to suspend, restrict, or permanently terminate your access to the service at any time, for any reason, with or without notice, including but not limited to violation of these Terms, fraudulent activity, abuse of the free trial, or conduct we determine to be harmful to other callers.",
+        "We reserve the right to suspend, restrict, or permanently terminate your access to the service at any time, for any reason, with or without notice, including but not limited to violation of these Terms, fraudulent activity, abuse of free access, or conduct we determine to be harmful to other callers.",
         "Upon termination, your right to use the service ceases immediately. Unused membership time remaining at the time of a termination for cause will be forfeited without refund.",
         "You may stop using the service at any time. Any obligation to pay for services already rendered survives termination.",
       ],

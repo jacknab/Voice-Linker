@@ -54,13 +54,13 @@ const TREE: TreeNode = {
           kind: "menu",
           choices: [
             { key: "→", label: "Has active time" },
-            { key: "→", label: "Free trial eligible" },
+            { key: "→", label: "Free access" },
             { key: "→", label: "No access" },
           ],
           children: [
             {
               id: "free-trial",
-              label: "Free Trial Offer",
+              label: "Free Access Message",
               kind: "menu",
               choices: [
                 { key: "1", label: "Accept → Main Menu" },

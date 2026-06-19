@@ -47,8 +47,8 @@ function buildFAQsMM(siteName: string, phone: string): FAQCategory[] {
           a: "Just dial " + formatPhone(phone) + " from your phone. You'll be greeted with a short welcome message and then asked to record a quick voice intro — just say your first name and a brief greeting. Once that's done, you're in and can start browsing other callers right away.",
         },
         {
-          q: "Is there really a free trial?",
-          a: "Yes! New callers receive 90 free minutes to explore the system. No credit card is required to start. Your free trial begins the moment you first call in and is available to your phone number for 7 days.",
+          q: "Is the service really completely free?",
+          a: "Yes. The service is completely free for callers. No credit card is required to start, and you can call in and use the system without trial limits.",
         },
         {
           q: "Do I need to create an account?",
@@ -123,7 +123,7 @@ function buildFAQsMM(siteName: string, phone: string): FAQCategory[] {
       items: [
         {
           q: "How does membership work?",
-          a: "After your free trial expires, you can purchase a membership to continue using the system. Memberships come in blocks of time (minutes) that are deducted while you're actively browsing and connected on the line. Time is only counted when you're in the male box — not while navigating menus.",
+          a: "The core chatline service is completely free. If optional paid features or plans are offered, details and pricing are announced clearly before any purchase.",
         },
         {
           q: "What membership plans are available?",
@@ -181,8 +181,8 @@ function buildFAQsMW(siteName: string, phone: string): FAQCategory[] {
           a: "Just dial " + formatPhone(phone) + " from your phone. You'll be asked a quick question to identify your gender, then prompted to record a short voice intro — just say your first name and a brief greeting. Once done, you're in and ready to start meeting people.",
         },
         {
-          q: "Is there really a free trial?",
-          a: "Yes! New callers receive 90 free minutes to explore the system. No credit card is required to start. Your free trial is tied to your phone number and is available for 7 days from when you first call in.",
+          q: "Is the service really completely free?",
+          a: "Yes. The service is completely free for callers. No credit card is required to start, and you can call in and use the system without trial limits.",
         },
         {
           q: "Do I need to create an account?",
@@ -257,7 +257,7 @@ function buildFAQsMW(siteName: string, phone: string): FAQCategory[] {
       items: [
         {
           q: "How does membership work?",
-          a: "After your free trial, you can purchase a block of minutes to keep using the system. Time counts down only while you're actively browsing or connected — not while navigating menus or holding.",
+          a: "The core chatline service is completely free. If optional paid features or plans are offered, details and pricing are announced clearly before any purchase.",
         },
         {
           q: "What plans are available?",
@@ -414,8 +414,8 @@ export default function FAQ() {
       ? `FAQ — Gay Chat Line Help & Tips | ${siteName}`
       : `FAQ — Singles Phone Chat Line Help | ${siteName}`,
     description: isMM
-      ? `Get answers about the ${siteName} interactive male phone chat line. How to call, free trial details, membership plans, privacy, and more. Customer toll-free support available 24/7.`
-      : `Get answers about the ${siteName} singles phone chat line. How to call, free trial details, membership plans, privacy, and more. Customer support available 24/7.`,
+      ? `Get answers about the ${siteName} interactive male phone chat line. Learn how to call, how the completely free service works, privacy, safety, and more. Customer toll-free support available 24/7.`
+      : `Get answers about the ${siteName} singles phone chat line. Learn how to call, how the completely free service works, privacy, safety, and more. Customer support available 24/7.`,
   });
 
   const handleToggle = (i: number) => {
@@ -505,7 +505,7 @@ export default function FAQ() {
             style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", background: "#1d4ed8", color: "#fff", textDecoration: "none", fontSize: "0.95rem", fontWeight: 700, padding: "0.65rem 1.35rem", borderRadius: "7px" }}
             data-testid="faq-cta-call"
           >
-            <Phone className="w-4 h-4" /> Call {formatPhone(phone)} — First 90 Min Free
+            <Phone className="w-4 h-4" /> Call {formatPhone(phone)} — Completely Free
           </a>
         </div>
       </section>
@@ -625,7 +625,7 @@ export default function FAQ() {
               </p>
             </div>
             {[
-              { heading: "Account", links: [{ label: "Buy Time", href: "/membership" }, { label: "Free Trial", href: "/membership" }, { label: "Memberships", href: "/membership" }] },
+              { heading: "Account", links: [{ label: "Buy Time", href: "/membership" }, { label: "Completely Free", href: "/membership" }, { label: "Memberships", href: "/membership" }] },
               {
                 heading: "Help",
                 links: [

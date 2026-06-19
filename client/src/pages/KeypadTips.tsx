@@ -386,7 +386,7 @@ export default function KeypadTips() {
               <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.3)", lineHeight: 1.65 }}>{footerBlurb}</p>
             </div>
             {[
-              { heading: "Account", links: [{ label: "Buy Time", href: "/membership" }, { label: "Free Trial", href: "/membership" }, { label: "Memberships", href: "/membership" }] },
+              { heading: "Account", links: [{ label: "Buy Time", href: "/membership" }, { label: "Completely Free", href: "/membership" }, { label: "Memberships", href: "/membership" }] },
               {
                 heading: "Help",
                 links: [

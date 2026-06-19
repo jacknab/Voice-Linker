@@ -99,7 +99,7 @@ export default function Membership() {
 
   useSEO({
     title: `Membership Plans — Phone Chat Line Minutes | ${siteName}`,
-    description: `Choose your ${siteName} membership plan. Affordable interactive male phone chat line minutes with no contracts. Stripe and PayPal accepted. Start with free trial minutes — no credit card needed.`,
+    description: `Choose your ${siteName} membership plan. Affordable interactive male phone chat line minutes with no contracts. Stripe and PayPal accepted. Core service is completely free — no credit card needed to start.`,
   });
 
   const paypalEnabled = !!(settings?.paypalEmail);

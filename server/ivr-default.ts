@@ -12,7 +12,7 @@ import * as engagementEngine from "./engagementEngine";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
 import { downloadRecording, twilioUrlToLocalPath, deleteLocalRecording } from "./downloadRecording";
 import { transcribeLocalFile } from "./transcribeAudio";
-import { locationToFilename, triggerLocationAudio, triggerCityWordAudio, minutesToAnnouncementText, ROGER_PROMPTS, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
+import { locationToFilename, triggerLocationAudio, triggerCityWordAudio, minutesToAnnouncementText, centsToLabel, minutesToDurationLabel } from "./audioAutogen";
 import type { BrowseQueueItem, CallerBrowseState } from "./ivr-browse-state";
 import { getBrowseState, setBrowseState, deleteBrowseState } from "./redis";
 import { registerCallerPhone, removeCallerQueue, broadcastCallersChanged } from "./ws";
@@ -38,7 +38,7 @@ function describeIvrState(pathname: string): string {
   if (path.includes("recording-rejected")) return "Fixing rejected recording";
   if (path.includes("main-menu") || path.includes("mw-main-menu")) return "At main menu";
   if (path.includes("browse-profiles") || path.includes("browse-category-ads") || path.includes("nearby-callers") || path.includes("category-ad-menu")) return "Browsing callers";
-  if (path.includes("engagement-interrupt") || path.includes("roger")) return "Listening to Roger prompt";
+  if (path.includes("engagement-interrupt") || path.includes("roger")) return "Listening to host prompt";
   if (path.includes("voicemail-inbox") || path.includes("voicemail-saved")) return "Listening to voicemail";
   if (path.includes("voicemail") || path.includes("message")) return "Using voicemail";
   if (path.includes("mailbox-lookup")) return "Looking up mailbox";
@@ -1309,7 +1309,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // ─── 1b. Shared Entry Flow ────────────────────────────────────────────────
   // Reached from both /voice and /voice/:slug after the call is registered.
   // system_greeting + disclaimer have already played in /voice or /voice/:slug.
-  // This route handles membership/account state and plays the Roger greeting.
+  // This route handles membership/account state before routing to the main flow.
   app.post("/voice/entry", async (req, res) => {
     const twiml = new VoiceResponse();
 
@@ -1325,8 +1325,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       // MW systems prompt for gender before membership — women are always free.
-      // MM systems: inline the full entry-check gates + Roger greeting here so
-      // Roger plays in the same TwiML response as the disclaimer — zero wait.
+      // MM systems: inline the full entry-check gates here for zero extra wait.
       // Exception: free mode skips all gates and goes directly to phone-booth.
       if (entrySiteConf.siteCategory === "MW") {
         twiml.redirect("/voice/gender-select");
@@ -1368,7 +1367,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                 twiml.redirect("/voice/entry-check-card");
                 inlineHandled = true;
               } else if (!entryUser.membershipTier) {
-                // Brand new — inline Roger activates free trial
+                // Brand new — inline activation of free trial
                 await applyRogerGreetingInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
                 inlineHandled = true;
               } else if (motdCfg.billingMode === "per_24h" && entryUser.membershipTier !== "free_trial") {
@@ -1386,7 +1385,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                 twiml.redirect("/voice/membership-purchase");
                 inlineHandled = true;
               } else {
-                // Returning caller with time — Roger plays inline
+                // Returning caller with time
                 await applyRogerGreetingInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
                 inlineHandled = true;
               }
@@ -2276,8 +2275,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else {
         const fromNumber = req.body?.From as string;
         if (fromNumber) {
-          const user = await getOrCreateUser(fromNumber);
-          await playRogerGreetingAudio(twiml, req, user, fromNumber, callSid);
+          await getOrCreateUser(fromNumber);
         }
         if (!callTimeAnnounced.has(callSid)) {
           playTimeRemaining(twiml, req, Math.floor(card.valueSeconds / 60));
@@ -2297,35 +2295,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── 1c. Entry Check ──────────────────────────────────────────────────────
   // Checks the caller's own account state and branches accordingly.
-  // When the caller passes all gates, Roger's greeting is played inline in the
-  // SAME HTTP response — no extra redirect round-trip to /voice/roger-greeting.
-
-  /** Strip ElevenLabs emotion tags for plain-text Twilio fallback. */
-  function stripEmotionTags(text: string): string {
-    return text.replace(/\[[\w\s]+\]/g, " ").replace(/\s{2,}/g, " ").trim();
-  }
-
-  /**
-   * Pick the pre-generated Roger greeting variant for this caller.
-   * Returns the filename (in uploads/ root) and a plain-text fallback.
-   */
-  function rogerGreetingVariant(
-    isNewCaller: boolean,
-    lastCallDate: Date | null,
-    todayCallCount: number,
-  ): { filename: string; fallback: string } {
-    const find = (name: string) => {
-      const p = ROGER_PROMPTS.find(r => r.filename === name);
-      return { filename: name, fallback: p ? stripEmotionTags(p.text) : "" };
-    };
-    if (isNewCaller || !lastCallDate) return find("roger_welcome_new.mp3");
-    const daysSince = Math.floor((Date.now() - lastCallDate.getTime()) / 86_400_000);
-    if (daysSince < 1)   return find("roger_welcome_sameday.mp3");
-    if (daysSince <= 3)  return find("roger_welcome_recent.mp3");
-    if (daysSince <= 14) return find("roger_welcome_fewdays.mp3");
-    if (daysSince <= 30) return find("roger_welcome_weeks.mp3");
-    return find("roger_welcome_longtime.mp3");
-  }
 
   async function playRogerGreetingAudio(
     twiml: InstanceType<typeof VoiceResponse>,
@@ -2334,32 +2303,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     fromNumber: string,
     callSid: string,
   ): Promise<void> {
-    const isNewCaller = !user.membershipTier;
-    const [lastCallDate, todayCallCount] = await Promise.all([
-      storage.getLastCallTimestamp(fromNumber, callSid),
-      storage.getTodayCallCount(fromNumber, callSid),
-    ]);
-
-    // Skip Roger entirely for frequent same-day callers (3rd+ call today).
-    // They've already heard him at least twice — go straight to the next step.
-    if (todayCallCount >= 3) {
-      console.log(`[roger-greeting] Skipped — frequent same-day caller (todayCallCount=${todayCallCount}) from=${fromNumber}`);
-      return;
-    }
-
-    const { filename: rogerFile, fallback: rogerFallback } = rogerGreetingVariant(isNewCaller, lastCallDate, todayCallCount);
-    const filepath = path.join(UPLOADS_DIR, rogerFile);
-
-    if (fs.existsSync(filepath)) {
-      twiml.play(`${baseUrl(req)}/uploads/${rogerFile}`);
-    } else {
-      console.warn(`[roger-greeting] Pre-generated file missing: ${rogerFile} — using TTS fallback`);
-      twiml.say({ voice: "alice" }, rogerFallback);
-    }
+    // Host prompts removed per product decision.
+    // Keep function as a no-op so existing call flow remains stable.
+    void twiml;
+    void req;
+    void user;
+    void fromNumber;
+    void callSid;
   }
 
   /**
-   * Inline Roger greeting — appends Roger audio + time announcement to twiml
+   * Inline entry handler — applies time announcement logic to twiml
    * and adds the main-menu redirect. Reuses the already-fetched user and
    * membershipConf so we avoid redundant DB calls.
    */
@@ -2374,7 +2328,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const isNewCaller = !user.membershipTier;
     await playRogerGreetingAudio(twiml, req, user, fromNumber, callSid);
 
-    const rogerFreeMode = isFreeModeActive(membershipConf);
+    const freeMode = isFreeModeActive(membershipConf);
 
     if (isNewCaller) {
       await storage.updateUserMembership(user.id, {
@@ -2382,19 +2336,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         remainingSeconds: membershipConf.freeTrialMinutes * 60,
       });
       await storage.getOrCreateMailbox(user.id);
-      console.log(`[roger-greeting] Auto-activated free trial — ${membershipConf.freeTrialMinutes} min for userId=${user.id}`);
-      if (!rogerFreeMode) {
+      console.log(`[entry] Auto-activated free trial — ${membershipConf.freeTrialMinutes} min for userId=${user.id}`);
+      if (!freeMode) {
         playTimeRemaining(twiml, req, membershipConf.freeTrialMinutes);
         playPrompt(twiml, req, "free_trial_terms.mp3",
           "Your free trial will expire in seven days and it must be used from this phone number.");
         callTimeAnnounced.add(callSid);
       }
-    } else if (!rogerFreeMode && membershipConf.billingMode === "per_24h" && user.membershipTier !== "free_trial" && user.membershipPurchasedAt) {
+    } else if (!freeMode && membershipConf.billingMode === "per_24h" && user.membershipTier !== "free_trial" && user.membershipPurchasedAt) {
       const hoursElapsed = (Date.now() - user.membershipPurchasedAt.getTime()) / 3_600_000;
       const hoursLeft = 24 - hoursElapsed;
       playBackdoorHoursRemaining(twiml, req, hoursLeft);
       callTimeAnnounced.add(callSid);
-    } else if (!rogerFreeMode) {
+    } else if (!freeMode) {
       const remainingSeconds = user.remainingSeconds ?? 0;
       if (remainingSeconds > 0) {
         playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
@@ -2436,7 +2390,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // ── Free Mode: bypass all membership/trial/balance checks ───────────────
       const freeModeSettings = await getMembershipSettingsCached();
       if (isFreeModeActive(freeModeSettings)) {
-        // Inline Roger greeting — no extra redirect hop
+        // Inline entry handling — no extra redirect hop
         await applyRogerGreetingInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
       } else {
         const linkedCard = await storage.getMembershipCardByPhone(fromNumber);
@@ -2448,7 +2402,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           twiml.redirect("/voice/entry-check-card");
         } else if (!user.membershipTier) {
-          // Brand new — inline Roger greeting activates free trial
+          // Brand new — inline entry handling activates free trial
           await applyRogerGreetingInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
         } else if (freeModeSettings.billingMode === "per_24h" && user.membershipTier !== "free_trial") {
           const purchasedAt = user.membershipPurchasedAt;
@@ -2457,14 +2411,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             playPrompt(twiml, req, "access_expired.mp3", "Your backdoor access pass has expired.");
             twiml.redirect("/voice/membership-purchase");
           } else {
-            // Inline Roger greeting — no extra redirect hop
+            // Inline entry handling — no extra redirect hop
             await applyRogerGreetingInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
           }
         } else if (remainingSeconds <= 0) {
           playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
           twiml.redirect("/voice/membership-purchase");
         } else {
-          // Returning caller with time — inline Roger greeting
+          // Returning caller with time — inline entry handling
           await applyRogerGreetingInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
         }
       }
@@ -2478,24 +2432,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
-  // ─── 1c. Roger Greeting (standalone route — kept for backward compatibility) ──
-  // Any path that still redirects here directly (e.g. external links, old Twilio
-  // call-flows) will work. New internal paths use applyRogerGreetingInline above.
+  // ─── 1c. Legacy Host Greeting Endpoint (backward compatibility) ────────────
+  // Kept so old Twilio flows do not break. Host prompt playback is disabled.
   app.post("/voice/roger-greeting", async (req, res) => {
     const twiml = new VoiceResponse();
-    const fromNumber = req.body?.From as string;
-    const callSid = req.body?.CallSid as string;
-
-    try {
-      const [user, membershipConf] = await Promise.all([
-        getOrCreateUser(fromNumber),
-        getMembershipSettingsCached(),
-      ]);
-      await applyRogerGreetingInline(twiml, req, user, fromNumber, callSid, membershipConf);
-    } catch (error) {
-      console.error("[voice] /voice/roger-greeting error:", error);
-      twiml.redirect("/voice/main-menu");
-    }
+    twiml.redirect("/voice/main-menu");
 
     res.type("text/xml");
     res.send(twiml.toString());
@@ -6918,15 +6859,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             : "fifteen bonus minutes";
           if (bustSettings.billingMode === "per_day") {
             playPrompt(twiml, req, "bust_win_hours.mp3",
-              "Roger here. You got it! That was our A I voice. One hour of bonus time has been added to your account. Nice ear.");
+              "You got it! That was our A I voice. One hour of bonus time has been added to your account. Nice ear.");
           } else {
             playPrompt(twiml, req, "bust_win_minutes.mp3",
-              "Roger here. You got it! That was our A I voice. Fifteen bonus minutes have been added to your account. Nice ear.");
+              "You got it! That was our A I voice. Fifteen bonus minutes have been added to your account. Nice ear.");
           }
           twiml.redirect("/voice/browse-profiles");
         } else if (bustResult.result === "miss") {
           playPrompt(twiml, req, "bust_miss.mp3",
-            "Roger here. Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing.");
+            "Oh, that one was real! You had one shot and missed it. Better luck next time. Back to browsing.");
           twiml.redirect("/voice/browse-profiles");
         } else {
           // No active game — treat as invalid choice
@@ -7013,23 +6954,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const promptText = rawText ? decodeURIComponent(rawText) : "";
 
       if (promptText) {
-        // Use pre-generated Roger audio file if it exists, otherwise fall back to twiml.say
-        const rogerAudioFile = promptId ? path.join(UPLOADS_DIR, `roger_${promptId}.mp3`) : null;
-        if (rogerAudioFile && fs.existsSync(rogerAudioFile)) {
-          twiml.play(`${baseUrl(req)}/uploads/roger_${promptId}.mp3`);
-          console.log(`[engagement-interrupt] Playing Roger audio file: roger_${promptId}.mp3`);
-        } else {
-          const hostName = callSid ? engagementEngine.getActivePersonalityName(callSid) : "Roger";
-          twiml.say({ voice: "alice" }, `${hostName} here. ${promptText}`);
-        }
-
-        // Record this prompt in per-caller history so Roger never repeats within 24 h
-        const fromNumber = req.body?.From as string;
-        if (promptId && fromNumber) {
-          storage.recordRogerPromptPlay(fromNumber, promptId).catch(err =>
-            console.error("[roger-history] failed to record prompt play:", err),
-          );
-        }
+        // Host persona prompts removed: play plain text only.
+        twiml.say({ voice: "alice" }, promptText);
       }
 
       if (followUp === "start_game" && callSid) {

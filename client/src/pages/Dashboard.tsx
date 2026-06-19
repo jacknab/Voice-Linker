@@ -801,7 +801,7 @@ export default function Dashboard() {
               <div style={{ marginBottom: "1.5rem", background: "#0d1a2e", border: "1px solid #1e3a5f", borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "0.75rem" }}>
                 <PhoneCall size={16} color="#60a5fa" />
                 <p style={{ color: "#93c5fd", fontSize: "0.82rem", margin: 0 }}>
-                  <strong>Free trial:</strong> New callers get {membershipSettings.freeTrialMinutes} minutes free — no credit card required.
+                  <strong>Completely free:</strong> The core chatline service is free for callers — no credit card required.
                 </p>
               </div>
             )}
@@ -978,7 +978,7 @@ export default function Dashboard() {
                 </div>
 
                 <p style={{ color: "#444", fontSize: "0.73rem", textAlign: "center", marginTop: "1rem" }}>
-                  Showing {callHistory.length} most recent completed call{callHistory.length !== 1 ? "s" : ""} · Free trial and zero-duration calls are excluded
+                  Showing {callHistory.length} most recent completed call{callHistory.length !== 1 ? "s" : ""} · Zero-duration calls are excluded
                 </p>
               </div>
             )}

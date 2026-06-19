@@ -87,11 +87,11 @@ export default function Landing() {
 
   useSEO({
     title: isMM
-      ? `Gay Chat Line & Gay Party Line | ${siteName} | Free Trial`
-      : `Free Chat Line for Singles | ${siteName} | Free Trial`,
+      ? `Completely Free Gay Chat Line & Gay Party Line | ${siteName}`
+      : `Completely Free Chat Line for Singles | ${siteName}`,
     description: isMM
-      ? `${siteName} is the #1 free gay chat line and gay party line for men in the US. Talk live to real local guys 24/7 — no app, no credit card required. Free trial minutes for every new caller.`
-      : `${siteName} is the free chat line for singles across the US. Talk live to real local men and women 24/7 — no app, no credit card required. Free trial minutes for every new caller.`,
+      ? `${siteName} is the #1 completely free gay chat line and gay party line for men in the US. Talk live to real local guys 24/7 — no app, no credit card, no limits.`
+      : `${siteName} is the completely free chat line for singles across the US. Talk live to real local men and women 24/7 — no app, no credit card, no limits.`,
     canonical: "/",
     ogImage: isMM ? "/hero_mm.png" : "/hero_mw.png",
   });
@@ -205,7 +205,7 @@ export default function Landing() {
         <img
           src={heroImg}
           alt={heroAlt}
-          fetchpriority="high"
+          fetchPriority="high"
           style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "right center", filter: "saturate(0.9) brightness(0.95)", border: "none", outline: "none" }}
         />
         {/* Dark overlay — uniform for centered text readability */}
@@ -226,7 +226,7 @@ export default function Landing() {
             <h1 style={{ fontSize: "clamp(1.8rem, 5vw, 2.8rem)", fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.15, marginBottom: "1rem", color: "#fff", textShadow: "2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 3px 3px 0 #000" }}
               data-testid="hero-headline"
             >
-              {isMM ? "Free Gay Chat Line —" : "Free Chat Line —"}<br />{isMM ? "Talk to Real Local Guys" : "Talk to Real Local Singles"}<br />Right Now — {isFreeModeActive ? "It's Free!" : "Try It Free!"}
+              {isMM ? "Completely Free Gay Chat Line —" : "Completely Free Chat Line —"}<br />{isMM ? "Talk to Real Local Guys" : "Talk to Real Local Singles"}<br />Right Now — It's Completely Free!
             </h1>
 
             {/* Glass pill */}
@@ -291,7 +291,7 @@ export default function Landing() {
             style={{ fontSize: "1.25rem", fontWeight: 800, color: "#1d6fa8", textDecoration: "none", letterSpacing: "-0.01em" }}
             data-testid="link-try-free"
           >
-            Try it FOR FREE!
+            Start chatting FREE now!
           </CallLink>
         </div>
       </section>
@@ -306,8 +306,8 @@ export default function Landing() {
           </h2>
           <p style={{ fontSize: "1rem", color: "#444", lineHeight: 1.8, marginBottom: "1.75rem" }}>
             {isMM
-              ? `An interactive male phone chat line is a live voice community where gay, bi, and curious men connect by phone — no apps, no photos, no swiping. ${siteName} is one of the premier interactive male chat lines in the US, letting callers browse real voice greetings, leave private voice messages, and go live one-on-one with someone they're interested in. All it takes is a phone call to your local access number. New callers get free trial minutes, and the line is active 24 hours a day with real men near you.`
-              : `A singles phone chat line is a live voice community where real men and women connect by phone — no apps, no photos, no swiping. ${siteName} is a premier chat line for singles across the US, letting callers browse real voice greetings, exchange private voice messages, and connect live one-on-one. All it takes is a call to your local access number. New callers get free trial minutes, and the line runs 24 hours a day.`}
+              ? `An interactive male phone chat line is a live voice community where gay, bi, and curious men connect by phone — no apps, no photos, no swiping. ${siteName} is one of the premier interactive male chat lines in the US, letting callers browse real voice greetings, leave private voice messages, and go live one-on-one with someone they're interested in. All it takes is a phone call to your local access number. The service is completely free, and the line is active 24 hours a day with real men near you.`
+              : `A singles phone chat line is a live voice community where real men and women connect by phone — no apps, no photos, no swiping. ${siteName} is a premier chat line for singles across the US, letting callers browse real voice greetings, exchange private voice messages, and connect live one-on-one. All it takes is a call to your local access number. The service is completely free, and the line runs 24 hours a day.`}
           </p>
 
           <h2 style={{ fontSize: "clamp(1.2rem, 2.5vw, 1.6rem)", fontWeight: 800, color: "#111", marginBottom: "1rem", lineHeight: 1.3 }}>
@@ -322,12 +322,12 @@ export default function Landing() {
           </p>
 
           <h2 style={{ fontSize: "clamp(1.2rem, 2.5vw, 1.6rem)", fontWeight: 800, color: "#111", marginBottom: "1rem", lineHeight: 1.3 }}>
-            Free Trial — No Credit Card Required
+            Completely Free — No Credit Card Required
           </h2>
           <p style={{ fontSize: "1rem", color: "#444", lineHeight: 1.8 }}>
             {isMM
-              ? `Every new caller on the ${siteName} gay chat line gets free trial minutes — no credit card, no commitment, no strings. Just dial your local number and you're in. Browse greetings from real gay men in your area, send private voice messages, and connect live. Your free trial starts on your first call and lasts for 7 days, so you have plenty of time to explore the system at your own pace.`
-              : `Every new caller on ${siteName} gets free trial minutes — no credit card, no commitment. Just dial your local singles chat line number and you're in. Browse greetings from real people near you, leave voice messages, and connect live. Your free trial starts on your first call and is valid for 7 days.`}
+              ? `Every caller on the ${siteName} gay chat line gets completely free access — no credit card, no commitment, no strings. Just dial your local number and you're in. Browse greetings from real gay men in your area, send private voice messages, and connect live.`
+              : `Every caller on ${siteName} gets completely free access — no credit card, no commitment. Just dial your local singles chat line number and you're in. Browse greetings from real people near you, leave voice messages, and connect live.`}
           </p>
         </div>
       </section>
@@ -409,7 +409,7 @@ export default function Landing() {
                 heading: "Account",
                 links: [
                   { label: "Buy Time", href: "/membership" },
-                  { label: "Free Trial", href: "/membership" },
+                  { label: "Completely Free", href: "/membership" },
                   { label: "Memberships", href: "/membership" },
                 ],
               },

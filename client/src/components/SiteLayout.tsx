@@ -110,7 +110,7 @@ export function SiteNav({ siteName, onMenuToggle, mobileOpen }: {
           <Link href="/membership" onClick={onMenuToggle}
             style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
             data-testid="mobile-nav-free-trial">
-            Free Trial
+            Completely Free
           </Link>
           <Link href="/membership" onClick={onMenuToggle}
             style={{ display: "block", color: "#ccc", textDecoration: "none", fontSize: "0.95rem", fontWeight: 500, padding: "0.65rem 0", borderBottom: "1px solid #1e1e1e" }}
