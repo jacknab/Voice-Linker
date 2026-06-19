@@ -828,6 +828,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // --- Twilio Voice Webhooks ---
 
   async function getOrCreateUser(phoneNumber: string) {
+    // Hard guard: never create (or return) an account for a blocked/private caller.
+    // Twilio sends From="anonymous" for callers with hidden caller ID.
+    // We also reject any string with fewer than 10 digits — those are not real
+    // E.164 numbers and should never have been routed here.
+    const digits = (phoneNumber ?? "").replace(/\D/g, "");
+    if (
+      !phoneNumber ||
+      phoneNumber.toLowerCase() === "anonymous" ||
+      !/^\+?[0-9]+$/.test(phoneNumber) ||
+      digits.length < 10
+    ) {
+      throw new Error(
+        `[getOrCreateUser] Refusing to create account for non-identifiable caller: "${phoneNumber}"`
+      );
+    }
+
     // Check if this number is an alternate number linked to a primary membership
     const primaryPhone = await storage.getPrimaryPhoneForAltNumber(phoneNumber);
     const effectivePhone = primaryPhone ?? phoneNumber;
@@ -1856,38 +1872,63 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
-  // ─── Anonymous Guest Entry Gate ────────────────────────────────────────────
+  // ─── Anonymous Caller Membership Gate ─────────────────────────────────────
   // After the disclaimer, anonymous callers (no caller ID) land here.
-  // They can enter a 5-digit membership card number OR press # to browse as a guest.
-  // Guests reach the main menu but are gated when they try any pay area.
+  // They MUST provide a valid membership to enter — there is no guest bypass.
+  //   • Enter a 5-digit calling card number (physical card), OR
+  //   • Press * to authenticate with a 10-digit account number + PIN.
+  // Callers who provide no valid membership are told to call back with
+  // caller ID enabled and the call ends.
 
   app.post("/voice/anon-entry", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({
       numDigits: 5,
-      finishOnKey: "#",
+      finishOnKey: "",
       action: "/voice/handle-anon-entry",
       timeout: 30,
       actionOnEmptyResult: true,
     });
     playPrompt(gather, req, "anon_membership_or_pound.mp3",
-      "If you have a membership, please enter it now, otherwise press pound.");
-    // Timeout with no input — re-prompt once
-    twiml.redirect("/voice/anon-entry");
+      "Your caller I D is not showing. To access this system, please enter your 5-digit membership card number now. Or press star to use your account number.");
+    // Timeout with no input — re-prompt once then hang up
+    const gather2 = twiml.gather({
+      numDigits: 5,
+      finishOnKey: "",
+      action: "/voice/handle-anon-entry",
+      timeout: 20,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather2, req, "anon_membership_or_pound.mp3",
+      "No input received. Please enter your 5-digit membership card number, or press star to use your account number.");
+    playPrompt(twiml, req, "goodbye.mp3",
+      "No membership number entered. To use this service, please call back with your caller I D enabled. Goodbye.");
+    twiml.hangup();
     res.type("text/xml");
     res.send(twiml.toString());
   });
 
   app.post("/voice/handle-anon-entry", async (req, res) => {
     const twiml = new VoiceResponse();
-    const digits = (req.body?.Digits as string ?? "").replace(/#/g, "").trim();
+    const rawDigits = (req.body?.Digits as string ?? "").trim();
     const callSid = req.body?.CallSid as string;
 
+    // Caller pressed * — redirect to 10-digit account number + PIN auth
+    if (rawDigits === "*") {
+      console.log(`[voice] anon-entry: caller pressed * — redirecting to account auth (callSid=${callSid})`);
+      twiml.redirect("/voice/anon-auth");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const digits = rawDigits.replace(/[^0-9]/g, "");
+
     if (!digits) {
-      // Caller pressed # (or sent empty) — enter as anonymous guest
-      anonGuestCallSids.add(callSid);
-      console.log(`[voice] anon-entry: caller pressed # — entering as anonymous guest (callSid=${callSid})`);
-      twiml.redirect("/voice/main-menu");
+      // No input — tell caller they must have a membership and hang up
+      console.log(`[voice] anon-entry: no input — hanging up anonymous caller (callSid=${callSid})`);
+      playPrompt(twiml, req, "goodbye.mp3",
+        "A membership number is required to access this system. Please call back with your caller I D enabled, or obtain a membership card. Goodbye.");
+      twiml.hangup();
     } else if (digits.length === 5) {
       // 5-digit membership card number entered
       try {
@@ -1913,7 +1954,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else {
       // Invalid input length — re-prompt
       playPrompt(twiml, req, "anon_membership_or_pound.mp3",
-        "If you have a membership, please enter it now, otherwise press pound.");
+        "Please enter your 5-digit membership card number. Or press star to use your account number.");
       twiml.redirect("/voice/anon-entry");
     }
 
@@ -2274,7 +2315,16 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.hangup();
       } else {
         const fromNumber = req.body?.From as string;
-        if (fromNumber) {
+        // Only try to create/find a user account if the caller has a real phone number.
+        // Anonymous card-holders (blocked caller ID) are identified by their card only —
+        // we must NOT call getOrCreateUser with "anonymous".
+        const callerDigits = (fromNumber ?? "").replace(/\D/g, "");
+        const hasRealNumber =
+          fromNumber &&
+          fromNumber.toLowerCase() !== "anonymous" &&
+          /^\+?[0-9]+$/.test(fromNumber) &&
+          callerDigits.length >= 10;
+        if (hasRealNumber) {
           await getOrCreateUser(fromNumber);
         }
         if (!callTimeAnnounced.has(callSid)) {
