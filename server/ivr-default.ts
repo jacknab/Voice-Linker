@@ -1397,41 +1397,27 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       return res.send(twiml.toString());
     }
 
-    try {
-      await getSiteSettingsCached();
-      storage.removeStaleActiveCalls(3).catch(() => {});
-      storage.logCall(callSid, fromNumber, calledTo, null).catch(() => {});
-      registerStatusCallback(callSid, req).catch(() => {});
+    // Log the raw call and register the status callback immediately —
+    // but do NOT create a user account yet. Account creation is deferred to
+    // /voice/entry so that misdialed calls that hang up during the greeting
+    // never produce phantom database records.
+    storage.removeStaleActiveCalls(3).catch(() => {});
+    storage.logCall(callSid, fromNumber, calledTo, null).catch(() => {});
+    registerStatusCallback(callSid, req).catch(() => {});
 
-      const user = await getOrCreateUser(fromNumber);
-      await storage.removeActiveCallsByUser(user.id);
-      await storage.registerActiveCall(callSid, user.id);
-      broadcastCallersChanged();
-      const caller = await storage.getCallerByCallSid(callSid);
-      console.log(`[voice] registered caller ${callSid} from ${fromNumber}`);
-
-      if (!caller?.greetingPlayed) {
-        // Wrap greeting + disclaimer in a Gather so pressing any key skips them.
-        // timeout:0 means the gather fires the action immediately after the
-        // audio finishes if no key was pressed (actionOnEmptyResult ensures this).
-        const skipGather = twiml.gather({
-          numDigits: 1,
-          action: "/voice/entry",
-          timeout: 0,
-          actionOnEmptyResult: true,
-        });
-        playPrompt(skipGather, req, "system_greeting.mp3",
-          "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
-        playPrompt(skipGather, req, "disclaimer.mp3",
-          "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
-        await storage.markCallerGreetingPlayed(callSid);
-      }
-      twiml.redirect("/voice/entry");
-    } catch (err) {
-      console.error(`[voice] caller registration failed ${callSid}:`, err);
-      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
-      twiml.hangup();
-    }
+    // Always play the greeting + disclaimer (skippable by pressing any key).
+    // Caller lands at /voice/entry once the greeting is done (or skipped).
+    const skipGather = twiml.gather({
+      numDigits: 1,
+      action: "/voice/entry",
+      timeout: 0,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(skipGather, req, "system_greeting.mp3",
+      "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
+    playPrompt(skipGather, req, "disclaimer.mp3",
+      "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
+    twiml.redirect("/voice/entry");
 
     res.type("text/xml");
     res.send(twiml.toString());
@@ -1476,6 +1462,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (entryFrom && entrySid) {
           try {
             const entryUser = await getOrCreateUser(entryFrom);
+
+            // Account now exists — register the active call so the caller appears
+            // in the live dashboard. This is the earliest safe point: the caller has
+            // heard (or skipped) the greeting, so they intend to use the service.
+            await storage.removeActiveCallsByUser(entryUser.id);
+            await storage.registerActiveCall(entrySid, entryUser.id);
+            broadcastCallersChanged();
 
             if (entryUser.accountStatus === "banned") {
               playPrompt(twiml, req, "caller_banned.mp3",
@@ -6317,10 +6310,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // Announce caller count exactly once per session — right before the first profile.
         if (!state.callerCountAnnounced) {
           state.callerCountAnnounced = true;
-          const homeCount = await storage.getActiveCallerCount(user.id, state.callerRegionId ?? undefined, browseCallerGender);
+          // Use getAvailableProfileCount (requires a recording) so the announced
+          // number matches the profiles that will actually play, not all active calls.
+          const homeCount = await storage.getAvailableProfileCount(user.id, state.callerRegionId ?? undefined, browseCallerGender, browseSiteCategory);
           let regionalTotal = homeCount;
           for (const snap of state.linkedRegionSnapshots) {
-            regionalTotal += await storage.getActiveCallerCount(user.id, snap.regionId, browseCallerGender);
+            regionalTotal += await storage.getAvailableProfileCount(user.id, snap.regionId, browseCallerGender, browseSiteCategory);
           }
           console.log(`[voice] browse-profiles: announcing caller count: ${regionalTotal} (home=${homeCount}, linkedRegions=${state.linkedRegionSnapshots.length})`);
           playCallerCount(twiml, req, regionalTotal);
@@ -8423,32 +8418,22 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
+      // Log + status only — no account creation yet (same deferred pattern as /voice).
       storage.removeStaleActiveCalls(3).catch(() => {});
       storage.logCall(callSid, fromNumber, region.phoneNumber, region.id).catch(() => {});
       registerStatusCallback(callSid, req).catch(() => {});
 
-      const regionId = region.id;
-      const user = await getOrCreateUser(fromNumber);
-      await storage.removeActiveCallsByUser(user.id);
-      await storage.registerActiveCall(callSid, user.id, regionId);
-      broadcastCallersChanged();
-      const caller = await storage.getCallerByCallSid(callSid);
-      console.log(`[voice] [${slug}] registered caller ${callSid} from ${fromNumber}`);
-
-      if (!caller?.greetingPlayed) {
-        // Wrap greeting + disclaimer in a Gather so pressing any key skips them.
-        const skipGather = twiml.gather({
-          numDigits: 1,
-          action: "/voice/entry",
-          timeout: 0,
-          actionOnEmptyResult: true,
-        });
-        playPrompt(skipGather, req, "system_greeting.mp3",
-          "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
-        playPrompt(skipGather, req, "disclaimer.mp3",
-          "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
-        await storage.markCallerGreetingPlayed(callSid);
-      }
+      // Always play greeting + disclaimer (skippable). Account created in /voice/entry.
+      const skipGather = twiml.gather({
+        numDigits: 1,
+        action: "/voice/entry",
+        timeout: 0,
+        actionOnEmptyResult: true,
+      });
+      playPrompt(skipGather, req, "system_greeting.mp3",
+        "Welcome to the Male Box. This service is for guys looking to connect with other local guys. No filters, no pressure — just real guys looking to connect.");
+      playPrompt(skipGather, req, "disclaimer.mp3",
+        "The Male Box is for callers 18 and over. If that's not you, hang up now. We do not check out callers to this line, so please use common sense and caution before giving out your address or phone number.");
       // Hand off to the shared entry flow (account state detection)
       twiml.redirect("/voice/entry");
     } catch (error) {
