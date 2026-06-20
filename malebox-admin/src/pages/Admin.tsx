@@ -4070,7 +4070,6 @@ function DashboardTab() {
 
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
-    refetchInterval: 30000,
   });
 
   const { data: siteData } = useQuery<{ siteCategory: string }>({
@@ -4083,12 +4082,10 @@ function DashboardTab() {
   const { data: mailboxStats } = useQuery<MailboxStats>({
     queryKey: ["/api/admin/mailbox-stats"],
     enabled: isMM,
-    refetchInterval: 30000,
   });
 
   const { data: liveCallersData, dataUpdatedAt: liveCallersUpdatedAt } = useQuery<LiveCallersResponse>({
     queryKey: ["/api/admin/live-callers"],
-    refetchInterval: 30000,
   });
 
   const { data: liveConnectionsData } = useQuery<{
@@ -4102,7 +4099,6 @@ function DashboardTab() {
     count: number;
   }>({
     queryKey: ["/api/admin/live-connections"],
-    refetchInterval: 30000,
   });
 
   const liveCallers = liveCallersData?.callers ?? [];
@@ -4110,7 +4106,6 @@ function DashboardTab() {
 
   const { data: redisStatus, isLoading: redisLoading, isFetching: redisFetching, refetch: refetchRedis } = useQuery<RedisStatus>({
     queryKey: ["/api/admin/redis/status"],
-    refetchInterval: 30000,
   });
 
   const [flushConfirm, setFlushConfirm] = useState(false);
@@ -4331,7 +4326,7 @@ function DashboardTab() {
               {liveConnectionsData?.count ?? 0} active
             </span>
           </div>
-          <span className="font-mono text-[10px] text-gray-400">Auto-refresh 5s</span>
+          <span className="font-mono text-[10px] text-gray-400">Updated via WebSocket</span>
         </div>
         <div className="p-5">
           {!liveConnectionsData || liveConnectionsData.sessions.length === 0 ? (
@@ -4383,7 +4378,7 @@ function DashboardTab() {
               Redis State Store
             </h3>
             <p className="text-gray-400 font-mono text-xs -mt-1">
-              Real-time caller browse session persistence. Refreshes every 30s.
+              Real-time caller browse session persistence.
             </p>
           </div>
           <div className="flex items-center gap-2">
