@@ -688,10 +688,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (digit !== "0") return next();
 
       const fromNumber = req.body?.From as string | undefined;
+      const callSid = req.body?.CallSid as string | undefined;
       let totalMinutes = 0;
       if (fromNumber) {
         try {
-          const user = await getOrCreateUser(fromNumber);
+          const user = await getOrCreateUser(fromNumber, callSid);
           totalMinutes = Math.max(0, Math.floor((user.remainingSeconds ?? 0) / 60));
         } catch (err: any) {
           console.warn(`[press-0] User lookup failed for From=${fromNumber}: ${err?.message ?? err}`);
@@ -727,7 +728,23 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // --- Twilio Voice Webhooks ---
 
-  async function getOrCreateUser(phoneNumber: string) {
+  function syntheticPhoneForCard(cardId: string): string {
+    const digits = cardId.replace(/[^0-9]/g, "");
+    return `0${digits}`.padEnd(10, "0").slice(0, 15);
+  }
+
+  async function getOrCreateUser(phoneNumber: string, callSid?: string) {
+    if (phoneNumber && !isRealPhoneNumber(phoneNumber)) {
+      if (callSid) {
+        const overridePhone = callMembershipOverride.get(callSid);
+        if (overridePhone) return getOrCreateUser(overridePhone);
+        const cardId = callCardOverride.get(callSid);
+        if (cardId) return getOrCreateUser(syntheticPhoneForCard(cardId));
+      }
+      throw new Error(
+        `[getOrCreateUser] Refusing to create account for non-identifiable caller: "${phoneNumber}"`
+      );
+    }
     // Check if this number is an alternate number linked to a primary membership
     const primaryPhone = await storage.getPrimaryPhoneForAltNumber(phoneNumber);
     const effectivePhone = primaryPhone ?? phoneNumber;
@@ -1111,7 +1128,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     try {
       // Fire-and-forget cleanup — doesn't affect response content.
       storage.removeStaleActiveCalls(20).catch(() => {});
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       // Fire-and-forget — removes lingering rows from a previous missed status callback.
       storage.removeActiveCallsByUser(user.id).catch(() => {});
       await storage.registerActiveCall(callSid, user.id);
@@ -1503,7 +1520,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const overridePhone = callMembershipOverride.get(callSid);
       const user = overridePhone
         ? await storage.getOrCreateUser(overridePhone)
-        : await getOrCreateUser(fromNumber);
+        : await getOrCreateUser(fromNumber, callSid);
 
       const remainingSeconds = user.remainingSeconds ?? 0;
 
@@ -1813,7 +1830,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const callSid = req.body?.CallSid as string;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const remainingSeconds = user.remainingSeconds ?? 0;
 
       // ── Moderation gate ─────────────────────────────────────────────────────
@@ -1929,7 +1946,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       try {
         const freeTrialMinutes = (await getMembershipSettingsCached()).freeTrialMinutes;
         const freeTrialSeconds = freeTrialMinutes * 60;
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         await storage.updateUserMembership(user.id, {
           membershipTier: "free_trial",
           remainingSeconds: freeTrialSeconds,
@@ -2005,7 +2022,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.error("[voice] phone-booth motd error:", err);
       }
 
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const profile = await storage.getProfile(user.id);
 
       if (!profile) {
@@ -2093,7 +2110,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (nameRecordingUrl) pendingNameRecordings.delete(callSid);
 
       // Save immediately to DB so playback works right away at the review screen
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
 
       // Delete old local files if the caller is re-recording
       const existingProfile = await storage.getProfile(user.id);
@@ -2165,7 +2182,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         hasMembership = true;
         remainingSeconds = card?.valueSeconds ?? 0;
       } else {
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         hasMembership = !!user.membershipTier;
         remainingSeconds = user.remainingSeconds ?? 0;
       }
@@ -2278,7 +2295,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         hasMembership = true;
         remainingSeconds = card?.valueSeconds ?? 0;
       } else {
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         hasMembership = !!user.membershipTier;
         remainingSeconds = user.remainingSeconds ?? 0;
       }
@@ -2469,7 +2486,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     try {
       if (digit === "1" || digit === "2" || digit === "3") {
         const returnTo = digit === "1" ? "mailbox" : digit === "2" ? "record" : "listen";
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         const mailbox = await storage.getMailboxByUserId(user.id);
 
         // If mailbox doesn't exist or setup is explicitly marked incomplete, run setup
@@ -2770,7 +2787,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     try {
       if (digit === "1") {
         // Ready — create the mailbox and reveal the number
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         const mailbox = await storage.createMailboxForSetup(user.id);
         const state = mailboxSetupState.get(callSid) || { returnTo };
         // Save profile fields collected so far
@@ -2810,7 +2827,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const returnTo = (req.query.returnTo as string) || "mailbox";
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const mailbox = await storage.getMailboxByUserId(user.id);
 
       if (!mailbox) {
@@ -2857,12 +2874,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     try {
       if (digit === "#") {
         // Create a new passcode — clear existing PIN so setup flow works
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         await storage.updateUserMembership(user.id, { membershipPin: null });
         twiml.redirect(`/voice/setup-mailbox-create-passcode?returnTo=${returnTo}`);
       } else {
         // Keep existing passcode — mark setup complete
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         await storage.updateMailboxProfile(user.id, { setupComplete: true });
         mailboxSetupState.delete(callSid);
         twiml.redirect(`/voice/setup-mailbox-complete?returnTo=${returnTo}`);
@@ -2949,7 +2966,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       // Passcodes match — save as membershipPin and mark setup complete
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       await storage.updateUserMembership(user.id, { membershipPin: digits });
       await storage.updateMailboxProfile(user.id, { setupComplete: true });
       mailboxSetupState.delete(callSid);
@@ -3005,7 +3022,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const callSid = req.body?.CallSid as string;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
 
       // ── Personal-ad recording rejection gate ─────────────────────────────
       if (user.recordingRejectionReason && user.recordingRejectionType === "personal_ad") {
@@ -3092,7 +3109,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const fromNumber = req.body?.From as string;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const mailbox = await storage.getMailboxByUserId(user.id);
 
       if (digit === "1") {
@@ -3125,7 +3142,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const fromNumber = req.body?.From as string;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const mailbox = await storage.getMailboxByUserId(user.id);
 
       if (mailbox?.adRecordingUrl) {
@@ -3159,7 +3176,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const fromNumber = req.body?.From as string;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const mailbox = await storage.getMailboxByUserId(user.id);
 
       if (digit === "1") {
@@ -3202,7 +3219,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       const recordingUrl = await downloadRecording(rawRecordingUrl);
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const mailbox = await storage.getMailboxByUserId(user.id);
       // Delete old local file if the caller is re-recording their mailbox greeting
       deleteLocalRecording(mailbox?.adRecordingUrl);
@@ -3380,7 +3397,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const category = req.query.category as string;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const categoryLabel = MAILBOX_CATEGORIES[category] || category;
 
       // Build or reuse the queue for this call + category
@@ -3539,7 +3556,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       // Rejection gate — intercept before the send-message menu plays
       if (fromNumber) {
-        const lookupUser = await getOrCreateUser(fromNumber);
+        const lookupUser = await getOrCreateUser(fromNumber, callSid);
         if (lookupUser.recordingRejectionReason && lookupUser.recordingRejectionType === "greeting") {
           const rejectionRoute = lookupUser.recordingRejectionReason === "phone_number"
             ? "/voice/recording-rejected-phone-number"
@@ -3629,7 +3646,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const categoryLabel = MAILBOX_CATEGORIES[category] || category;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const mailbox = await storage.getMailboxByUserId(user.id);
 
       if (mailbox?.adRecordingUrl && mailbox.category === category) {
@@ -3671,7 +3688,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         );
         twiml.record({ maxLength: 60, playBeep: true, action: `/voice/save-category-ad?category=${category}` } as any);
       } else if (digit === "2") {
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         const mailbox = await storage.getMailboxByUserId(user.id);
         if (mailbox?.adRecordingUrl) {
           safePlayRecording(twiml, mailbox.adRecordingUrl, req, "Your ad is not available for playback.");
@@ -3713,7 +3730,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       const recordingUrl = await downloadRecording(rawRecordingUrl);
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       // Delete old local file if the caller is re-recording their category ad
       const existingMailbox = await storage.getMailboxByUserId(user.id);
       deleteLocalRecording(existingMailbox?.adRecordingUrl);
@@ -3909,7 +3926,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const siteConf = await getSiteSettingsCached();
       const isMW = siteConf.siteCategory === "MW";
 
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const tier = user.membershipTier ?? "none";
       const tierMsg = tier === "free_trial" ? "You are on a free trial." : tier !== "none" ? "You have an active membership." : "You do not have an active membership.";
 
@@ -4105,7 +4122,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const fromNumber = req.body?.From as string;
     let snapshot = "";
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const remaining = user.remainingSeconds ?? 0;
       const tier = user.membershipTier === "free_trial" ? "a free trial"
         : user.membershipTier ? "a paid membership"
@@ -4142,7 +4159,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
     try {
-      const user    = await getOrCreateUser(fromNumber);
+      const user    = await getOrCreateUser(fromNumber, callSid);
       const profile = await storage.getProfile(user.id);
       const remaining = user.remainingSeconds ?? 0;
       const tier = user.membershipTier === "free_trial" ? "Free trial"
@@ -4192,7 +4209,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const fromNumber = req.body?.From as string;
     let planContext = "";
     try {
-      const [user, settings] = await Promise.all([getOrCreateUser(fromNumber), getMembershipSettingsCached()]);
+      const [user, settings] = await Promise.all([getOrCreateUser(fromNumber, callSid), getMembershipSettingsCached()]);
       if (user.membershipTier === "free_trial") {
         planContext = `You are on a free trial with ${settings.freeTrialMinutes} minutes. `;
       } else if (user.membershipTier) {
@@ -4256,7 +4273,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     let isFreeTrialCaller = false;
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       isFreeTrialCaller = user.membershipTier === "free_trial";
     } catch (err) {
       console.error("[voice] time-warning user lookup error:", err);
@@ -4324,7 +4341,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     }
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const result = await storage.redeemPromoCode(digits, user.id);
       if ("error" in result) {
         const PROMO_ERROR_FILES: Record<string, string> = {
@@ -4389,7 +4406,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else if (digit === "3") {
       // HEAR existing greeting then loop back
       try {
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         const profile = await storage.getProfile(user.id);
         if (profile?.recordingUrl) {
           playPrompt(twiml, req, "here_is_your_greeting.mp3", "Here is what your greeting sounds like.");
@@ -4426,7 +4443,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // was listening to the review menu. This route loops on each Gather timeout
       // so the rejection is caught within seconds of the transcription check firing.
       if (fromNumber) {
-        const reviewUser = await getOrCreateUser(fromNumber);
+        const reviewUser = await getOrCreateUser(fromNumber, callSid);
         if (reviewUser.recordingRejectionReason && reviewUser.recordingRejectionType === "greeting") {
           const rejectionRoute = reviewUser.recordingRejectionReason === "phone_number"
             ? "/voice/recording-rejected-phone-number"
@@ -4461,7 +4478,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (digit === "1") {
         // Accept — check if auto-moderation has already rejected this recording
         // (the transcription callback may have fired while the caller was reviewing)
-        const acceptUser = await getOrCreateUser(fromNumber);
+        const acceptUser = await getOrCreateUser(fromNumber, callSid);
         if (acceptUser.recordingRejectionReason && acceptUser.recordingRejectionType === "greeting") {
           const rejectionRoute = acceptUser.recordingRejectionReason === "phone_number"
             ? "/voice/recording-rejected-phone-number"
@@ -4480,7 +4497,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.record({ maxLength: 5, playBeep: true, action: "/voice/save-name" });
       } else if (digit === "3") {
         // Play back the saved greeting so the caller can hear it again
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         const profile = await storage.getProfile(user.id);
         if (profile?.recordingUrl) {
           playPrompt(twiml, req, "here_is_your_greeting.mp3", "Here is what your greeting sounds like.");
@@ -4532,7 +4549,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       // Only save if exactly 5 numeric digits were entered
       if (/^\d{5}$/.test(digits)) {
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         const geoRaw = await lookupZipCode(digits);
         const geo = geoRaw
           ? { latitude: parseFloat(geoRaw.latitude), longitude: parseFloat(geoRaw.longitude), city: geoRaw.city, state: geoRaw.state, neighborhood: geoRaw.neighborhood }
@@ -4577,7 +4594,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const callSid = req.body?.CallSid as string;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const regionId = callRegion.get(callSid);
 
       // Restricted users cannot go live
@@ -4634,7 +4651,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Sync billing before playing the next greeting — deducts elapsed seconds since last check
       await syncBilling(callSid);
 
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const regionId = callRegion.get(callSid);
 
       // ── Greeting rejection gate ───────────────────────────────────────────
@@ -5112,7 +5129,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       if (digit === "1" && state && chosenRegionId) {
         // Load profiles from the first linked region (primary offer)
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         const callerZip = user.zipCodeId ? await storage.getZipEntryById(user.zipCodeId) : null;
         const callerLat = callerZip?.latitude ?? null;
         const callerLon = callerZip?.longitude ?? null;
@@ -5193,7 +5210,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           playPrompt(twiml, req, "error_generic.mp3", "Sorry, we could not start a live connection. Returning to profiles.");
           twiml.redirect("/voice/browse-profiles");
         } else {
-          const user = await getOrCreateUser(fromNumber);
+          const user = await getOrCreateUser(fromNumber, callSid);
           const liveConnectSettings = await getMembershipSettingsCached();
           const liveConnectFreeMode = liveConnectSettings.freeMode === true;
           if (!liveConnectFreeMode && (user.remainingSeconds ?? 0) < 300) {
@@ -5271,7 +5288,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else if (digit === "4") {
         // ── Hear the last message you sent them ───────────────────────────────
         if (fromNumber && senderId) {
-          const user = await getOrCreateUser(fromNumber);
+          const user = await getOrCreateUser(fromNumber, callSid);
           const lastSent = await storage.getLastSentMessageToUser(user.id, senderId);
           const replayGather = twiml.gather({
             numDigits: 1,
@@ -5297,7 +5314,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       } else if (digit === "7") {
         // ── Block the message sender ──────────────────────────────────────────
         if (fromNumber && senderId) {
-          const user = await getOrCreateUser(fromNumber);
+          const user = await getOrCreateUser(fromNumber, callSid);
           // Mark ALL unread messages from this sender as read so they don't surface again
           await storage.markAllMessagesReadFromSender(senderId, user.id);
           await storage.blockUser(user.id, senderId);
@@ -5416,7 +5433,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           playPrompt(twiml, req, "error_generic.mp3", "Sorry, we could not start a live connection. Returning to profiles.");
           twiml.redirect("/voice/browse-profiles");
         } else {
-          const user = await getOrCreateUser(fromNumber);
+          const user = await getOrCreateUser(fromNumber, callSid);
           const liveConnectSettings = await getMembershipSettingsCached();
           const liveConnectFreeMode = liveConnectSettings.freeMode === true;
 
@@ -5506,7 +5523,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const fromNumber = req.body?.From as string;
         const callSid = req.body?.CallSid as string;
         if (fromNumber && profileUserId) {
-          const user = await getOrCreateUser(fromNumber);
+          const user = await getOrCreateUser(fromNumber, callSid);
           await storage.blockUser(user.id, profileUserId);
           await removeFromBrowseQueue(callSid, profileUserId);
           console.log(`[voice] handle-profile-menu: userId=${user.id} blocked profileUserId=${profileUserId}`);
@@ -5608,7 +5625,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         // ── Flag this profile for review ────────────────────────────────────
         const fromNumber = req.body?.From as string;
         if (fromNumber && profileUserId) {
-          const user = await getOrCreateUser(fromNumber);
+          const user = await getOrCreateUser(fromNumber, callSid);
           await storage.createFlaggedItem({
             contentType: "profile",
             contentId: profileUserId,
@@ -5760,7 +5777,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         return res.send(twiml.toString());
       }
 
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const callerProfile  = await storage.getProfile(user.id);
       const resolvedCallSid = initiatorCallSid || callSid;
       const conferenceRoom  = `live-${resolvedCallSid}`;
@@ -5924,7 +5941,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const callSid = req.body?.CallSid as string;
 
     try {
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
       const invite = pendingLiveInvites.get(user.id);
 
       // Guard: invite must still be valid
@@ -6202,7 +6219,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (digit === "1") {
         // Send the message
         pendingMessages.delete(callSid);
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         if (returnTo === "mailbox" || returnTo === "category") {
           await syncBilling(callSid);
         }
@@ -6297,7 +6314,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const recordingUrl = await downloadRecording(rawRecordingUrl);
       const returnTo = req.query.returnTo as string;
       const category = req.query.category as string;
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
 
       // Mailbox reply: billing is per-minute on the recording time.
       // syncBilling captures the time elapsed during the recording (reply to ad).
@@ -6477,7 +6494,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     let isFirstPurchase = false;
     if (settings.bonusPlanKey === pkg.name) {
       try {
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         isFirstPurchase = !user.membershipTier || user.membershipTier === "free_trial";
       } catch {
         isFirstPurchase = false;
@@ -6698,7 +6715,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     if (result === "success") {
       try {
-        const user = await getOrCreateUser(fromNumber);
+        const user = await getOrCreateUser(fromNumber, callSid);
         const packages = await getMembershipPackages();
         const pkg = Object.values(packages).find(p => p.name === session.packageName);
         const baseMinutes = pkg?.minutes ?? (await getMembershipSettingsCached()).plan3Minutes;
@@ -6809,7 +6826,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // Fire-and-forget cleanup — doesn't affect response content.
       storage.removeStaleActiveCalls(20).catch(() => {});
 
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(fromNumber, callSid);
 
       // Fire-and-forget — removes lingering rows from a previous missed status callback.
       storage.removeActiveCallsByUser(user.id).catch(() => {});
