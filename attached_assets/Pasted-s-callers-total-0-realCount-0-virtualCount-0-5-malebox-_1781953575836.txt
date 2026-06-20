@@ -1,0 +1,20 @@
+s :: {"callers":[],"total":0,"realCount":0,"virtualCount":0}
+5|malebox  | 2026-06-20 11:02:18 +00:00: [voice] POST /denver | From=Anonymous CallSid=CA2c33f77e10543a8e84d9e252d7e4e1e6 Digits=undefined CallStatus=ringing
+5|malebox  | 2026-06-20 11:02:18 +00:00: [status] Registered status callback for CA2c33f77e10543a8e84d9e252d7e4e1e6 → https://malebox.net/voice/status
+5|malebox  | 2026-06-20 11:02:39 +00:00: [voice] POST /entry | From=Anonymous CallSid=CA2c33f77e10543a8e84d9e252d7e4e1e6 Digits= CallStatus=in-progress
+5|malebox  | 2026-06-20 11:02:39 +00:00: [voice] /voice/entry inline check failed — falling back to entry-check redirect: Error: [getOrCreateUser] Refusing to create account for non-identifiable caller: "Anonymous"
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at r (/opt/Voice-Linker/dist/index.cjs:1438:45542)
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at /opt/Voice-Linker/dist/index.cjs:1438:56080
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+5|malebox  | 2026-06-20 11:02:39 +00:00: [voice] POST /entry-check | From=Anonymous CallSid=CA2c33f77e10543a8e84d9e252d7e4e1e6 Digits=undefined CallStatus=in-progress
+5|malebox  | 2026-06-20 11:02:39 +00:00: [voice] /voice/entry-check error: Error: [getOrCreateUser] Refusing to create account for non-identifiable caller: "Anonymous"
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at r (/opt/Voice-Linker/dist/index.cjs:1438:45542)
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at /opt/Voice-Linker/dist/index.cjs:1438:78607
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at il.handleRequest (/opt/Voice-Linker/dist/index.cjs:31:15984)
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at u (/opt/Voice-Linker/dist/index.cjs:31:17903)
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at rl.dispatch (/opt/Voice-Linker/dist/index.cjs:31:17659)
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at r (/opt/Voice-Linker/dist/index.cjs:31:21734)
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at il.handleRequest (/opt/Voice-Linker/dist/index.cjs:31:15984)
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at /opt/Voice-Linker/dist/index.cjs:31:20615
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at bne (/opt/Voice-Linker/dist/index.cjs:31:22637)
+5|malebox  | 2026-06-20 11:02:39 +00:00:     at f (/opt/Voice-Linker/dist/index.cjs:31:20568)
