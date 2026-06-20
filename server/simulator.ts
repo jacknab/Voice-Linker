@@ -334,20 +334,13 @@ async function runSeedSession(
   log(`seed session END userId=${userId}`, "simulator");
 }
 
-// ─── Admin seed maintenance: tops up seeds while real callers are present ──────
-// Runs every minute. Only activates seeds when at least one real caller is on
-// the line — the system stays silent otherwise. Seeds are started by
-// triggerSeedActivity() the moment a caller hits the main menu; this loop
-// handles top-ups for long calls (sessions expire after 30 min).
+// ─── Admin seed maintenance: always keeps seeds topped up ─────────────────────
+// Runs every minute. Admin-uploaded seeds are kept online continuously so the
+// queue is always populated when a real caller arrives. Sessions expire after
+// 30 min and this loop replaces them immediately.
 async function maintainAdminSeeds(): Promise<void> {
   while (true) {
     try {
-      // Stay silent when no real callers are present
-      if (!(await hasRealCallers())) {
-        await sleep(SEED_MAINTENANCE_INTERVAL_MS);
-        continue;
-      }
-
       const adminProfiles = await db
         .select({ userId: profiles.userId })
         .from(profiles)
@@ -487,11 +480,12 @@ async function runRealCallerScheduler(): Promise<void> {
   }
 }
 
-// ─── Last-caller cleanup: silence the line the moment everyone hangs up ───────
+// ─── Last-caller cleanup: only stop real-caller seeds when everyone hangs up ───
 //
 // Called right after a real caller disconnects. If no real callers remain,
-// cancels all pending cool-down timers and takes every active seed offline
-// immediately so the system returns to a fully silent state.
+// cancels pending cool-down timers and takes real-caller seeds offline.
+// Admin-uploaded seeds are left running so the queue is always populated
+// for the next incoming caller.
 export async function onLastCallerDisconnected(): Promise<void> {
   try {
     if ((await countRealCallers()) > 0) return; // other real callers still present
@@ -503,9 +497,19 @@ export async function onLastCallerDisconnected(): Promise<void> {
       log(`last-caller-gone: cancelled cooldown for userId=${userId}`, "simulator");
     }
 
-    // Collect every currently-active seed session
-    const toStop = [...activeSessions];
-    if (toStop.length === 0) return;
+    // Only stop real-caller seeds — admin seeds stay online permanently
+    const adminProfileRows = await db
+      .select({ userId: profiles.userId })
+      .from(profiles)
+      .where(eq(profiles.isAdminUploaded, true))
+      .catch(() => [] as { userId: string }[]);
+    const adminUserIds = new Set(adminProfileRows.map(r => r.userId));
+
+    const toStop = [...activeSessions].filter(userId => !adminUserIds.has(userId));
+    if (toStop.length === 0) {
+      log("last-caller-gone: line is now silent (admin seeds remain active)", "simulator");
+      return;
+    }
 
     log(`last-caller-gone: taking ${toStop.length} seed(s) offline`, "simulator");
 
@@ -621,11 +625,29 @@ export async function startSimulator(): Promise<void> {
     .where(eq(profiles.isAdminUploaded, true));
 
   log(
-    `${adminProfiles.length} admin seed(s) loaded — dynamic target (0–3 day / 3–5 weeknight / 6–10 weekend prime time)`,
+    `${adminProfiles.length} admin seed(s) loaded — booting all online now so queue is ready for first caller`,
     "simulator",
   );
 
-  // Start continuous admin seed maintenance (re-evaluates target every minute)
+  // Boot every admin seed immediately at startup — no real-caller gate.
+  // Seeds stay online permanently (30-min sessions auto-renew via maintainAdminSeeds).
+  const regionList = await buildBalancedRegionList().catch(() => [] as string[]);
+  let regionIdx = 0;
+  for (const { userId } of adminProfiles) {
+    if (!activeSessions.has(userId)) {
+      const assignedRegion = regionList.length > 0
+        ? regionList[regionIdx % regionList.length]
+        : undefined;
+      regionIdx++;
+      activeSessions.add(userId);
+      runAdminSeedSession(userId, assignedRegion).catch(err =>
+        log(`startup seed session error userId=${userId}: ${err}`, "simulator"),
+      );
+      log(`startup seed ONLINE userId=${userId} regionId=${assignedRegion ?? "global"}`, "simulator");
+    }
+  }
+
+  // Start continuous admin seed maintenance (re-evaluates and tops up every minute)
   maintainAdminSeeds().catch(err =>
     log(`seed maintenance fatal: ${err}`, "simulator"),
   );
