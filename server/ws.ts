@@ -111,6 +111,21 @@ export function initWebSocketServer(httpServer: Server): void {
     }
   });
 
+  // ── Server-side heartbeat ─────────────────────────────────────────────────
+  // Replit's edge proxy terminates idle WebSocket connections after ~30 s.
+  // Sending a ws-level ping frame every 20 s keeps every admin socket alive.
+  // The browser's native WebSocket stack responds to ping frames automatically
+  // with a pong frame — no client-side code needed.
+  const heartbeatInterval = setInterval(() => {
+    for (const client of adminSockets) {
+      if (client.readyState === WebSocket.OPEN) {
+        try { client.ping(); } catch { /* socket already gone */ }
+      } else {
+        adminSockets.delete(client);
+      }
+    }
+  }, 20_000);
+
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     // Auth: require ADMIN_SECRET_KEY when set; skip in dev (key not set)
     const url      = new URL(req.url ?? "/", "http://localhost");

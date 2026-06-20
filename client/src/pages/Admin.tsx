@@ -3763,6 +3763,14 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
   const queryClient = useQueryClient();
   const adminKey = getAdminKey();
 
+  // 1-second ticker so "Xm Ys on line" counts up every second without
+  // waiting for the next API poll.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const { data: stats } = useQuery<{ users: number; profiles: number; messages: number; activeCalls: number }>({
     queryKey: ["/api/stats"],
     refetchInterval: 5000,
@@ -3903,7 +3911,7 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       {caller.currentIvrState ?? "Connected"}
                     </div>
-                    <div className="font-mono text-[10px] text-gray-400 mt-1">{formatDuration(caller.durationSeconds)} on line</div>
+                    <div className="font-mono text-[10px] text-gray-400 mt-1">{formatDuration(caller.joinedAt ? Math.max(0, Math.floor((Date.now() - new Date(caller.joinedAt).getTime()) / 1000)) : caller.durationSeconds)} on line</div>
                   </div>
                 </div>
               ))}
@@ -8588,9 +8596,18 @@ function LiveCallersTab() {
   const callers = data?.callers ?? [];
   const [showVirtual, setShowVirtual] = useState(true);
 
+  // 1-second ticker so "Xm Ys on line" counts up every second without waiting
+  // for the next API poll.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   // Real-time balance overlay: keyed by callSid, updated every 30s via WebSocket
   // This lets us show balances draining live without waiting for the API poll.
   const [liveBalances, setLiveBalances] = useState<Record<string, number>>({});
+  const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
     const adminKey = getAdminKey();
@@ -8604,6 +8621,7 @@ function LiveCallersTab() {
     const connect = () => {
       if (ws?.readyState === WebSocket.OPEN) return;
       ws = new WebSocket(url);
+      ws.onopen = () => setWsConnected(true);
       ws.onmessage = (evt) => {
         try {
           const msg = JSON.parse(evt.data as string);
@@ -8612,7 +8630,11 @@ function LiveCallersTab() {
           }
         } catch { /* ignore */ }
       };
-      ws.onclose = () => { reconnectTimer = setTimeout(connect, 3000); };
+      ws.onclose = () => {
+        setWsConnected(false);
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+      ws.onerror = () => setWsConnected(false);
     };
 
     connect();
@@ -8644,8 +8666,10 @@ function LiveCallersTab() {
             </span>
             Live Callers
           </h2>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Auto-refreshes every 5 seconds{lastUpdated && <> · Last updated {lastUpdated}</>}
+          <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+            <span className={`h-1.5 w-1.5 rounded-full inline-block ${wsConnected ? "bg-green-500 animate-pulse" : "bg-amber-400"}`} />
+            {wsConnected ? "Live" : "Reconnecting…"}
+            {lastUpdated && <> · Last updated {lastUpdated}</>}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -8779,7 +8803,7 @@ function LiveCallersTab() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <span className="font-mono text-xs text-gray-700 font-semibold">
-                      {formatDuration(caller.durationSeconds)}
+                      {formatDuration(caller.joinedAt ? Math.max(0, Math.floor((Date.now() - new Date(caller.joinedAt).getTime()) / 1000)) : caller.durationSeconds)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">

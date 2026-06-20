@@ -4598,6 +4598,7 @@ END OF KNOWLEDGE BASE
         currentIvrState: row.currentIvrState ?? (String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX) ? "Virtual caller online" : "Connected"),
         isVirtual: !row.isPreVerification && (String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX) || String(row.callSid ?? "").startsWith("virtual_")),
         stateAgeSeconds: row.currentIvrUpdatedAt ? Math.floor((Date.now() - new Date(row.currentIvrUpdatedAt).getTime()) / 1000) : null,
+        durationSeconds: row.joinedAt ? Math.floor((Date.now() - new Date(row.joinedAt).getTime()) / 1000) : 0,
       });
 
       const callersList = [...rows.map(mapRow), ...preVerRows.map(mapRow)];
