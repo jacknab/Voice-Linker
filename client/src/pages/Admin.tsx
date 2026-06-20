@@ -8587,10 +8587,38 @@ function maskPhone(phone: string): string {
   return phone;
 }
 
+interface LiveCallersMsSettings {
+  plan1Name: string; plan1Minutes: number; plan1PriceCents: number;
+  plan2Name: string; plan2Minutes: number; plan2PriceCents: number;
+  plan3Name: string; plan3Minutes: number; plan3PriceCents: number;
+  billingMode: string; freeMode: boolean;
+}
+
+function getCentsPerMinute(tier: string | null, settings: LiveCallersMsSettings | undefined): number | null {
+  if (!tier || !settings) return null;
+  if (settings.billingMode === "per_day" || settings.billingMode === "per_24h" || settings.freeMode) return null;
+  const plans = [
+    { name: settings.plan1Name.toLowerCase(), minutes: settings.plan1Minutes, cents: settings.plan1PriceCents },
+    { name: settings.plan2Name.toLowerCase(), minutes: settings.plan2Minutes, cents: settings.plan2PriceCents },
+    { name: settings.plan3Name.toLowerCase(), minutes: settings.plan3Minutes, cents: settings.plan3PriceCents },
+  ];
+  const match = plans.find(p => p.name === tier.toLowerCase() && p.minutes > 0 && p.cents > 0);
+  return match ? match.cents / match.minutes : null;
+}
+
+function fmtSpent(spentCents: number): string {
+  if (spentCents < 100) return `${spentCents.toFixed(1)}¢`;
+  return `$${(spentCents / 100).toFixed(2)}`;
+}
+
 function LiveCallersTab() {
   const { data, isLoading, dataUpdatedAt } = useQuery<LiveCallersResponse>({
     queryKey: ["/api/admin/live-callers"],
     refetchInterval: 5000,
+  });
+
+  const { data: msSettings } = useQuery<LiveCallersMsSettings>({
+    queryKey: ["/api/admin/membership-settings"],
   });
 
   const callers = data?.callers ?? [];
@@ -8609,6 +8637,21 @@ function LiveCallersTab() {
   const [liveBalances, setLiveBalances] = useState<Record<string, number>>({});
   const [wsConnected, setWsConnected] = useState(false);
 
+  // First-seen balance per callSid — set on first WS tick or initial API load.
+  // Used to compute "spent this session" = (firstSeen - current) * rate/60.
+  const firstSeenBalance = useRef<Record<string, number>>({});
+
+  // Seed firstSeenBalance from the initial API load for any caller that has
+  // a known balance and hasn't been seen by the WS ticker yet.
+  useEffect(() => {
+    if (!data?.callers) return;
+    for (const c of data.callers) {
+      if (c.remainingSeconds != null && firstSeenBalance.current[c.callSid] == null) {
+        firstSeenBalance.current[c.callSid] = c.remainingSeconds;
+      }
+    }
+  }, [data]);
+
   useEffect(() => {
     const adminKey = getAdminKey();
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -8626,6 +8669,10 @@ function LiveCallersTab() {
         try {
           const msg = JSON.parse(evt.data as string);
           if (msg.type === "balance:update" && msg.callSid != null && msg.remainingSeconds != null) {
+            // Record the first balance we see for spend tracking
+            if (firstSeenBalance.current[msg.callSid] == null) {
+              firstSeenBalance.current[msg.callSid] = msg.remainingSeconds;
+            }
             setLiveBalances(prev => ({ ...prev, [msg.callSid]: msg.remainingSeconds }));
           }
         } catch { /* ignore */ }
@@ -8775,29 +8822,49 @@ function LiveCallersTab() {
                     )}
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
-                    {caller.membershipTier ? (
-                      <div>
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
-                          caller.membershipTier === "premium" ? "bg-yellow-100 text-yellow-700" :
-                          caller.membershipTier === "free" ? "bg-gray-100 text-gray-500" :
-                          "bg-indigo-100 text-indigo-700"
-                        }`}>
-                          {caller.membershipTier}
-                        </span>
-                        {caller.remainingSeconds !== null && (
-                          <div className={`flex items-center gap-1 mt-0.5 text-[10px] font-mono font-semibold ${
-                            caller.remainingSeconds <= 0 ? "text-red-600" :
-                            caller.remainingSeconds < 300 ? "text-amber-500" :
-                            "text-gray-400"
-                          }`}>
-                            {liveBalances[caller.callSid] != null && (
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" title="Live balance" />
+                    {caller.membershipTier ? (() => {
+                      const cpm = getCentsPerMinute(caller.membershipTier, msSettings);
+                      const firstSeen = firstSeenBalance.current[caller.callSid];
+                      const current = caller.remainingSeconds;
+                      const spentCents = (cpm != null && firstSeen != null && current != null && firstSeen > current)
+                        ? ((firstSeen - current) / 60) * cpm
+                        : null;
+                      return (
+                        <div>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ${
+                              caller.membershipTier === "premium" ? "bg-yellow-100 text-yellow-700" :
+                              caller.membershipTier === "free" ? "bg-gray-100 text-gray-500" :
+                              "bg-indigo-100 text-indigo-700"
+                            }`}>
+                              {caller.membershipTier}
+                            </span>
+                            {cpm != null && (
+                              <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-100 tabular-nums">
+                                {cpm < 1 ? `${(cpm * 10).toFixed(1)}m¢` : `${cpm.toFixed(1)}¢`}/min
+                              </span>
                             )}
-                            {caller.remainingSeconds <= 0 ? "EXPIRED" : `${formatDuration(caller.remainingSeconds)} left`}
                           </div>
-                        )}
-                      </div>
-                    ) : (
+                          {current !== null && (
+                            <div className={`flex items-center gap-1 mt-0.5 text-[10px] font-mono font-semibold ${
+                              current <= 0 ? "text-red-600" :
+                              current < 300 ? "text-amber-500" :
+                              "text-gray-400"
+                            }`}>
+                              {liveBalances[caller.callSid] != null && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse inline-block shrink-0" title="Live balance" />
+                              )}
+                              {current <= 0 ? "EXPIRED" : `${formatDuration(current)} left`}
+                            </div>
+                          )}
+                          {spentCents != null && spentCents > 0 && (
+                            <div className="text-[9px] text-rose-500 font-semibold font-mono mt-0.5 tabular-nums">
+                              spent {fmtSpent(spentCents)} this session
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })() : (
                       <span className="text-gray-300 text-xs">—</span>
                     )}
                   </td>
