@@ -19,6 +19,7 @@ import { getUncachableStripeClient } from "./stripeClient";
 import { getRedisStatus, flushBrowseSessions } from "./redis";
 
 import { invalidateMembershipSettingsCache, invalidateSiteSettingsCache, getSiteSettingsCached, getMembershipSettingsCached } from "./settings-cache";
+import { broadcastCallersChanged } from "./ws";
 import { db } from "./db";
 import { profiles } from "@shared/schema";
 import { eq, isNull, or, sql } from "drizzle-orm";
@@ -879,6 +880,78 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[admin] caller DELETE error:", e);
       res.status(500).json({ message: "Failed to delete caller record" });
+    }
+  });
+
+  // ── Kick (forcibly end) an active call ──────────────────────────────────────
+  app.post("/api/admin/callers/:callSid/kick", async (req, res) => {
+    const { callSid } = req.params;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken  = process.env.TWILIO_AUTH_TOKEN;
+    try {
+      // Terminate via Twilio if credentials are available
+      if (accountSid && authToken && !callSid.startsWith("VIRTUAL-") && !callSid.startsWith("virtual_")) {
+        const client = twilio(accountSid, authToken);
+        await client.calls(callSid).update({ status: "completed" }).catch((e: any) => {
+          console.warn(`[admin] kick Twilio call failed (callSid=${callSid}): ${e.message}`);
+        });
+      }
+      // Clean up DB regardless
+      await storage.removeActiveCall(callSid);
+      broadcastCallersChanged();
+      const caller = await storage.getCallerByCallSid(callSid).catch(() => undefined);
+      logAudit("caller_kicked", { targetType: "caller", targetId: callSid, targetLabel: caller?.phoneNumber ?? callSid });
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error("[admin] kick error:", e);
+      res.status(500).json({ message: "Failed to kick caller" });
+    }
+  });
+
+  // ── Ban a user account and kick their active call ────────────────────────────
+  app.post("/api/admin/callers/:callSid/ban", async (req, res) => {
+    const { callSid } = req.params;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken  = process.env.TWILIO_AUTH_TOKEN;
+    try {
+      // Look up the caller record to get their userId
+      const caller = await storage.getCallerByCallSid(callSid);
+      if (!caller?.userId) {
+        return res.status(400).json({ message: "No user account found for this call — cannot ban a pre-verification caller." });
+      }
+      // Ban the account
+      await storage.setUserAccountStatus(caller.userId, "banned");
+      logAudit("user_ban", { targetType: "user", targetId: caller.userId, targetLabel: caller.phoneNumber ?? callSid });
+      // Terminate via Twilio
+      if (accountSid && authToken) {
+        const client = twilio(accountSid, authToken);
+        await client.calls(callSid).update({ status: "completed" }).catch((e: any) => {
+          console.warn(`[admin] ban-kick Twilio call failed (callSid=${callSid}): ${e.message}`);
+        });
+      }
+      await storage.removeActiveCall(callSid);
+      broadcastCallersChanged();
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error("[admin] ban error:", e);
+      res.status(500).json({ message: "Failed to ban caller" });
+    }
+  });
+
+  // ── Restrict a user account (keep call active) ───────────────────────────────
+  app.post("/api/admin/callers/:callSid/restrict", async (req, res) => {
+    const { callSid } = req.params;
+    try {
+      const caller = await storage.getCallerByCallSid(callSid);
+      if (!caller?.userId) {
+        return res.status(400).json({ message: "No user account found for this call." });
+      }
+      await storage.setUserAccountStatus(caller.userId, "restricted");
+      logAudit("user_restrict", { targetType: "user", targetId: caller.userId, targetLabel: caller.phoneNumber ?? callSid });
+      res.json({ success: true });
+    } catch (e: any) {
+      console.error("[admin] restrict error:", e);
+      res.status(500).json({ message: "Failed to restrict caller" });
     }
   });
 

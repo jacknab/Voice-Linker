@@ -12,7 +12,7 @@ import {
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
   BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send, Headphones,
-  FileText, ExternalLink,
+  FileText, ExternalLink, PhoneOff, ShieldX, ShieldMinus,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import {
@@ -810,7 +810,7 @@ function NewRegionWizard({ onClose }: { onClose: () => void }) {
             <>
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
                 <p className="text-[10px] font-mono uppercase tracking-widest text-gray-400 font-bold mb-3">Summary</p>
-                {[["Name", name], ["Slug", `/${slug}`], stateAbbreviation ? ["State", stateAbbreviation] : null, ["Phone", chosenNumber]].filter(Boolean).map(([label, val]) => (
+                {([["Name", name], ["Slug", `/${slug}`], stateAbbreviation ? ["State", stateAbbreviation] : null, ["Phone", chosenNumber]] as ([string, string] | null)[]).filter((x): x is [string, string] => x !== null).map(([label, val]) => (
                   <div key={label} className="flex items-baseline gap-2 font-mono text-sm">
                     <span className="text-gray-400 w-14 flex-shrink-0 text-xs">{label}</span>
                     <span className="text-gray-800 font-bold">{val}</span>
@@ -3998,6 +3998,8 @@ function maskPhone(phone: string): string {
 }
 
 function DashboardTab() {
+  const { toast } = useToast();
+
   // ── Real-time WebSocket updates ─────────────────────────────────────────────
   // The server broadcasts "callers:changed" the moment a call connects or
   // disconnects. We listen here and immediately invalidate the relevant queries
@@ -4120,6 +4122,40 @@ function DashboardTab() {
     onError: () => setFlushConfirm(false),
   });
 
+  // ── Caller action mutations ────────────────────────────────────────────────
+  const [banConfirmSid, setBanConfirmSid] = useState<string | null>(null);
+
+  const kickMutation = useMutation({
+    mutationFn: (callSid: string) => apiRequest("POST", `/api/admin/callers/${callSid}/kick`),
+    onSuccess: () => {
+      toast({ title: "Caller kicked", description: "The call has been disconnected." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/live-callers"] });
+    },
+    onError: () => toast({ title: "Kick failed", description: "Could not disconnect the call.", variant: "destructive" }),
+  });
+
+  const banMutation = useMutation({
+    mutationFn: (callSid: string) => apiRequest("POST", `/api/admin/callers/${callSid}/ban`),
+    onSuccess: () => {
+      setBanConfirmSid(null);
+      toast({ title: "Caller banned", description: "Account banned and call disconnected." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/live-callers"] });
+    },
+    onError: (e: any) => {
+      setBanConfirmSid(null);
+      toast({ title: "Ban failed", description: e?.message ?? "Could not ban the caller.", variant: "destructive" });
+    },
+  });
+
+  const restrictMutation = useMutation({
+    mutationFn: (callSid: string) => apiRequest("POST", `/api/admin/callers/${callSid}/restrict`),
+    onSuccess: () => {
+      toast({ title: "Caller restricted", description: "Account status set to restricted." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/live-callers"] });
+    },
+    onError: () => toast({ title: "Restrict failed", description: "Could not restrict the caller.", variant: "destructive" }),
+  });
+
   const items = [
     { label: "Live on the Line", value: stats?.activeCalls ?? 0, icon: <PhoneCall size={18} className="text-emerald-500" /> },
     { label: "Registered Users", value: stats?.users ?? 0, icon: <Phone size={18} className="text-[#f5a623]" /> },
@@ -4190,20 +4226,87 @@ function DashboardTab() {
                   ? Math.max(0, Math.floor((Date.now() - new Date(caller.joinedAt).getTime()) / 1000))
                   : 0;
                 const isPre = caller.isPreVerification;
+                const isVirtual = caller.isVirtual;
+                const isConfirmingBan = banConfirmSid === caller.callSid;
+                const isKicking = kickMutation.isPending && kickMutation.variables === caller.callSid;
+                const isBanning = banMutation.isPending && banMutation.variables === caller.callSid;
                 return (
                   <div key={caller.callSid} className={`flex items-center justify-between gap-3 border rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors ${isPre ? "border-amber-100 bg-amber-50/40" : "border-gray-100"}`} data-testid={`row-live-feed-${caller.userId ?? caller.callSid}`}>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="font-mono text-xs font-bold text-gray-800">{caller.phoneNumber}</div>
                       <div className="font-mono text-[10px] text-gray-400 truncate">
                         {caller.currentIvrPath ?? "/voice"}{caller.regionName ? ` · ${caller.regionName}` : ""}
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold uppercase tracking-wider ${isPre ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`} data-testid={`status-live-state-${caller.userId ?? caller.callSid}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${isPre ? "bg-amber-400" : "bg-emerald-500"}`} />
-                        {caller.currentIvrState ?? "Connected"}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right">
+                        <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold uppercase tracking-wider ${isPre ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`} data-testid={`status-live-state-${caller.userId ?? caller.callSid}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${isPre ? "bg-amber-400" : "bg-emerald-500"}`} />
+                          {caller.currentIvrState ?? "Connected"}
+                        </div>
+                        <div className="font-mono text-[10px] text-gray-400 mt-1">{formatDuration(liveDuration)} on line</div>
                       </div>
-                      <div className="font-mono text-[10px] text-gray-400 mt-1">{formatDuration(liveDuration)} on line</div>
+                      {/* Action buttons — hidden for virtual callers */}
+                      {!isVirtual && (
+                        <div className="flex items-center gap-1">
+                          {isConfirmingBan ? (
+                            <>
+                              <button
+                                onClick={() => banMutation.mutate(caller.callSid)}
+                                disabled={isBanning}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                                data-testid={`button-ban-confirm-${caller.callSid}`}
+                              >
+                                {isBanning ? <Loader2 size={10} className="animate-spin" /> : <ShieldX size={10} />}
+                                Confirm
+                              </button>
+                              <button
+                                onClick={() => setBanConfirmSid(null)}
+                                className="px-2 py-1 rounded text-[10px] font-mono text-gray-500 hover:bg-gray-100 transition-colors"
+                                data-testid={`button-ban-cancel-${caller.callSid}`}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {/* Kick */}
+                              <button
+                                onClick={() => kickMutation.mutate(caller.callSid)}
+                                disabled={isKicking}
+                                title="Kick — disconnect this call"
+                                className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 transition-colors"
+                                data-testid={`button-kick-${caller.callSid}`}
+                              >
+                                {isKicking ? <Loader2 size={12} className="animate-spin" /> : <PhoneOff size={12} />}
+                              </button>
+                              {/* Restrict — only for verified callers */}
+                              {!isPre && caller.userId && (
+                                <button
+                                  onClick={() => restrictMutation.mutate(caller.callSid)}
+                                  disabled={restrictMutation.isPending && restrictMutation.variables === caller.callSid}
+                                  title="Restrict account (call stays active)"
+                                  className="p-1.5 rounded text-gray-400 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-40 transition-colors"
+                                  data-testid={`button-restrict-${caller.callSid}`}
+                                >
+                                  <ShieldMinus size={12} />
+                                </button>
+                              )}
+                              {/* Ban — only for verified callers */}
+                              {!isPre && caller.userId && (
+                                <button
+                                  onClick={() => setBanConfirmSid(caller.callSid)}
+                                  title="Ban account and kick call"
+                                  className="p-1.5 rounded text-gray-400 hover:text-red-700 hover:bg-red-50 disabled:opacity-40 transition-colors"
+                                  data-testid={`button-ban-${caller.callSid}`}
+                                >
+                                  <ShieldX size={12} />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
