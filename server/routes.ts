@@ -4676,14 +4676,19 @@ END OF KNOWLEDGE BASE
   // ── AI SEO Page Generator ─────────────────────────────────────────────────
   app.post("/api/admin/ai-seo-generate", async (req, res) => {
     try {
-      const { topic, keyword, extraContext } = req.body as {
+      // Accepts either a freeform { prompt } or the legacy { topic, keyword, extraContext }
+      const { prompt, topic, keyword, extraContext } = req.body as {
+        prompt?: string;
         topic?: string;
         keyword?: string;
         extraContext?: string;
       };
 
-      if (!topic || !keyword) {
-        return res.status(400).json({ message: "topic and keyword are required" });
+      const freeformPrompt = prompt?.trim();
+      const legacyOk = topic?.trim() && keyword?.trim();
+
+      if (!freeformPrompt && !legacyOk) {
+        return res.status(400).json({ message: "Provide either a prompt or both topic and keyword" });
       }
 
       const apiKey = process.env.OPENAI_API_KEY;
@@ -4696,7 +4701,7 @@ END OF KNOWLEDGE BASE
       const siteSettings = await storage.getSiteSettings();
       const siteName = siteSettings?.siteName ?? "Chat Line";
 
-      const systemPrompt = `You are an expert SEO content writer specializing in adult chat line services. 
+      const systemPrompt = `You are an expert SEO content writer specializing in adult chat line services.
 Your task is to generate a complete, self-contained HTML page that is highly optimized to rank on page 1 of Google.
 The HTML you produce must:
 - Be a full standalone HTML document (<!DOCTYPE html> through </html>)
@@ -4704,7 +4709,7 @@ The HTML you produce must:
 - Use proper H1, H2, H3 heading hierarchy with the target keyword naturally embedded
 - Include schema.org JSON-LD structured data (LocalBusiness or Service type)
 - Have a canonical <link> tag
-- Contain compelling, original body content of at least 600 words targeting the keyword
+- Contain compelling, original body content of at least 600 words targeting the primary keyword
 - Include internal anchor links and a clear call-to-action section
 - Be mobile-friendly (include a viewport meta tag)
 - Use clean, semantic HTML5 with inline CSS for styling (use a professional dark theme with gold accents)
@@ -4713,12 +4718,9 @@ The HTML you produce must:
 - Do NOT include external script or stylesheet links (fully self-contained)
 Return ONLY the raw HTML — no markdown fences, no explanation.`;
 
-      const userPrompt = `Site Name: ${siteName}
-Topic: ${topic}
-Primary Keyword: ${keyword}
-${extraContext ? `Additional Context: ${extraContext}` : ""}
-
-Generate a complete SEO-optimized HTML page for this chat line service targeting the keyword "${keyword}".`;
+      const userPrompt = freeformPrompt
+        ? `Site Name: ${siteName}\n\n${freeformPrompt}\n\nGenerate a complete SEO-optimized HTML page for this chat line service based on the description above.`
+        : `Site Name: ${siteName}\nTopic: ${topic}\nPrimary Keyword: ${keyword}\n${extraContext ? `Additional Context: ${extraContext}` : ""}\n\nGenerate a complete SEO-optimized HTML page for this chat line service targeting the keyword "${keyword}".`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -4739,8 +4741,9 @@ Generate a complete SEO-optimized HTML page for this chat line service targeting
       const aiSeoDir = path.join(process.cwd(), "client", "public", "ai-seo");
       if (!fs.existsSync(aiSeoDir)) fs.mkdirSync(aiSeoDir, { recursive: true });
 
-      // Create a slug from keyword
-      const slug = keyword.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      // Derive a slug: from keyword (legacy) or first 6 words of the freeform prompt
+      const slugSource = keyword?.trim() ?? (freeformPrompt ?? "page").split(/\s+/).slice(0, 6).join(" ");
+      const slug = slugSource.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       const filename = `${slug}.html`;
       const filePath = path.join(aiSeoDir, filename);
       fs.writeFileSync(filePath, html, "utf8");
@@ -4748,7 +4751,7 @@ Generate a complete SEO-optimized HTML page for this chat line service targeting
       const siteUrl = process.env.SITE_URL?.replace(/\/$/, "")
         ?? `https://${process.env.REPLIT_DEV_DOMAIN ?? "example.com"}`;
 
-      console.log(`[ai-seo] Generated page for keyword: ${keyword} -> ${filename}`);
+      console.log(`[ai-seo] Generated page -> ${filename}`);
       res.json({ ok: true, html, slug, url: `${siteUrl}/ai-seo/${filename}` });
     } catch (e: any) {
       console.error("[ai-seo] Generation failed:", e);

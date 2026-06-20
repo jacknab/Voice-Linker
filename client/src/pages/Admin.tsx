@@ -9281,20 +9281,61 @@ interface SeoPage {
 function SeoPagesTab() {
   const { toast } = useToast();
 
-  const { data, isLoading, refetch } = useQuery<{ pages: SeoPage[]; total: number }>({
+  // ── AI generation state ────────────────────────────────────────────────────
+  const [prompt, setPrompt] = useState("");
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewSlug, setPreviewSlug] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const { data: aiPagesData, refetch: refetchAiPages, isLoading: aiPagesLoading } = useQuery<{ pages: AiSeoGeneratedPage[] }>({
+    queryKey: ["/api/admin/ai-seo-pages"],
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/ai-seo-generate", { prompt });
+      const data = await res.json();
+      return data as { ok: boolean; html: string; slug: string; url: string };
+    },
+    onSuccess: (data) => {
+      toast({ title: "Page generated!", description: `Saved as /ai-seo/${data.slug}.html` });
+      setPreviewHtml(data.html);
+      setPreviewSlug(data.slug);
+      setPreviewUrl(data.url);
+      refetchAiPages();
+    },
+    onError: (err: any) => {
+      toast({ title: "Generation failed", description: err?.message ?? "Unknown error", variant: "destructive" });
+    },
+  });
+
+  const deleteAiMutation = useMutation({
+    mutationFn: async (slug: string) => apiRequest("DELETE", `/api/admin/ai-seo-pages/${slug}`),
+    onSuccess: (_data, slug) => {
+      toast({ title: "Page deleted" });
+      if (previewSlug === slug) { setPreviewHtml(null); setPreviewSlug(null); setPreviewUrl(null); }
+      refetchAiPages();
+    },
+    onError: () => toast({ title: "Failed to delete page", variant: "destructive" }),
+  });
+
+  const aiPages = aiPagesData?.pages ?? [];
+
+  // ── Regional pages ─────────────────────────────────────────────────────────
+  const { data: regionalData, isLoading: regionalLoading, refetch: refetchRegional } = useQuery<{ pages: SeoPage[]; total: number }>({
     queryKey: ["/api/admin/seo-pages"],
   });
 
   const rebuildMutation = useMutation({
     mutationFn: async () => apiRequest("POST", "/api/admin/rebuild-seo-pages"),
     onSuccess: (res: any) => {
-      toast({ title: "SEO pages rebuilt", description: `${res?.pagesBuilt ?? 0} page(s) generated + sitemap updated` });
-      refetch();
+      toast({ title: "Regional pages rebuilt", description: `${res?.pagesBuilt ?? 0} page(s) generated + sitemap updated` });
+      refetchRegional();
     },
-    onError: () => toast({ title: "Failed to rebuild SEO pages", variant: "destructive" }),
+    onError: () => toast({ title: "Failed to rebuild regional pages", variant: "destructive" }),
   });
 
-  const pages = data?.pages ?? [];
+  const regionalPages = regionalData?.pages ?? [];
 
   function formatSize(bytes: number) {
     if (bytes < 1024) return `${bytes} B`;
@@ -9302,88 +9343,228 @@ function SeoPagesTab() {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  function formatDate(iso: string) {
-    return new Date(iso).toLocaleString();
-  }
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8">
+
+      {/* ── AI Page Generator ─────────────────────────────────────────────── */}
+      <div className="space-y-4">
         <div>
-          <h2 className="text-lg font-bold text-gray-800">Generated SEO Pages</h2>
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <Wand2 size={16} className="text-indigo-600" />
+            AI SEO Page Generator
+          </h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            One page is auto-generated per active region. Pages are served at <code className="bg-gray-100 px-1 rounded">/regions/&#123;slug&#125;</code>
+            Describe the page you want — GPT-4 will write a fully optimized, standalone HTML landing page designed to rank on Google.
           </p>
         </div>
-        <button
-          data-testid="btn-seo-rebuild-all"
-          onClick={() => rebuildMutation.mutate()}
-          disabled={rebuildMutation.isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-xs font-semibold disabled:opacity-50"
-        >
-          <RefreshCw size={12} className={rebuildMutation.isPending ? "animate-spin" : ""} />
-          {rebuildMutation.isPending ? "Building..." : "Rebuild All Pages"}
-        </button>
+
+        <div className="border border-gray-200 rounded-xl p-5 bg-gradient-to-br from-indigo-50 to-blue-50 space-y-3">
+          <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+            What kind of page do you want to create?
+          </label>
+          <textarea
+            data-testid="input-seo-prompt"
+            value={prompt}
+            onChange={e => setPrompt(e.target.value)}
+            rows={5}
+            placeholder={`Describe the page you want in plain language. Examples:\n\n• A landing page for men in Chicago looking for adult chat lines. Include our phone number 800-730-2508 and mention the free 90-minute trial.\n\n• A page targeting gay men in Texas who want to meet local guys by phone. Emphasize anonymity and no commitment.\n\n• A comparison page: "best chat lines for women" — rank us above competitors, highlight our female membership is free.`}
+            className="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none font-sans leading-relaxed"
+          />
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-[10px] text-gray-400">
+              Be specific: include city, audience, phone number, offers, keywords you want to rank for.
+            </p>
+            <button
+              data-testid="btn-seo-generate"
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending || !prompt.trim()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generateMutation.isPending ? (
+                <><Loader2 size={14} className="animate-spin" /> Generating… (15–30s)</>
+              ) : (
+                <><Wand2 size={14} /> Generate Page</>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Preview */}
+        {previewHtml && (
+          <div className="border border-indigo-200 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-indigo-50 border-b border-indigo-200">
+              <span className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
+                <FileText size={12} /> Preview — <span className="font-mono">/ai-seo/{previewSlug}.html</span>
+              </span>
+              <div className="flex items-center gap-3">
+                {previewUrl && (
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="link-seo-preview"
+                    className="flex items-center gap-1 text-xs text-indigo-600 hover:underline font-semibold"
+                  >
+                    Open Page <ExternalLink size={10} />
+                  </a>
+                )}
+                <button
+                  onClick={() => setPreviewHtml(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                  data-testid="btn-close-preview"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            </div>
+            <iframe
+              data-testid="iframe-seo-preview"
+              srcDoc={previewHtml}
+              className="w-full h-[500px] bg-white"
+              sandbox="allow-same-origin"
+              title="Generated SEO Page Preview"
+            />
+          </div>
+        )}
+
+        {/* AI-generated pages list */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">AI-Generated Pages ({aiPages.length})</h3>
+          {aiPagesLoading ? (
+            <div className="flex items-center gap-2 text-gray-400 text-sm py-6 justify-center">
+              <Loader2 size={14} className="animate-spin" /> Loading…
+            </div>
+          ) : aiPages.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+              <Wand2 size={28} className="mx-auto mb-2 opacity-30" />
+              <p className="text-sm font-medium">No pages generated yet</p>
+              <p className="text-xs mt-1">Describe a page above and click Generate to create your first AI SEO page.</p>
+            </div>
+          ) : (
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left font-semibold">File</th>
+                    <th className="px-4 py-3 text-left font-semibold hidden sm:table-cell">URL</th>
+                    <th className="px-4 py-3 text-right font-semibold hidden md:table-cell">Size</th>
+                    <th className="px-4 py-3 text-right font-semibold">Generated</th>
+                    <th className="px-4 py-3 text-right font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {aiPages.map((page) => (
+                    <tr key={page.slug} className="hover:bg-gray-50 transition-colors" data-testid={`row-ai-seo-${page.slug}`}>
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800">{page.filename}</td>
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        <a href={page.url} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-blue-600 hover:underline text-xs font-mono truncate max-w-xs"
+                          data-testid={`link-ai-seo-${page.slug}`}>
+                          {page.url} <ExternalLink size={10} className="shrink-0" />
+                        </a>
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-500 text-xs hidden md:table-cell font-mono">
+                        {formatSize(page.sizeBytes)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-400 text-xs">
+                        {new Date(page.builtAt).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          data-testid={`btn-delete-ai-seo-${page.slug}`}
+                          onClick={() => deleteAiMutation.mutate(page.slug)}
+                          disabled={deleteAiMutation.isPending}
+                          className="text-red-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                          title="Delete page"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-gray-400 text-sm py-8 justify-center">
-          <Loader2 size={16} className="animate-spin" /> Loading pages...
+      {/* ── Regional Pages (auto-generated per city) ──────────────────────── */}
+      <div className="space-y-4 pt-4 border-t border-gray-200">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <Globe size={14} className="text-blue-500" />
+              Regional City Pages
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Auto-generated per active region, served at <code className="bg-gray-100 px-1 rounded">/regions/&#123;slug&#125;</code>
+            </p>
+          </div>
+          <button
+            data-testid="btn-seo-rebuild-all"
+            onClick={() => rebuildMutation.mutate()}
+            disabled={rebuildMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors text-xs font-semibold disabled:opacity-50"
+          >
+            <RefreshCw size={12} className={rebuildMutation.isPending ? "animate-spin" : ""} />
+            {rebuildMutation.isPending ? "Building..." : "Rebuild All"}
+          </button>
         </div>
-      ) : pages.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <FileText size={32} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm font-medium">No pages generated yet</p>
-          <p className="text-xs mt-1">Add active regions and click "Rebuild All Pages" to generate city landing pages.</p>
-        </div>
-      ) : (
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
-                <th className="px-4 py-3 text-left font-semibold">Slug / City</th>
-                <th className="px-4 py-3 text-left font-semibold hidden sm:table-cell">URL</th>
-                <th className="px-4 py-3 text-right font-semibold hidden md:table-cell">Size</th>
-                <th className="px-4 py-3 text-right font-semibold">Last Built</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {pages.map((page) => (
-                <tr key={page.slug} className="hover:bg-gray-50 transition-colors" data-testid={`row-seo-page-${page.slug}`}>
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800">
-                    /{page.slug}
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    <a
-                      href={page.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-blue-600 hover:underline text-xs font-mono truncate max-w-xs"
-                      data-testid={`link-seo-page-${page.slug}`}
-                    >
-                      {page.url}
-                      <ExternalLink size={10} className="shrink-0" />
-                    </a>
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-500 text-xs hidden md:table-cell font-mono">
-                    {formatSize(page.sizeBytes)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-400 text-xs">
-                    {formatDate(page.builtAt)}
+
+        {regionalLoading ? (
+          <div className="flex items-center gap-2 text-gray-400 text-sm py-6 justify-center">
+            <Loader2 size={14} className="animate-spin" /> Loading…
+          </div>
+        ) : regionalPages.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+            <Globe size={28} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm font-medium">No regional pages yet</p>
+            <p className="text-xs mt-1">Add active regions and click "Rebuild All" to generate city landing pages.</p>
+          </div>
+        ) : (
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
+                  <th className="px-4 py-3 text-left font-semibold">Slug / City</th>
+                  <th className="px-4 py-3 text-left font-semibold hidden sm:table-cell">URL</th>
+                  <th className="px-4 py-3 text-right font-semibold hidden md:table-cell">Size</th>
+                  <th className="px-4 py-3 text-right font-semibold">Last Built</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {regionalPages.map((page) => (
+                  <tr key={page.slug} className="hover:bg-gray-50 transition-colors" data-testid={`row-seo-page-${page.slug}`}>
+                    <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800">/{page.slug}</td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
+                      <a href={page.url} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-blue-600 hover:underline text-xs font-mono truncate max-w-xs"
+                        data-testid={`link-seo-page-${page.slug}`}>
+                        {page.url} <ExternalLink size={10} className="shrink-0" />
+                      </a>
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-500 text-xs hidden md:table-cell font-mono">
+                      {formatSize(page.sizeBytes)}
+                    </td>
+                    <td className="px-4 py-3 text-right text-gray-400 text-xs">
+                      {new Date(page.builtAt).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-gray-50 border-t border-gray-200">
+                  <td colSpan={4} className="px-4 py-2 text-xs text-gray-500 font-mono">
+                    {regionalPages.length} page{regionalPages.length !== 1 ? "s" : ""} on disk
                   </td>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-gray-50 border-t border-gray-200">
-                <td colSpan={4} className="px-4 py-2 text-xs text-gray-500 font-mono">
-                  {pages.length} page{pages.length !== 1 ? "s" : ""} on disk
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
@@ -9404,7 +9585,6 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "queue-monitor",  label: "Queue Monitor",     icon: <Shuffle size={15} /> },
   { id: "regions",        label: "Regions",           icon: <Globe size={15} /> },
   { id: "seo-pages",      label: "SEO Pages",         icon: <FileText size={15} /> },
-  { id: "ai-seo-gen",     label: "AI SEO Generator",  icon: <Wand2 size={15} /> },
   { id: "announcements",  label: "Announcements",     icon: <Megaphone size={15} /> },
   // ── System Settings
   { id: "analytics",      label: "Analytics",         icon: <BarChart2 size={15} />,  dividerBefore: true },
