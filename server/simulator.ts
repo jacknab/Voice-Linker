@@ -318,12 +318,20 @@ async function runSeedSession(
   log(`seed session END userId=${userId}`, "simulator");
 }
 
-// ─── Admin seed maintenance: tops up to the dynamic time-based target ─────────
-// Runs every minute. Launches new 30-minute sessions for any idle admin seeds
-// until the current getTargetSeedCount() value is reached.
+// ─── Admin seed maintenance: tops up seeds while real callers are present ──────
+// Runs every minute. Only activates seeds when at least one real caller is on
+// the line — the system stays silent otherwise. Seeds are started by
+// triggerSeedActivity() the moment a caller hits the main menu; this loop
+// handles top-ups for long calls (sessions expire after 30 min).
 async function maintainAdminSeeds(): Promise<void> {
   while (true) {
     try {
+      // Stay silent when no real callers are present
+      if (!(await hasRealCallers())) {
+        await sleep(SEED_MAINTENANCE_INTERVAL_MS);
+        continue;
+      }
+
       const adminProfiles = await db
         .select({ userId: profiles.userId })
         .from(profiles)
@@ -334,14 +342,12 @@ async function maintainAdminSeeds(): Promise<void> {
         continue;
       }
 
-      const activeCount  = adminProfiles.filter(({ userId }) => activeSessions.has(userId)).length;
-      const target       = Math.min(getTargetSeedCount(), adminProfiles.length);
-      const slots        = Math.max(0, target - activeCount);
+      const activeCount = adminProfiles.filter(({ userId }) => activeSessions.has(userId)).length;
+      // Keep the same 4–11 range that triggerSeedActivity targets
+      const target = Math.min(randomBetween(4, 11), adminProfiles.length);
+      const slots  = Math.max(0, target - activeCount);
 
       if (slots > 0) {
-        // Build a balanced region list so seeds are spread across linked clusters.
-        // Each idle seed gets the next region in the interleaved order, ensuring
-        // no two seeds assigned in this batch share a linked-region pair.
         const regionList = await buildBalancedRegionList();
         let regionIdx = 0;
 
@@ -364,7 +370,7 @@ async function maintainAdminSeeds(): Promise<void> {
         }
         if (started > 0) {
           log(
-            `seed maintenance: started ${started} admin seed(s) (${activeCount + started}/${target} active, ${adminProfiles.length} total)`,
+            `seed maintenance: top-up ${started} admin seed(s) (${activeCount + started}/${target} active, ${adminProfiles.length} total)`,
             "simulator",
           );
         }
@@ -377,36 +383,35 @@ async function maintainAdminSeeds(): Promise<void> {
   }
 }
 
-// ─── Caller-triggered: also top up admin seeds on demand ──────────────────────
-// Called when a real caller hits the main menu — starts any idle admin seeds
-// beyond what the maintenance loop might have already started.
-export async function triggerSeedActivity(): Promise<void> {
+// ─── Caller-triggered: instantly place 4–11 seeds in the caller's region ──────
+// Called the moment a real caller hits the main menu. All seeds are placed in
+// the same region as the caller so they are immediately visible in the phone
+// booth / browse queue. The maintenance loop handles top-ups for long calls.
+export async function triggerSeedActivity(callerRegionId?: string): Promise<void> {
   try {
     const adminProfiles = await db
       .select({ userId: profiles.userId })
       .from(profiles)
       .where(eq(profiles.isAdminUploaded, true));
 
+    if (adminProfiles.length === 0) return;
+
     const activeCount = adminProfiles.filter(({ userId }) => activeSessions.has(userId)).length;
-    const target      = Math.min(getTargetSeedCount(), adminProfiles.length);
-    const slots       = Math.max(0, target - activeCount);
+    // Target 4–11 seeds regardless of time of day
+    const target = Math.min(randomBetween(4, 11), adminProfiles.length);
+    const slots  = Math.max(0, target - activeCount);
     if (slots <= 0) return;
 
-    const regionList = await buildBalancedRegionList();
-    let regionIdx = 0;
-
-    const idle      = adminProfiles.filter(({ userId }) => !activeSessions.has(userId));
-    const shuffled  = [...idle].sort(() => Math.random() - 0.5);
+    const idle     = adminProfiles.filter(({ userId }) => !activeSessions.has(userId));
+    const shuffled = [...idle].sort(() => Math.random() - 0.5);
     let started = 0;
+
     for (const { userId } of shuffled) {
       if (started >= slots) break;
       if (!activeSessions.has(userId)) {
-        const assignedRegion = regionList.length > 0
-          ? regionList[regionIdx % regionList.length]
-          : undefined;
-        regionIdx++;
         activeSessions.add(userId);
-        runAdminSeedSession(userId, assignedRegion).catch(err =>
+        // All seeds go into the caller's region so they are visible immediately
+        runAdminSeedSession(userId, callerRegionId).catch(err =>
           log(`admin seed session error userId=${userId}: ${err}`, "simulator"),
         );
         started++;
@@ -415,7 +420,7 @@ export async function triggerSeedActivity(): Promise<void> {
 
     if (started > 0) {
       log(
-        `caller triggered ${started} admin seed(s) (${activeCount + started}/${target} active)`,
+        `caller triggered ${started} admin seed(s) in region=${callerRegionId ?? "global"} (${activeCount + started}/${target} active)`,
         "simulator",
       );
     }

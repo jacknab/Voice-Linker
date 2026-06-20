@@ -3248,8 +3248,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const callSid  = req.body?.CallSid as string;
     const fromNumber = req.body?.From as string;
 
-    // A real caller just arrived — kick off seed activity (fire and forget)
-    triggerSeedActivity().catch(() => {});
+    // A real caller just hit the main menu — instantly place 4–11 seeded profiles
+    // in the caller's own region so they are ready before the caller enters the
+    // phone booth. Region is resolved from the active callers table (set at /voice entry).
+    storage.getCallerByCallSid(callSid)
+      .then(callerRecord => triggerSeedActivity(callerRecord?.regionId ?? undefined))
+      .catch(() => triggerSeedActivity());
 
     // MW systems have their own main menu — bounce there automatically so all
     // sub-routes that redirect to /voice/main-menu land in the right place.
@@ -3742,6 +3746,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const callSid   = req.body?.CallSid as string;
     const fromNumber = req.body?.From as string;
+
+    // Instantly place 4–11 seeded profiles in the caller's region
+    storage.getCallerByCallSid(callSid)
+      .then(callerRecord => triggerSeedActivity(callerRecord?.regionId ?? undefined))
+      .catch(() => triggerSeedActivity());
 
     try {
       const cardId = callCardOverride.get(callSid);
