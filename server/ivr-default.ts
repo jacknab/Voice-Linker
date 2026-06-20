@@ -2784,6 +2784,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const isMW = boothSiteConf.siteCategory === "MW";
       const isFemale = femaleCallers.has(callSid);
 
+      // Anonymous callers (no caller ID) who authenticated via a membership card
+      // cannot create a user account — there is no phone number to key off.
+      // Tell them they need caller ID to participate and offer the purchase path.
+      if (!isRealPhoneNumber(fromNumber)) {
+        console.log(`[voice] phone-booth-continue: anonymous caller reached — no user account possible (callSid=${callSid})`);
+        const anonGather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-anon-booth-fallback", timeout: 15, actionOnEmptyResult: true });
+        playPrompt(anonGather, req, "anon_needs_callerid.mp3",
+          "To participate in the phone booth, please call back with caller ID enabled. " +
+          "To purchase a membership online, press 2. Otherwise, press any key to return to the main menu.");
+        twiml.redirect("/voice/main-menu");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       const user = await getOrCreateUser(fromNumber);
       const profile = await storage.getProfile(user.id);
 
@@ -2809,6 +2823,23 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       twiml.hangup();
     }
 
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Anon Booth Fallback ───────────────────────────────────────────────────
+  // Reached only when an anonymous (no caller ID) caller authenticated with a
+  // membership card and arrived at phone-booth-continue. Since there is no
+  // phone number to key a user account off, we cannot create a profile.
+  // 2 → purchase flow; anything else → main menu.
+  app.post("/voice/handle-anon-booth-fallback", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = (req.body?.Digits as string ?? "").trim();
+    if (digit === "2") {
+      twiml.redirect("/voice/membership-purchase");
+    } else {
+      twiml.redirect("/voice/main-menu");
+    }
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -3225,10 +3256,13 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const callSid = req.body?.CallSid as string;
 
     // Anonymous guest gate: callers with no caller ID who pressed # at the entry
-    // prompt may browse the main menu but are blocked from all pay areas.
-    // Pay areas: male box (1), mailboxes (3), voicemail (6), manage membership (8).
+    // prompt may browse the main menu and enter the phone booth (which has its
+    // own membership gate), but are blocked from mailboxes, voicemail, and
+    // membership management which require a real phone-number account.
+    // Phone booth (1) is intentionally excluded — it handles anonymous callers
+    // via the booth-membership-gate flow (enter card, or press # to buy).
     const isAnonGuest = anonGuestCallSids.has(callSid);
-    const PAY_AREA_DIGITS = ["1", "3", "6", "8"];
+    const PAY_AREA_DIGITS = ["3", "6", "8"];
     if (isAnonGuest && PAY_AREA_DIGITS.includes(digit)) {
       twiml.redirect("/voice/anon-pay-gate");
       res.type("text/xml");
