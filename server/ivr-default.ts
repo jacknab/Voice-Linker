@@ -769,6 +769,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     "/handle-booth-membership-gate",
     "/handle-booth-membership-card-pin",
     "/handle-booth-membership-required",
+    // Mailbox membership gate — same local # behaviour as the booth gate.
+    "/handle-mailbox-membership-gate",
+    "/handle-mailbox-membership-card-pin",
+    "/handle-mailbox-membership-required",
   ]);
 
   // Press-0 menu handlers whose "menu URL" cannot be derived by simply stripping "handle-"
@@ -3764,6 +3768,24 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       res.type("text/xml");
       return res.send(twiml.toString());
     }
+
+    // ── Membership gate ───────────────────────────────────────────────────────
+    // Verify the caller is an active member before granting access to the mailbox.
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+    try {
+      const isVerified = await callerHasActiveMembership(callSid, fromNumber);
+      if (!isVerified) {
+        console.log(`[voice] mailbox-menu: unverified caller — redirecting to membership gate (callSid=${callSid})`);
+        twiml.redirect("/voice/mailbox-membership-gate");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+    } catch (gateErr) {
+      console.error("[voice] mailbox-menu membership gate error:", gateErr);
+      // On error, fall through so the caller isn't silently blocked
+    }
+
     const gather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-mailbox-menu" });
     playPrompt(gather, req, "mailbox_menu.mp3",
       "To go to your mailbox press one. " +
@@ -4342,7 +4364,172 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     res.send(twiml.toString());
   });
 
-  // ─── 4a3. My Mailbox — check unread messages ─────────────────────────────
+  // ─── Mailbox Membership Gate ──────────────────────────────────────────────
+  // Mirrors the phone-booth gate exactly — same audio, same card+PIN flow —
+  // but on success redirects back to /voice/mailbox-menu (now verified).
+  app.post("/voice/mailbox-membership-gate", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 5,
+      finishOnKey: "#",
+      action: "/voice/handle-mailbox-membership-gate",
+      timeout: 30,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "membership_entry_prompt.mp3",
+      "If you have a membership, please enter it now. Otherwise press pound.");
+    const gather2 = twiml.gather({
+      numDigits: 5,
+      finishOnKey: "#",
+      action: "/voice/handle-mailbox-membership-gate",
+      timeout: 20,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather2, req, "membership_entry_prompt.mp3",
+      "No input received. Please enter your 5-digit membership card number, or press pound.");
+    twiml.redirect("/voice/mailbox-membership-required");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-mailbox-membership-gate", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const rawDigits = (req.body?.Digits as string ?? "").trim();
+    const callSid = req.body?.CallSid as string;
+    const digits = rawDigits.replace(/[^0-9]/g, "");
+
+    if (!digits) {
+      console.log(`[voice] mailbox-membership-gate: # pressed or timeout — routing to membership-required (callSid=${callSid})`);
+      twiml.redirect("/voice/mailbox-membership-required");
+    } else if (digits.length === 5) {
+      try {
+        const card = await storage.getMembershipCardByNumber(digits);
+        if (!card) {
+          playPrompt(twiml, req, "membership_not_found.mp3",
+            "That membership number was not found. Please try again.");
+          twiml.redirect("/voice/mailbox-membership-gate");
+        } else if (card.valueSeconds <= 0) {
+          playPrompt(twiml, req, "access_expired.mp3",
+            "That membership has no time remaining. Please purchase a new membership.");
+          twiml.redirect("/voice/mailbox-membership-required");
+        } else {
+          anonCardPending.set(callSid, digits);
+          twiml.redirect("/voice/mailbox-membership-card-pin");
+        }
+      } catch (err) {
+        console.error("[voice] mailbox-membership-gate card lookup error:", err);
+        playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again.");
+        twiml.redirect("/voice/mailbox-membership-gate");
+      }
+    } else {
+      playPrompt(twiml, req, "membership_entry_prompt.mp3",
+        "Please enter your 5-digit membership card number. Or press pound.");
+      twiml.redirect("/voice/mailbox-membership-gate");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/mailbox-membership-card-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    if (!anonCardPending.has(callSid)) {
+      twiml.redirect("/voice/mailbox-membership-gate");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-mailbox-membership-card-pin",
+      timeout: 30,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "membership_pin_prompt.mp3", "Please enter your 4-digit PIN.");
+    playPrompt(twiml, req, "goodbye.mp3", "No input received. Goodbye.");
+    twiml.hangup();
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-mailbox-membership-card-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string ?? "").trim();
+    const callSid = req.body?.CallSid as string;
+    const cardNumber = anonCardPending.get(callSid);
+
+    if (!cardNumber) {
+      twiml.redirect("/voice/mailbox-membership-gate");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const card = await storage.getMembershipCardByNumber(cardNumber);
+      if (card && card.pin && card.pin === digits) {
+        anonCardPending.delete(callSid);
+        callCardOverride.set(callSid, card.id);
+        const minutes = Math.floor(card.valueSeconds / 60);
+        console.log(`[voice] mailbox-membership-card-pin: accepted callSid=${callSid} card=${cardNumber} — ${minutes} min`);
+        playPrompt(twiml, req, "pin_accepted.mp3", "Access code accepted. Welcome.");
+        if (!callTimeAnnounced.has(callSid)) {
+          playTimeRemaining(twiml, req, minutes);
+          callTimeAnnounced.add(callSid);
+        }
+        // Verified — send back to mailbox-menu now that the gate will pass
+        twiml.redirect("/voice/mailbox-menu");
+      } else {
+        anonCardPending.delete(callSid);
+        console.log(`[voice] mailbox-membership-card-pin: rejected callSid=${callSid}`);
+        playPrompt(twiml, req, "pin_incorrect.mp3", "Incorrect PIN. Please try again.");
+        twiml.redirect("/voice/mailbox-membership-gate");
+      }
+    } catch (err) {
+      console.error("[voice] mailbox-membership-card-pin error:", err);
+      anonCardPending.delete(callSid);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/mailbox-membership-required", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 1,
+      finishOnKey: "",
+      action: "/voice/handle-mailbox-membership-required",
+      timeout: 15,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "booth_membership_required.mp3",
+      "A membership is required to use this system. To buy your membership now, press 2. Otherwise, please hang up and call back when you are ready to become a member.");
+    twiml.hangup();
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-mailbox-membership-required", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+
+    if (digit === "2") {
+      twiml.redirect("/voice/membership-purchase");
+    } else {
+      playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
   app.post("/voice/my-mailbox", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
