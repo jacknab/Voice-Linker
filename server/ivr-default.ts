@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import { getVoiceIdForFolder } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
-import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity, onQueueCycleComplete } from "./simulator";
+import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity, onQueueCycleComplete, onLastCallerDisconnected } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, scheduleAutoModCheck } from "./autoModeration";
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
 
@@ -1242,6 +1242,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     // Notify admin dashboard that caller list has changed
     broadcastCallersChanged();
+
+    // If this was the last real caller, silence the line immediately
+    onLastCallerDisconnected().catch(err =>
+      console.error("[simulator] onLastCallerDisconnected error:", err),
+    );
   }
 
   // ─── Call Status Callback ──────────────────────────────────────────────────

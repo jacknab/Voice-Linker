@@ -487,6 +487,41 @@ async function runRealCallerScheduler(): Promise<void> {
   }
 }
 
+// ─── Last-caller cleanup: silence the line the moment everyone hangs up ───────
+//
+// Called right after a real caller disconnects. If no real callers remain,
+// cancels all pending cool-down timers and takes every active seed offline
+// immediately so the system returns to a fully silent state.
+export async function onLastCallerDisconnected(): Promise<void> {
+  try {
+    if ((await countRealCallers()) > 0) return; // other real callers still present
+
+    // Cancel any pending cool-down timers first so no seed sneaks back online
+    for (const [userId, timer] of cooldownTimers.entries()) {
+      clearTimeout(timer);
+      cooldownTimers.delete(userId);
+      log(`last-caller-gone: cancelled cooldown for userId=${userId}`, "simulator");
+    }
+
+    // Collect every currently-active seed session
+    const toStop = [...activeSessions];
+    if (toStop.length === 0) return;
+
+    log(`last-caller-gone: taking ${toStop.length} seed(s) offline`, "simulator");
+
+    for (const userId of toStop) {
+      activeSessions.delete(userId);
+      const callSid = `${VIRTUAL_PREFIX}${userId}`;
+      await storage.removeActiveCall(callSid).catch(() => {});
+      await storage.endSeedSession(userId).catch(() => {});
+    }
+
+    log("last-caller-gone: line is now fully silent", "simulator");
+  } catch (err) {
+    log(`onLastCallerDisconnected error: ${err}`, "simulator");
+  }
+}
+
 // ─── Queue-cycle churn: fires when the sole real caller exhausts the queue ────
 //
 // Brings 1–2 idle seeds online (in the caller's region) and takes 1 active seed

@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import { generateTTS, getVoiceIdForFolder } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
-import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity, onQueueCycleComplete } from "./simulator";
+import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity, onQueueCycleComplete, onLastCallerDisconnected } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, scheduleAutoModCheck } from "./autoModeration";
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
@@ -1026,6 +1026,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       liveConnectionCallSidMap.delete(callSid);
       console.log(`[live-connect] Removed userId=${liveUserId} from live connections (call ended)`);
     }
+
+    // If this was the last real caller, silence the line immediately
+    onLastCallerDisconnected().catch(err =>
+      console.error("[simulator] onLastCallerDisconnected error:", err),
+    );
   }
 
   // ─── Call Status Callback ──────────────────────────────────────────────────
