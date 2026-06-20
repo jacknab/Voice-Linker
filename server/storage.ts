@@ -15,6 +15,7 @@ export interface CallerSummary {
   membershipTier: string | null;
   remainingSeconds: number | null;
   createdAt: Date | null;
+  lastCalledAt: Date | null;
   hasProfile: boolean;
   callCount: number;
   messageCount: number;
@@ -1398,13 +1399,16 @@ export class DatabaseStorage implements IStorage {
         u.created_at        AS "createdAt",
         COALESCE(u.account_status, 'active') AS "accountStatus",
         (p.id IS NOT NULL)::boolean AS "hasProfile",
-        COALESCE(cl.call_count, 0)::int    AS "callCount",
-        COALESCE(mc.msg_count, 0)::int     AS "messageCount",
-        COALESCE(bl.block_count, 0)::int   AS "blockCount"
+        COALESCE(cl.call_count, 0)::int AS "callCount",
+        cl.last_called_at                AS "lastCalledAt",
+        COALESCE(mc.msg_count, 0)::int  AS "messageCount",
+        COALESCE(bl.block_count, 0)::int AS "blockCount"
       FROM users u
       LEFT JOIN profiles p ON p.user_id = u.id
       LEFT JOIN (
-        SELECT from_phone_number, COUNT(*)::int AS call_count
+        SELECT from_phone_number,
+               COUNT(*)::int      AS call_count,
+               MAX(started_at)    AS last_called_at
         FROM call_logs
         GROUP BY from_phone_number
       ) cl ON cl.from_phone_number = u.phone_number

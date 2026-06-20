@@ -100,6 +100,7 @@ interface CallerSummary {
   membershipTier: string | null;
   remainingSeconds: number | null;
   createdAt: string | null;
+  lastCalledAt: string | null;
   hasProfile: boolean;
   callCount: number;
   messageCount: number;
@@ -6204,7 +6205,7 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
 // ── CallersTab ────────────────────────────────────────────────────────────────
 function CallersTab() {
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<"joined" | "phone" | "credits" | "calls">("joined");
+  const [sort, setSort] = useState<"joined" | "phone" | "credits" | "calls" | "last-called">("joined");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data: callers, isLoading } = useQuery<CallerSummary[]>({
@@ -6215,9 +6216,10 @@ function CallersTab() {
   const filtered = (callers ?? [])
     .filter(c => c.phoneNumber.includes(search.trim()))
     .sort((a, b) => {
-      if (sort === "phone")   return a.phoneNumber.localeCompare(b.phoneNumber);
-      if (sort === "credits") return (b.remainingSeconds ?? 0) - (a.remainingSeconds ?? 0);
-      if (sort === "calls")   return b.callCount - a.callCount;
+      if (sort === "phone")       return a.phoneNumber.localeCompare(b.phoneNumber);
+      if (sort === "credits")     return (b.remainingSeconds ?? 0) - (a.remainingSeconds ?? 0);
+      if (sort === "calls")       return b.callCount - a.callCount;
+      if (sort === "last-called") return new Date(b.lastCalledAt ?? 0).getTime() - new Date(a.lastCalledAt ?? 0).getTime();
       return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
     });
 
@@ -6240,7 +6242,7 @@ function CallersTab() {
         <div className="flex items-center gap-1.5 text-gray-400 font-mono text-xs">
           <ArrowUpDown size={12} />
           Sort:
-          {(["joined", "phone", "credits", "calls"] as const).map(s => (
+          {(["joined", "last-called", "phone", "credits", "calls"] as const).map(s => (
             <button
               key={s}
               data-testid={`btn-sort-${s}`}
@@ -6259,21 +6261,20 @@ function CallersTab() {
             <tr>
               <th className={C.th}>Phone Number</th>
               <th className={C.th}>Joined</th>
+              <th className={C.th}>Last Called</th>
               <th className={C.th}>Tier</th>
               <th className={C.th}>Status</th>
               <th className={C.th}>Credits</th>
               <th className={C.th}>Profile</th>
               <th className={C.th}>Calls</th>
-              <th className={C.th}>Msgs</th>
-              <th className={C.th}>Blocks</th>
               <th className={C.th}></th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING CALLERS…</td></tr>
+              <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">LOADING CALLERS…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={10} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">
+              <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400 font-mono text-xs tracking-widest">
                 {search ? "NO MATCHES FOUND" : "NO CALLERS REGISTERED"}
               </td></tr>
             ) : (
@@ -6285,7 +6286,14 @@ function CallersTab() {
                       <span data-testid={`text-caller-phone-${caller.id}`} className="text-gray-900 font-mono text-sm">{caller.phoneNumber}</span>
                     </div>
                   </td>
-                  <td className={C.td + " text-gray-400 text-xs"}>{caller.createdAt ? new Date(caller.createdAt).toLocaleDateString() : "—"}</td>
+                  <td className={C.td + " text-gray-400 text-xs whitespace-nowrap"}>{caller.createdAt ? new Date(caller.createdAt).toLocaleDateString() : "—"}</td>
+                  <td className={C.td + " text-gray-400 text-xs whitespace-nowrap"}>
+                    {caller.lastCalledAt ? (
+                      <span title={new Date(caller.lastCalledAt).toLocaleString()}>
+                        {new Date(caller.lastCalledAt).toLocaleDateString()}
+                      </span>
+                    ) : "—"}
+                  </td>
                   <td className={C.td}>
                     {caller.membershipTier ? (
                       <span className={`${C.badge} border-amber-200 bg-amber-50 text-amber-700`}>{caller.membershipTier}</span>
@@ -6311,8 +6319,6 @@ function CallersTab() {
                     )}
                   </td>
                   <td className={C.td + " text-gray-600 text-xs text-center"}>{caller.callCount}</td>
-                  <td className={C.td + " text-gray-600 text-xs text-center"}>{caller.messageCount}</td>
-                  <td className={C.td + " text-gray-600 text-xs text-center"}>{caller.blockCount > 0 ? <span className="text-red-400">{caller.blockCount}</span> : <span className="text-gray-300">0</span>}</td>
                   <td className={C.td}>
                     <button
                       data-testid={`btn-view-caller-${caller.id}`}

@@ -31,12 +31,13 @@ function randomBetween(min: number, max: number): number {
  * Returns the target number of active admin seed profiles for the current
  * time window, based on Eastern Time.
  *
- *  5 am – 5 pm  (any day)              →  0 – 3   quiet / daytime
- *  Mon – Thu evenings / nights          →  3 – 5   semi-busy weeknights
- *  Fri – Sun prime time (5 pm → 4 am)  →  6 – 10  busy weekend nights
+ *  Weekday  5 am – 5 pm               →  0 – 3   quiet / daytime
+ *  Weekend 10 am – 5 pm               →  0 – 3   quiet / late-morning
+ *  Mon – Thu evenings / nights         →  3 – 5   semi-busy weeknights
+ *  Fri – Sun prime time (5 pm → 10am) →  6 – 10  busy weekend nights/mornings
  *
- * Hours 0 – 3 are treated as belonging to the previous calendar day's night
- * so that e.g. 2 am Saturday still counts as Friday-night busy time.
+ * Hours 0–7 are credited to the previous calendar day's night so that
+ * e.g. 7 am Saturday still counts as Friday-night prime time.
  * Active seeds that exceed the new target are not force-stopped; they simply
  * run out their 30-minute sessions and are not replaced.
  */
@@ -47,15 +48,19 @@ function getTargetSeedCount(): number {
   const hour = et.getHours();  // 0-23
   const day  = et.getDay();    // 0=Sun … 6=Sat
 
-  // Quiet daytime window (5 am through 5 pm): 0–3 seeds
-  if (hour >= 5 && hour < 17) return randomBetween(0, 3);
+  // For hours 0–7 credit the night to the previous calendar day so that
+  // "7 am Saturday" still belongs to Friday night prime time, etc.
+  const effectiveDay = hour < 8 ? (day + 6) % 7 : day;
 
-  // For hours 0–3 credit the night to the previous calendar day so that
-  // "2 am Saturday" still belongs to Friday night, etc.
-  const effectiveDay = hour < 4 ? (day + 6) % 7 : day;
+  // Weekend prime time: Friday (5), Saturday (6), Sunday (0) evenings + mornings
+  const isWeekendPrime = [5, 6, 0].includes(effectiveDay);
 
-  // Weekend prime time: Friday (5), Saturday (6), Sunday (0) evenings + nights
-  if ([5, 6, 0].includes(effectiveDay)) return randomBetween(6, 10);
+  // Daytime quiet window: 10 am on weekends, 5 am on weekdays
+  const dayStart = isWeekendPrime ? 10 : 5;
+  if (hour >= dayStart && hour < 17) return randomBetween(0, 3);
+
+  // Weekend prime time: busy
+  if (isWeekendPrime) return randomBetween(6, 10);
 
   // Mon–Thu evenings / late nights — semi-busy, clearly below weekend levels
   return randomBetween(3, 5);
@@ -485,7 +490,7 @@ export async function startSimulator(): Promise<void> {
     .where(eq(profiles.isAdminUploaded, true));
 
   log(
-    `${adminProfiles.length} admin seed(s) loaded — dynamic target (0–3 day / 2–5 weeknight / 5–8 weekend prime time)`,
+    `${adminProfiles.length} admin seed(s) loaded — dynamic target (0–3 day / 3–5 weeknight / 6–10 weekend prime time)`,
     "simulator",
   );
 
