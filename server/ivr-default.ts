@@ -1527,7 +1527,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                 inlineHandled = true;
               } else if (!entryUser.membershipTier) {
                 // Brand new — inline activation of free trial
-                await applyRogerGreetingInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
+                await applyEntryInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
                 inlineHandled = true;
               } else if (motdCfg.billingMode === "per_24h" && entryUser.membershipTier !== "free_trial") {
                 const purchasedAt = entryUser.membershipPurchasedAt;
@@ -1536,7 +1536,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                   playPrompt(twiml, req, "access_expired.mp3", "Your backdoor access pass has expired.");
                   twiml.redirect("/voice/membership-purchase");
                 } else {
-                  await applyRogerGreetingInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
+                  await applyEntryInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
                 }
                 inlineHandled = true;
               } else if ((entryUser.remainingSeconds ?? 0) <= 0) {
@@ -1545,7 +1545,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                 inlineHandled = true;
               } else {
                 // Returning caller with time
-                await applyRogerGreetingInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
+                await applyEntryInline(twiml, req, entryUser, entryFrom, entrySid, motdCfg);
                 inlineHandled = true;
               }
             }
@@ -2490,7 +2490,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
    * and adds the main-menu redirect. Reuses the already-fetched user and
    * membershipConf so we avoid redundant DB calls.
    */
-  async function applyRogerGreetingInline(
+  async function applyEntryInline(
     twiml: InstanceType<typeof VoiceResponse>,
     req: Request,
     user: Awaited<ReturnType<typeof getOrCreateUser>>,
@@ -2564,7 +2564,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const freeModeSettings = await getMembershipSettingsCached();
       if (isFreeModeActive(freeModeSettings)) {
         // Inline entry handling — no extra redirect hop
-        await applyRogerGreetingInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
+        await applyEntryInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
       } else {
         const linkedCard = await storage.getMembershipCardByPhone(fromNumber);
         if (linkedCard && linkedCard.valueSeconds > 0) {
@@ -2576,7 +2576,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           twiml.redirect("/voice/entry-check-card");
         } else if (!user.membershipTier) {
           // Brand new — inline entry handling activates free trial
-          await applyRogerGreetingInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
+          await applyEntryInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
         } else if (freeModeSettings.billingMode === "per_24h" && user.membershipTier !== "free_trial") {
           const purchasedAt = user.membershipPurchasedAt;
           const hoursElapsed = purchasedAt ? (Date.now() - purchasedAt.getTime()) / 3_600_000 : 24;
@@ -2585,14 +2585,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             twiml.redirect("/voice/membership-purchase");
           } else {
             // Inline entry handling — no extra redirect hop
-            await applyRogerGreetingInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
+            await applyEntryInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
           }
         } else if (remainingSeconds <= 0) {
           playPrompt(twiml, req, "access_expired.mp3", "Your access has expired.");
           twiml.redirect("/voice/membership-purchase");
         } else {
           // Returning caller with time — inline entry handling
-          await applyRogerGreetingInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
+          await applyEntryInline(twiml, req, user, fromNumber, callSid, freeModeSettings);
         }
       }
     } catch (error) {
@@ -6531,7 +6531,12 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
             }
           }
 
-          // No linked regions (or already browsingLinked) — reset local cycle
+          // No linked regions (or already browsingLinked) — reset local cycle.
+          // Tell the caller they've heard everyone before starting the rotation again.
+          if (state.seenUserIds.length > 0) {
+            playPrompt(twiml, req, "all_profiles_heard.mp3",
+              "You have heard all the local profiles in your area. Starting from the beginning.");
+          }
           console.log(`[voice] browse-profiles: full cycle complete for ${callSid} — resetting queue`);
           state.seenUserIds = [];
           state.browsingLinked = false;
@@ -7448,9 +7453,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
 
       if (attempt >= 2) {
-        playPrompt(twiml, req, "connector_idle_goodbye.mp3",
-          "You're apparently having issues right now, or have fallen asleep. Sweet dreams.");
-        twiml.hangup();
+        // Caller made no selection after two prompts — advance to the next profile
+        // rather than disconnecting them. A passive listener (just browsing) would
+        // otherwise be hung up on, which is wrong behaviour.
+        twiml.redirect(`/voice/browse-profiles?afterUserId=${encodeURIComponent(profileUserId)}`);
       } else {
         const repeatGather = twiml.gather({
           numDigits: 1,
