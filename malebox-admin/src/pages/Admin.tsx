@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { resolveUrl, getConfig } from "../config";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -12,7 +12,7 @@ import {
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
   BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send, Headphones,
-  FileText, ExternalLink, PhoneOff, ShieldX, ShieldMinus,
+  FileText, ExternalLink, PhoneOff, ShieldX, ShieldMinus, Filter,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import {
@@ -6206,6 +6206,8 @@ function CallerDetailView({ callerId, allCallers, onBack }: { callerId: string; 
 function CallersTab() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"joined" | "phone" | "credits" | "calls" | "last-called">("joined");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "restricted" | "banned">("all");
+  const [tierFilter, setTierFilter] = useState<string>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data: callers, isLoading } = useQuery<CallerSummary[]>({
@@ -6213,8 +6215,25 @@ function CallersTab() {
     refetchInterval: 30000,
   });
 
+  const availableTiers = useMemo(() => {
+    const tiers = new Set<string>();
+    (callers ?? []).forEach(c => { if (c.membershipTier) tiers.add(c.membershipTier); });
+    return Array.from(tiers).sort();
+  }, [callers]);
+
   const filtered = (callers ?? [])
-    .filter(c => c.phoneNumber.includes(search.trim()))
+    .filter(c => {
+      if (search.trim() && !c.phoneNumber.includes(search.trim())) return false;
+      if (statusFilter !== "all") {
+        const s = c.accountStatus ?? "active";
+        if (statusFilter === "active" && s !== "active") return false;
+        if (statusFilter === "restricted" && s !== "restricted") return false;
+        if (statusFilter === "banned" && s !== "banned") return false;
+      }
+      if (tierFilter === "none" && c.membershipTier) return false;
+      if (tierFilter !== "all" && tierFilter !== "none" && c.membershipTier !== tierFilter) return false;
+      return true;
+    })
     .sort((a, b) => {
       if (sort === "phone")       return a.phoneNumber.localeCompare(b.phoneNumber);
       if (sort === "credits")     return (b.remainingSeconds ?? 0) - (a.remainingSeconds ?? 0);
@@ -6223,35 +6242,97 @@ function CallersTab() {
       return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
     });
 
+  const hasActiveFilters = search.trim() || statusFilter !== "all" || tierFilter !== "all";
+
   if (selectedId) {
     return <CallerDetailView callerId={selectedId} allCallers={callers ?? []} onBack={() => setSelectedId(null)} />;
   }
 
   return (
-    <div className="space-y-4">
-      {/* Toolbar */}
+    <div className="space-y-3">
+      {/* Search row */}
       <div className="flex items-center gap-3 flex-wrap">
-        <input
-          data-testid="input-caller-search"
-          type="text"
-          placeholder="Search phone number…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="border border-gray-200 rounded px-3 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none w-56 focus:border-[#f5a623]"
-        />
-        <div className="flex items-center gap-1.5 text-gray-400 font-mono text-xs">
-          <ArrowUpDown size={12} />
-          Sort:
-          {(["joined", "last-called", "phone", "credits", "calls"] as const).map(s => (
+        <div className="relative">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            data-testid="input-caller-search"
+            type="text"
+            placeholder="Search phone number…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="border border-gray-200 rounded pl-7 pr-3 py-1.5 font-mono text-xs bg-white text-gray-700 focus:outline-none w-56 focus:border-[#f5a623]"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+              <X size={11} />
+            </button>
+          )}
+        </div>
+
+        {/* Status filter */}
+        <div className="flex items-center gap-1 text-gray-400 font-mono text-xs">
+          <Filter size={11} />
+          Status:
+          {(["all", "active", "restricted", "banned"] as const).map(s => (
             <button
               key={s}
-              data-testid={`btn-sort-${s}`}
-              onClick={() => setSort(s)}
-              className={`px-2 py-0.5 rounded font-mono text-xs tracking-widest uppercase transition-colors ${sort === s ? "bg-[#f5a623] text-black" : "text-gray-400 hover:text-gray-700"}`}
+              data-testid={`btn-status-${s}`}
+              onClick={() => setStatusFilter(s)}
+              className={`px-2 py-0.5 rounded font-mono text-xs tracking-widest uppercase transition-colors ${
+                statusFilter === s
+                  ? s === "banned" ? "bg-red-100 text-red-700 border border-red-200"
+                    : s === "restricted" ? "bg-orange-100 text-orange-700 border border-orange-200"
+                    : s === "active" ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                    : "bg-[#f5a623] text-black"
+                  : "text-gray-400 hover:text-gray-700"
+              }`}
             >{s}</button>
           ))}
         </div>
+
+        {/* Tier filter — only rendered when tiers exist */}
+        {availableTiers.length > 0 && (
+          <div className="flex items-center gap-1 text-gray-400 font-mono text-xs">
+            Tier:
+            {(["all", "none", ...availableTiers] as const).map(t => (
+              <button
+                key={t}
+                data-testid={`btn-tier-${t}`}
+                onClick={() => setTierFilter(t)}
+                className={`px-2 py-0.5 rounded font-mono text-xs tracking-widest uppercase transition-colors ${
+                  tierFilter === t
+                    ? t === "none" ? "bg-gray-200 text-gray-600 border border-gray-300"
+                      : "bg-amber-100 text-amber-700 border border-amber-200"
+                    : "text-gray-400 hover:text-gray-700"
+                }`}
+              >{t}</button>
+            ))}
+          </div>
+        )}
+
+        {hasActiveFilters && (
+          <button
+            data-testid="btn-clear-filters"
+            onClick={() => { setSearch(""); setStatusFilter("all"); setTierFilter("all"); }}
+            className="flex items-center gap-1 text-gray-400 hover:text-red-500 font-mono text-xs transition-colors ml-1"
+          ><X size={11} /> Clear</button>
+        )}
+
         <span className="ml-auto text-gray-400 font-mono text-xs">{filtered.length} record{filtered.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      {/* Sort row */}
+      <div className="flex items-center gap-1.5 text-gray-400 font-mono text-xs">
+        <ArrowUpDown size={12} />
+        Sort:
+        {(["joined", "last-called", "phone", "credits", "calls"] as const).map(s => (
+          <button
+            key={s}
+            data-testid={`btn-sort-${s}`}
+            onClick={() => setSort(s)}
+            className={`px-2 py-0.5 rounded font-mono text-xs tracking-widest uppercase transition-colors ${sort === s ? "bg-[#f5a623] text-black" : "text-gray-400 hover:text-gray-700"}`}
+          >{s}</button>
+        ))}
       </div>
 
       {/* Directory table */}
