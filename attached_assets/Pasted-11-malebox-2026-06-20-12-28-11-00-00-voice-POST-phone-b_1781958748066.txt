@@ -1,0 +1,16 @@
+11|malebox  | 2026-06-20 12:28:11 +00:00: [voice] POST /phone-booth | From=Anonymous CallSid=CAa90cd30b24991ee3645a915ba93d95d6 Digits=undefined CallStatus=in-progress
+11|malebox  | 2026-06-20 12:28:25 +00:00: [voice] POST /phone-booth-continue | From=Anonymous CallSid=CAa90cd30b24991ee3645a915ba93d95d6 Digits=undefined CallStatus=in-progress
+11|malebox  | 2026-06-20 12:28:25 +00:00: [billing] Started for callSid=CAa90cd30b24991ee3645a915ba93d95d6
+11|malebox  | 2026-06-20 12:28:25 +00:00: [billing] Started for anonymous card caller callSid=CAa90cd30b24991ee3645a915ba93d95d6
+11|malebox  | 2026-06-20 12:28:25 +00:00: [voice] phone-booth-continue: anonymous caller with valid card session — routing to browse (callSid=CAa90cd30b24991ee3645a915ba93d95d6)
+11|malebox  | 2026-06-20 12:28:28 +00:00: [voice] POST /browse-profiles | From=Anonymous CallSid=CAa90cd30b24991ee3645a915ba93d95d6 Digits=undefined CallStatus=in-progress
+11|malebox  | 2026-06-20 12:28:28 +00:00: [billing] syncBilling: deducted 3s from cardId=ab4a6ccc-bef0-4a18-af06-85cb20f80c0c
+11|malebox  | 2026-06-20 12:28:28 +00:00: [voice] browse-profiles TwiML:
+11|malebox  | 2026-06-20 12:28:28 +00:00: <?xml version="1.0" encoding="UTF-8"?><Response><Play>https://malebox.net/uploads/mm/error_generic.mp3</Play><Redirect>/voice/main-menu</Redirect></Response>
+11|malebox  | 2026-06-20 12:28:28 +00:00: [voice] /voice/browse-profiles error: Error: [getOrCreateUser] Refusing to create account for non-identifiable caller: "Anonymous"
+11|malebox  | 2026-06-20 12:28:28 +00:00:     at r (/opt/Voice-Linker/dist/index.cjs:1441:45542)
+11|malebox  | 2026-06-20 12:28:28 +00:00:     at /opt/Voice-Linker/dist/index.cjs:1441:167784
+11|malebox  | 2026-06-20 12:28:28 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+11|malebox  | 2026-06-20 12:28:31 +00:00: [voice] POST /main-menu | From=Anonymous CallSid=CAa90cd30b24991ee3645a915ba93d95d6 Digits=undefined CallStatus=in-progress
+11|malebox  | 2026-06-20 12:28:32 +00:00: [voice] POST /main-menu | From=Anonymous CallSid=CAa90cd30b24991ee3645a915ba93d95d6 Digits=undefined CallStatus=completed
+11|malebox  | 2026-06-20 12:28:32 +00:00: [voice] POST /denver/status | From=Anonymous CallSid=CAa90cd30b24991ee3645a915ba93d95d6 Digits=undefined CallStatus=completed
