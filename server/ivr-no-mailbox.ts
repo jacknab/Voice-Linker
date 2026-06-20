@@ -390,7 +390,7 @@ const callMembershipOverride = new Map<string, string>(); // callSid → members
 // go directly to the male box. Women are always free on MW systems.
 const femaleCallers = new Set<string>(); // CallSids identified as female
 
-// Temporary store for a membership number mid-entry (between the 10-digit gather and account lookup)
+// Temporary store for a membership number mid-entry (between the 5-digit gather and account lookup)
 const pendingMembershipEntries = new Map<string, string>(); // callSid → membership number
 
 // Pending PIN authentication: caller entered a valid membership number from a different phone,
@@ -1451,7 +1451,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.redirect("/voice/entry-check");
       }
     } else if (digits.length === 10) {
-      // Legacy 10-digit membership number — require PIN if calling from a different phone
+      // 5-digit membership number — require PIN if calling from a different phone
       try {
         const memberUser = await storage.getUserByMembershipNumber(digits);
         if (memberUser) {
@@ -1543,7 +1543,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       actionOnEmptyResult: true,
     });
     playPrompt(gather, req, "anon_auth_enter_membership.mp3",
-      "Please enter your 10-digit membership number now.");
+      "Please enter your 5-digit membership number now.");
     playPrompt(twiml, req, "goodbye.mp3", "No input received. Goodbye.");
     twiml.hangup();
     res.type("text/xml");
