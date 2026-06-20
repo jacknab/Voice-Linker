@@ -1335,6 +1335,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           // Broadcast balance update to admin WebSocket clients
           broadcastBalanceUpdate(callSid, userId, remainingSeconds);
 
+          // Low-balance warning for anonymous card callers in the booth.
+          // Fires once when balance first drops below 5 minutes, giving the
+          // caller a heads-up before the system force-disconnects them at zero.
+          if (cardId && remainingSeconds > 0 && remainingSeconds < LIVE_LOW_BALANCE_SECONDS
+              && !callWarningShown.has(callSid) && accountSid && authToken) {
+            callWarningShown.add(callSid);
+            console.log(`[ivr-billing-tick] callSid=${callSid} card balance below 5 min — playing booth low-balance warning`);
+            const baseUrl = `https://${process.env.REPLIT_DEV_DOMAIN ?? process.env.SITE_URL ?? "localhost:5000"}`;
+            const client = twilio(accountSid, authToken);
+            client.calls(callSid)
+              .update({ url: `${baseUrl}/voice/booth-low-balance-warning`, method: "POST" })
+              .catch(err => console.error(`[ivr-billing-tick] low-balance warning error for ${callSid}:`, err.message));
+          }
+
           // Zero-balance enforcement: force-redirect the caller out
           if (remainingSeconds <= 0 && accountSid && authToken) {
             console.log(`[ivr-billing-tick] callSid=${callSid} balance hit zero — force-redirecting to /voice/time-expired`);
@@ -6874,8 +6888,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
 
         // Nest <Play> inside <Gather> — pressing 2 during the greeting skips to the next one.
+        // finishOnKey: "" so that # is received as Digits="#" (used to exit the booth).
         const profileGather = twiml.gather({
           numDigits: 1,
+          finishOnKey: "",
           action: `/voice/handle-profile-menu?profileUserId=${profile.userId}&previousProfileUserId=${prevLastProfile?.userId ?? ""}`,
           timeout: 10,
         });
@@ -7509,9 +7525,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         }
         playPrompt(twiml, req, "profile_flagged.mp3", "This profile has been flagged for review. Thank you.");
         twiml.redirect("/voice/browse-profiles");
-      } else if (digit === "9") {
-        // Exiting the male box — in per-minute billing notify caller deductions have stopped.
-        // In per-day, per_24h billing or free mode, time is not deducted per-call, so skip the announcement.
+      } else if (digit === "#") {
+        // Exiting the phone booth via the pound key — in per-minute billing notify
+        // caller that deductions have stopped.
         const boothExitSettings = await getMembershipSettingsCached();
         if (boothExitSettings.billingMode !== "per_day" && boothExitSettings.billingMode !== "per_24h" && !boothExitSettings.freeMode) {
           playPrompt(twiml, req, "time_deduction_stop.mp3",
@@ -8174,6 +8190,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/live-low-balance-warning", (_req, res) => {
     const twiml = new VoiceResponse();
     playPrompt(twiml, _req, "live_time_warning.mp3", "Warning: you have less than 5 minutes remaining. Please note your live connection will end when your time expires.");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // Played by the IVR billing ticker when an anonymous card caller's balance
+  // drops below 5 minutes while browsing the phone booth. Interrupts their
+  // current IVR state, plays the warning, then returns them to browse.
+  app.post("/voice/booth-low-balance-warning", (req, res) => {
+    const twiml = new VoiceResponse();
+    playPrompt(twiml, req, "member_warning.mp3",
+      "Warning: you have less than 5 minutes remaining on your card. " +
+      "Time will continue to be deducted. You can press pound at any time to exit the phone booth.");
+    twiml.redirect("/voice/browse-profiles");
     res.type("text/xml");
     res.send(twiml.toString());
   });
