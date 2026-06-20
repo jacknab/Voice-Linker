@@ -9408,11 +9408,9 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "announcements",  label: "Announcements",     icon: <Megaphone size={15} /> },
   // ── System Settings
   { id: "analytics",      label: "Analytics",         icon: <BarChart2 size={15} />,  dividerBefore: true },
-  { id: "audit-log",      label: "Audit Log",         icon: <TrendingUp size={15} /> },
   { id: "mod-log",        label: "Moderation Log",    icon: <ShieldAlert size={15} /> },
   { id: "sms-marketing",  label: "SMS Marketing",     icon: <Send size={15} /> },
   { id: "support",        label: "Support Tickets",   icon: <Headphones size={15} /> },
-  { id: "phone-testing",  label: "Phone Testing",     icon: <PhoneCall size={15} /> },
   { id: "phone-numbers",  label: "Phone Numbers",     icon: <Phone size={15} /> },
   { id: "blocked",        label: "Blocked Numbers",   icon: <X size={15} /> },
   { id: "promo-codes",    label: "Promo Codes",       icon: <Tag size={15} /> },
