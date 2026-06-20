@@ -6935,6 +6935,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/handle-message-menu", async (req, res) => {
     const twiml = new VoiceResponse();
 
+    // ── Hang-up detection ────────────────────────────────────────────────────
+    // Fired by the message-notification Gather when caller disconnects mid-playback.
+    const mmCallSid = req.body?.CallSid as string;
+    if (req.body?.HangUp === "true") {
+      console.log(`[voice] handle-message-menu: HangUp detected — cleaning up callSid=${mmCallSid}`);
+      cleanupEndedCall(mmCallSid).catch(err =>
+        console.error("[voice] handle-message-menu cleanupEndedCall error:", err));
+      res.type("text/xml");
+      return res.send("<Response/>");
+    }
+
     try {
       const digit = req.body?.Digits;
       const msgId = req.query.msgId as string;
@@ -7150,6 +7161,20 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   // ─── 8. Handle Profile Menu ───────────────────────────────────────────────
   app.post("/voice/handle-profile-menu", async (req, res) => {
     const twiml = new VoiceResponse();
+
+    // ── Hang-up detection ────────────────────────────────────────────────────
+    // Twilio fires this action URL with HangUp=true when the caller disconnects
+    // during the profile-greeting Gather. Detect it here so billing stops and
+    // the caller is removed from active-call state immediately — no credentials
+    // or polling needed. Return an empty <Response/> so Twilio doesn't retry.
+    const hangUpCallSid = req.body?.CallSid as string;
+    if (req.body?.HangUp === "true") {
+      console.log(`[voice] handle-profile-menu: HangUp detected — cleaning up callSid=${hangUpCallSid}`);
+      cleanupEndedCall(hangUpCallSid).catch(err =>
+        console.error("[voice] handle-profile-menu cleanupEndedCall error:", err));
+      res.type("text/xml");
+      return res.send("<Response/>");
+    }
 
     try {
       const digit = req.body?.Digits;
@@ -7397,6 +7422,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const profileUserId = (req.query.profileUserId as string) || "";
     const previousProfileUserId = (req.query.previousProfileUserId as string) || "";
     const attempt = parseInt((req.query.attempt as string) || "1", 10);
+
+    // ── Hang-up detection ────────────────────────────────────────────────────
+    // This route is the fallback when no key is pressed after the profile gather.
+    // Twilio also fires it with HangUp=true if the caller disconnected during the
+    // repeat-prompt gather inside this handler.
+    const ctCallSid = req.body?.CallSid as string;
+    if (req.body?.HangUp === "true") {
+      console.log(`[voice] connector-timeout: HangUp detected — cleaning up callSid=${ctCallSid}`);
+      cleanupEndedCall(ctCallSid).catch(err =>
+        console.error("[voice] connector-timeout cleanupEndedCall error:", err));
+      res.type("text/xml");
+      return res.send("<Response/>");
+    }
 
     try {
       const fromNumber = req.body?.From as string | undefined;
@@ -7707,6 +7745,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const room = req.query.room as string;
     const fromNumber = req.body?.From as string;
     const callSid = req.body?.CallSid as string;
+
+    // ── Hang-up detection ────────────────────────────────────────────────────
+    // Fired by the live-invite Gather when the invitee disconnects while the
+    // invite audio is playing (chime + name recording + accept prompt).
+    if (req.body?.HangUp === "true") {
+      console.log(`[voice] handle-live-invite: HangUp detected — cleaning up callSid=${callSid}`);
+      cleanupEndedCall(callSid).catch(err =>
+        console.error("[voice] handle-live-invite cleanupEndedCall error:", err));
+      res.type("text/xml");
+      return res.send("<Response/>");
+    }
 
     try {
       const user = await getOrCreateUser(fromNumber);
