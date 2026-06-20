@@ -1,0 +1,24 @@
+eNumber":null,"notes":null,"createdAt":"2026-06-06T05:44:55.701Z","firstUsedAt":null}]
+10|malebox  | 2026-06-20 11:42:48 +00:00: [voice] POST /handle-main-menu | From=Anonymous CallSid=CAdbfc7958e4ada6739aa8d9ab38ae69e6 Digits=1 CallStatus=in-progress
+10|malebox  | 2026-06-20 11:42:48 +00:00: [voice] POST /phone-booth | From=Anonymous CallSid=CAdbfc7958e4ada6739aa8d9ab38ae69e6 Digits=undefined CallStatus=in-progress
+10|malebox  | 2026-06-20 11:42:48 +00:00: [voice] /voice/phone-booth error: ReferenceError: isRealPhoneNumber is not defined
+10|malebox  | 2026-06-20 11:42:48 +00:00:     at KV (/opt/Voice-Linker/dist/index.cjs:1441:39438)
+10|malebox  | 2026-06-20 11:42:48 +00:00:     at /opt/Voice-Linker/dist/index.cjs:1441:82910
+10|malebox  | 2026-06-20 11:42:48 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+10|malebox  | 2026-06-20 11:43:06 +00:00: [voice] POST /denver/status | From=Anonymous CallSid=CAdbfc7958e4ada6739aa8d9ab38ae69e6 Digits=undefined CallStatus=completed
+10|malebox  | 2026-06-20 11:43:12 +00:00: [voice] POST /denver | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=undefined CallStatus=ringing
+10|malebox  | 2026-06-20 11:43:13 +00:00: [status] Registered status callback for CA93cacfbe527460fa3531dcc7d1e6fc0b → https://malebox.net/voice/status
+10|malebox  | 2026-06-20 11:43:33 +00:00: [voice] POST /entry | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits= CallStatus=in-progress
+10|malebox  | 2026-06-20 11:43:33 +00:00: [voice] POST /anon-entry | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=undefined CallStatus=in-progress
+10|malebox  | 2026-06-20 11:43:41 +00:00: [voice] POST /handle-anon-entry | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=70438 CallStatus=in-progress
+10|malebox  | 2026-06-20 11:43:41 +00:00: [voice] POST /anon-card-pin-entry | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=undefined CallStatus=in-progress
+10|malebox  | 2026-06-20 11:43:49 +00:00: [voice] POST /handle-anon-card-pin | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=9836 CallStatus=in-progress
+10|malebox  | 2026-06-20 11:43:49 +00:00: [voice] anon-card-pin: accepted for callSid=CA93cacfbe527460fa3531dcc7d1e6fc0b cardNumber=70438 — 1440 min
+10|malebox  | 2026-06-20 11:43:53 +00:00: [voice] POST /entry-check-card | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=undefined CallStatus=in-progress
+10|malebox  | 2026-06-20 11:43:53 +00:00: [voice] POST /main-menu | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=undefined CallStatus=in-progress
+10|malebox  | 2026-06-20 11:43:59 +00:00: [voice] POST /handle-main-menu | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=1 CallStatus=in-progress
+10|malebox  | 2026-06-20 11:44:00 +00:00: [voice] POST /phone-booth | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=undefined CallStatus=in-progress
+10|malebox  | 2026-06-20 11:44:14 +00:00: [voice] POST /phone-booth-continue | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=undefined CallStatus=in-progress
+10|malebox  | 2026-06-20 11:44:14 +00:00: [voice] phone-booth-continue: anonymous caller reached — no user account possible (callSid=CA93cacfbe527460fa3531dcc7d1e6fc0b)
+10|malebox  | 2026-06-20 11:44:22 +00:00: [voice] POST /handle-anon-booth-fallback | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits= CallStatus=completed
+10|malebox  | 2026-06-20 11:44:22 +00:00: [voice] POST /denver/status | From=Anonymous CallSid=CA93cacfbe527460fa3531dcc7d1e6fc0b Digits=undefined CallStatus=completed

@@ -2785,10 +2785,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const isFemale = femaleCallers.has(callSid);
 
       // Anonymous callers (no caller ID) who authenticated via a membership card
-      // cannot create a user account — there is no phone number to key off.
-      // Tell them they need caller ID to participate and offer the purchase path.
+      // have valid paid access — route them directly into browse mode.
+      // They cannot have their own profile (no phone number to key off), but they
+      // can fully browse greetings and connect live just like any member.
       if (!isRealPhoneNumber(fromNumber)) {
-        console.log(`[voice] phone-booth-continue: anonymous caller reached — no user account possible (callSid=${callSid})`);
+        if (callCardOverride.has(callSid) || callMembershipOverride.has(callSid)) {
+          console.log(`[voice] phone-booth-continue: anonymous caller with valid card session — routing to browse (callSid=${callSid})`);
+          twiml.redirect("/voice/browse-profiles");
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        }
+        // Truly anonymous with no card auth — prompt caller ID or purchase.
+        console.log(`[voice] phone-booth-continue: anonymous caller with no card session — prompting caller ID (callSid=${callSid})`);
         const anonGather = twiml.gather({ numDigits: 1, finishOnKey: "", action: "/voice/handle-anon-booth-fallback", timeout: 15, actionOnEmptyResult: true });
         playPrompt(anonGather, req, "anon_needs_callerid.mp3",
           "To participate in the phone booth, please call back with caller ID enabled. " +
