@@ -1439,6 +1439,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     storage.removeStaleActiveCalls(3).catch(() => {});
     storage.logCall(callSid, fromNumber, calledTo, null).catch(() => {});
     registerStatusCallback(callSid, req).catch(() => {});
+    // Push a real-time update immediately so the admin feed shows the call
+    // the moment it arrives — before the greeting finishes and the account
+    // is created in /voice/entry.
+    broadcastCallersChanged();
 
     // Always play the greeting + disclaimer (skippable by pressing any key).
     // Caller lands at /voice/entry once the greeting is done (or skipped).

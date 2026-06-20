@@ -3947,7 +3947,7 @@ interface MailboxStats {
 
 interface LiveCaller {
   callSid: string;
-  userId: string;
+  userId: string | null;
   phoneNumber: string;
   status: string;
   currentIvrState: string | null;
@@ -3957,7 +3957,8 @@ interface LiveCaller {
   membershipTier: string | null;
   remainingSeconds: number | null;
   isVirtual: boolean;
-  durationSeconds: number;
+  isPreVerification: boolean;
+  joinedAt: string;
   stateAgeSeconds: number | null;
 }
 
@@ -4002,6 +4003,15 @@ function DashboardTab() {
   // disconnects. We listen here and immediately invalidate the relevant queries
   // so the dashboard reflects the change with zero polling delay.
   const [wsStatus, setWsStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
+
+  // ── 1-second ticker for live duration display ──────────────────────────────
+  // Re-renders every second so "Xm Ys on line" counts up in real-time without
+  // needing any network calls. Duration is computed client-side from joinedAt.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const config = getConfig();
@@ -4175,21 +4185,29 @@ function DashboardTab() {
             <div className="text-gray-400 font-mono text-xs text-center py-5">No active calls right now.</div>
           ) : (
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {liveCallers.map(caller => (
-                <div key={caller.callSid} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors" data-testid={`row-live-feed-${caller.userId}`}>
-                  <div className="min-w-0">
-                    <div className="font-mono text-xs font-bold text-gray-800">{caller.phoneNumber}</div>
-                    <div className="font-mono text-[10px] text-gray-400 truncate">{caller.currentIvrPath ?? "/voice"}{caller.regionName ? ` · ${caller.regionName}` : ""}</div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-mono text-[10px] font-bold uppercase tracking-wider" data-testid={`status-live-state-${caller.userId}`}>
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      {caller.currentIvrState ?? "Connected"}
+              {liveCallers.map(caller => {
+                const liveDuration = caller.joinedAt
+                  ? Math.max(0, Math.floor((Date.now() - new Date(caller.joinedAt).getTime()) / 1000))
+                  : 0;
+                const isPre = caller.isPreVerification;
+                return (
+                  <div key={caller.callSid} className={`flex items-center justify-between gap-3 border rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors ${isPre ? "border-amber-100 bg-amber-50/40" : "border-gray-100"}`} data-testid={`row-live-feed-${caller.userId ?? caller.callSid}`}>
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs font-bold text-gray-800">{caller.phoneNumber}</div>
+                      <div className="font-mono text-[10px] text-gray-400 truncate">
+                        {caller.currentIvrPath ?? "/voice"}{caller.regionName ? ` · ${caller.regionName}` : ""}
+                      </div>
                     </div>
-                    <div className="font-mono text-[10px] text-gray-400 mt-1">{formatDuration(caller.durationSeconds)} on line</div>
+                    <div className="text-right shrink-0">
+                      <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold uppercase tracking-wider ${isPre ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`} data-testid={`status-live-state-${caller.userId ?? caller.callSid}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full animate-pulse ${isPre ? "bg-amber-400" : "bg-emerald-500"}`} />
+                        {caller.currentIvrState ?? "Connected"}
+                      </div>
+                      <div className="font-mono text-[10px] text-gray-400 mt-1">{formatDuration(liveDuration)} on line</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -4453,6 +4453,8 @@ END OF KNOWLEDGE BASE
   app.get("/api/admin/live-callers", async (_req, res) => {
     try {
       const VIRTUAL_PREFIX = "VIRTUAL-";
+
+      // ── Verified callers (have a user account, are in callers table) ─────
       const result = await db.execute(sql`
         SELECT
           c.call_sid        AS "callSid",
@@ -4471,7 +4473,8 @@ END OF KNOWLEDGE BASE
           r.slug            AS "regionSlug",
           r.state_abbreviation AS "regionState",
           u.membership_tier AS "membershipTier",
-          u.remaining_seconds AS "remainingSeconds"
+          u.remaining_seconds AS "remainingSeconds",
+          false             AS "isPreVerification"
         FROM callers c
         LEFT JOIN regions r ON r.id = c.region_id
         LEFT JOIN users u ON u.id = c.user_id
@@ -4479,16 +4482,60 @@ END OF KNOWLEDGE BASE
         ORDER BY c.joined_at DESC
       `);
 
-      const rows = result.rows as any[];
-      const callersList = rows.map(row => ({
-        ...row,
-        currentIvrState: row.currentIvrState ?? (String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX) ? "Virtual caller online" : "Connected"),
-        isVirtual: String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX) || String(row.callSid ?? "").startsWith("virtual_"),
-        durationSeconds: Math.floor((Date.now() - new Date(row.joinedAt).getTime()) / 1000),
-        stateAgeSeconds: row.currentIvrUpdatedAt ? Math.floor((Date.now() - new Date(row.currentIvrUpdatedAt).getTime()) / 1000) : null,
-      }));
+      // ── Pre-verification callers: in call_logs but not yet in callers ────
+      // These are callers who dialed in but are still hearing the greeting /
+      // haven't been verified yet. We pull them from call_logs so the admin
+      // feed shows the call the moment Twilio fires the first webhook.
+      const preVerResult = await db.execute(sql`
+        SELECT
+          cl.call_sid           AS "callSid",
+          NULL                  AS "userId",
+          cl.from_phone_number  AS "phoneNumber",
+          'active'              AS "status",
+          'Entering system…'    AS "currentIvrState",
+          '/voice'              AS "currentIvrPath",
+          NULL                  AS "currentIvrUpdatedAt",
+          NULL                  AS gender,
+          NULL                  AS seeking,
+          cl.started_at         AS "joinedAt",
+          cl.started_at         AS "lastPing",
+          false                 AS "greetingPlayed",
+          NULL                  AS "regionName",
+          NULL                  AS "regionSlug",
+          NULL                  AS "regionState",
+          NULL                  AS "membershipTier",
+          NULL                  AS "remainingSeconds",
+          true                  AS "isPreVerification"
+        FROM call_logs cl
+        WHERE cl.completed_at IS NULL
+          AND cl.started_at > NOW() - INTERVAL '10 minutes'
+          AND cl.from_phone_number NOT IN ('anonymous', 'blocked_anonymous', 'Anonymous', 'private', 'blocked', 'restricted', 'unknown')
+          AND cl.call_sid NOT IN (
+            SELECT call_sid FROM callers WHERE status = 'active'
+          )
+        ORDER BY cl.started_at DESC
+      `);
 
-      res.json({ callers: callersList, total: callersList.length, realCount: callersList.filter(c => !c.isVirtual).length, virtualCount: callersList.filter(c => c.isVirtual).length });
+      const rows = result.rows as any[];
+      const preVerRows = preVerResult.rows as any[];
+
+      const mapRow = (row: any) => ({
+        ...row,
+        isPreVerification: row.isPreVerification === true || row.isPreVerification === "true",
+        currentIvrState: row.currentIvrState ?? (String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX) ? "Virtual caller online" : "Connected"),
+        isVirtual: !row.isPreVerification && (String(row.callSid ?? "").startsWith(VIRTUAL_PREFIX) || String(row.callSid ?? "").startsWith("virtual_")),
+        stateAgeSeconds: row.currentIvrUpdatedAt ? Math.floor((Date.now() - new Date(row.currentIvrUpdatedAt).getTime()) / 1000) : null,
+      });
+
+      const callersList = [...rows.map(mapRow), ...preVerRows.map(mapRow)];
+      callersList.sort((a, b) => new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime());
+
+      res.json({
+        callers: callersList,
+        total: callersList.length,
+        realCount: callersList.filter(c => !c.isVirtual).length,
+        virtualCount: callersList.filter(c => c.isVirtual).length,
+      });
     } catch (e: any) {
       console.error("[live-callers] Failed:", e);
       res.status(500).json({ message: "Failed to fetch live callers" });
