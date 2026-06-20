@@ -493,6 +493,30 @@ const BODY_TYPE_LABELS: Record<string, string> = {
   big_and_tall: "Big and Tall",
 };
 
+// ─── Membership verification helper ──────────────────────────────────────────
+// Returns true when the caller is confirmed as an active member for this call.
+// Three ways a caller can be verified:
+//   1. callCardOverride  — they entered a calling card + PIN this session
+//   2. callMembershipOverride — they entered a 10-digit membership number + PIN this session
+//   3. Their caller-ID phone number is linked to an account with remaining time
+async function callerHasActiveMembership(callSid: string, fromNumber: string): Promise<boolean> {
+  if (callCardOverride.has(callSid)) return true;
+  if (callMembershipOverride.has(callSid)) return true;
+  if (!isRealPhoneNumber(fromNumber)) return false;
+  try {
+    const user = await storage.getUserByPhone(fromNumber);
+    if (!user || !user.membershipTier) return false;
+    const settings = await getMembershipSettingsCached();
+    if (settings.billingMode === "per_24h") {
+      const purchasedAt = user.membershipPurchasedAt;
+      return !!purchasedAt && (Date.now() - purchasedAt.getTime()) < 24 * 3_600_000;
+    }
+    return (user.remainingSeconds ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 // Ethnicity labels for mailbox setup
 const ETHNICITY_LABELS: Record<string, string> = {
   prefer_not_to_say: "prefer not to identify",
@@ -740,6 +764,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     "/handle-anon-card-pin",
     "/handle-anon-pay-gate",
     "/handle-anon-pay-gate-pin",
+    // Phone-booth membership gate — # goes to the "membership required" menu,
+    // NOT to the global main menu. Must be excluded from the global interceptor.
+    "/handle-booth-membership-gate",
+    "/handle-booth-membership-card-pin",
+    "/handle-booth-membership-required",
   ]);
 
   // Press-0 menu handlers whose "menu URL" cannot be derived by simply stripping "handle-"
@@ -2656,21 +2685,19 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       const isMW = boothSiteConf.siteCategory === "MW";
       const isFemale = femaleCallers.has(callSid);
 
-      // Play the male box welcome intro — gender-aware for MW systems
+      // Play the phone booth welcome — gender-aware for MW systems.
+      // This always plays so the caller knows where they are.
       if (isMW) {
         if (isFemale) {
-          // Female caller on MW hears guys' greetings
           playPrompt(twiml, req, "phone_booth_welcome.mp3",
             "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
         } else {
-          // Male caller on MW hears women's greetings
           playPrompt(twiml, req, "phone_booth_welcome.mp3",
             "Welcome to the live connector. Greetings from all the local women here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
         }
       } else {
-        // MM — standard message
         playPrompt(twiml, req, "phone_booth_welcome.mp3",
-          "Welcome to the live connector. Greetings from all the local guys here right now. Swap private messages and then connect live for a totally private conversation. You can leave the connector anytime you want by pressing the pound sign.");
+          "Welcome to the phone booth. At any time you want to leave the booth, press the pound key and you will return to the main menu.");
       }
 
       // Male Box MOTD
@@ -2683,11 +2710,52 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.error("[voice] phone-booth motd error:", err);
       }
 
+      // ── Membership gate ────────────────────────────────────────────────────
+      // Check whether this caller is a verified member before granting access.
+      // MW female callers are always free — they bypass the gate.
+      const isVerified = (isMW && isFemale)
+        || await callerHasActiveMembership(callSid, fromNumber);
+
+      if (!isVerified) {
+        // Caller has not been verified as a member — send them to the gate.
+        // The gate will prompt for a membership card; if they press # they
+        // are offered the option to purchase.
+        console.log(`[voice] phone-booth: unverified caller — redirecting to membership gate (callSid=${callSid})`);
+        twiml.redirect("/voice/booth-membership-gate");
+      } else {
+        // Verified member — continue directly to profile/greeting setup.
+        twiml.redirect("/voice/phone-booth-continue");
+      }
+    } catch (error) {
+      console.error("[voice] /voice/phone-booth error:", error);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Phone Booth Continue (post-gate) ─────────────────────────────────────
+  // Reached after the caller has been verified (either directly from phone-booth
+  // or after successfully authenticating at the membership gate).
+  // Contains the profile / name-recording logic that was previously inline in
+  // /voice/phone-booth, keeping it DRY so the gate can redirect here too.
+  app.post("/voice/phone-booth-continue", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
+
+    try {
+      const boothSiteConf = await getSiteSettingsCached();
+      const isMW = boothSiteConf.siteCategory === "MW";
+      const isFemale = femaleCallers.has(callSid);
+
       const user = await getOrCreateUser(fromNumber);
       const profile = await storage.getProfile(user.id);
 
       if (!profile) {
-        // No profile yet — need to record their name first (gender-aware for MW)
+        // No profile yet — record name first (gender-aware for MW)
         if (isMW && isFemale) {
           playPrompt(twiml, req, "welcome_record_name.mp3",
             "You need to record a greeting to introduce yourself to the guys first. Let's record the name you want to use. After the tone, record just your first name.");
@@ -2703,8 +2771,188 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         twiml.redirect("/voice/greeting-setup");
       }
     } catch (error) {
-      console.error("[voice] /voice/phone-booth error:", error);
+      console.error("[voice] /voice/phone-booth-continue error:", error);
       playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Booth Membership Gate ─────────────────────────────────────────────────
+  // Played after the phone-booth welcome when the caller has not been verified
+  // as a member. Asks them to enter their 5-digit membership card number.
+  // Pressing # does NOT go to the global main menu here — it routes to the
+  // "membership required" prompt (handled locally, excluded from GLOBAL_KEY_SKIP_ROUTES).
+  app.post("/voice/booth-membership-gate", async (req, res) => {
+    const twiml = new VoiceResponse();
+    // finishOnKey: "#" — # immediately fires the action so the caller
+    // is routed to the "membership required" menu instead of waiting for timeout.
+    const gather = twiml.gather({
+      numDigits: 5,
+      finishOnKey: "#",
+      action: "/voice/handle-booth-membership-gate",
+      timeout: 30,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "membership_entry_prompt.mp3",
+      "If you have a membership, please enter it now. Otherwise press pound.");
+    // Timeout fallback — re-prompt once
+    const gather2 = twiml.gather({
+      numDigits: 5,
+      finishOnKey: "#",
+      action: "/voice/handle-booth-membership-gate",
+      timeout: 20,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather2, req, "membership_entry_prompt.mp3",
+      "No input received. Please enter your 5-digit membership card number, or press pound.");
+    // Still no input — route to the membership-required menu
+    twiml.redirect("/voice/booth-membership-required");
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-booth-membership-gate", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const rawDigits = (req.body?.Digits as string ?? "").trim();
+    const callSid = req.body?.CallSid as string;
+    const digits = rawDigits.replace(/[^0-9]/g, "");
+
+    if (!digits) {
+      // # pressed or timeout — no membership card provided
+      console.log(`[voice] booth-membership-gate: # pressed or timeout — routing to membership-required (callSid=${callSid})`);
+      twiml.redirect("/voice/booth-membership-required");
+    } else if (digits.length === 5) {
+      try {
+        const card = await storage.getMembershipCardByNumber(digits);
+        if (!card) {
+          playPrompt(twiml, req, "membership_not_found.mp3",
+            "That membership number was not found. Please try again.");
+          twiml.redirect("/voice/booth-membership-gate");
+        } else if (card.valueSeconds <= 0) {
+          playPrompt(twiml, req, "access_expired.mp3",
+            "That membership has no time remaining. Please purchase a new membership.");
+          twiml.redirect("/voice/booth-membership-required");
+        } else {
+          // Valid card — store and ask for PIN
+          anonCardPending.set(callSid, digits);
+          twiml.redirect("/voice/booth-membership-card-pin");
+        }
+      } catch (err) {
+        console.error("[voice] booth-membership-gate card lookup error:", err);
+        playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again.");
+        twiml.redirect("/voice/booth-membership-gate");
+      }
+    } else {
+      // Wrong number of digits — re-prompt
+      playPrompt(twiml, req, "membership_entry_prompt.mp3",
+        "Please enter your 5-digit membership card number. Or press pound.");
+      twiml.redirect("/voice/booth-membership-gate");
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Booth Membership Card PIN ─────────────────────────────────────────────
+  app.post("/voice/booth-membership-card-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const callSid = req.body?.CallSid as string;
+
+    if (!anonCardPending.has(callSid)) {
+      twiml.redirect("/voice/booth-membership-gate");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    const gather = twiml.gather({
+      numDigits: 4,
+      finishOnKey: "",
+      action: "/voice/handle-booth-membership-card-pin",
+      timeout: 30,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "membership_pin_prompt.mp3", "Please enter your 4-digit PIN.");
+    playPrompt(twiml, req, "goodbye.mp3", "No input received. Goodbye.");
+    twiml.hangup();
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-booth-membership-card-pin", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digits = (req.body?.Digits as string ?? "").trim();
+    const callSid = req.body?.CallSid as string;
+    const cardNumber = anonCardPending.get(callSid);
+
+    if (!cardNumber) {
+      twiml.redirect("/voice/booth-membership-gate");
+      res.type("text/xml");
+      return res.send(twiml.toString());
+    }
+
+    try {
+      const card = await storage.getMembershipCardByNumber(cardNumber);
+      if (card && card.pin && card.pin === digits) {
+        anonCardPending.delete(callSid);
+        callCardOverride.set(callSid, card.id);
+        const minutes = Math.floor(card.valueSeconds / 60);
+        console.log(`[voice] booth-membership-card-pin: accepted callSid=${callSid} card=${cardNumber} — ${minutes} min`);
+        playPrompt(twiml, req, "pin_accepted.mp3", "Access code accepted. Welcome.");
+        if (!callTimeAnnounced.has(callSid)) {
+          playTimeRemaining(twiml, req, minutes);
+          callTimeAnnounced.add(callSid);
+        }
+        // Card authenticated — skip the welcome (already played) and go straight to profile setup
+        twiml.redirect("/voice/phone-booth-continue");
+      } else {
+        anonCardPending.delete(callSid);
+        console.log(`[voice] booth-membership-card-pin: rejected callSid=${callSid}`);
+        playPrompt(twiml, req, "pin_incorrect.mp3", "Incorrect PIN. Please try again.");
+        twiml.redirect("/voice/booth-membership-gate");
+      }
+    } catch (err) {
+      console.error("[voice] booth-membership-card-pin error:", err);
+      anonCardPending.delete(callSid);
+      playPrompt(twiml, req, "error_generic.mp3", "An error occurred. Please try again later.");
+      twiml.hangup();
+    }
+
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ─── Booth Membership Required ─────────────────────────────────────────────
+  // Reached when a caller at the booth gate presses # (no membership card).
+  // Offers them the option to purchase (press 2) or hang up.
+  // NOTE: # here stays local — it does NOT route to the global main menu.
+  app.post("/voice/booth-membership-required", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const gather = twiml.gather({
+      numDigits: 1,
+      finishOnKey: "",
+      action: "/voice/handle-booth-membership-required",
+      timeout: 15,
+      actionOnEmptyResult: true,
+    });
+    playPrompt(gather, req, "booth_membership_required.mp3",
+      "A membership is required to use this system. To buy your membership now, press 2. Otherwise, please hang up and call back when you are ready to become a member.");
+    twiml.hangup();
+    res.type("text/xml");
+    res.send(twiml.toString());
+  });
+
+  app.post("/voice/handle-booth-membership-required", async (req, res) => {
+    const twiml = new VoiceResponse();
+    const digit = req.body?.Digits as string;
+
+    if (digit === "2") {
+      twiml.redirect("/voice/membership-purchase");
+    } else {
+      // Any other key or timeout — hang up gracefully
+      playPrompt(twiml, req, "goodbye.mp3", "Thank you for calling. Goodbye.");
       twiml.hangup();
     }
 
