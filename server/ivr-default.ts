@@ -1466,6 +1466,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
 
     try {
+      // ── Anonymous caller guard ────────────────────────────────────────────
+      // If an anonymous/blocked caller somehow reaches /voice/entry (e.g. via a
+      // direct Twilio retry or an edge-case redirect), send them back to the
+      // anon-entry gate rather than crashing in getOrCreateUser.
+      const entryFromGuard = req.body?.From as string;
+      if (entryFromGuard && !isRealPhoneNumber(entryFromGuard)) {
+        twiml.redirect("/voice/anon-entry");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       // Load site settings so the raw cache is populated before any playPrompt call.
       // playPrompt uses getRawSiteSettingsCache() synchronously to pick the right audio folder.
       const entrySiteConf = await getSiteSettingsCached();
@@ -2539,6 +2550,15 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const callSid = req.body?.CallSid as string;
 
     try {
+      // ── Anonymous caller guard ────────────────────────────────────────────
+      // Redirect back to the anon-entry gate rather than letting getOrCreateUser
+      // throw and returning a generic "An error occurred" to the caller.
+      if (fromNumber && !isRealPhoneNumber(fromNumber)) {
+        twiml.redirect("/voice/anon-entry");
+        res.type("text/xml");
+        return res.send(twiml.toString());
+      }
+
       const user = await getOrCreateUser(fromNumber);
       const remainingSeconds = user.remainingSeconds ?? 0;
 
