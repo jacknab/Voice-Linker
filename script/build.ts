@@ -4,6 +4,7 @@ import { rm, readFile } from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import { execSync } from "child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -90,6 +91,42 @@ async function buildAll() {
     logLevel: "info",
   });
   // Note: ivr-default is bundled into main index.cjs to avoid ES module import issues
+
+  // ── Post-build validation ───────────────────────────────────────────────────
+  // Runs two checks so a bad deploy is caught before it reaches callers:
+  //   1. TypeScript type-check (server + shared only — skips slow client check)
+  //      Catches scope errors like "isRealPhoneNumber is not defined" at
+  //      compile time, before the bundle is even created.
+  //   2. Node.js syntax check on the compiled bundle
+  //      Confirms esbuild produced valid JS (guards against bundler bugs).
+  //
+  // If either check fails the build exits non-zero so CI / pm2 reload stops.
+  console.log("\n── Post-build validation ──────────────────────────────────");
+
+  // 1. TypeScript server check (fast — excludes client/src)
+  console.log("checking server TypeScript…");
+  try {
+    execSync("npx tsc --project tsconfig.server.json", {
+      stdio: "inherit",
+      timeout: 90_000,
+    });
+    console.log("✓ TypeScript: no server-side type errors");
+  } catch {
+    console.error("✗ TypeScript errors in server code — fix before deploying");
+    process.exit(1);
+  }
+
+  // 2. Syntax check the compiled bundle
+  console.log("syntax-checking dist/index.cjs…");
+  try {
+    execSync(`node --check "dist/index.cjs"`, { stdio: "inherit", timeout: 15_000 });
+    console.log("✓ dist/index.cjs passes syntax check");
+  } catch {
+    console.error("✗ Syntax error in compiled bundle — do not deploy");
+    process.exit(1);
+  }
+
+  console.log("\n✅  Build + validation complete — safe to deploy dist/\n");
 }
 
 buildAll().catch((err) => {

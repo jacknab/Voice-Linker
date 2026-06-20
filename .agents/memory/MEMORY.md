@@ -1,0 +1,4 @@
+- [callSid scope pattern](callsid-scope-pattern.md) — all IVR route handlers need `const callSid = req.body?.CallSid as string;` declared at handler level (or inside the same branch as fromNumber if fromNumber is branch-scoped).
+- [tsconfig-server](tsconfig-server.md) — `tsconfig.server.json` excludes client/src for fast server-only TS checks; target must be ES2017+ to allow Map/Set iteration without downlevelIteration.
+- [nearbySet scope fix](nearbySet-scope.md) — `nearbySet` in browse-profiles was declared inside `if (!state)` but used in reconciliation block; fix was to hoist `let nearbySet = new Set<string>()` before the if block.
+- [twilio update options](twilio-update-options.md) — `statusCallbackEvent` is NOT valid in `CallContextUpdateOptions` (only valid at call creation); `statusCallbackMethod` needs `as any` cast; `availablePhoneNumbers.local.list` expects `areaCode` as number not string.

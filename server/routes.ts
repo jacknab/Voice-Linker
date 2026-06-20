@@ -1385,7 +1385,7 @@ export async function registerRoutes(
           const logRows = await db.execute(sql`
             SELECT started_at FROM call_logs WHERE call_sid = ${s.callSid} LIMIT 1
           `);
-          const row = (logRows as any).rows?.[0] ?? logRows[0];
+          const row = (logRows as any).rows?.[0] ?? (logRows as any)[0];
           if (row?.started_at) {
             startedAt = new Date(row.started_at).toISOString();
           }
@@ -1831,7 +1831,7 @@ export async function registerRoutes(
       checkedAt: new Date().toISOString(),
       elevenLabs: {
         apiKeyConfigured: !!apiKey,
-        apiKeyMasked: maskSecret(apiKey),
+        apiKeyMasked: maskSecret(apiKey ?? undefined),
         connectionOk,
         message: connectionMessage,
       },
@@ -2718,7 +2718,7 @@ export async function registerRoutes(
     if (!accountSid || !authToken) return res.status(503).json({ message: "Twilio credentials not configured." });
     try {
       const client = twilio(accountSid, authToken);
-      const numbers = await client.availablePhoneNumbers("US").local.list({ areaCode: String(areaCode), limit: 20 });
+      const numbers = await client.availablePhoneNumbers("US").local.list({ areaCode: Number(areaCode), limit: 20 });
       res.json({
         numbers: numbers.map(n => ({
           phoneNumber: n.phoneNumber,

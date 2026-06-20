@@ -3984,6 +3984,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     try {
       if (digit === "1" || digit === "2" || digit === "3") {
@@ -4353,6 +4354,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/setup-mailbox-reveal", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
     const returnTo = (req.query.returnTo as string) || "mailbox";
 
     try {
@@ -4795,6 +4797,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     try {
       const user = await getOrCreateUser(fromNumber, callSid);
@@ -4828,6 +4831,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/record-mailbox-greeting", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     try {
       const user = await getOrCreateUser(fromNumber, callSid);
@@ -4866,6 +4870,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     try {
       const user = await getOrCreateUser(fromNumber, callSid);
@@ -4900,6 +4905,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       const fromNumber = req.body?.From as string;
+      const callSid = req.body?.CallSid as string;
       const rawRecordingUrl = req.body?.RecordingUrl as string;
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
 
@@ -5342,6 +5348,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/record-category-ad", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
     const category = req.query.category as string;
     const regionId = req.query.regionId as string | undefined;
     const regionLabel = req.query.regionLabel ? decodeURIComponent(req.query.regionLabel as string) : undefined;
@@ -5385,6 +5392,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
     const category = req.query.category as string;
     const regionId = req.query.regionId as string | undefined;
     const regionLabel = req.query.regionLabel as string | undefined;
@@ -5426,6 +5434,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
     try {
       const fromNumber = req.body?.From as string;
+      const callSid = req.body?.CallSid as string;
       const rawRecordingUrl = req.body?.RecordingUrl as string;
       const recordingDuration = parseInt(req.body?.RecordingDuration) || 0;
       const category = req.query.category as string;
@@ -5664,6 +5673,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/manage-membership", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     try {
       const siteConf = await getSiteSettingsCached();
@@ -5867,6 +5877,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/customer-service", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     let snapshot = "";
     try {
@@ -5909,6 +5920,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/cs-account-status", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
     try {
       const user    = await getOrCreateUser(fromNumber, callSid);
       const profile = await storage.getProfile(user.id);
@@ -5965,6 +5977,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/cs-billing-info", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     let planContext = "";
     try {
@@ -6102,6 +6115,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digits = (req.body?.Digits as string) ?? "";
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     if (!digits || digits === "*" || digits === "#") {
       playPrompt(twiml, req, "cancelled.mp3", "Cancelled.");
@@ -6222,6 +6236,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     const digit = req.body?.Digits as string;
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string;
 
     try {
       if (digit === "1") {
@@ -6291,6 +6306,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const twiml = new VoiceResponse();
     try {
       const fromNumber = req.body?.From as string;
+      const callSid = req.body?.CallSid as string;
       const digits = (req.body?.Digits as string) ?? "";
 
       // Only save if exactly 5 numeric digits were entered
@@ -7355,6 +7371,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     // the caller is removed from active-call state immediately — no credentials
     // or polling needed. Return an empty <Response/> so Twilio doesn't retry.
     const hangUpCallSid = req.body?.CallSid as string;
+    const callSid = hangUpCallSid;
     if (req.body?.HangUp === "true") {
       console.log(`[voice] handle-profile-menu: HangUp detected — cleaning up callSid=${hangUpCallSid}`);
       cleanupEndedCall(hangUpCallSid).catch(err =>
@@ -7615,6 +7632,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     // Twilio also fires it with HangUp=true if the caller disconnected during the
     // repeat-prompt gather inside this handler.
     const ctCallSid = req.body?.CallSid as string;
+    const callSid = ctCallSid;
     if (req.body?.HangUp === "true") {
       console.log(`[voice] connector-timeout: HangUp detected — cleaning up callSid=${ctCallSid}`);
       cleanupEndedCall(ctCallSid).catch(err =>
