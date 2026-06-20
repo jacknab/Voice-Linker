@@ -11,7 +11,7 @@ import {
   Shield, PlusCircle, MinusCircle, ArrowUpDown, Flag, CheckCircle2,
   XCircle, AlertTriangle, Tag, Megaphone, ToggleLeft, ToggleRight,
   BarChart2, TrendingUp, RefreshCw, GitBranch, ShieldAlert, Search, Send, Headphones,
-  Voicemail, MailOpen, Bookmark, FileText, ExternalLink, Shuffle,
+  Voicemail, MailOpen, Bookmark, FileText, ExternalLink, Shuffle, Hash,
 } from "lucide-react";
 import IvrFlowMap from "./admin/IvrFlowMap";
 import QueueMonitor from "@/components/QueueMonitor";
@@ -75,7 +75,7 @@ interface AudioHealth {
   };
 }
 
-type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "seo-pages" | "ai-seo-gen" | "live-callers" | "queue-monitor" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
+type Tab = "dashboard" | "voice-profiles" | "transcriptions" | "regions" | "seo-pages" | "ai-seo-gen" | "live-callers" | "queue-monitor" | "messages" | "phone-testing" | "audio-gen" | "memberships" | "cards" | "anon-sessions" | "phone-numbers" | "blocked" | "callers" | "flagged" | "zip-codes" | "promo-codes" | "announcements" | "analytics" | "audit-log" | "site-settings" | "ivr-flow" | "mod-log" | "sms-marketing" | "support";
 
 interface FlaggedItem {
   id: string;
@@ -8611,6 +8611,148 @@ function fmtSpent(spentCents: number): string {
   return `$${(spentCents / 100).toFixed(2)}`;
 }
 
+interface AnonSession {
+  callSid: string;
+  type: "card" | "membership";
+  cardNumber?: string;
+  cardNotes?: string | null;
+  memberPhone?: string;
+  minutesRemaining: number;
+  startedAt: string | null;
+}
+
+function AnonSessionsTab() {
+  const { data = [], isLoading, dataUpdatedAt } = useQuery<AnonSession[]>({
+    queryKey: ["/api/admin/anon-sessions"],
+    refetchInterval: 5000,
+  });
+
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : null;
+
+  function elapsed(startedAt: string | null): string {
+    if (!startedAt) return "—";
+    const secs = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+    if (secs < 0) return "—";
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+
+  const cardSessions = data.filter(s => s.type === "card");
+  const memberSessions = data.filter(s => s.type === "membership");
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+            </span>
+            Anonymous Sessions
+          </h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Active callers with Caller ID blocked who authenticated via a membership card or number
+            {lastUpdated && <> · Updated {lastUpdated}</>}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+          <div className="text-2xl font-black text-amber-700" data-testid="stat-anon-total">{data.length}</div>
+          <div className="text-xs text-amber-600 font-semibold mt-0.5">Total Active</div>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+          <div className="text-2xl font-black text-blue-700" data-testid="stat-anon-card">{cardSessions.length}</div>
+          <div className="text-xs text-blue-600 font-semibold mt-0.5">Card Sessions</div>
+        </div>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+          <div className="text-2xl font-black text-emerald-700" data-testid="stat-anon-member">{memberSessions.length}</div>
+          <div className="text-xs text-emerald-600 font-semibold mt-0.5">Member Sessions</div>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-gray-400 text-sm py-10 justify-center">
+          <Loader2 size={16} className="animate-spin" /> Loading sessions…
+        </div>
+      ) : data.length === 0 ? (
+        <div className="text-center py-14 text-gray-400 border border-dashed border-gray-200 rounded-xl">
+          <EyeOff size={32} className="mx-auto mb-3 opacity-20" />
+          <p className="text-sm font-medium">No anonymous sessions right now</p>
+          <p className="text-xs mt-1">When a caller with blocked Caller ID authenticates, they'll appear here.</p>
+        </div>
+      ) : (
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wide">
+                <th className="px-4 py-3 text-left font-semibold">Type</th>
+                <th className="px-4 py-3 text-left font-semibold">Call SID</th>
+                <th className="px-4 py-3 text-left font-semibold">Auth Info</th>
+                <th className="px-4 py-3 text-right font-semibold">Min Left</th>
+                <th className="px-4 py-3 text-left font-semibold hidden md:table-cell">On Line</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {data.map(s => (
+                <tr key={s.callSid} className="hover:bg-gray-50 transition-colors" data-testid={`row-anon-${s.callSid}`}>
+                  <td className="px-4 py-3">
+                    {s.type === "card" ? (
+                      <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                        <CreditCard size={11} /> Card
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                        <Hash size={11} /> Member
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-400">
+                    …{s.callSid.slice(-10)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {s.type === "card" ? (
+                      <div>
+                        <span className="font-mono text-sm text-gray-800">{s.cardNumber ?? "•••••"}</span>
+                        {s.cardNotes && (
+                          <p className="text-xs text-gray-400 mt-0.5 truncate max-w-[160px]">{s.cardNotes}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="font-mono text-sm text-gray-800">{s.memberPhone ?? "••••"}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className={`font-bold text-sm tabular-nums ${
+                      s.minutesRemaining < 10 ? "text-red-600" :
+                      s.minutesRemaining < 30 ? "text-amber-600" :
+                      "text-emerald-600"
+                    }`}>
+                      {s.minutesRemaining.toLocaleString()}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell text-gray-400 text-xs font-mono tabular-nums">
+                    {elapsed(s.startedAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LiveCallersTab() {
   const { data, isLoading, dataUpdatedAt } = useQuery<LiveCallersResponse>({
     queryKey: ["/api/admin/live-callers"],
@@ -9256,6 +9398,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode; dividerBefore?: boo
   { id: "messages",       label: "Messages",          icon: <MessageSquare size={15} /> },
   { id: "memberships",    label: "$$ Memberships",    icon: <CreditCard size={15} /> },
   { id: "cards",          label: "Member Cards",      icon: <CreditCard size={15} /> },
+  { id: "anon-sessions",  label: "Anon Sessions",     icon: <EyeOff size={15} /> },
   { id: "audio-gen",      label: "Audio Gen",         icon: <Volume2 size={15} /> },
   { id: "live-callers",   label: "Live Callers",      icon: <PhoneCall size={15} /> },
   { id: "queue-monitor",  label: "Queue Monitor",     icon: <Shuffle size={15} /> },
@@ -9941,6 +10084,7 @@ export default function Admin({ onLogout }: AdminProps) {
           {activeTab === "ai-seo-gen"     && <AiSeoGenTab />}
           {activeTab === "memberships"    && <MembershipsTab />}
           {activeTab === "cards"          && <MembershipCardsTab />}
+          {activeTab === "anon-sessions"  && <AnonSessionsTab />}
           {activeTab === "audio-gen"      && <TTSTab />}
           {activeTab === "messages"       && <MessagesTab />}
           {activeTab === "phone-numbers"  && <PhoneNumbersTab />}

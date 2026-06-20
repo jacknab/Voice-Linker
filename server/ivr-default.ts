@@ -424,6 +424,26 @@ export function getLiveConnectionsState() {
   }));
 }
 
+// Returns a snapshot of all currently active anonymous IVR sessions — callers
+// with no Caller ID who authenticated via a calling card or membership number.
+export function getAnonSessions(): Array<{
+  callSid: string;
+  type: "card" | "membership";
+  cardId?: string;
+  memberPhone?: string;
+}> {
+  const sessions: Array<{ callSid: string; type: "card" | "membership"; cardId?: string; memberPhone?: string }> = [];
+  for (const [callSid, cardId] of callCardOverride) {
+    sessions.push({ callSid, type: "card", cardId });
+  }
+  for (const [callSid, memberPhone] of callMembershipOverride) {
+    if (!sessions.find(s => s.callSid === callSid)) {
+      sessions.push({ callSid, type: "membership", memberPhone });
+    }
+  }
+  return sessions;
+}
+
 const LIVE_TICK_MS = 5_000;             // deduct every 5 seconds
 const LIVE_LOW_BALANCE_SECONDS = 300;   // warn at < 5 minutes remaining
 

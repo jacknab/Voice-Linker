@@ -1365,6 +1365,63 @@ export async function registerRoutes(
     }
   });
 
+  // ─── Admin: Anonymous Sessions ─────────────────────────────────────────────
+  // Returns all active IVR sessions where the caller has no Caller ID but
+  // authenticated via a calling card or membership number.
+  app.get("/api/admin/anon-sessions", async (_req, res) => {
+    try {
+      const { getAnonSessions } = await import("./ivr-default.js");
+      const raw = getAnonSessions();
+
+      const enriched = await Promise.all(raw.map(async (s) => {
+        let minutesRemaining = 0;
+        let cardNumber: string | undefined;
+        let cardNotes: string | null = null;
+        let memberPhone: string | undefined;
+        let startedAt: string | null = null;
+
+        // Look up call start time from call_logs
+        try {
+          const logRows = await db.execute(sql`
+            SELECT started_at FROM call_logs WHERE call_sid = ${s.callSid} LIMIT 1
+          `);
+          const row = (logRows as any).rows?.[0] ?? logRows[0];
+          if (row?.started_at) {
+            startedAt = new Date(row.started_at).toISOString();
+          }
+        } catch { /* non-fatal */ }
+
+        if (s.type === "card" && s.cardId) {
+          try {
+            const card = await storage.getMembershipCardById(s.cardId);
+            if (card) {
+              minutesRemaining = Math.floor(card.valueSeconds / 60);
+              cardNumber = card.cardNumber
+                ? `${card.cardNumber[0]}${"•".repeat(Math.max(0, card.cardNumber.length - 1))}`
+                : "•••••";
+              cardNotes = card.notes ?? null;
+            }
+          } catch { /* non-fatal */ }
+        } else if (s.type === "membership" && s.memberPhone) {
+          try {
+            const user = await storage.getUserByPhone(s.memberPhone);
+            minutesRemaining = user ? Math.floor((user.remainingSeconds ?? 0) / 60) : 0;
+            memberPhone = s.memberPhone.length > 4
+              ? `•••-•••-${s.memberPhone.slice(-4)}`
+              : s.memberPhone;
+          } catch { /* non-fatal */ }
+        }
+
+        return { callSid: s.callSid, type: s.type, cardNumber, cardNotes, memberPhone, minutesRemaining, startedAt };
+      }));
+
+      res.json(enriched);
+    } catch (e) {
+      console.error("[admin] /api/admin/anon-sessions error:", e);
+      res.status(500).json({ message: "Failed to fetch anonymous sessions" });
+    }
+  });
+
   // --- Admin: Simulator status ---
   app.get("/api/admin/simulator/live", async (_req, res) => {
     try {
