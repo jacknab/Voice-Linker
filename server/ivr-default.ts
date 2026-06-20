@@ -846,7 +846,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (fromNumber) {
         try {
           const user = await getOrCreateUser(fromNumber, callSid);
-          totalMinutes = Math.max(0, Math.floor((user.remainingSeconds ?? 0) / 60));
+          totalMinutes = Math.max(0, Math.round((user.remainingSeconds ?? 0) / 60));
         } catch (err: any) {
           console.warn(`[press-0] User lookup failed for From=${fromNumber}: ${err?.message ?? err}`);
         }
@@ -1587,7 +1587,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               if (linkedCard && linkedCard.valueSeconds > 0) {
                 callCardOverride.set(entrySid, linkedCard.id);
                 if (!callTimeAnnounced.has(entrySid)) {
-                  playTimeRemaining(twiml, req, Math.floor(linkedCard.valueSeconds / 60));
+                  playTimeRemaining(twiml, req, Math.round(linkedCard.valueSeconds / 60));
                   callTimeAnnounced.add(entrySid);
                 }
                 twiml.redirect("/voice/entry-check-card");
@@ -1880,7 +1880,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
           console.log(`[voice] Card ${digits} — no PIN, granting access directly`);
           callCardOverride.set(callSid, card.id);
-          const minutes = Math.floor(card.valueSeconds / 60);
+          const minutes = Math.round(card.valueSeconds / 60);
           playTimeRemaining(twiml, req, minutes);
           callTimeAnnounced.add(callSid);
           twiml.redirect("/voice/entry-check-card");
@@ -1952,7 +1952,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         playPrompt(twiml, req, "access_expired.mp3", "Your membership time has expired.");
         twiml.redirect("/voice/membership-purchase");
       } else {
-        playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
+        playTimeRemaining(twiml, req, Math.round(remainingSeconds / 60));
         callTimeAnnounced.add(callSid);
         const siteConf = await getSiteSettingsCached();
         twiml.redirect(siteConf.siteCategory === "MW" ? "/voice/mw-main-menu" : "/voice/main-menu");
@@ -2215,7 +2215,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         anonCardPending.delete(callSid);
         anonGuestCallSids.delete(callSid); // no longer a guest — full card access
         callCardOverride.set(callSid, card.id);
-        const minutes = Math.floor(card.valueSeconds / 60);
+        const minutes = Math.round(card.valueSeconds / 60);
         console.log(`[voice] anon-card-pin: accepted for callSid=${callSid} cardNumber=${cardNumber} — ${minutes} min`);
         playPrompt(twiml, req, "pin_accepted.mp3", "Access code accepted. Welcome.");
         playTimeRemaining(twiml, req, minutes);
@@ -2343,7 +2343,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         anonCardPending.delete(callSid);
         anonGuestCallSids.delete(callSid); // fully authenticated — remove guest flag
         callCardOverride.set(callSid, card.id);
-        const minutes = Math.floor(card.valueSeconds / 60);
+        const minutes = Math.round(card.valueSeconds / 60);
         console.log(`[voice] anon-pay-gate-pin: accepted callSid=${callSid} cardNumber=${cardNumber} — ${minutes} min`);
         playPrompt(twiml, req, "pin_accepted.mp3", "Access code accepted. Welcome.");
         playTimeRemaining(twiml, req, minutes);
@@ -2481,7 +2481,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           await storage.linkCardToPhone(card.id, fromNumber);
         }
         callCardOverride.set(callSid, card.id);
-        const minutes = Math.floor(card.valueSeconds / 60);
+        const minutes = Math.round(card.valueSeconds / 60);
         console.log(`[voice] Card ${cardNumber} PIN accepted for callSid=${callSid} phone=${fromNumber} — ${minutes} min remaining`);
         playPrompt(twiml, req, "membership_linked.mp3", "Membership card activated.");
         playTimeRemaining(twiml, req, minutes);
@@ -2539,7 +2539,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           await getOrCreateUser(fromNumber, callSid);
         }
         if (!callTimeAnnounced.has(callSid)) {
-          playTimeRemaining(twiml, req, Math.floor(card.valueSeconds / 60));
+          playTimeRemaining(twiml, req, Math.round(card.valueSeconds / 60));
           callTimeAnnounced.add(callSid);
         }
         const siteConf = await getSiteSettingsCached();
@@ -2596,7 +2596,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     } else if (!freeMode) {
       const remainingSeconds = user.remainingSeconds ?? 0;
       if (remainingSeconds > 0) {
-        playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
+        playTimeRemaining(twiml, req, Math.round(remainingSeconds / 60));
         callTimeAnnounced.add(callSid);
       }
     }
@@ -2651,7 +2651,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         if (linkedCard && linkedCard.valueSeconds > 0) {
           callCardOverride.set(callSid, linkedCard.id);
           if (!callTimeAnnounced.has(callSid)) {
-            playTimeRemaining(twiml, req, Math.floor(linkedCard.valueSeconds / 60));
+            playTimeRemaining(twiml, req, Math.round(linkedCard.valueSeconds / 60));
             callTimeAnnounced.add(callSid);
           }
           twiml.redirect("/voice/entry-check-card");
@@ -2854,14 +2854,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
             if (cardId) {
               const card = await storage.getMembershipCardById(cardId);
-              const minutes = card ? Math.floor(card.valueSeconds / 60) : 0;
+              const minutes = card ? Math.round(card.valueSeconds / 60) : 0;
               if (minutes > 0 && !callTimeAnnounced.has(callSid)) {
                 playTimeRemaining(twiml, req, minutes);
                 callTimeAnnounced.add(callSid);
               }
             } else if (overridePhone) {
               const memberUser = await storage.getOrCreateUser(overridePhone);
-              const minutes = Math.floor((memberUser.remainingSeconds ?? 0) / 60);
+              const minutes = Math.round((memberUser.remainingSeconds ?? 0) / 60);
               if (minutes > 0 && !callTimeAnnounced.has(callSid)) {
                 playTimeRemaining(twiml, req, minutes);
                 callTimeAnnounced.add(callSid);
@@ -3061,7 +3061,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (card && card.pin && card.pin === digits) {
         anonCardPending.delete(callSid);
         callCardOverride.set(callSid, card.id);
-        const minutes = Math.floor(card.valueSeconds / 60);
+        const minutes = Math.round(card.valueSeconds / 60);
         console.log(`[voice] booth-membership-card-pin: accepted callSid=${callSid} card=${cardNumber} — ${minutes} min`);
         playPrompt(twiml, req, "pin_accepted.mp3", "Access code accepted. Welcome.");
         if (!callTimeAnnounced.has(callSid)) {
@@ -3316,7 +3316,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // ── First-visit balance announcement ────────────────────────────────
       if (!inFreeMode && hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
         callTimeAnnounced.add(callSid);
-        playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
+        playTimeRemaining(twiml, req, Math.round(remainingSeconds / 60));
       }
     } catch (err) {
       console.error("[voice] main-menu time check error:", err);
@@ -3793,7 +3793,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // First-visit balance announcement
       if (!mwInFreeMode && hasMembership && remainingSeconds > 0 && !callTimeAnnounced.has(callSid)) {
         callTimeAnnounced.add(callSid);
-        playTimeRemaining(twiml, req, Math.floor(remainingSeconds / 60));
+        playTimeRemaining(twiml, req, Math.round(remainingSeconds / 60));
       }
     } catch (err) {
       console.error("[voice] mw-main-menu time check error:", err);
@@ -4638,7 +4638,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       if (card && card.pin && card.pin === digits) {
         anonCardPending.delete(callSid);
         callCardOverride.set(callSid, card.id);
-        const minutes = Math.floor(card.valueSeconds / 60);
+        const minutes = Math.round(card.valueSeconds / 60);
         console.log(`[voice] mailbox-membership-card-pin: accepted callSid=${callSid} card=${cardNumber} — ${minutes} min`);
         playPrompt(twiml, req, "pin_accepted.mp3", "Access code accepted. Welcome.");
         if (!callTimeAnnounced.has(callSid)) {
