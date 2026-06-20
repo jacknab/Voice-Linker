@@ -5447,12 +5447,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.log(`[transcribe] Mailbox ad stored for userId=${user.id}: status=${storeStatus}`);
       }).catch(err => console.error("[transcribe] save-mailbox-greeting error:", err));
 
-      // Schedule auto-mod + human review queue after 65 seconds
-      scheduleAutoModCheck(recordingUrl, user.id, "personal_ad");
-
       playPrompt(twiml, req, "mailbox_ad_recorded_pending.mp3",
-        "Thanks for recording your ad. Once it's approved, you'll be able to send messages to other mailboxes. " +
-        "In the meantime you can browse other ads or visit the male box to check out who's on the line right now."
+        "Thanks for recording your ad. Your ad is now live and other callers can find you right away. " +
+        "You can browse other ads or visit the male box to check out who's on the line right now."
       );
       twiml.redirect("/voice/mailbox-menu");
     } catch (err) {
