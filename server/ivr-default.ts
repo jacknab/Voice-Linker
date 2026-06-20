@@ -1990,28 +1990,31 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   app.post("/voice/anon-entry", async (req, res) => {
     const twiml = new VoiceResponse();
+    // finishOnKey: "#" lets the caller press # to trigger the action immediately
+    // (the audio says "press pound" so # must be a recognised finish key)
     const gather = twiml.gather({
       numDigits: 5,
-      finishOnKey: "",
+      finishOnKey: "#",
       action: "/voice/handle-anon-entry",
       timeout: 30,
       actionOnEmptyResult: true,
     });
-    playPrompt(gather, req, "anon_membership_or_pound.mp3",
-      "Your caller I D is not showing. To access this system, please enter your 5-digit membership card number now. Or press star to use your account number.");
-    // Timeout with no input — re-prompt once then hang up
+    playPrompt(gather, req, "membership_entry_prompt.mp3",
+      "Your caller I D is not showing. If you have a membership, please enter your 5-digit card number now, then press pound. Otherwise press pound to purchase a membership.");
+    // Timeout with no input — re-prompt once then send to purchase
     const gather2 = twiml.gather({
       numDigits: 5,
-      finishOnKey: "",
+      finishOnKey: "#",
       action: "/voice/handle-anon-entry",
       timeout: 20,
       actionOnEmptyResult: true,
     });
-    playPrompt(gather2, req, "anon_membership_or_pound.mp3",
-      "No input received. Please enter your 5-digit membership card number, or press star to use your account number.");
-    playPrompt(twiml, req, "goodbye.mp3",
-      "No membership number entered. To use this service, please call back with your caller I D enabled. Goodbye.");
-    twiml.hangup();
+    playPrompt(gather2, req, "membership_entry_prompt.mp3",
+      "No input received. If you have a membership card, enter your 5-digit number now, then press pound. Otherwise press pound.");
+    // Still no input after second prompt — send to purchase
+    playPrompt(twiml, req, "membership_required_purchase.mp3",
+      "To continue, you will need a membership. Connecting you to our membership options now.");
+    twiml.redirect("/voice/membership-purchase");
     res.type("text/xml");
     res.send(twiml.toString());
   });
@@ -2032,11 +2035,11 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
     const digits = rawDigits.replace(/[^0-9]/g, "");
 
     if (!digits) {
-      // No input — tell caller they must have a membership and hang up
-      console.log(`[voice] anon-entry: no input — hanging up anonymous caller (callSid=${callSid})`);
-      playPrompt(twiml, req, "goodbye.mp3",
-        "A membership number is required to access this system. Please call back with your caller I D enabled, or obtain a membership card. Goodbye.");
-      twiml.hangup();
+      // Caller pressed # (no membership card) — route them to purchase
+      console.log(`[voice] anon-entry: no card entered (# pressed or timeout) — routing to purchase (callSid=${callSid})`);
+      playPrompt(twiml, req, "membership_required_purchase.mp3",
+        "To continue, you will need a membership. Connecting you to our membership options now.");
+      twiml.redirect("/voice/membership-purchase");
     } else if (digits.length === 5) {
       // 5-digit membership card number entered
       try {
@@ -2061,8 +2064,8 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       }
     } else {
       // Invalid input length — re-prompt
-      playPrompt(twiml, req, "anon_membership_or_pound.mp3",
-        "Please enter your 5-digit membership card number. Or press star to use your account number.");
+      playPrompt(twiml, req, "membership_entry_prompt.mp3",
+        "Please enter your 5-digit membership card number, then press pound. Or press star to use your account number.");
       twiml.redirect("/voice/anon-entry");
     }
 
