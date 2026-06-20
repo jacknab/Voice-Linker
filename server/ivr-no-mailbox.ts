@@ -728,6 +728,26 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // --- Twilio Voice Webhooks ---
 
+  /**
+   * Returns true only for real, dialable E.164 phone numbers.
+   * Rejects anything Twilio may send instead of a real number:
+   *   "anonymous" / "private" / "blocked" / "restricted" / "unknown"
+   *   SIP URIs:      sip:name@domain.com
+   *   Twilio clients: client:name
+   *   SIP trunk IDs:  anything containing ":" or "@"
+   *   Short strings / non-digit noise (< 10 digits)
+   */
+  function isRealPhoneNumber(from: string): boolean {
+    if (!from) return false;
+    const lower = from.toLowerCase().trim();
+    if (["anonymous", "private", "blocked", "restricted", "unknown"].includes(lower)) return false;
+    if (lower.includes(":") || lower.includes("@")) return false;
+    const cleaned = from.replace(/^\+/, "").replace(/\s/g, "");
+    if (!/^[0-9]+$/.test(cleaned)) return false;
+    if (cleaned.length < 10) return false;
+    return true;
+  }
+
   function syntheticPhoneForCard(cardId: string): string {
     const digits = cardId.replace(/[^0-9]/g, "");
     return `0${digits}`.padEnd(10, "0").slice(0, 15);
@@ -4284,6 +4304,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/time-warning", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string | undefined;
 
     let isFreeTrialCaller = false;
     try {

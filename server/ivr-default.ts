@@ -6041,6 +6041,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/time-warning", async (req, res) => {
     const twiml = new VoiceResponse();
     const fromNumber = req.body?.From as string;
+    const callSid = req.body?.CallSid as string | undefined;
 
     let isFreeTrialCaller = false;
     try {

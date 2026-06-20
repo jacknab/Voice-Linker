@@ -1,0 +1,44 @@
+28a-452d-8a22-662accca3a38 regionId=global from=2026-06-20T18:15:43.566Z for=30min
+20|malebox  | 2026-06-20 18:15:43 +00:00: 6:15:43 PM [simulator] admin seed ONLINE userId=a5f6924f-6f6e-47b9-9719-7af62e3b3ea9 regionId=global from=2026-06-20T18:15:43.568Z for=30min
+20|malebox  | 2026-06-20 18:15:43 +00:00: 6:15:43 PM [simulator] admin seed ONLINE userId=d8807c0b-8547-42e6-b9a1-ba0f8f5891e1 regionId=global from=2026-06-20T18:15:43.568Z for=30min
+20|malebox  | 2026-06-20 18:15:43 +00:00: 6:15:43 PM [simulator] admin seed ONLINE userId=e67d88d0-0c33-4bb0-9490-bebec1f91f28 regionId=global from=2026-06-20T18:15:43.575Z for=30min
+20|malebox  | 2026-06-20 18:15:43 +00:00: 6:15:43 PM [simulator] admin seed ONLINE userId=ca267f17-4e90-45d3-ad4b-ad551b822579 regionId=global from=2026-06-20T18:15:43.575Z for=30min
+20|malebox  | 2026-06-20 18:15:43 +00:00: 6:15:43 PM [simulator] admin seed ONLINE userId=b7d7dabf-c132-4d68-8a3b-2f36e80da5e4 regionId=global from=2026-06-20T18:15:43.578Z for=30min
+20|malebox  | 2026-06-20 18:15:43 +00:00: 6:15:43 PM [simulator] admin seed ONLINE userId=fc58b843-4da3-4b9b-8abf-21503e0c7d31 regionId=global from=2026-06-20T18:15:43.578Z for=30min
+20|malebox  | 2026-06-20 18:15:43 +00:00: [voice] POST /time-warning | From=+17202436886 CallSid=CAd3ff23b0f5606ac5b1491f13bc22f86b Digits=undefined CallStatus=in-progress
+20|malebox  | 2026-06-20 18:15:43 +00:00: [voice] time-warning user lookup error: ReferenceError: callSid is not defined
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at /opt/Voice-Linker/dist/index.cjs:1446:160513
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at cl.handleRequest (/opt/Voice-Linker/dist/index.cjs:31:15984)
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at u (/opt/Voice-Linker/dist/index.cjs:31:17903)
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at ll.dispatch (/opt/Voice-Linker/dist/index.cjs:31:17659)
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at r (/opt/Voice-Linker/dist/index.cjs:31:21734)
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at cl.handleRequest (/opt/Voice-Linker/dist/index.cjs:31:15984)
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at /opt/Voice-Linker/dist/index.cjs:31:20615
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at Sne (/opt/Voice-Linker/dist/index.cjs:31:22637)
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at h (/opt/Voice-Linker/dist/index.cjs:31:20568)
+20|malebox  | 2026-06-20 18:15:43 +00:00:     at /opt/Voice-Linker/dist/index.cjs:1446:44824
+20|malebox  | 2026-06-20 18:15:44 +00:00: [voice] POST /handle-time-warning | From=+17202436886 CallSid=CAd3ff23b0f5606ac5b1491f13bc22f86b Digits=1 CallStatus=in-progress
+20|malebox  | 2026-06-20 18:15:45 +00:00: [voice] POST /membership-purchase | From=+17202436886 CallSid=CAd3ff23b0f5606ac5b1491f13bc22f86b Digits=undefined CallStatus=in-progress
+20|malebox  | 2026-06-20 18:15:45 +00:00: [voice] POST /purchase-pre-menu | From=+17202436886 CallSid=CAd3ff23b0f5606ac5b1491f13bc22f86b Digits=undefined CallStatus=in-progress
+20|malebox  | 2026-06-20 18:15:59 +00:00: [voice] POST /handle-purchase-pre-menu | From=+17202436886 CallSid=CAd3ff23b0f5606ac5b1491f13bc22f86b Digits=# CallStatus=in-progress
+20|malebox  | 2026-06-20 18:15:59 +00:00: [voice] POST /main-menu | From=+17202436886 CallSid=CAd3ff23b0f5606ac5b1491f13bc22f86b Digits=undefined CallStatus=in-progress
+20|malebox  | 2026-06-20 18:16:02 +00:00: [voice] POST /handle-main-menu | From=+17202436886 CallSid=CAd3ff23b0f5606ac5b1491f13bc22f86b Digits=1 CallStatus=in-progress
+20|malebox  | 2026-06-20 18:16:02 +00:00: [voice] POST /phone-booth | From=+17202436886 CallSid=CAd3ff23b0f5606ac5b1491f13bc22f86b Digits=undefined CallStatus=in-progress
+20|malebox  | 2026-06-20 18:16:02 +00:00: [voice] /voice/phone-booth error: ReferenceError: isRealPhoneNumber is not defined
+20|malebox  | 2026-06-20 18:16:02 +00:00:     at tK (/opt/Voice-Linker/dist/index.cjs:1446:39650)
+20|malebox  | 2026-06-20 18:16:02 +00:00:     at /opt/Voice-Linker/dist/index.cjs:1446:83825
+20|malebox  | 2026-06-20 18:16:02 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+20|malebox  | 2026-06-20 18:16:20 +00:00: [voice] POST /denver/status | From=+17202436886 CallSid=CAd3ff23b0f5606ac5b1491f13bc22f86b Digits=undefined CallStatus=completed
+20|malebox  | 2026-06-20 18:16:24 +00:00: [status-poll] Call CAd3ff23b0f5606ac5b1491f13bc22f86b is "completed" in Twilio but still active in DB — running cleanup
+20|malebox  | 2026-06-20 18:16:24 +00:00: [status] Removed CAd3ff23b0f5606ac5b1491f13bc22f86b from active calls
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [simulator] last-caller-gone: taking 9 seed(s) offline
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [express] GET /api/admin/live-connections 304 in 1ms :: {"sessions":[],"count":0}
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [simulator] last-caller-gone: line is now fully silent
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [express] GET /api/admin/live-callers 200 in 19ms :: {"callers":[],"total":0,"realCount":0,"virtualCount":0}
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [express] GET /api/stats 200 in 20ms :: {"users":10,"profiles":5,"messages":9,"activeCalls":0}
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [express] GET /api/admin/live-connections 304 in 1ms :: {"sessions":[],"count":0}
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [express] GET /api/admin/live-callers 304 in 4ms :: {"callers":[],"total":0,"realCount":0,"virtualCount":0}
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [express] GET /api/stats 304 in 3ms :: {"users":10,"profiles":5,"messages":9,"activeCalls":0}
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [express] GET /api/admin/live-connections 304 in 1ms :: {"sessions":[],"count":0}
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [express] GET /api/admin/live-callers 304 in 3ms :: {"callers":[],"total":0,"realCount":0,"virtualCount":0}
+20|malebox  | 2026-06-20 18:16:24 +00:00: 6:16:24 PM [express] GET /api/stats 304 in 3ms :: {"users":10,"profiles":5,"messages":9,"activeCalls":0}
