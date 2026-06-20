@@ -1,0 +1,16 @@
+urationSeconds":47}],"total":63,"realCount":1,"virtualCount":62,"adminSeedCount":62}
+21|malebox  | 2026-06-20 18:32:51 +00:00: 6:32:51 PM [express] GET /api/stats 200 in 20ms :: {"users":10,"profiles":5,"messages":9,"activeCalls":63}
+21|malebox  | 2026-06-20 18:32:53 +00:00: [voice] POST /main-menu | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=undefined CallStatus=in-progress
+21|malebox  | 2026-06-20 18:32:53 +00:00: [voice] POST /time-warning | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=undefined CallStatus=in-progress
+21|malebox  | 2026-06-20 18:32:57 +00:00: [voice] POST /handle-time-warning | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=1 CallStatus=in-progress
+21|malebox  | 2026-06-20 18:32:57 +00:00: [voice] POST /membership-purchase | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=undefined CallStatus=in-progress
+21|malebox  | 2026-06-20 18:32:57 +00:00: [voice] POST /purchase-pre-menu | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=undefined CallStatus=in-progress
+21|malebox  | 2026-06-20 18:33:03 +00:00: [voice] POST /handle-purchase-pre-menu | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=# CallStatus=in-progress
+21|malebox  | 2026-06-20 18:33:04 +00:00: [voice] POST /main-menu | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=undefined CallStatus=in-progress
+21|malebox  | 2026-06-20 18:33:06 +00:00: [voice] POST /handle-main-menu | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=1 CallStatus=in-progress
+21|malebox  | 2026-06-20 18:33:06 +00:00: [voice] POST /phone-booth | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=undefined CallStatus=in-progress
+21|malebox  | 2026-06-20 18:33:06 +00:00: [voice] /voice/phone-booth error: ReferenceError: isRealPhoneNumber is not defined
+21|malebox  | 2026-06-20 18:33:06 +00:00:     at tK (/opt/Voice-Linker/dist/index.cjs:1446:39650)
+21|malebox  | 2026-06-20 18:33:06 +00:00:     at /opt/Voice-Linker/dist/index.cjs:1446:83825
+21|malebox  | 2026-06-20 18:33:06 +00:00:     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+21|malebox  | 2026-06-20 18:33:24 +00:00: [voice] POST /denver/status | From=+17202436886 CallSid=CA9f00b904035310fb63dbdd517dea8404 Digits=undefined CallStatus=completed

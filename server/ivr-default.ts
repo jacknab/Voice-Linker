@@ -513,6 +513,29 @@ const BODY_TYPE_LABELS: Record<string, string> = {
   big_and_tall: "Big and Tall",
 };
 
+/**
+ * Returns true only for real, dialable E.164 phone numbers.
+ * Rejects anything Twilio may send instead of a real number:
+ *   "anonymous" / "private" / "blocked" / "restricted" / "unknown"
+ *   SIP URIs:      sip:name@domain.com
+ *   Twilio clients: client:name
+ *   SIP trunk IDs:  anything containing ":" or "@"
+ *   Short strings / non-digit noise (< 10 digits)
+ *
+ * NOTE: Must remain at module level — callerHasActiveMembership and
+ * getOrCreateUser (both module-level functions) call this.
+ */
+function isRealPhoneNumber(from: string): boolean {
+  if (!from) return false;
+  const lower = from.toLowerCase().trim();
+  if (["anonymous", "private", "blocked", "restricted", "unknown"].includes(lower)) return false;
+  if (lower.includes(":") || lower.includes("@")) return false;
+  const cleaned = from.replace(/^\+/, "").replace(/\s/g, "");
+  if (!/^[0-9]+$/.test(cleaned)) return false;
+  if (cleaned.length < 10) return false;
+  return true;
+}
+
 // ─── Membership verification helper ──────────────────────────────────────────
 // Returns true when the caller is confirmed as an active member for this call.
 // Three ways a caller can be verified:
@@ -880,30 +903,6 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   });
 
   // --- Twilio Voice Webhooks ---
-
-  /**
-   * Returns true only for real, dialable E.164 phone numbers.
-   * Rejects anything Twilio may send instead of a real number:
-   *   "anonymous" / "private" / "blocked" / "restricted" / "unknown"
-   *   SIP URIs:      sip:name@domain.com
-   *   Twilio clients: client:name
-   *   SIP trunk IDs:  anything containing ":" or "@"
-   *   Short strings / non-digit noise (< 10 digits)
-   */
-  function isRealPhoneNumber(from: string): boolean {
-    if (!from) return false;
-    const lower = from.toLowerCase().trim();
-    // Reject well-known privacy/placeholder strings
-    if (["anonymous", "private", "blocked", "restricted", "unknown"].includes(lower)) return false;
-    // Reject SIP URIs (sip:...), Twilio client handles (client:...), conference legs, etc.
-    if (lower.includes(":") || lower.includes("@")) return false;
-    // Must be digits-only after stripping leading + and spaces
-    const cleaned = from.replace(/^\+/, "").replace(/\s/g, "");
-    if (!/^[0-9]+$/.test(cleaned)) return false;
-    // Require at least 10 digits (shortest valid NANP / international number)
-    if (cleaned.length < 10) return false;
-    return true;
-  }
 
   // Derives a synthetic but stable phone number for anonymous callers who
   // authenticated via a calling card (no real Caller ID). Starts with "0"
