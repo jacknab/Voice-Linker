@@ -2789,7 +2789,29 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
       // They cannot have their own profile (no phone number to key off), but they
       // can fully browse greetings and connect live just like any member.
       if (!isRealPhoneNumber(fromNumber)) {
-        if (callCardOverride.has(callSid) || callMembershipOverride.has(callSid)) {
+        const cardId = callCardOverride.get(callSid);
+        const overridePhone = callMembershipOverride.get(callSid);
+        if (cardId || overridePhone) {
+          // Announce time remaining so the caller knows how long they have.
+          try {
+            if (cardId) {
+              const card = await storage.getMembershipCardById(cardId);
+              const minutes = card ? Math.floor(card.valueSeconds / 60) : 0;
+              if (minutes > 0 && !callTimeAnnounced.has(callSid)) {
+                playTimeRemaining(twiml, req, minutes);
+                callTimeAnnounced.add(callSid);
+              }
+            } else if (overridePhone) {
+              const memberUser = await storage.getOrCreateUser(overridePhone);
+              const minutes = Math.floor((memberUser.remainingSeconds ?? 0) / 60);
+              if (minutes > 0 && !callTimeAnnounced.has(callSid)) {
+                playTimeRemaining(twiml, req, minutes);
+                callTimeAnnounced.add(callSid);
+              }
+            }
+          } catch (timeErr) {
+            console.error("[voice] phone-booth-continue: time announcement error:", timeErr);
+          }
           console.log(`[voice] phone-booth-continue: anonymous caller with valid card session — routing to browse (callSid=${callSid})`);
           twiml.redirect("/voice/browse-profiles");
           res.type("text/xml");
