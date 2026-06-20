@@ -6353,10 +6353,31 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
       const callSid = req.body?.CallSid as string;
 
+      // Anonymous callers (no Caller ID) who authenticated via a membership number
+      // have a real phone linked in callMembershipOverride — use that as the effective
+      // identity so getOrCreateUser can look them up. Pure calling-card sessions
+      // (callCardOverride only, no linked membership phone) have no stable identity
+      // for profile browsing, so route them back to the main menu gracefully.
+      let effectiveFrom = fromNumber;
+      if (!isRealPhoneNumber(fromNumber)) {
+        const overridePhone = callMembershipOverride.get(callSid);
+        if (overridePhone) {
+          effectiveFrom = overridePhone;
+        } else if (callCardOverride.has(callSid)) {
+          playPrompt(twiml, req, "anon_needs_callerid.mp3",
+            "To browse member profiles, please call back with caller ID enabled.");
+          twiml.redirect("/voice/main-menu");
+          res.type("text/xml");
+          return res.send(twiml.toString());
+        } else {
+          throw new Error(`browse-profiles: non-identifiable caller with no card/membership session: "${fromNumber}"`);
+        }
+      }
+
       // Sync billing before playing the next greeting — deducts elapsed seconds since last check
       await syncBilling(callSid);
 
-      const user = await getOrCreateUser(fromNumber);
+      const user = await getOrCreateUser(effectiveFrom);
       const callerRecord = await storage.getCallerByCallSid(callSid);
       const regionId = callerRecord?.regionId ?? undefined;
 
