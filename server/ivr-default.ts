@@ -2792,8 +2792,14 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const cardId = callCardOverride.get(callSid);
         const overridePhone = callMembershipOverride.get(callSid);
         if (cardId || overridePhone) {
-          // Announce time remaining so the caller knows how long they have.
+          // Announce time remaining so the caller knows how long they have,
+          // then start billing and tell them deductions are now running.
           try {
+            const boothBillingSettings = await getMembershipSettingsCached();
+            const isPerMin = boothBillingSettings.billingMode !== "per_day"
+              && boothBillingSettings.billingMode !== "per_24h"
+              && !boothBillingSettings.freeMode;
+
             if (cardId) {
               const card = await storage.getMembershipCardById(cardId);
               const minutes = card ? Math.floor(card.valueSeconds / 60) : 0;
@@ -2808,6 +2814,17 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
                 playTimeRemaining(twiml, req, minutes);
                 callTimeAnnounced.add(callSid);
               }
+            }
+
+            // Start the billing checkpoint so the periodic IVR ticker and
+            // syncBilling can drain the card/membership balance in real time.
+            // fromNumber is "anonymous" here — syncBilling uses callCardOverride
+            // or callMembershipOverride first, so the actual phone is not needed.
+            if (isPerMin) {
+              startBilling(callSid, fromNumber ?? "anonymous");
+              playPrompt(twiml, req, "time_deduction_start.mp3",
+                "Time is now being deducted from your membership.");
+              console.log(`[billing] Started for anonymous card caller callSid=${callSid}`);
             }
           } catch (timeErr) {
             console.error("[voice] phone-booth-continue: time announcement error:", timeErr);
