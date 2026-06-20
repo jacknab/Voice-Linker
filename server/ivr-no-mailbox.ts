@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import { generateTTS, getVoiceIdForFolder } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
-import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity } from "./simulator";
+import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity, onQueueCycleComplete } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, scheduleAutoModCheck } from "./autoModeration";
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
 import type { MembershipSettings, MembershipCard } from "@shared/schema";
@@ -4875,6 +4875,9 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
           }
         } else {
           // ── Linked-region offer: queue has looped at least once ──────────────
+          if (state.hasWrapped) {
+            onQueueCycleComplete(regionId ?? undefined).catch(() => {});
+          }
           if (state.hasWrapped && !state.linkedRegionLoaded && regionId) {
             const linkedRegions = await storage.getLinkedRegions(regionId).catch(() => [] as Awaited<ReturnType<typeof storage.getLinkedRegions>>);
             if (linkedRegions.length > 0) {

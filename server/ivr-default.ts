@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 import { getVoiceIdForFolder } from "./elevenlabs";
 import { lookupZipCode, reverseGeocodeNeighborhood } from "./zipLookup";
-import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity } from "./simulator";
+import { addVirtualCaller, removeVirtualCaller, getLiveVirtualUserIds, triggerSeedActivity, onQueueCycleComplete } from "./simulator";
 import { runFlagAutoChecks, runBlockAutoChecks, runTranscriptionAutoChecks, scheduleAutoModCheck } from "./autoModeration";
 import { getMembershipSettingsCached, getSiteSettingsCached, getRawSiteSettingsCache } from "./settings-cache";
 
@@ -6712,6 +6712,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
               "You have heard all the local profiles in your area. Starting from the beginning.");
           }
           console.log(`[voice] browse-profiles: full cycle complete for ${callSid} — resetting queue`);
+          onQueueCycleComplete(state.callerRegionId ?? undefined).catch(() => {});
           state.seenUserIds = [];
           state.browsingLinked = false;
           const resetAvail = await storage.getAllActiveProfilesWithGeo(user.id, state.callerRegionId ?? undefined, browseCallerGender, browseSiteCategory);

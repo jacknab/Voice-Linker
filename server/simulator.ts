@@ -84,6 +84,22 @@ async function hasRealCallers(): Promise<boolean> {
   }
 }
 
+// Returns the exact count of non-virtual active calls
+async function countRealCallers(): Promise<number> {
+  try {
+    const rows = await db
+      .select({ callSid: callers.callSid })
+      .from(callers)
+      .where(and(eq(callers.status, "active"), not(like(callers.callSid, `${VIRTUAL_PREFIX}%`))));
+    return rows.length;
+  } catch {
+    return 0;
+  }
+}
+
+// Tracks seeds currently cooling down (userId → timer handle)
+const cooldownTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 // Sleeps in POLL_INTERVAL chunks; resolves early if `stopWhen()` returns true.
 const POLL_INTERVAL_MS = 15_000;
 async function sleepWatched(durationMs: number, stopWhen: () => Promise<boolean>): Promise<boolean> {
@@ -468,6 +484,81 @@ async function runRealCallerScheduler(): Promise<void> {
     }
 
     await sleep(SCHEDULER_INTERVAL_MS);
+  }
+}
+
+// ─── Queue-cycle churn: fires when the sole real caller exhausts the queue ────
+//
+// Brings 1–2 idle seeds online (in the caller's region) and takes 1 active seed
+// offline to simulate organic activity. The dropped seed has a 40 % chance of
+// returning after a 3–4 minute cool-down, mimicking a caller stepping away
+// briefly and calling back.
+//
+// No-ops when more than one real caller is on the line — natural churn is
+// already happening and we don't want to inflate the seed count unnecessarily.
+export async function onQueueCycleComplete(callerRegionId?: string): Promise<void> {
+  try {
+    if ((await countRealCallers()) !== 1) return;
+
+    const adminProfiles = await db
+      .select({ userId: profiles.userId })
+      .from(profiles)
+      .where(eq(profiles.isAdminUploaded, true));
+
+    if (adminProfiles.length === 0) return;
+
+    // ── Bring 1–2 new idle seeds online ──────────────────────────────────────
+    const idleSeeds = adminProfiles.filter(({ userId }) => !activeSessions.has(userId));
+    const toAdd = Math.min(randomBetween(1, 2), idleSeeds.length);
+
+    if (toAdd > 0) {
+      const picks = [...idleSeeds].sort(() => Math.random() - 0.5).slice(0, toAdd);
+      for (const { userId } of picks) {
+        if (!activeSessions.has(userId)) {
+          activeSessions.add(userId);
+          runAdminSeedSession(userId, callerRegionId).catch(err =>
+            log(`queue-cycle new seed error userId=${userId}: ${err}`, "simulator"),
+          );
+          log(`queue-cycle: seed ONLINE userId=${userId} region=${callerRegionId ?? "global"}`, "simulator");
+        }
+      }
+    }
+
+    // ── Take 1 active seed offline (skip any currently cooling down) ──────────
+    const activeSeeds = adminProfiles.filter(
+      ({ userId }) => activeSessions.has(userId) && !cooldownTimers.has(userId),
+    );
+    if (activeSeeds.length === 0) return;
+
+    const victim = activeSeeds[Math.floor(Math.random() * activeSeeds.length)];
+    const victimCallSid = `${VIRTUAL_PREFIX}${victim.userId}`;
+
+    activeSessions.delete(victim.userId);
+    await storage.removeActiveCall(victimCallSid).catch(() => {});
+    await storage.endSeedSession(victim.userId).catch(() => {});
+    log(`queue-cycle: seed OFFLINE userId=${victim.userId}`, "simulator");
+
+    // 40 % chance: schedule a cool-down return in 3–4 minutes
+    if (Math.random() < 0.4) {
+      const cooldownMs = randomBetween(3, 4) * 60 * 1000;
+      log(
+        `queue-cycle: seed ${victim.userId} cooling down for ${Math.round(cooldownMs / 60_000)} min`,
+        "simulator",
+      );
+      const timer = setTimeout(async () => {
+        cooldownTimers.delete(victim.userId);
+        if (!(await hasRealCallers())) return;
+        if (activeSessions.has(victim.userId)) return;
+        activeSessions.add(victim.userId);
+        runAdminSeedSession(victim.userId, callerRegionId).catch(err =>
+          log(`queue-cycle cooldown return error userId=${victim.userId}: ${err}`, "simulator"),
+        );
+        log(`queue-cycle: seed RETURNED from cooldown userId=${victim.userId}`, "simulator");
+      }, cooldownMs);
+      cooldownTimers.set(victim.userId, timer);
+    }
+  } catch (err) {
+    log(`onQueueCycleComplete error: ${err}`, "simulator");
   }
 }
 
