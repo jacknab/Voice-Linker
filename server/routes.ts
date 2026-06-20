@@ -4661,11 +4661,25 @@ END OF KNOWLEDGE BASE
       const callersList = [...rows.map(mapRow), ...preVerRows.map(mapRow)];
       callersList.sort((a, b) => new Date(b.joinedAt).getTime() - new Date(a.joinedAt).getTime());
 
+      // Count admin-uploaded seeds that are currently online (VIRTUAL- callers
+      // whose profile has isAdminUploaded = true). This powers the pre-warm
+      // indicator on the dashboard so operators can confirm the queue is hot.
+      const adminSeedResult = await db.execute(sql`
+        SELECT COUNT(*) AS cnt
+        FROM callers c
+        JOIN profiles p ON p.user_id = c.user_id
+        WHERE c.status = 'active'
+          AND c.call_sid LIKE ${VIRTUAL_PREFIX + "%"}
+          AND p.is_admin_uploaded = true
+      `);
+      const adminSeedCount = Number((adminSeedResult.rows[0] as any)?.cnt ?? 0);
+
       res.json({
         callers: callersList,
         total: callersList.length,
         realCount: callersList.filter(c => !c.isVirtual).length,
         virtualCount: callersList.filter(c => c.isVirtual).length,
+        adminSeedCount,
       });
     } catch (e: any) {
       console.error("[live-callers] Failed:", e);

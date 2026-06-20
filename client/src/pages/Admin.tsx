@@ -3859,6 +3859,9 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
     { label: "Unread Voicemails", value: vmSummary?.totalUnread ?? 0, icon: <Voicemail size={18} className={vmSummary && vmSummary.totalUnread > 0 ? "text-rose-500" : "text-gray-400"} /> },
   ];
 
+  const adminSeedCount = liveCallersData?.adminSeedCount ?? 0;
+  const seedsHot = adminSeedCount > 0;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -3871,6 +3874,42 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
             <div className={C.statLabel}>{item.label}</div>
           </div>
         ))}
+      </div>
+
+      {/* ── Pre-warm indicator ─────────────────────────────────────────────── */}
+      <div
+        data-testid="card-prewarm-indicator"
+        className={`rounded-xl border px-5 py-4 flex items-center justify-between gap-4 transition-colors ${
+          seedsHot
+            ? "bg-emerald-50 border-emerald-200"
+            : "bg-gray-50 border-gray-200"
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          {/* Pulsing dot */}
+          <span className="relative flex h-3 w-3">
+            {seedsHot && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            )}
+            <span className={`relative inline-flex rounded-full h-3 w-3 ${seedsHot ? "bg-emerald-500" : "bg-gray-300"}`} />
+          </span>
+          <div>
+            <div className="font-mono font-bold text-sm tracking-widest uppercase text-gray-800">
+              Queue Pre-Warm Status
+            </div>
+            <div className={`text-xs font-medium mt-0.5 ${seedsHot ? "text-emerald-700" : "text-gray-400"}`}>
+              {seedsHot
+                ? `${adminSeedCount} seed profile${adminSeedCount !== 1 ? "s" : ""} live — queue is hot and ready for callers`
+                : "No seed profiles online — upload seeds via the Seeds tab to pre-populate the queue"}
+            </div>
+          </div>
+        </div>
+        <div
+          data-testid="stat-admin-seed-count"
+          className={`text-3xl font-black tabular-nums ${seedsHot ? "text-emerald-600" : "text-gray-300"}`}
+        >
+          {String(adminSeedCount).padStart(2, "0")}
+        </div>
       </div>
 
       <div className="border border-gray-200 rounded-xl bg-white overflow-hidden" data-testid="card-live-caller-feed">
@@ -8612,6 +8651,7 @@ interface LiveCallersResponse {
   total: number;
   realCount: number;
   virtualCount: number;
+  adminSeedCount: number;
 }
 
 function formatDuration(seconds: number): string {
