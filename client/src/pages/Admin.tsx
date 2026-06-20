@@ -3751,7 +3751,8 @@ const MAILBOX_CATEGORY_LABELS: Record<string, string> = {
 
 interface MailboxStats {
   total: number;
-  byCategory: { category: string | null; count: number }[];
+  activeMailboxes: number;
+  byCategory: { category: string | null; count: number; newCount: number }[];
 }
 
 interface VoicemailSummary {
@@ -3992,50 +3993,95 @@ function DashboardTab({ onNavigate }: { onNavigate?: (tab: Tab) => void }) {
               <Tag size={15} className="text-[#f5a623]" />
               <span className="font-mono font-bold text-sm tracking-widest uppercase text-gray-800">Mailboxes &amp; Personal Ads</span>
             </div>
-            <span className="font-mono text-xs text-gray-400">
-              {mailboxStats ? `${mailboxStats.total.toLocaleString()} total` : "—"}
-            </span>
           </div>
-          <div className="p-5">
-            {!mailboxStats ? (
-              <div className="flex items-center gap-2 text-gray-400 font-mono text-xs py-4 justify-center">
-                <Loader2 size={13} className="animate-spin" /> Loading…
-              </div>
-            ) : mailboxStats.total === 0 ? (
-              <div className="text-gray-400 font-mono text-xs text-center py-4">No mailboxes registered yet.</div>
-            ) : (
-              <div className="space-y-3">
-                {/* Total bar */}
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-gray-500 w-44 shrink-0">All Categories</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-2">
-                    <div className="bg-[#f5a623] h-2 rounded-full w-full" />
+          {!mailboxStats ? (
+            <div className="flex items-center gap-2 text-gray-400 font-mono text-xs py-6 justify-center">
+              <Loader2 size={13} className="animate-spin" /> Loading…
+            </div>
+          ) : (
+            <>
+              {/* Active accounts stat */}
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
+                    <Voicemail size={15} className="text-amber-600" />
                   </div>
-                  <span className="font-mono text-xs font-bold text-gray-800 w-8 text-right">{mailboxStats.total}</span>
+                  <div>
+                    <div className="text-xl font-black text-gray-900 leading-none" data-testid="stat-active-mailboxes">
+                      {mailboxStats.activeMailboxes.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">Active Mailbox Accounts</div>
+                  </div>
                 </div>
-                <div className="border-t border-gray-100 pt-3 space-y-2.5">
-                  {mailboxStats.byCategory.map(row => {
-                    const label = row.category
-                      ? (MAILBOX_CATEGORY_LABELS[row.category] ?? row.category)
-                      : "Uncategorised";
-                    const pct = mailboxStats.total > 0 ? (row.count / mailboxStats.total) * 100 : 0;
-                    return (
-                      <div key={row.category ?? "null"} className="flex items-center gap-3" data-testid={`stat-category-${row.category ?? "null"}`}>
-                        <span className="font-mono text-xs text-gray-500 w-44 shrink-0 truncate">{label}</span>
-                        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                          <div
-                            className="bg-blue-400 h-1.5 rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className="font-mono text-xs text-gray-600 w-8 text-right">{row.count}</span>
-                      </div>
-                    );
-                  })}
+                <div className="h-8 w-px bg-gray-100 mx-1" />
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center">
+                    <Tag size={15} className="text-blue-500" />
+                  </div>
+                  <div>
+                    <div className="text-xl font-black text-gray-900 leading-none" data-testid="stat-total-mailboxes">
+                      {mailboxStats.total.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">Total Registrations</div>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
+
+              {/* Category table */}
+              {mailboxStats.byCategory.length === 0 ? (
+                <div className="text-gray-400 font-mono text-xs text-center py-6">No ads posted yet.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-xs text-gray-400 uppercase tracking-wide">
+                      <th className="px-5 py-2.5 text-left font-semibold">Category</th>
+                      <th className="px-5 py-2.5 text-right font-semibold text-emerald-600">New Ads <span className="normal-case font-normal text-gray-400">(≤30 days)</span></th>
+                      <th className="px-5 py-2.5 text-right font-semibold">Total Ads</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {mailboxStats.byCategory.map(row => {
+                      const label = row.category
+                        ? (MAILBOX_CATEGORY_LABELS[row.category] ?? row.category)
+                        : "Uncategorised";
+                      const oldCount = row.count - row.newCount;
+                      return (
+                        <tr key={row.category ?? "null"} className="hover:bg-gray-50 transition-colors" data-testid={`stat-category-${row.category ?? "null"}`}>
+                          <td className="px-5 py-2.5 text-sm text-gray-700 font-medium">{label}</td>
+                          <td className="px-5 py-2.5 text-right">
+                            <span className={`font-bold tabular-nums text-sm ${row.newCount > 0 ? "text-emerald-600" : "text-gray-300"}`}>
+                              {row.newCount > 0 ? `+${row.newCount}` : "—"}
+                            </span>
+                          </td>
+                          <td className="px-5 py-2.5 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <span className="font-black tabular-nums text-gray-800">{row.count}</span>
+                              {oldCount > 0 && (
+                                <span className="text-[10px] text-gray-400 font-mono">({oldCount} older)</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-50 border-t border-gray-200">
+                      <td className="px-5 py-2 text-xs text-gray-500 font-semibold">All Categories</td>
+                      <td className="px-5 py-2 text-right">
+                        <span className="text-xs font-bold text-emerald-600 tabular-nums">
+                          +{mailboxStats.byCategory.reduce((s, r) => s + r.newCount, 0)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-2 text-right">
+                        <span className="text-xs font-black text-gray-800 tabular-nums">{mailboxStats.total}</span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>

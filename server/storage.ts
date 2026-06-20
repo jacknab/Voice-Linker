@@ -2109,19 +2109,33 @@ export class DatabaseStorage implements IStorage {
     return !!row;
   }
 
-  async getMailboxStats(): Promise<{ total: number; byCategory: { category: string | null; count: number }[] }> {
+  async getMailboxStats(): Promise<{
+    total: number;
+    activeMailboxes: number;
+    byCategory: { category: string | null; count: number; newCount: number }[];
+  }> {
     const totalResult = await db.select({ count: count() }).from(mailboxes);
     const total = Number(totalResult[0]?.count ?? 0);
 
+    const activeResult = await db.execute(sql`
+      SELECT COUNT(*)::int AS count FROM mailboxes WHERE setup_complete = true
+    `);
+    const activeMailboxes = Number((activeResult.rows[0] as { count: number })?.count ?? 0);
+
     const byCategoryResult = await db.execute(sql`
-      SELECT category, COUNT(*)::int AS count
+      SELECT
+        category,
+        COUNT(*)::int AS count,
+        COUNT(*) FILTER (WHERE ad_updated_at >= NOW() - INTERVAL '30 days')::int AS new_count
       FROM mailboxes
       GROUP BY category
       ORDER BY count DESC
     `);
 
-    const byCategory = (byCategoryResult.rows as { category: string | null; count: number }[]);
-    return { total, byCategory };
+    const byCategory = (byCategoryResult.rows as { category: string | null; count: number; new_count: number }[])
+      .map(r => ({ category: r.category, count: r.count, newCount: r.new_count }));
+
+    return { total, activeMailboxes, byCategory };
   }
 
   // ── Auto-moderation implementations ──────────────────────────────────────────
