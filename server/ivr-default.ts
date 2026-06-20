@@ -2032,36 +2032,34 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
 
   // ─── Anonymous Caller Membership Gate ─────────────────────────────────────
   // After the disclaimer, anonymous callers (no caller ID) land here.
-  // They MUST provide a valid membership to enter — there is no guest bypass.
-  //   • Enter a 5-digit calling card number (physical card), OR
-  //   • Press * to authenticate with a 10-digit account number + PIN.
-  // Callers who provide no valid membership are told to call back with
-  // caller ID enabled and the call ends.
+  //   • Enter a 5-digit calling card number to use that membership, OR
+  //   • Press # to skip and go directly to the main menu as a guest.
+  // Callers who provide no input at all are re-prompted once, then sent to
+  // the membership purchase flow.
 
   app.post("/voice/anon-entry", async (req, res) => {
     const twiml = new VoiceResponse();
-    // numDigits: 5 — gather fires automatically after exactly 5 digits are entered.
-    // finishOnKey: "" — no key terminates the gather early; # is the global main-menu
-    // key and must not be captured here as a shortcut.
+    // finishOnKey: "#" — pound ends the gather immediately so the caller can
+    // bypass card entry and go straight to the main menu.
     const gather = twiml.gather({
       numDigits: 5,
-      finishOnKey: "",
+      finishOnKey: "#",
       action: "/voice/handle-anon-entry",
       timeout: 30,
       actionOnEmptyResult: true,
     });
     playPrompt(gather, req, "membership_entry_prompt.mp3",
-      "Your caller I D is not showing. If you have a membership, please enter your 5-digit card number now.");
+      "If you have a membership, please enter it now. Otherwise press the pound key.");
     // Timeout with no input — re-prompt once then send to purchase
     const gather2 = twiml.gather({
       numDigits: 5,
-      finishOnKey: "",
+      finishOnKey: "#",
       action: "/voice/handle-anon-entry",
       timeout: 20,
       actionOnEmptyResult: true,
     });
     playPrompt(gather2, req, "membership_entry_prompt.mp3",
-      "No input received. Please enter your 5-digit membership card number now.");
+      "If you have a membership, please enter it now. Otherwise press the pound key.");
     // Still no input after second prompt — send to purchase
     playPrompt(twiml, req, "membership_required_purchase.mp3",
       "To continue, you will need a membership. Connecting you to our membership options now.");
@@ -2073,11 +2071,18 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/handle-anon-entry", async (req, res) => {
     const twiml = new VoiceResponse();
     const rawDigits = (req.body?.Digits as string ?? "").trim();
+    const finishedOnKey = req.body?.FinishedOnKey as string | undefined;
     const callSid = req.body?.CallSid as string;
 
     const digits = rawDigits.replace(/[^0-9]/g, "");
 
-    if (!digits) {
+    if (finishedOnKey === "#" && !digits) {
+      // Caller pressed pound with no card digits — go straight to main menu as guest.
+      // Register in anonGuestCallSids so handle-main-menu gates pay areas properly.
+      console.log(`[voice] anon-entry: pound pressed — routing anonymous caller to main menu as guest (callSid=${callSid})`);
+      anonGuestCallSids.add(callSid);
+      twiml.redirect("/voice/main-menu");
+    } else if (!digits) {
       // No valid digits received (timeout or non-numeric input) — route to purchase
       console.log(`[voice] anon-entry: no card entered (timeout or no numeric input) — routing to purchase (callSid=${callSid})`);
       playPrompt(twiml, req, "membership_required_purchase.mp3",
@@ -3137,6 +3142,10 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         const card = await storage.getMembershipCardById(cardId);
         hasMembership = true;
         remainingSeconds = card?.valueSeconds ?? 0;
+      } else if (!isRealPhoneNumber(fromNumber)) {
+        // Anonymous caller who pressed pound at anon-entry — treat as guest with no membership
+        hasMembership = false;
+        remainingSeconds = 0;
       } else {
         const user = await getOrCreateUser(fromNumber);
         hasMembership = !!user.membershipTier;
