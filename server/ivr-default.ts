@@ -1822,7 +1822,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
         console.error("[voice] Card lookup error:", err);
         twiml.redirect("/voice/entry-check");
       }
-    } else if (digits.length === 10) {
+    } else if (digits.length === 5) {
       // 5-digit membership number — require PIN if calling from a different phone
       try {
         const memberUser = await storage.getUserByMembershipNumber(digits);
@@ -1908,7 +1908,7 @@ export async function registerVoiceRoutes(app: Express): Promise<void> {
   app.post("/voice/anon-auth", async (req, res) => {
     const twiml = new VoiceResponse();
     const gather = twiml.gather({
-      numDigits: 10,
+      numDigits: 5,
       finishOnKey: "",
       action: "/voice/handle-anon-auth-number",
       timeout: 30,
